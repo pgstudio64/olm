@@ -299,7 +299,7 @@ def _block_eo_extent(block: dict) -> int:
 def _mirror_block(block: dict) -> dict:
     """Miroir E-O d'un bloc individuel.
 
-    - Types ortho : ORTHO_D ↔ ORTHO_G, orientation = (360 - θ) % 360
+    - Types ortho : ORTHO_R ↔ ORTHO_L, orientation = (360 - θ) % 360
     - Autres blocs : orientation = (180 - θ) % 360
     - Sticks : E ↔ O
     - offset_ns_cm inchangé

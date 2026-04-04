@@ -448,7 +448,7 @@ def api_dsl_export():
 def api_room_dsl_parse():
     """Parse du DSL pièce en JSON.
 
-    Body JSON : {"dsl": "PIECE 300x480\\nFEN N 0 300\\nPORTE S 0 90 INT G"}
+    Body JSON : {"dsl": "ROOM 300x480\\nWINDOW N 0 300\\nDOOR S 0 90 INT L"}
     Retourne les champs parsés pour mise à jour de l'éditeur.
     """
     try:
