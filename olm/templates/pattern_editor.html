@@ -1084,13 +1084,14 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
 <!-- MAIN TAB: FLOOR PLAN -->
 <div class="tab-content active" id="tabFloorPlan">
   <div class="sub-tab-bar">
-    <button class="sub-tab-btn" data-subtab="fpInput" data-parent="floorPlan">Input</button>
-    <button class="sub-tab-btn active" data-subtab="fpMatching" data-parent="floorPlan">Matching</button>
-    <button class="sub-tab-btn" data-subtab="fpOutput" data-parent="floorPlan">Output</button>
+    <button class="sub-tab-btn" data-subtab="fpImport" data-parent="floorPlan">Import</button>
+    <button class="sub-tab-btn" data-subtab="fpReview" data-parent="floorPlan">Review</button>
+    <button class="sub-tab-btn active" data-subtab="fpMatching" data-parent="floorPlan">Match</button>
+    <button class="sub-tab-btn" data-subtab="fpExport" data-parent="floorPlan">Export</button>
   </div>
 
-  <!-- SUB-TAB: INPUT -->
-  <div class="sub-tab-content" id="subtabFpInput">
+  <!-- SUB-TAB: IMPORT -->
+  <div class="sub-tab-content" id="subtabFpImport">
     <div class="fp-input-page">
       <div class="section-title">Floor plan image</div>
       <div style="margin-bottom:8px;color:var(--text-dim);font-size:11px;">
@@ -1121,6 +1122,52 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
     </div>
   </div>
 
+  <!-- SUB-TAB: REVIEW -->
+  <div class="sub-tab-content" id="subtabFpReview">
+    <div class="fp-container">
+      <div class="fp-main">
+        <div class="fp-nav">
+          <span class="fp-nav-info" id="rvRoomSize">-</span>
+          <span style="flex:1;"></span>
+          <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
+          <div class="fp-room-label" id="rvRoomLabel">-</div>
+          <button class="btn" id="rvBtnNext" title="Next room">Next &rarr;</button>
+          <span class="fp-nav-info" id="rvNavInfo">0 / 0</span>
+          <span style="flex:1;"></span>
+          <button class="btn" id="rvBtnAdjustRoom" style="font-size:9px;padding:2px 8px;" title="Edit room geometry">Adjust room</button>
+        </div>
+        <div class="fp-canvas-wrap" id="rvCanvasWrap">
+          <!-- Room SVG rendered here for review -->
+        </div>
+      </div>
+      <div class="fp-sidebar" style="min-width:240px;">
+        <div class="fp-sidebar-title">Room properties</div>
+        <div style="padding:8px;font-size:12px;">
+          <div style="margin-bottom:8px;">
+            <label style="color:var(--text-dim);font-size:11px;">Width (cm)</label>
+            <input type="number" id="rvWidth" style="width:70px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:11px;padding:2px 4px;">
+            <label style="color:var(--text-dim);font-size:11px;margin-left:8px;">Depth (cm)</label>
+            <input type="number" id="rvDepth" style="width:70px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:11px;padding:2px 4px;">
+          </div>
+        </div>
+        <div class="fp-sidebar-title">Openings</div>
+        <div id="rvOpeningsList" style="padding:4px 8px;font-size:11px;max-height:150px;overflow-y:auto;">
+          <span style="color:var(--text-dim);">No rooms loaded</span>
+        </div>
+        <div class="fp-sidebar-title" style="margin-top:8px;">Exclusion zones
+          <button class="btn" id="rvBtnAddExcl" style="font-size:9px;padding:1px 6px;margin-left:8px;" title="Draw exclusion zone">+ Add</button>
+        </div>
+        <div id="rvExclusionsList" style="padding:4px 8px;font-size:11px;max-height:150px;overflow-y:auto;">
+          <span style="color:var(--text-dim);">No exclusion zones</span>
+        </div>
+        <div style="padding:8px;margin-top:8px;">
+          <button class="btn" id="rvBtnSave" style="padding:4px 12px;">Save changes</button>
+          <span id="rvSaveStatus" style="color:var(--text-dim);font-size:10px;margin-left:8px;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- SUB-TAB: MATCHING -->
   <div class="sub-tab-content active" id="subtabFpMatching">
     <div class="fp-container">
@@ -1138,8 +1185,6 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
           <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
           <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
           <span style="flex:1;"></span>
-          <button class="btn" id="fpBtnEditRoom" style="font-size:9px;padding:2px 8px;" title="Edit room geometry" disabled>Adjust room</button>
-          <span style="color:var(--border);margin:0 2px;">|</span>
           <button class="btn" id="fpBtnEditPattern" style="font-size:9px;padding:2px 8px;" title="Open source pattern in editor" disabled>Edit pattern</button>
           <button class="btn" id="fpBtnAdjustLayout" style="font-size:9px;padding:2px 8px;" title="Amend layout in room" disabled>Amend layout</button>
           <button class="btn" id="fpBtnDiscard" style="display:none;font-size:9px;padding:2px 8px;background:#b35533;color:#fff;" title="Discard amendment">Discard amendment</button>
@@ -1149,11 +1194,8 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
         </div>
       </div>
       <div class="fp-sidebar">
-        <div class="fp-standard-filter">
-          <label><input type="radio" name="fpStandard" value="" checked> All</label>
-          <label><input type="radio" name="fpStandard" value="AFNOR_ADVICE"> AFNOR</label>
-          <label><input type="radio" name="fpStandard" value="GROUP"> GROUP</label>
-          <label><input type="radio" name="fpStandard" value="SITE"> SITE</label>
+        <div class="fp-standard-filter" id="fpStandardFilter">
+          <!-- Populated dynamically by renderFpStandardFilter() -->
         </div>
         <div class="fp-sidebar-title">Pattern candidates</div>
         <div id="fpCandidatesList"></div>
@@ -1179,8 +1221,8 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
     </div>
   </div>
 
-  <!-- SUB-TAB: OUTPUT -->
-  <div class="sub-tab-content" id="subtabFpOutput">
+  <!-- SUB-TAB: EXPORT -->
+  <div class="sub-tab-content" id="subtabFpExport">
     <div class="fp-output-page">
       <div class="section-title">Matching results</div>
       <div style="margin-bottom:12px;color:var(--text-dim);font-size:11px;">
@@ -4279,6 +4321,16 @@ function renderSpacingSettings() {
   });
 }
 
+function renderFpStandardFilter() {
+  var container = document.getElementById("fpStandardFilter");
+  if (!container) return;
+  var html = '<label><input type="radio" name="fpStandard" value="" checked> All</label>';
+  getStandards().forEach(function(s) {
+    html += '<label><input type="radio" name="fpStandard" value="' + s + '"> ' + getStdLabel(s) + '</label>';
+  });
+  container.innerHTML = html;
+}
+
 function renderGeneralSettings() {
   if (!APP_CONFIG) return;
 
@@ -4362,6 +4414,7 @@ async function init() {
   await loadSpacingConfigs();
   renderSpacingSettings();
   renderGeneralSettings();
+  renderFpStandardFilter();
 
   // Settings drawer open/close
   document.getElementById("btnOpenSettings").addEventListener("click", function() {
@@ -4887,7 +4940,9 @@ document.addEventListener("DOMContentLoaded", init);
     // Reset action buttons on room change
     document.getElementById("fpBtnEditPattern").disabled = true;
     document.getElementById("fpBtnAdjustLayout").disabled = true;
-    document.getElementById("fpBtnEditRoom").disabled = false;
+    // fpBtnEditRoom moved to Review tab
+    var btnEditRoom = document.getElementById("fpBtnEditRoom");
+    if (btnEditRoom) btnEditRoom.disabled = false;
     // Show Discard if amendment exists
     var hasAmendment = !!fpAmendments[room.name];
     document.getElementById("fpBtnDiscard").style.display = hasAmendment ? "" : "none";
@@ -5325,14 +5380,17 @@ document.addEventListener("DOMContentLoaded", init);
         fpRenderCurrent();
       }
     });
-    document.getElementById("fpBtnEditRoom").addEventListener("click", function() {
-      var room = fpCurrent();
-      if (room) {
-        // Use amended room geometry if exists, otherwise original
-        var roomData = fpRoomAmendments[room.name] || room;
-        enterRoomAmendMode(roomData);
-      }
-    });
+    // fpBtnEditRoom moved to Review tab — listener will be wired there
+    var btnEditRoom = document.getElementById("fpBtnEditRoom");
+    if (btnEditRoom) {
+      btnEditRoom.addEventListener("click", function() {
+        var room = fpCurrent();
+        if (room) {
+          var roomData = fpRoomAmendments[room.name] || room;
+          enterRoomAmendMode(roomData);
+        }
+      });
+    }
     document.getElementById("fpBtnExport").addEventListener("click", fpExport);
 
     document.getElementById("fpBtnLoadJson").addEventListener("click", function() {
