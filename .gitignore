@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+venv/
+.venv/
+output/
+*.png
+*.svg
+!olm/static/
+.DS_Store

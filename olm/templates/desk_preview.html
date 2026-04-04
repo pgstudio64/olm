@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>OLO — Poste de travail (BLOC_1)</title>
+<style>
+  body {
+    margin: 0;
+    background: #121212;
+    color: #ccc;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+</style>
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="340" viewBox="0 0 340 340">
+
+  <!--
+    Échelle : 1 cm = 0.5 px
+    DESK_W = 80 cm = 40 px    (axe EO)
+    DESK_D = 180 cm = 90 px   (axe NS)
+    CHR = 70 cm = 35 px       (zone fixe)
+
+    Layout EO (x) : CHR(35) | DESK(40) = 75 px
+    Layout NS (y) : DESK(90) = 90 px
+
+    Origine du dessin : x0=100, y0=100
+
+    Fauteuil : 50% sous le bureau
+      Bureau x=135, le fauteuil glisse sous le bureau
+      Assise centrée à x=125 (moitié sous le bureau à x=135)
+  -->
+
+  <!-- Fond -->
+  <rect width="340" height="340" fill="#1e1e1e"/>
+
+  <!-- Rose des vents -->
+  <text x="14" y="22" font-family="sans-serif" font-size="12" font-weight="bold" fill="#fff">N</text>
+  <line x1="18" y1="26" x2="18" y2="44" stroke="#fff" stroke-width="1.5"/>
+
+  <!-- ============================================================ -->
+  <!-- ZONE FIXE (débattement chaise) — bleu moyen                  -->
+  <!-- ============================================================ -->
+
+  <rect x="100" y="100" width="35" height="90"
+        fill="#3b7dc9" fill-opacity="0.40"
+        stroke="#4a90d9" stroke-width="0.5"/>
+
+  <!-- ============================================================ -->
+  <!-- FAUTEUIL — 50% sous le bureau                                -->
+  <!-- ============================================================ -->
+
+  <!-- Assise (centrée à x=121, soit moitié sous le bureau à x=135) -->
+  <rect x="121" y="130" width="28" height="30" fill="#8B6914" rx="5"/>
+  <!-- Dossier (côté ouest) -->
+  <rect x="117" y="134" width="6" height="22" fill="#6a4e0e" rx="3"/>
+  <!-- Accoudoirs -->
+  <rect x="124" y="128" width="22" height="5" fill="#7a5c10" rx="2"/>
+  <rect x="124" y="157" width="22" height="5" fill="#7a5c10" rx="2"/>
+
+  <!-- ============================================================ -->
+  <!-- BUREAU (plan de travail) — par-dessus le fauteuil            -->
+  <!-- ============================================================ -->
+
+  <rect x="135" y="100" width="40" height="90"
+        fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
+
+  <!-- Écran (côté est, bord du bureau) -->
+  <rect x="169" y="123" width="5" height="44"
+        fill="#1a1a1a" rx="1"/>
+
+  <!-- Label bureau -->
+  <text x="153" y="149" text-anchor="middle" font-family="sans-serif"
+        font-size="9" fill="#555">WS01</text>
+
+  <!-- ============================================================ -->
+  <!-- COTES — nombres simples, décalés vers l'extérieur            -->
+  <!-- ============================================================ -->
+
+  <!-- Largeur bureau (80 cm) — au-dessus du bureau -->
+  <text x="155" y="93" text-anchor="middle" font-family="sans-serif"
+        font-size="9" fill="#aaa">80</text>
+
+  <!-- Profondeur bureau (180 cm) — à droite du bureau -->
+  <text x="182" y="149" font-family="sans-serif"
+        font-size="9" fill="#aaa">180</text>
+
+  <!-- Zone fixe CHR (70 cm) — au-dessus de la zone fixe -->
+  <text x="117" y="93" text-anchor="middle" font-family="sans-serif"
+        font-size="9" fill="#aaa">70</text>
+
+  <!-- ============================================================ -->
+  <!-- LÉGENDE                                                      -->
+  <!-- ============================================================ -->
+
+  <rect x="40" y="230" width="14" height="11" fill="#d0d0d0" stroke="#888" stroke-width="0.5"/>
+  <text x="60" y="240" font-family="sans-serif" font-size="10" fill="#ccc">Bureau (80 × 180 cm)</text>
+
+  <rect x="40" y="250" width="14" height="11" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
+  <text x="60" y="260" font-family="sans-serif" font-size="10" fill="#ccc">Zone fixe — debattement chaise (70 cm)</text>
+
+  <!-- Titre en bas -->
+  <text x="170" y="295" text-anchor="middle" font-family="sans-serif"
+        font-size="10" fill="#888">BLOC_1 — 1 poste, regard EST</text>
+  <text x="170" y="310" text-anchor="middle" font-family="sans-serif"
+        font-size="9" fill="#666">Emprise : 150 × 180 cm (avec zone fixe)</text>
+
+</svg>
+
+</body>
+</html>

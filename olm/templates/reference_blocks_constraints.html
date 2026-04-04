@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Référence — Contraintes de distance et emprises par bloc</title>
+<style>
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 2em; line-height: 1.5; }
+  h1 { color: #5090c0; border-bottom: 2px solid #5090c0; padding-bottom: 0.3em; }
+  h2 { color: #e0c070; margin-top: 2em; }
+  h3 { color: #c0c0c0; }
+  table { border-collapse: collapse; margin: 1em 0 2em 0; width: 100%; max-width: 1100px; }
+  th, td { border: 1px solid #444; padding: 6px 12px; text-align: center; }
+  th { background: #2a2a3a; color: #e0c070; font-weight: 600; }
+  td { background: #262626; }
+  td.left { text-align: left; }
+  .code { font-family: 'Cascadia Code', 'Fira Code', monospace; color: #9cdcfe; }
+  .val { color: #b5cea8; font-weight: bold; }
+  .unit { color: #888; font-size: 0.85em; }
+  .note { font-size: 0.9em; color: #999; margin-top: -0.5em; margin-bottom: 1.5em; }
+  .section { background: #1a2030; border-left: 4px solid #5090c0; padding: 0.8em 1.2em; margin: 1.5em 0; border-radius: 0 6px 6px 0; }
+  .derogatoire { color: #e06060; font-style: italic; }
+  tr.highlight td { background: #2a2a40; }
+  .formula { color: #ce9178; font-family: monospace; }
+  caption { text-align: left; font-weight: bold; color: #c0c0c0; margin-bottom: 0.5em; font-size: 1.05em; }
+</style>
+</head>
+<body>
+
+<h1>Référence — Contraintes de distance et emprises par bloc</h1>
+<p>Généré le 2026-04-02 — Source de vérité : <span class="code">spacing_config.py</span></p>
+
+<!-- ============================================================ -->
+<h2>1. Contraintes d'espacement par standard (ES-*)</h2>
+
+<div class="section">
+  Les contraintes ES varient selon le standard d'aménagement. Les valeurs sont en centimètres.<br>
+  <strong>Source de vérité</strong> : <span class="code">spacing_config.py</span> (servie via <span class="code">/api/spacing</span>).
+</div>
+
+<h3>1.1 Accès aux postes</h3>
+<table>
+  <tr>
+    <th>Code</th><th>Description</th><th>AFNOR ADVICE</th><th>GROUP</th><th>SITE</th><th>Formule</th>
+  </tr>
+  <tr>
+    <td class="code">ES-01</td><td class="left">Débattement chaise (composante de base)</td>
+    <td class="val">70</td><td class="val">70</td><td class="val">70</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="code">ES-02</td><td class="left">Accès frontal (s'asseoir / se lever)</td>
+    <td class="val">60</td><td class="val">60</td><td class="val">60</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="code">ES-03</td><td class="left">Accès poste seul dos à un mur</td>
+    <td class="val">100</td><td class="val">90</td><td class="val">90</td>
+    <td class="formula">CHR + marge</td>
+  </tr>
+  <tr class="highlight">
+    <td class="code">ES-04</td><td class="left">Passage derrière 1 rangée occupée</td>
+    <td class="val">160</td><td class="val">120</td><td class="val">140</td>
+    <td class="formula">CHR + passage libre</td>
+  </tr>
+  <tr class="highlight">
+    <td class="code">ES-05</td><td class="left">Passage entre 2 rangées dos à dos</td>
+    <td class="val">230</td><td class="val">180</td><td class="val">160</td>
+    <td class="formula">CHR + gap + CHR</td>
+  </tr>
+  <tr>
+    <td class="code">ES-06</td><td class="left">Passage entre deux blocs distincts</td>
+    <td class="val">90</td><td class="val">90</td><td class="val">90</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<p class="note">
+  <strong>Décomposition AFNOR</strong> : ES-04 = ES-01 + ES-06 = 70 + 90 = 160.
+  ES-05 = ES-01 + ES-06 + ES-01 = 70 + 90 + 70 = 230.<br>
+  <strong>Décomposition SITE</strong> : ES-03 = 70 + 20 = 90. ES-04 = 70 + 70 = 140.
+  ES-05 = 70 + 20 + 70 = 160.
+</p>
+
+<h3>1.2 Portes, murs, blocs</h3>
+<table>
+  <tr>
+    <th>Code</th><th>Description</th><th>AFNOR ADVICE</th><th>GROUP</th><th>SITE</th>
+  </tr>
+  <tr>
+    <td class="code">ES-08</td><td class="left">Zone libre devant porte</td>
+    <td class="val">180</td><td class="val">180</td><td class="val">120</td>
+  </tr>
+  <tr>
+    <td class="code">ES-09</td><td class="left">Distance latérale table → mur</td>
+    <td class="val">20</td><td class="val">10</td><td class="val">0</td>
+  </tr>
+  <tr>
+    <td class="code">ES-10</td><td class="left">Taille maximale d'un bloc</td>
+    <td class="val">4 postes</td><td class="val">6 postes</td><td class="val">6 postes</td>
+  </tr>
+  <tr>
+    <td class="code">ES-11</td><td class="left">Séparation minimale entre blocs</td>
+    <td class="val">90</td><td class="val">90</td><td class="val">90</td>
+  </tr>
+  <tr>
+    <td class="code">PS-04</td><td class="left">Largeur couloir principal (PMR)</td>
+    <td class="val">140</td><td class="val">140</td><td class="val">140</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>2. Dimensions physiques des blocs (desk uniquement)</h2>
+
+<div class="section">
+  Dimensions de bureau : <span class="val">180 × 80 cm</span> (profondeur × largeur).<br>
+  <span class="code">eo_cm</span> = largeur (Est-Ouest), <span class="code">ns_cm</span> = profondeur (Nord-Sud).
+</div>
+
+<table>
+  <tr>
+    <th>Bloc</th><th>Postes</th><th>EO <span class="unit">(cm)</span></th><th>NS <span class="unit">(cm)</span></th><th>Dérog.</th><th>Sym. 180°</th><th>Description</th>
+  </tr>
+  <tr>
+    <td class="code">BLOC_1</td><td>1</td><td class="val">80</td><td class="val">180</td><td>—</td><td>—</td><td class="left">Poste seul</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_FACE</td><td>2</td><td class="val">160</td><td class="val">180</td><td>—</td><td>oui</td><td class="left">2 postes face à face</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_COTE</td><td>2</td><td class="val">80</td><td class="val">360</td><td>—</td><td>—</td><td class="left">2 postes côte à côte</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_3_COTE</td><td>3</td><td class="val">80</td><td class="val">540</td><td>—</td><td>—</td><td class="left">3 postes côte à côte</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_4_FACE</td><td>4</td><td class="val">160</td><td class="val">360</td><td>—</td><td>oui</td><td class="left">2×2 face à face</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_6_FACE</td><td>6</td><td class="val">160</td><td class="val">540</td><td class="derogatoire">oui</td><td>oui</td><td class="left">3×2 face à face</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_D</td><td>2</td><td class="val">180</td><td class="val">260</td><td>—</td><td>—</td><td class="left">L bas-gauche (90°)</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_G</td><td>2</td><td class="val">180</td><td class="val">260</td><td>—</td><td>—</td><td class="left">L bas-droite (miroir)</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>3. Emprises totales par bloc × standard (desk + zones)</h2>
+
+<div class="section">
+  <strong>Emprise totale</strong> = dimensions desk + zones de chaque côté (non_superposable + candidate).<br>
+  Les zones varient selon le standard et le type de bloc.
+  Pour les blocs face-à-face (E/W) : zone = ES-01 + ES-06 (chair + passage).<br>
+  Pour les blocs seul/côte (W seulement) : zone = ES-01 + (ES-03 − ES-01) = ES-03.
+</div>
+
+<table>
+  <caption>AFNOR ADVICE — CHR=70, passage=90, access_single=100 → zone face=160, zone seul=100</caption>
+  <tr>
+    <th>Bloc</th><th>Desk EO</th><th>Zone W</th><th>Zone E</th><th><strong>Total EO</strong></th><th>Desk NS</th><th>Zone N</th><th>Zone S</th><th><strong>Total NS</strong></th>
+  </tr>
+  <tr>
+    <td class="code">BLOC_1</td><td>80</td><td>100</td><td>0</td><td class="val">180</td><td>180</td><td>0</td><td>0</td><td class="val">180</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>180</td><td>0</td><td>0</td><td class="val">180</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_COTE</td><td>80</td><td>100</td><td>0</td><td class="val">180</td><td>360</td><td>0</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_3_COTE</td><td>80</td><td>100</td><td>0</td><td class="val">180</td><td>540</td><td>0</td><td>0</td><td class="val">540</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_4_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>360</td><td>0</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_6_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>540</td><td>0</td><td>0</td><td class="val">540</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_D</td><td>180</td><td>0</td><td>100</td><td class="val">280</td><td>260</td><td>100</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_G</td><td>180</td><td>100</td><td>0</td><td class="val">280</td><td>260</td><td>100</td><td>0</td><td class="val">360</td>
+  </tr>
+</table>
+
+<table>
+  <caption>GROUP — CHR=70, passage=90, access_single=90 → zone face=160, zone seul=90</caption>
+  <tr>
+    <th>Bloc</th><th>Desk EO</th><th>Zone W</th><th>Zone E</th><th><strong>Total EO</strong></th><th>Desk NS</th><th>Zone N</th><th>Zone S</th><th><strong>Total NS</strong></th>
+  </tr>
+  <tr>
+    <td class="code">BLOC_1</td><td>80</td><td>90</td><td>0</td><td class="val">170</td><td>180</td><td>0</td><td>0</td><td class="val">180</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>180</td><td>0</td><td>0</td><td class="val">180</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_COTE</td><td>80</td><td>90</td><td>0</td><td class="val">170</td><td>360</td><td>0</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_3_COTE</td><td>80</td><td>90</td><td>0</td><td class="val">170</td><td>540</td><td>0</td><td>0</td><td class="val">540</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_4_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>360</td><td>0</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_6_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>540</td><td>0</td><td>0</td><td class="val">540</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_D</td><td>180</td><td>0</td><td>90</td><td class="val">270</td><td>260</td><td>90</td><td>0</td><td class="val">350</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_G</td><td>180</td><td>90</td><td>0</td><td class="val">270</td><td>260</td><td>90</td><td>0</td><td class="val">350</td>
+  </tr>
+</table>
+
+<table>
+  <caption>SITE — CHR=70, passage=90, access_single=90 → zone face=160, zone seul=90</caption>
+  <tr>
+    <th>Bloc</th><th>Desk EO</th><th>Zone W</th><th>Zone E</th><th><strong>Total EO</strong></th><th>Desk NS</th><th>Zone N</th><th>Zone S</th><th><strong>Total NS</strong></th>
+  </tr>
+  <tr>
+    <td class="code">BLOC_1</td><td>80</td><td>90</td><td>0</td><td class="val">170</td><td>180</td><td>0</td><td>0</td><td class="val">180</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>180</td><td>0</td><td>0</td><td class="val">180</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_COTE</td><td>80</td><td>90</td><td>0</td><td class="val">170</td><td>360</td><td>0</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_3_COTE</td><td>80</td><td>90</td><td>0</td><td class="val">170</td><td>540</td><td>0</td><td>0</td><td class="val">540</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_4_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>360</td><td>0</td><td>0</td><td class="val">360</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_6_FACE</td><td>160</td><td>160</td><td>160</td><td class="val">480</td><td>540</td><td>0</td><td>0</td><td class="val">540</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_D</td><td>180</td><td>0</td><td>90</td><td class="val">270</td><td>260</td><td>90</td><td>0</td><td class="val">350</td>
+  </tr>
+  <tr>
+    <td class="code">BLOC_2_ORTHO_G</td><td>180</td><td>90</td><td>0</td><td class="val">270</td><td>260</td><td>90</td><td>0</td><td class="val">350</td>
+  </tr>
+</table>
+
+<p class="note">
+  <strong>Zone face-à-face</strong> (blocs FACE) : non_superposable = CHR (70) + candidate = passage (90) = 160 cm par côté E et W.<br>
+  <strong>Zone seul/côte</strong> (BLOC_1, BLOC_2_COTE, BLOC_3_COTE) : non_superposable = CHR (70) + candidate = ES-03 − CHR.
+  AFNOR: 100−70=30 → total 100. GROUP/SITE: 90−70=20 → total 90. Côté W uniquement.<br>
+  <strong>Blocs ortho</strong> : zone CHR+passage_single sur les faces chaise (N et E pour ORTHO_D, N et W pour ORTHO_G).
+</p>
+
+<!-- ============================================================ -->
+<h2>4. Règle d'affichage des distances (V-01)</h2>
+
+<div class="section">
+  Une distance inter-blocs est affichée si et seulement si :<br>
+  <strong>1.</strong> L'un est le <strong>plus proche voisin</strong> de l'autre dans une direction cardinale (droite ou bas).<br>
+  <strong>2.</strong> Les <strong>emprises desk</strong> (physiques, sans zones) des deux blocs se chevauchent sur l'axe perpendiculaire :
+  chevauchement EO pour des voisins verticaux, chevauchement NS pour des voisins horizontaux.<br><br>
+  Les zones de circulation/recul <strong>ne participent pas</strong> au test de chevauchement.
+</div>
+
+</body>
+</html>
