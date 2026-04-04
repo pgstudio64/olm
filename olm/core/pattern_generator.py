@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 import json
 
+from olm.core.app_config import get as _cfg_get
+
 # AFNOR NF X35-102
-DESK_W_CM = 80        # largeur bureau (axe EO dans les patterns)
-DESK_D_CM = 180       # profondeur bureau (axe NS)
+DESK_W_CM: int = _cfg_get("desk_width_cm", 80)    # largeur bureau (axe EO dans les patterns)
+DESK_D_CM: int = _cfg_get("desk_depth_cm", 180)   # profondeur bureau (axe NS)
 CHAIR_CLEARANCE_CM = 70   # ES-01 débattement chaise — zone fixe non superposable
 PASSAGE_CM = 90           # ES-06 zone minimale de circulation — obligatoire, extensible
 PASSAGE_SINGLE_CM = 30    # ES-03 zone minimale de circulation accès poste seul

@@ -24,6 +24,8 @@ from olm.core.spacing_config import AFNOR_ADVICE
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_DOOR_DEPTH = AFNOR_ADVICE.door_exclusion_depth_cm
+
 
 # ---------------------------------------------------------------------------
 # Dataclass résultat
@@ -64,7 +66,7 @@ class CirculationResult:
 def build_grid(
     room: dict,
     blocks: list[dict],
-    door_depth_cm: int = AFNOR_ADVICE.door_exclusion_depth_cm,
+    door_depth_cm: int = _DEFAULT_DOOR_DEPTH,
 ) -> np.ndarray:
     """Construit une grille numpy (ROWS × COLS) de CellType.
 
@@ -913,7 +915,7 @@ def _compute_violations(
 def analyse(
     room: dict,
     blocks: list[dict],
-    door_depth_cm: int = AFNOR_ADVICE.door_exclusion_depth_cm,
+    door_depth_cm: int = _DEFAULT_DOOR_DEPTH,
 ) -> CirculationResult:
     """Analyse la qualité de la circulation pour un candidat du matching.
 

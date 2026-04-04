@@ -234,6 +234,31 @@ def api_spacing():
     return jsonify(configs)
 
 
+@app.route("/api/config", methods=["GET"])
+def api_config_get():
+    """Return the full configuration."""
+    from olm.core import app_config
+    return jsonify(app_config._cfg)
+
+
+@app.route("/api/config", methods=["POST"])
+def api_config_post():
+    """Update configuration keys and persist.
+
+    Body: {"key": "room_code", "value": "15"}
+    or:   {"path": ["matching", "w_density"], "value": 0.7}
+    """
+    from olm.core import app_config
+    data = request.json
+    if "path" in data:
+        app_config.update_nested(data["path"], data["value"])
+    elif "key" in data:
+        app_config.update(data["key"], data["value"])
+    else:
+        return jsonify({"error": "Missing 'key' or 'path'"}), 400
+    return jsonify({"ok": True})
+
+
 @app.route("/api/patterns", methods=["GET"])
 def api_patterns_list():
     """Liste tous les patterns du catalogue."""

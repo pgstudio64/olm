@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 import copy
 
+from olm.core.app_config import get_standard_label
 from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
 from olm.core.pattern_generator import (
@@ -1293,16 +1294,6 @@ def match_room(
 # Nommage automatique des patterns (D-50)
 # ---------------------------------------------------------------------------
 
-# Mapping standard long → court pour le nommage
-_STD_SHORT = {
-    "AFNOR_ADVICE": "AFNOR",
-    "GROUP": "GROUP",
-    "SITE": "SITE",
-}
-
-_STD_LONG = {v: k for k, v in _STD_SHORT.items()}
-
-
 def _count_openings(pattern: dict) -> int:
     """Compte le nombre d'ouvertures (portes + baies) dans un pattern."""
     return len(pattern.get("room_openings", []))
@@ -1316,7 +1307,8 @@ def _pattern_group_key(pattern: dict) -> tuple[int, int, str, int]:
     """
     w = pattern.get("room_width_cm", 0)
     d = pattern.get("room_depth_cm", 0)
-    std = _STD_SHORT.get(pattern.get("standard", ""), "UNKNOWN")
+    std_key = pattern.get("standard", "")
+    std = get_standard_label(std_key) if std_key else "UNKNOWN"
     n_open = _count_openings(pattern)
     return (w, d, std, n_open)
 
