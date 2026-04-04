@@ -939,9 +939,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
     <div class="ol-header">
       <span id="autoName">-</span>
       <div class="standard-row" id="headerStandard">
-        <label><input type="radio" name="standard" value="AFNOR_ADVICE" checked> AFNOR</label>
-        <label><input type="radio" name="standard" value="GROUP"> GROUP</label>
-        <label><input type="radio" name="standard" value="SITE"> SITE</label>
+        <!-- Populated dynamically by renderEditorStandardRadios() -->
       </div>
       <button class="btn" id="btnNew">New</button>
       <button class="btn" id="btnLoad">Load</button>
@@ -981,6 +979,13 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
   <div class="col right-col">
     <div class="col-inner">
 
+      <div class="section-title">Room</div>
+      <table class="info-table">
+        <tr><td>Width (cm)</td><td id="infoRoomWidth">-</td></tr>
+        <tr><td>Depth (cm)</td><td id="infoRoomDepth">-</td></tr>
+        <tr><td>Area (m²)</td><td id="infoRoomArea">-</td></tr>
+      </table>
+
       <div class="section-title">Pattern info</div>
       <table class="info-table" id="infoTable">
         <tr><td>Rows</td><td id="infoRows">0</td></tr>
@@ -1011,7 +1016,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
             <label><input type="checkbox" id="stickN" value="N"> N</label>
             <label><input type="checkbox" id="stickS" value="S"> S</label>
             <label><input type="checkbox" id="stickE" value="E"> E</label>
-            <label><input type="checkbox" id="stickO" value="W"> W</label>
+            <label><input type="checkbox" id="stickO" value="O"> W</label>
           </div>
         </div>
         <div style="margin-top:10px; color:var(--text-dim); font-size:10px; line-height:1.6;">
@@ -1038,9 +1043,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
       <label style="margin-left:8px;">Standard:
         <select id="catFilterStandard">
           <option value="">All</option>
-          <option value="AFNOR_ADVICE">AFNOR</option>
-          <option value="GROUP">GROUP</option>
-          <option value="SITE">SITE</option>
+          <!-- Populated dynamically by renderCatStandardFilter() -->
         </select>
       </label>
       <span class="cat-dim-filter" style="flex:1;"></span>
@@ -1125,7 +1128,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
   <!-- SUB-TAB: REVIEW -->
   <div class="sub-tab-content" id="subtabFpReview">
     <div class="fp-container">
-      <div class="fp-info-col" id="rvFloorCol" style="min-width:200px;max-width:220px;border-left:none;border-right:1px solid var(--border);">
+      <div class="fp-info-col" id="rvFloorCol" style="min-width:200px;max-width:220px;border-left:none;border-right:1px solid var(--border);order:-2;">
         <div class="section-title">Floor properties</div>
         <table>
           <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
@@ -1145,7 +1148,9 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
             <tr><td style="color:var(--text-dim);">Area (m²)</td><td id="rvRoomArea" style="text-align:right;">-</td></tr>
           </table>
         </div>
-        <div class="fp-sidebar-title" style="margin-top:8px;">Room DSL</div>
+        <div class="fp-sidebar-title" style="margin-top:8px;">Room DSL
+          <span id="rvDslHelpToggle" style="color:var(--accent);font-size:10px;cursor:help;text-decoration:underline;margin-left:8px;font-weight:normal;">syntax help</span>
+        </div>
         <textarea id="rvRoomDsl" readonly rows="6"
           style="width:calc(100% - 16px);margin:4px 8px;font-size:11px;font-family:var(--font-mono);
           background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
@@ -2080,6 +2085,12 @@ function updateInfo() {
 
   _safeText("deskCount", nd + " desk(s)");
   updateRoomDSL();
+
+  // Room info
+  _safeText("infoRoomWidth", state.room_width_cm);
+  _safeText("infoRoomDepth", state.room_depth_cm);
+  _safeText("infoRoomArea", (state.room_width_cm * state.room_depth_cm / 10000).toFixed(1));
+
   _safeText("infoRows", nr);
   _safeText("infoBlocks", nb);
   _safeText("infoDesks", nd);
@@ -4323,6 +4334,35 @@ function renderSpacingSettings() {
   });
 }
 
+function renderEditorStandardRadios() {
+  var container = document.getElementById("headerStandard");
+  if (!container) return;
+  var stds = getStandards();
+  var html = "";
+  stds.forEach(function(s, i) {
+    var checked = i === 0 ? " checked" : "";
+    html += '<label><input type="radio" name="standard" value="' + s + '"' + checked + '> ' + getStdLabel(s) + '</label>';
+  });
+  container.innerHTML = html;
+  // Re-wire change listeners
+  container.querySelectorAll('input[name="standard"]').forEach(function(r) {
+    r.addEventListener("change", function() {
+      state.standard = this.value;
+      loadBlockDefs().then(function() { render(); updateAutoName(); });
+    });
+  });
+}
+
+function renderCatStandardFilter() {
+  var sel = document.getElementById("catFilterStandard");
+  if (!sel) return;
+  var html = '<option value="">All</option>';
+  getStandards().forEach(function(s) {
+    html += '<option value="' + s + '">' + getStdLabel(s) + '</option>';
+  });
+  sel.innerHTML = html;
+}
+
 function renderFpStandardFilter() {
   var container = document.getElementById("fpStandardFilter");
   if (!container) return;
@@ -4416,6 +4456,8 @@ async function init() {
   await loadSpacingConfigs();
   renderSpacingSettings();
   renderGeneralSettings();
+  renderEditorStandardRadios();
+  renderCatStandardFilter();
   renderFpStandardFilter();
 
   // Settings drawer open/close
@@ -4492,6 +4534,21 @@ async function init() {
   document.getElementById("dslHelpToggle").addEventListener("mouseleave", function() {
     document.getElementById("dslHelpTooltip").style.display = "none";
   });
+
+  // Review DSL help — reuse same tooltip
+  var rvHelp = document.getElementById("rvDslHelpToggle");
+  if (rvHelp) {
+    rvHelp.addEventListener("mouseenter", function(e) {
+      var tip = document.getElementById("dslHelpTooltip");
+      var rect = e.target.getBoundingClientRect();
+      tip.style.left = Math.min(rect.left, window.innerWidth - 400) + "px";
+      tip.style.top = (rect.bottom + 4) + "px";
+      tip.style.display = "";
+    });
+    rvHelp.addEventListener("mouseleave", function() {
+      document.getElementById("dslHelpTooltip").style.display = "none";
+    });
+  }
 
   // Wall stick checkboxes
   ["stickN", "stickS", "stickE", "stickO"].forEach(function(id) {
@@ -5052,9 +5109,6 @@ document.addEventListener("DOMContentLoaded", init);
     // Reset action buttons on room change
     document.getElementById("fpBtnEditPattern").disabled = true;
     document.getElementById("fpBtnAdjustLayout").disabled = true;
-    // fpBtnEditRoom moved to Review tab
-    var btnEditRoom = document.getElementById("fpBtnEditRoom");
-    if (btnEditRoom) btnEditRoom.disabled = false;
     // Show Discard if amendment exists
     var hasAmendment = !!fpAmendments[room.name];
     document.getElementById("fpBtnDiscard").style.display = hasAmendment ? "" : "none";
@@ -5505,17 +5559,6 @@ document.addEventListener("DOMContentLoaded", init);
         fpRenderCurrent();
       }
     });
-    // fpBtnEditRoom moved to Review tab — listener will be wired there
-    var btnEditRoom = document.getElementById("fpBtnEditRoom");
-    if (btnEditRoom) {
-      btnEditRoom.addEventListener("click", function() {
-        var room = fpCurrent();
-        if (room) {
-          var roomData = fpRoomAmendments[room.name] || room;
-          enterRoomAmendMode(roomData);
-        }
-      });
-    }
     document.getElementById("fpBtnExport").addEventListener("click", fpExport);
 
     document.getElementById("fpBtnLoadJson").addEventListener("click", function() {
