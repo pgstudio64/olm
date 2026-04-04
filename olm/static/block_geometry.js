@@ -55,7 +55,7 @@ function getDeskRects(type) {
   const eo = def.eo_cm || 80;
   const ns = def.ns_cm || 160;
 
-  const symmetric = ["BLOC_2_FACE", "BLOC_4_FACE", "BLOC_6_FACE"];
+  const symmetric = ["BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"];
   if (symmetric.includes(type)) {
     const pairs = n / 2;
     const rects = [];
@@ -71,7 +71,7 @@ function getDeskRects(type) {
   }
 
   // Blocs orthogonaux : 2 desks a 90 degres
-  if (type === "BLOC_2_ORTHO_D") {
+  if (type === "BLOCK_2_ORTHO_R") {
     // L en bas-gauche : desk2 regarde ouest, chaise est
     return [
       { x: 0, y: 0, w: DESK_D, h: DESK_W,
@@ -80,7 +80,7 @@ function getDeskRects(type) {
         label: "WS02", screenSide: "W", chairSide: "E" },
     ];
   }
-  if (type === "BLOC_2_ORTHO_G") {
+  if (type === "BLOCK_2_ORTHO_L") {
     // L en bas-droite (miroir) : desk2 regarde est, chaise ouest
     return [
       { x: 0, y: 0, w: DESK_D, h: DESK_W,

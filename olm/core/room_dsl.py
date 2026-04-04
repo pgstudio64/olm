@@ -1,13 +1,13 @@
-"""Parseur et sérialiseur DSL pour les pièces — solver_lab.
+"""Room DSL parser and serializer.
 
-Grammaire :
-    PIECE <width> x <depth>
-    FEN <face> <offset> <width>
-    PORTE <face> <offset> <width> INT|EXT G|D
-    BAIE <face> <offset> <width>
-    EXCL <x> <y> <width> <depth>
+Grammar:
+    ROOM <width> x <depth>
+    WINDOW <face> <offset> <width>
+    DOOR <face> <offset> <width> INT|EXT L|R
+    OPENING <face> <offset> <width>
+    EXCLUSION <x> <y> <width> <depth>
 
-Commentaires : ``--`` jusqu'à fin de ligne.
+Comments: ``--`` until end of line.
 """
 from __future__ import annotations
 
@@ -25,57 +25,57 @@ _FACE_MAP: dict[str, Face] = {
     "N": Face.NORTH,
     "S": Face.SOUTH,
     "E": Face.EAST,
-    "O": Face.WEST,
+    "W": Face.WEST,
 }
 
 _FACE_REV: dict[Face, str] = {v: k for k, v in _FACE_MAP.items()}
 
 _HINGE_MAP: dict[str, HingeSide] = {
-    "G": HingeSide.LEFT,
-    "D": HingeSide.RIGHT,
+    "L": HingeSide.LEFT,
+    "R": HingeSide.RIGHT,
 }
 
 _HINGE_REV: dict[HingeSide, str] = {v: k for k, v in _HINGE_MAP.items()}
 
 
 class RoomDSLError(DSLError):
-    """Erreur de syntaxe ou de sémantique dans le DSL pièce."""
+    """Syntax or semantic error in the room DSL."""
 
 
 def _parse_face(token: str, line_no: int) -> Face:
-    """Convertit un token de face en enum Face."""
+    """Convert a face token to a Face enum."""
     face = _FACE_MAP.get(token.upper())
     if face is None:
         raise RoomDSLError(
-            f"Ligne {line_no} : face invalide '{token}' "
-            f"(attendu : {', '.join(_FACE_MAP)})"
+            f"Line {line_no}: invalid face '{token}' "
+            f"(expected: {', '.join(_FACE_MAP)})"
         )
     return face
 
 
 def _parse_int(token: str, name: str, line_no: int) -> int:
-    """Convertit un token en entier avec message d'erreur clair.
+    """Convert a token to int with a clear error message.
 
-    Délègue à ``dsl_common.parse_int`` en ajoutant le contexte de ligne.
-    Relève ``RoomDSLError`` pour compatibilité avec le code appelant.
+    Delegates to ``dsl_common.parse_int`` with line context.
+    Raises ``RoomDSLError`` for caller compatibility.
     """
     try:
-        return parse_int(token, name, context=f"Ligne {line_no}")
+        return parse_int(token, name, context=f"Line {line_no}")
     except DSLError as exc:
         raise RoomDSLError(str(exc)) from None
 
 
 def parse_room_dsl(text: str) -> RoomSpec:
-    """Parse un texte DSL et retourne un RoomSpec.
+    """Parse a DSL text and return a RoomSpec.
 
     Args:
-        text: Texte DSL multi-lignes.
+        text: Multi-line DSL text.
 
     Returns:
-        RoomSpec correspondant.
+        Corresponding RoomSpec.
 
     Raises:
-        RoomDSLError: Si la syntaxe est invalide ou PIECE manquant.
+        RoomDSLError: If the syntax is invalid or ROOM is missing.
     """
     room: RoomSpec | None = None
     windows: list[WindowSpec] = []
@@ -90,38 +90,38 @@ def parse_room_dsl(text: str) -> RoomSpec:
         tokens = line.split()
         keyword = tokens[0].upper()
 
-        if keyword == "PIECE":
+        if keyword == "ROOM":
             if room is not None:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PIECE dupliqué"
+                    f"Line {line_no}: duplicate ROOM"
                 )
             if len(tokens) != 2:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PIECE attend <largeur>x<profondeur>"
+                    f"Line {line_no}: ROOM expects <width>x<depth>"
                 )
             parts = tokens[1].lower().split("x")
             if len(parts) != 2:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : format PIECE invalide "
-                    f"(attendu : LARGxPROF)"
+                    f"Line {line_no}: invalid ROOM format "
+                    f"(expected: WIDTHxDEPTH)"
                 )
-            w = _parse_int(parts[0], "largeur", line_no)
-            d = _parse_int(parts[1], "profondeur", line_no)
+            w = _parse_int(parts[0], "width", line_no)
+            d = _parse_int(parts[1], "depth", line_no)
             room = RoomSpec(width_cm=w, depth_cm=d)
 
-        elif keyword == "FEN":
+        elif keyword == "WINDOW":
             if room is None:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PIECE doit apparaître "
-                    f"avant FEN"
+                    f"Line {line_no}: ROOM must appear "
+                    f"before WINDOW"
                 )
             if len(tokens) < 2 or len(tokens) > 4:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : FEN attend <face> [<offset> <largeur>]"
+                    f"Line {line_no}: WINDOW expects <face> [<offset> <width>]"
                 )
             face = _parse_face(tokens[1], line_no)
             if len(tokens) == 2:
-                # Pleine largeur du mur
+                # Full wall width
                 offset = 0
                 if face in (Face.NORTH, Face.SOUTH):
                     width = room.width_cm
@@ -129,25 +129,25 @@ def parse_room_dsl(text: str) -> RoomSpec:
                     width = room.depth_cm
             else:
                 offset = _parse_int(tokens[2], "offset", line_no)
-                width = _parse_int(tokens[3], "largeur", line_no)
+                width = _parse_int(tokens[3], "width", line_no)
             windows.append(WindowSpec(
                 face=face, offset_cm=offset, width_cm=width,
             ))
 
-        elif keyword == "PORTE":
+        elif keyword == "DOOR":
             if room is None:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PIECE doit apparaître "
-                    f"avant PORTE"
+                    f"Line {line_no}: ROOM must appear "
+                    f"before DOOR"
                 )
             if len(tokens) != 6:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PORTE attend "
-                    f"<face> <offset> <largeur> INT|EXT G|D"
+                    f"Line {line_no}: DOOR expects "
+                    f"<face> <offset> <width> INT|EXT L|R"
                 )
             face = _parse_face(tokens[1], line_no)
             offset = _parse_int(tokens[2], "offset", line_no)
-            width = _parse_int(tokens[3], "largeur", line_no)
+            width = _parse_int(tokens[3], "width", line_no)
             dir_token = tokens[4].upper()
             if dir_token == "INT":
                 opens_inward = True
@@ -155,15 +155,15 @@ def parse_room_dsl(text: str) -> RoomSpec:
                 opens_inward = False
             else:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : direction invalide "
-                    f"'{tokens[4]}' (attendu : INT ou EXT)"
+                    f"Line {line_no}: invalid direction "
+                    f"'{tokens[4]}' (expected: INT or EXT)"
                 )
             hinge_token = tokens[5].upper()
             hinge = _HINGE_MAP.get(hinge_token)
             if hinge is None:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : gond invalide "
-                    f"'{tokens[5]}' (attendu : G ou D)"
+                    f"Line {line_no}: invalid hinge side "
+                    f"'{tokens[5]}' (expected: L or R)"
                 )
             openings.append(OpeningSpec(
                 face=face,
@@ -174,20 +174,20 @@ def parse_room_dsl(text: str) -> RoomSpec:
                 hinge_side=hinge,
             ))
 
-        elif keyword == "BAIE":
+        elif keyword == "OPENING":
             if room is None:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PIECE doit apparaître "
-                    f"avant BAIE"
+                    f"Line {line_no}: ROOM must appear "
+                    f"before OPENING"
                 )
             if len(tokens) != 4:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : BAIE attend "
-                    f"<face> <offset> <largeur>"
+                    f"Line {line_no}: OPENING expects "
+                    f"<face> <offset> <width>"
                 )
             face = _parse_face(tokens[1], line_no)
             offset = _parse_int(tokens[2], "offset", line_no)
-            width = _parse_int(tokens[3], "largeur", line_no)
+            width = _parse_int(tokens[3], "width", line_no)
             openings.append(OpeningSpec(
                 face=face,
                 offset_cm=offset,
@@ -197,32 +197,32 @@ def parse_room_dsl(text: str) -> RoomSpec:
                 hinge_side=HingeSide.LEFT,
             ))
 
-        elif keyword == "EXCL":
+        elif keyword == "EXCLUSION":
             if room is None:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : PIECE doit apparaître "
-                    f"avant EXCL"
+                    f"Line {line_no}: ROOM must appear "
+                    f"before EXCLUSION"
                 )
             if len(tokens) != 5:
                 raise RoomDSLError(
-                    f"Ligne {line_no} : EXCL attend "
-                    f"<x> <y> <largeur> <profondeur>"
+                    f"Line {line_no}: EXCLUSION expects "
+                    f"<x> <y> <width> <depth>"
                 )
             x = _parse_int(tokens[1], "x", line_no)
             y = _parse_int(tokens[2], "y", line_no)
-            w = _parse_int(tokens[3], "largeur", line_no)
-            d = _parse_int(tokens[4], "profondeur", line_no)
+            w = _parse_int(tokens[3], "width", line_no)
+            d = _parse_int(tokens[4], "depth", line_no)
             exclusions.append(ExclusionZone(
                 x_cm=x, y_cm=y, width_cm=w, depth_cm=d, physical=True,
             ))
 
         else:
             raise RoomDSLError(
-                f"Ligne {line_no} : mot-clé inconnu '{tokens[0]}'"
+                f"Line {line_no}: unknown keyword '{tokens[0]}'"
             )
 
     if room is None:
-        raise RoomDSLError("PIECE manquant dans le DSL")
+        raise RoomDSLError("ROOM missing in DSL")
 
     room.windows = windows
     room.openings = openings
@@ -231,26 +231,26 @@ def parse_room_dsl(text: str) -> RoomSpec:
 
 
 def to_room_dsl(room: RoomSpec) -> str:
-    """Sérialise un RoomSpec en texte DSL.
+    """Serialize a RoomSpec to DSL text.
 
     Args:
-        room: Spécification de la pièce.
+        room: Room specification.
 
     Returns:
-        Texte DSL multi-lignes.
+        Multi-line DSL text.
     """
     lines: list[str] = []
-    lines.append(f"PIECE {room.width_cm}x{room.depth_cm}")
+    lines.append(f"ROOM {room.width_cm}x{room.depth_cm}")
 
     for w in room.windows:
         face = _FACE_REV[w.face]
-        # Forme courte si pleine largeur du mur
+        # Short form if full wall width
         wall_len = (room.width_cm if w.face in (Face.NORTH, Face.SOUTH)
                     else room.depth_cm)
         if w.offset_cm == 0 and w.width_cm == wall_len:
-            lines.append(f"FEN {face}")
+            lines.append(f"WINDOW {face}")
         else:
-            lines.append(f"FEN {face} {w.offset_cm} {w.width_cm}")
+            lines.append(f"WINDOW {face} {w.offset_cm} {w.width_cm}")
 
     for o in room.openings:
         face = _FACE_REV[o.face]
@@ -258,17 +258,17 @@ def to_room_dsl(room: RoomSpec) -> str:
             direction = "INT" if o.opens_inward else "EXT"
             hinge = _HINGE_REV[o.hinge_side]
             lines.append(
-                f"PORTE {face} {o.offset_cm} {o.width_cm} "
+                f"DOOR {face} {o.offset_cm} {o.width_cm} "
                 f"{direction} {hinge}"
             )
         else:
             lines.append(
-                f"BAIE {face} {o.offset_cm} {o.width_cm}"
+                f"OPENING {face} {o.offset_cm} {o.width_cm}"
             )
 
     for z in room.exclusion_zones:
         lines.append(
-            f"EXCL {z.x_cm} {z.y_cm} {z.width_cm} {z.depth_cm}"
+            f"EXCLUSION {z.x_cm} {z.y_cm} {z.width_cm} {z.depth_cm}"
         )
 
     return "\n".join(lines) + "\n"

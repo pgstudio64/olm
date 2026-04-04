@@ -94,8 +94,8 @@ class Pattern:
 _FACE_CHAIR_PASSAGE = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_CM)         # 70 + 90 = 160 cm
 _FACE_CHAIR_ACCESS = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_SINGLE_CM)   # 70 + 30 = 100 cm
 
-BLOC_2_FACE = Block(
-    name="BLOC_2_FACE",
+BLOCK_2_FACE = Block(
+    name="BLOCK_2_FACE",
     eo_cm=DESK_W_CM * 2,     # 160 cm
     ns_cm=DESK_D_CM,          # 180 cm
     n_desks=2,
@@ -108,8 +108,8 @@ BLOC_2_FACE = Block(
     symmetric_180=True,
 )
 
-BLOC_1 = Block(
-    name="BLOC_1",
+BLOCK_1 = Block(
+    name="BLOCK_1",
     eo_cm=DESK_W_CM,
     ns_cm=DESK_D_CM,
     n_desks=1,
@@ -121,8 +121,8 @@ BLOC_1 = Block(
     ),
 )
 
-BLOC_2_COTE = Block(
-    name="BLOC_2_COTE",
+BLOCK_2_SIDE = Block(
+    name="BLOCK_2_SIDE",
     eo_cm=DESK_W_CM,
     ns_cm=DESK_D_CM * 2,
     n_desks=2,
@@ -134,8 +134,8 @@ BLOC_2_COTE = Block(
     ),
 )
 
-BLOC_3_COTE = Block(
-    name="BLOC_3_COTE",
+BLOCK_3_SIDE = Block(
+    name="BLOCK_3_SIDE",
     eo_cm=DESK_W_CM,          # 80 cm — 1 seule colonne
     ns_cm=DESK_D_CM * 3,      # 540 cm — 3 postes empilés NS
     n_desks=3,
@@ -147,8 +147,8 @@ BLOC_3_COTE = Block(
     ),
 )
 
-BLOC_4_FACE = Block(
-    name="BLOC_4_FACE",
+BLOCK_4_FACE = Block(
+    name="BLOCK_4_FACE",
     eo_cm=DESK_W_CM * 2,     # 160 cm — 2 paires EO
     ns_cm=DESK_D_CM * 2,     # 360 cm — 2 paires empilées NS
     n_desks=4,
@@ -161,9 +161,9 @@ BLOC_4_FACE = Block(
     symmetric_180=True,
 )
 
-BLOC_6_FACE = Block(
-    name="BLOC_6_FACE",
-    eo_cm=DESK_W_CM * 2,     # 160 cm — identique BLOC_4_FACE
+BLOCK_6_FACE = Block(
+    name="BLOCK_6_FACE",
+    eo_cm=DESK_W_CM * 2,     # 160 cm — identique BLOCK_4_FACE
     ns_cm=DESK_D_CM * 3,     # 540 cm — 3 paires empilées NS
     n_desks=6,
     faces=FaceCandidates(
@@ -177,7 +177,7 @@ BLOC_6_FACE = Block(
 )
 
 # Blocs orthogonaux : 2 desks à 90° l'un de l'autre, collés
-# BLOC_2_ORTHO_D : L en bas-gauche (desk1 regarde sud, desk2 regarde ouest)
+# BLOCK_2_ORTHO_R : L en bas-gauche (desk1 regarde sud, desk2 regarde ouest)
 #   +--------180cm---------+
 #   |   Desk1 (regard S)    | 80cm
 #   +------+----------------+
@@ -187,8 +187,8 @@ BLOC_6_FACE = Block(
 #   +------+
 #    80cm
 # Chaises : desk1=nord, desk2=est
-BLOC_2_ORTHO_D = Block(
-    name="BLOC_2_ORTHO_D",
+BLOCK_2_ORTHO_R = Block(
+    name="BLOCK_2_ORTHO_R",
     eo_cm=DESK_D_CM,          # 180 cm (largeur desk1)
     ns_cm=DESK_W_CM + DESK_D_CM,  # 260 cm (80+180)
     n_desks=2,
@@ -200,7 +200,7 @@ BLOC_2_ORTHO_D = Block(
     ),
 )
 
-# BLOC_2_ORTHO_G : miroir — L en bas-droite (desk1 regarde sud, desk2 regarde est)
+# BLOCK_2_ORTHO_L : miroir — L en bas-droite (desk1 regarde sud, desk2 regarde est)
 #   +--------180cm---------+
 #   |   Desk1 (regard S)    | 80cm
 #   +----------------+------+
@@ -210,8 +210,8 @@ BLOC_2_ORTHO_D = Block(
 #                    +------+
 #                     80cm
 # Chaises : desk1=nord, desk2=ouest
-BLOC_2_ORTHO_G = Block(
-    name="BLOC_2_ORTHO_G",
+BLOCK_2_ORTHO_L = Block(
+    name="BLOCK_2_ORTHO_L",
     eo_cm=DESK_D_CM,          # 180 cm
     ns_cm=DESK_W_CM + DESK_D_CM,  # 260 cm
     n_desks=2,
@@ -456,20 +456,20 @@ def mirror_double_row(pattern: DoubleRowPattern) -> "DoubleRowPattern | None":
 
 
 PATTERNS = [
-    compose_row([BLOC_4_FACE], "P_B4"),
-    compose_row([BLOC_4_FACE, BLOC_2_FACE], "P_B4_B2F"),
-    compose_row([BLOC_6_FACE], "P_B6"),
-    compose_row([BLOC_6_FACE, BLOC_2_FACE], "P_B6_B2F"),
+    compose_row([BLOCK_4_FACE], "P_B4"),
+    compose_row([BLOCK_4_FACE, BLOCK_2_FACE], "P_B4_B2F"),
+    compose_row([BLOCK_6_FACE], "P_B6"),
+    compose_row([BLOCK_6_FACE, BLOCK_2_FACE], "P_B6_B2F"),
 ]
 PATTERNS_ALL = PATTERNS + [rotate_pattern_90(p) for p in PATTERNS]
 
 DOUBLE_ROW_PATTERNS = [
-    compose_double_row([BLOC_4_FACE],              [BLOC_4_FACE],              "P_B4_B4"),
-    compose_double_row([BLOC_4_FACE],              [BLOC_4_FACE, BLOC_2_FACE], "P_B4_B4B2F"),
-    compose_double_row([BLOC_4_FACE, BLOC_2_FACE], [BLOC_4_FACE, BLOC_2_FACE], "P_B4B2F_B4B2F"),
-    compose_double_row([BLOC_2_FACE],              [BLOC_2_FACE],              "P_B2F_B2F"),
-    compose_double_row([BLOC_2_FACE],              [BLOC_4_FACE],              "P_B2F_B4"),
-    compose_double_row([BLOC_4_FACE, BLOC_2_FACE], [BLOC_4_FACE],              "P_B4B2F_B4"),
+    compose_double_row([BLOCK_4_FACE],              [BLOCK_4_FACE],              "P_B4_B4"),
+    compose_double_row([BLOCK_4_FACE],              [BLOCK_4_FACE, BLOCK_2_FACE], "P_B4_B4B2F"),
+    compose_double_row([BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE, BLOCK_2_FACE], "P_B4B2F_B4B2F"),
+    compose_double_row([BLOCK_2_FACE],              [BLOCK_2_FACE],              "P_B2F_B2F"),
+    compose_double_row([BLOCK_2_FACE],              [BLOCK_4_FACE],              "P_B2F_B4"),
+    compose_double_row([BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE],              "P_B4B2F_B4"),
 ]
 _mirrors = [mirror_double_row(p) for p in DOUBLE_ROW_PATTERNS]
 DOUBLE_ROW_PATTERNS_ALL = (
@@ -655,9 +655,9 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                 60 % masqué sous le bureau (z-order).
 
     Rendu par type de bloc :
-      BLOC_4 / BLOC_6 : fauteuils NS (regard N ou S), orange horizontal aux bords
+      BLOCK_4 / BLOCK_6 : fauteuils NS (regard N ou S), orange horizontal aux bords
                         extérieurs des rangées, écran horizontal bord intérieur.
-      BLOC_2_FACE     : fauteuils EW (regard E ou W), orange vertical sur les
+      BLOCK_2_FACE     : fauteuils EW (regard E ou W), orange vertical sur les
                         faces EW du bloc, écran vertical bord intérieur.
 
     Géométrie NS (de haut en bas) :
@@ -729,8 +729,8 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
         L.append(s)
 
     def _is_facing_ns(block: Block) -> bool:
-        """Vrai pour BLOC_4_FACE et BLOC_6_FACE (regard N/S) ; faux pour BLOC_2_FACE (regard E/W)."""
-        return block.name in ("BLOC_4_FACE", "BLOC_6_FACE")
+        """Vrai pour BLOCK_4_FACE et BLOCK_6_FACE (regard N/S) ; faux pour BLOCK_2_FACE (regard E/W)."""
+        return block.name in ("BLOCK_4_FACE", "BLOCK_6_FACE")
 
     # --- primitives ---
 
@@ -779,7 +779,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                 f'width="{scr_w:.1f}" height="5" fill="{SCREEN_COL}" rx="1"/>')
 
     def draw_chair_ew(bx: float, y_desk: float, screen_side: str) -> None:
-        """Fauteuil EW (BLOC_2_FACE, regard E ou W) — 60% sous le bureau.
+        """Fauteuil EW (BLOCK_2_FACE, regard E ou W) — 60% sous le bureau.
 
         Corps 40×22 px, dossier 7×16 px côté extérieur, accoudoirs 22×5 px N et S.
         """
@@ -804,7 +804,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
             f'width="22" height="5" fill="{CHAIR_ARM}" rx="2"/>')
 
     def draw_chair_ns(bx: float, y_desk: float, side: str) -> None:
-        """Fauteuil NS (BLOC_4/6, regard N ou S) — 60% sous le bureau.
+        """Fauteuil NS (BLOCK_4/6, regard N ou S) — 60% sous le bureau.
 
         Corps (dw×0.8)×22 px, dossier côté extérieur (N pour rangée nord, S pour sud).
         Accoudoirs verticaux gauche et droit.
@@ -899,9 +899,9 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     def draw_row_oranges(blocks: list[Block], y_desk: float, row_side: str) -> None:
         """Zones orange d'une rangée selon le type de chaque bloc.
 
-        BLOC_4/6 : bande orange horizontale au bord extérieur de la rangée
+        BLOCK_4/6 : bande orange horizontale au bord extérieur de la rangée
                    (dans la zone candidate bleue), sur toute la largeur du bloc.
-        BLOC_2_FACE : bandes orange verticales sur les faces EW du bloc,
+        BLOCK_2_FACE : bandes orange verticales sur les faces EW du bloc,
                       hauteur = celle des bureaux.
 
         Args:
@@ -920,7 +920,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                 else:
                     draw_zone_orange(x_cur, y_desk + dh, bw_px, deb_px,
                                      f"{CHAIR_CLEARANCE_CM} cm")
-            else:  # BLOC_2_FACE → orange vertical EW
+            else:  # BLOCK_2_FACE → orange vertical EW
                 draw_zone_orange(x_cur - deb_px, y_desk, deb_px, dh, "")
                 draw_zone_orange(x_cur + bw_px,  y_desk, deb_px, dh, "")
             x_cur += bw_px
@@ -935,8 +935,8 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
         """Dessine fauteuils PUIS bureaux d'une rangée (z-order correct).
 
         Rendu par type de bloc :
-          BLOC_4/6    → fauteuil NS (draw_chair_ns), écran horizontal bord intérieur.
-          BLOC_2_FACE → fauteuil EW (draw_chair_ew), écran vertical bord utilisateur.
+          BLOCK_4/6    → fauteuil NS (draw_chair_ns), écran horizontal bord intérieur.
+          BLOCK_2_FACE → fauteuil EW (draw_chair_ew), écran vertical bord utilisateur.
 
         Args:
             blocks: Blocs de la rangée (ouest → est).
@@ -956,7 +956,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                 for i in range(block.n_desks):
                     desks_info.append((x_cur + i * dw, y_desk, 'NS', chair_side, ws_idx))
                     ws_idx += 1
-            else:  # BLOC_2_FACE
+            else:  # BLOCK_2_FACE
                 n_pairs = block.n_desks // 2
                 for j in range(n_pairs):
                     desks_info.append((x_cur + j * dw * 2,       y_desk, 'EW', 'W', ws_idx))
@@ -1300,7 +1300,7 @@ if __name__ == "__main__":
         render_pattern_svg(p, svg_path)
         print(f"✓ {svg_path}")
 
-    for block in [BLOC_1, BLOC_2_COTE, BLOC_2_FACE, BLOC_3_COTE, BLOC_4_FACE, BLOC_6_FACE]:
+    for block in [BLOCK_1, BLOCK_2_SIDE, BLOCK_2_FACE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE]:
         svg_path = os.path.join(out_dir, f"{block.name}.svg")
         render_block_svg(block, svg_path)
         print(f"✓ {svg_path}")

@@ -25,8 +25,8 @@ from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
 from olm.core.pattern_generator import (
     DESK_W_CM, DESK_D_CM,
-    BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE, BLOC_6_FACE,
-    BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+    BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
+    BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,22 +99,22 @@ def load_catalogue(path: str = CATALOGUE_PATH) -> list[dict]:
 
 # Dimensions canoniques (eo_cm, ns_cm) et nombre de postes par type
 _BLOCK_REGISTRY = {
-    "BLOC_1":          (BLOC_1.eo_cm, BLOC_1.ns_cm, 1),
-    "BLOC_2_FACE":     (BLOC_2_FACE.eo_cm, BLOC_2_FACE.ns_cm, 2),
-    "BLOC_2_COTE":     (BLOC_2_COTE.eo_cm, BLOC_2_COTE.ns_cm, 2),
-    "BLOC_3_COTE":     (BLOC_3_COTE.eo_cm, BLOC_3_COTE.ns_cm, 3),
-    "BLOC_4_FACE":     (BLOC_4_FACE.eo_cm, BLOC_4_FACE.ns_cm, 4),
-    "BLOC_6_FACE":     (BLOC_6_FACE.eo_cm, BLOC_6_FACE.ns_cm, 6),
-    "BLOC_2_ORTHO_D":  (BLOC_2_ORTHO_D.eo_cm, BLOC_2_ORTHO_D.ns_cm, 2),
-    "BLOC_2_ORTHO_G":  (BLOC_2_ORTHO_G.eo_cm, BLOC_2_ORTHO_G.ns_cm, 2),
+    "BLOCK_1":          (BLOCK_1.eo_cm, BLOCK_1.ns_cm, 1),
+    "BLOCK_2_FACE":     (BLOCK_2_FACE.eo_cm, BLOCK_2_FACE.ns_cm, 2),
+    "BLOCK_2_SIDE":     (BLOCK_2_SIDE.eo_cm, BLOCK_2_SIDE.ns_cm, 2),
+    "BLOCK_3_SIDE":     (BLOCK_3_SIDE.eo_cm, BLOCK_3_SIDE.ns_cm, 3),
+    "BLOCK_4_FACE":     (BLOCK_4_FACE.eo_cm, BLOCK_4_FACE.ns_cm, 4),
+    "BLOCK_6_FACE":     (BLOCK_6_FACE.eo_cm, BLOCK_6_FACE.ns_cm, 6),
+    "BLOCK_2_ORTHO_R":  (BLOCK_2_ORTHO_R.eo_cm, BLOCK_2_ORTHO_R.ns_cm, 2),
+    "BLOCK_2_ORTHO_L":  (BLOCK_2_ORTHO_L.eo_cm, BLOCK_2_ORTHO_L.ns_cm, 2),
 }
 
 _BLOCK_N_DESKS = {k: v[2] for k, v in _BLOCK_REGISTRY.items()}
 
 # Types de blocs ortho (miroir = swap D↔G)
 _ORTHO_MIRROR = {
-    "BLOC_2_ORTHO_D": "BLOC_2_ORTHO_G",
-    "BLOC_2_ORTHO_G": "BLOC_2_ORTHO_D",
+    "BLOCK_2_ORTHO_R": "BLOCK_2_ORTHO_L",
+    "BLOCK_2_ORTHO_L": "BLOCK_2_ORTHO_R",
 }
 
 
@@ -729,29 +729,29 @@ class DeskPosition:
 # Positions relatives des desks dans chaque type de bloc à orientation 0°
 # Format: list[(dx, dy, desk_w, desk_d)] relatif au coin NW du bloc
 _DESK_LAYOUTS: dict[str, list[tuple[int, int, int, int]]] = {
-    "BLOC_1": [
+    "BLOCK_1": [
         (0, 0, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_2_FACE": [
+    "BLOCK_2_FACE": [
         (0, 0, DESK_W_CM, DESK_D_CM),
         (DESK_W_CM, 0, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_2_COTE": [
+    "BLOCK_2_SIDE": [
         (0, 0, DESK_W_CM, DESK_D_CM),
         (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_3_COTE": [
+    "BLOCK_3_SIDE": [
         (0, 0, DESK_W_CM, DESK_D_CM),
         (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
         (0, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_4_FACE": [
+    "BLOCK_4_FACE": [
         (0, 0, DESK_W_CM, DESK_D_CM),
         (DESK_W_CM, 0, DESK_W_CM, DESK_D_CM),
         (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
         (DESK_W_CM, DESK_D_CM, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_6_FACE": [
+    "BLOCK_6_FACE": [
         (0, 0, DESK_W_CM, DESK_D_CM),
         (DESK_W_CM, 0, DESK_W_CM, DESK_D_CM),
         (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
@@ -759,13 +759,13 @@ _DESK_LAYOUTS: dict[str, list[tuple[int, int, int, int]]] = {
         (0, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
         (DESK_W_CM, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_2_ORTHO_D": [
+    "BLOCK_2_ORTHO_R": [
         # desk1 (regard S) : barre horizontale en haut
         (0, 0, DESK_D_CM, DESK_W_CM),
         # desk2 (regard W) : barre verticale en bas à gauche
         (0, DESK_W_CM, DESK_W_CM, DESK_D_CM),
     ],
-    "BLOC_2_ORTHO_G": [
+    "BLOCK_2_ORTHO_L": [
         # desk1 (regard S) : barre horizontale en haut
         (0, 0, DESK_D_CM, DESK_W_CM),
         # desk2 (regard E) : barre verticale en bas à droite

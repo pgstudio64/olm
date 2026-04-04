@@ -1,12 +1,12 @@
-"""Parseur et exporteur DSL pour les patterns — solver_lab.
+"""Pattern DSL parser and serializer.
 
-Bijection DSL texte <-> JSON selon specs/PATTERN_DSL_SPEC.md.
+Bijection DSL text <-> JSON per specs/PATTERN_DSL_SPEC.md.
 
-DSL texte :
-    P_B4_B2F: BLOC_4_FACE, 180, BLOC_2_FACE
-    P_B4_B4: BLOC_4_FACE; 180; BLOC_4_FACE
+DSL text:
+    P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE
+    P_B4_B4: BLOCK_4_FACE; 180; BLOCK_4_FACE
 
-JSON :
+JSON:
     {"name": "P_B4_B2F", "rows": [{"blocks": [...]}], "row_gaps_cm": []}
 """
 from __future__ import annotations
@@ -16,9 +16,9 @@ import re
 from olm.core.dsl_common import DSLError, strip_comment
 
 VALID_BLOCK_TYPES = frozenset({
-    "BLOC_1", "BLOC_2_FACE", "BLOC_2_COTE",
-    "BLOC_3_COTE", "BLOC_4_FACE", "BLOC_6_FACE",
-    "BLOC_2_ORTHO_G", "BLOC_2_ORTHO_D",
+    "BLOCK_1", "BLOCK_2_FACE", "BLOCK_2_SIDE",
+    "BLOCK_3_SIDE", "BLOCK_4_FACE", "BLOCK_6_FACE",
+    "BLOCK_2_ORTHO_L", "BLOCK_2_ORTHO_R",
 })
 
 VALID_ORIENTATIONS = frozenset({0, 90, 180, 270})
@@ -28,7 +28,7 @@ def parse_dsl(text: str) -> dict:
     """Parse une ligne DSL en dict JSON (format PATTERN_DSL_SPEC.md).
 
     Args:
-        text: Ligne DSL, ex. "P_B4_B2F: BLOC_4_FACE, 180, BLOC_2_FACE"
+        text: Ligne DSL, ex. "P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE"
 
     Returns:
         Dict avec clés name, rows, row_gaps_cm.
@@ -38,22 +38,22 @@ def parse_dsl(text: str) -> dict:
     """
     text = strip_comment(text)
     if not text:
-        raise DSLError("DSL vide")
+        raise DSLError("Empty DSL")
 
     # Séparer nom : contenu
     if ":" not in text:
-        raise DSLError(f"Séparateur ':' manquant dans : {text}")
+        raise DSLError(f"Missing ':' separator in: {text}")
 
     name_part, body = text.split(":", 1)
     name = name_part.strip()
     if not name:
-        raise DSLError("Nom de pattern vide")
+        raise DSLError("Empty pattern name")
     if not re.match(r"^[A-Za-z0-9_ ]+$", name):
-        raise DSLError(f"Nom de pattern invalide : {name}")
+        raise DSLError(f"Invalid pattern name: {name}")
 
     body = body.strip()
     if not body:
-        raise DSLError(f"Corps du pattern vide pour : {name}")
+        raise DSLError(f"Empty pattern body for: {name}")
 
     # Séparer les rangées par ";"
     raw_parts = [p.strip() for p in body.split(";")]
@@ -79,7 +79,7 @@ def parse_dsl(text: str) -> dict:
             else:
                 # Pas de gap explicite — erreur : un gap est requis entre rangées
                 raise DSLError(
-                    f"Gap inter-rangée manquant entre rangées dans : {name}"
+                    f"Missing inter-row gap between rows in: {name}"
                 )
 
     return {"name": name, "rows": rows, "row_gaps_cm": row_gaps_cm}
@@ -110,18 +110,18 @@ def _parse_row(text: str) -> dict:
             blocks.append(block)
 
     if not blocks:
-        raise DSLError(f"Rangée sans bloc : {text}")
+        raise DSLError(f"Row without block: {text}")
 
     return {"blocks": blocks}
 
 
-_OFFSET_RE = re.compile(r"^(SUD|NORD)(\d+)$")
-_STICK_RE = re.compile(r"^@S([NSEO])$")
-_VALID_STICK_DIRS = frozenset({"N", "S", "E", "O"})
+_OFFSET_RE = re.compile(r"^(S|N)(\d+)$")
+_STICK_RE = re.compile(r"^@S([NSEW])$")
+_VALID_STICK_DIRS = frozenset({"N", "S", "E", "W"})
 
 
 def _parse_block(text: str) -> dict:
-    """Parse un élément bloc : BLOC_TYPE[@ORIENT] [SUD<N>|NORD<N>] [@SN|@SS|@SE|@SO]*."""
+    """Parse a block element: BLOCK_TYPE[@ORIENT] [S<N>|N<N>] [@SN|@SS|@SE|@SW]*."""
     parts_ws = text.strip().split()
     main_part = parts_ws[0]
     offset_ns_cm = 0
@@ -133,15 +133,15 @@ def _parse_block(text: str) -> dict:
         if offset_match:
             direction = offset_match.group(1)
             value = int(offset_match.group(2))
-            offset_ns_cm = value if direction == "SUD" else -value
+            offset_ns_cm = value if direction == "S" else -value
         elif stick_match:
             d = stick_match.group(1)
             if d not in _VALID_STICK_DIRS:
-                raise DSLError(f"Direction stick invalide : {token}")
+                raise DSLError(f"Invalid stick direction: {token}")
             if d not in sticks:
                 sticks.append(d)
         else:
-            raise DSLError(f"Token invalide après le bloc : {token}")
+            raise DSLError(f"Invalid token after block: {token}")
 
     if "@" in main_part:
         at_parts = main_part.split("@", 1)
@@ -149,15 +149,15 @@ def _parse_block(text: str) -> dict:
         try:
             orientation = int(at_parts[1].strip())
         except ValueError:
-            raise DSLError(f"Orientation invalide : {at_parts[1]}")
+            raise DSLError(f"Invalid orientation: {at_parts[1]}")
     else:
         block_type = main_part.strip()
         orientation = 0
 
     if block_type not in VALID_BLOCK_TYPES:
-        raise DSLError(f"Type de bloc inconnu : {block_type}")
+        raise DSLError(f"Unknown block type: {block_type}")
     if orientation not in VALID_ORIENTATIONS:
-        raise DSLError(f"Orientation invalide ({orientation}), attendu 0/90/180/270")
+        raise DSLError(f"Invalid orientation ({orientation}), expected 0/90/180/270")
 
     result: dict = {"type": block_type, "orientation": orientation}
     if offset_ns_cm != 0:
@@ -174,7 +174,7 @@ def to_dsl(pattern: dict) -> str:
         pattern: Dict avec clés name, rows, row_gaps_cm.
 
     Returns:
-        Ligne DSL, ex. "P_B4_B2F: BLOC_4_FACE, 180, BLOC_2_FACE"
+        Ligne DSL, ex. "P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE"
     """
     name = pattern["name"]
     rows = pattern["rows"]
@@ -190,9 +190,9 @@ def to_dsl(pattern: dict) -> str:
                 block_str += f"@{orient}"
             offset = block.get("offset_ns_cm", 0)
             if offset > 0:
-                block_str += f" SUD{offset}"
+                block_str += f" S{offset}"
             elif offset < 0:
-                block_str += f" NORD{-offset}"
+                block_str += f" N{-offset}"
             for s in block.get("sticks", []):
                 block_str += f" @S{s}"
             gap = block.get("gap_cm")

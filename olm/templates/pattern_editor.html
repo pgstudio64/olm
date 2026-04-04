@@ -119,8 +119,9 @@
   }
 
   .section-title {
-    color: var(--text-dim);
+    color: var(--accent);
     font-size: 10px;
+    font-weight: bold;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     margin-bottom: 8px;
@@ -474,7 +475,7 @@
   .fp-desk-pos { color: var(--text-dim); font-size: 10px; }
   .fp-sidebar-title {
     padding: 8px 12px; font-size: 11px; font-weight: bold;
-    color: var(--text-dim); border-bottom: 1px solid var(--border);
+    color: var(--accent); border-bottom: 1px solid var(--border);
     text-transform: uppercase; letter-spacing: 1px;
   }
   .fp-candidate {
@@ -738,7 +739,7 @@
   .modal-list li:hover { background: var(--surface2); color: var(--accent); }
   .modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
 
-  [data-row] { cursor: pointer; }
+  [data-row], [data-excl] { cursor: pointer; }
 
   .row-gap-item {
     display: flex;
@@ -862,7 +863,7 @@
 <div class="tab-content" id="tabOfficeLayout">
   <div class="sub-tab-bar">
     <button class="sub-tab-btn active" data-subtab="olCatalogue" data-parent="officeLayout">Catalogue</button>
-    <button class="sub-tab-btn" data-subtab="olEditor" data-parent="officeLayout">Edit layout</button>
+    <button class="sub-tab-btn" data-subtab="olEditor" data-parent="officeLayout">Pattern editor</button>
   </div>
 
 <!-- SUB-TAB: EDITOR -->
@@ -887,25 +888,20 @@
           <input type="number" id="roomDepth" value="480" min="100" step="10">
           <button class="btn-xs" id="btnDepthPlus">+</button>
         </div>
+        <div class="room-dim-row">
+          <label>Area (m²)</label>
+          <span id="infoRoomArea" style="font-family:var(--font-mono);font-size:11px;color:var(--text);">-</span>
+        </div>
       </div>
 
 
       <hr class="sep">
-      <div class="section-title">Room DSL</div>
+      <div class="section-title">Room definition</div>
       <textarea id="dslRoom" rows="8" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;"
-        placeholder="PIECE 400x500&#10;FEN N&#10;PORTE S 0 90 INT G&#10;BAIE E 100 150&#10;EXCL 200 100 80 60"></textarea>
+        placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
       <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;">Apply</button>
       <div style="margin-bottom:8px;position:relative;">
-        <span id="dslHelpToggle" style="color:var(--accent);font-size:10px;cursor:help;text-decoration:underline;">DSL syntax help</span>
-        <div id="dslHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);pointer-events:none;">PIECE 600x500         <span style="color:var(--text-dim)">-- room 600cm wide, 500cm deep</span>
-FEN N                 <span style="color:var(--text-dim)">-- full-width window on north wall</span>
-FEN N 50 200          <span style="color:var(--text-dim)">-- 200cm window, 50cm from west corner</span>
-PORTE S 0 90 INT G    <span style="color:var(--text-dim)">-- door south, offset 0, 90cm, inward, hinge left</span>
-PORTE S 400 90 EXT D  <span style="color:var(--text-dim)">-- door south, offset 400, outward, hinge right</span>
-BAIE E 100 150        <span style="color:var(--text-dim)">-- free opening (no door) on east wall</span>
-EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 y=0, 40x40cm</span>
-
-<span style="color:var(--text-dim)">Faces: N S E O  |  Door: INT/EXT G/D  |  All dims in cm</span></div>
+        <span id="dslHelpToggle" style="color:var(--accent);font-size:10px;cursor:pointer;text-decoration:underline;">Syntax help</span>
       </div>
 
       <hr class="sep">
@@ -979,13 +975,6 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
   <div class="col right-col">
     <div class="col-inner">
 
-      <div class="section-title">Room</div>
-      <table class="info-table">
-        <tr><td>Width (cm)</td><td id="infoRoomWidth">-</td></tr>
-        <tr><td>Depth (cm)</td><td id="infoRoomDepth">-</td></tr>
-        <tr><td>Area (m²)</td><td id="infoRoomArea">-</td></tr>
-      </table>
-
       <div class="section-title">Pattern info</div>
       <table class="info-table" id="infoTable">
         <tr><td>Rows</td><td id="infoRows">0</td></tr>
@@ -993,7 +982,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
         <tr><td>Desks</td><td id="infoDesks">0</td></tr>
         <tr><td>EW x NS (blocks, cm)</td><td id="infoDimsBlocks">- x -</td></tr>
         <tr><td>EW x NS (total, cm)</td><td id="infoDimsTotal">- x -</td></tr>
-        <tr><td>m²/desk</td><td id="infoM2">-</td></tr>
+        <tr><td>Area/desk (m²)</td><td id="infoM2">-</td></tr>
         <tr><td>Min passage</td><td id="infoCirc">-</td></tr>
       </table>
 
@@ -1016,7 +1005,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
             <label><input type="checkbox" id="stickN" value="N"> N</label>
             <label><input type="checkbox" id="stickS" value="S"> S</label>
             <label><input type="checkbox" id="stickE" value="E"> E</label>
-            <label><input type="checkbox" id="stickO" value="O"> W</label>
+            <label><input type="checkbox" id="stickW" value="W"> W</label>
           </div>
         </div>
         <div style="margin-top:10px; color:var(--text-dim); font-size:10px; line-height:1.6;">
@@ -1132,9 +1121,7 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
         <div class="section-title">Floor properties</div>
         <table>
           <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
-          <tr><td>Total area</td><td id="rvFloorArea">-</td></tr>
-          <tr><td>With openings</td><td id="rvFloorWithOpenings">-</td></tr>
-          <tr><td>With exclusions</td><td id="rvFloorWithExcl">-</td></tr>
+          <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
         </table>
         <div class="section-title" style="margin-top:12px;">Room list</div>
         <div id="rvRoomList" style="max-height:calc(100vh - 300px);overflow-y:auto;font-size:11px;"></div>
@@ -1148,24 +1135,31 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
             <tr><td style="color:var(--text-dim);">Area (m²)</td><td id="rvRoomArea" style="text-align:right;">-</td></tr>
           </table>
         </div>
-        <div class="fp-sidebar-title" style="margin-top:8px;">Room DSL
-          <span id="rvDslHelpToggle" style="color:var(--accent);font-size:10px;cursor:help;text-decoration:underline;margin-left:8px;font-weight:normal;">syntax help</span>
-        </div>
+        <div class="fp-sidebar-title" style="margin-top:8px;">Room definition</div>
         <textarea id="rvRoomDsl" readonly rows="6"
           style="width:calc(100% - 16px);margin:4px 8px;font-size:11px;font-family:var(--font-mono);
           background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
           padding:6px;resize:vertical;cursor:default;"></textarea>
+        <div style="margin:0 8px 4px;">
+          <span id="rvDslHelpToggle" style="color:var(--accent);font-size:10px;cursor:pointer;text-decoration:underline;">Syntax help</span>
+        </div>
+        <div id="rvAmendControls" style="display:none;padding:0 8px 8px;">
+          <button class="btn" id="rvBtnApplyDsl" style="width:100%;margin-bottom:4px;">Apply</button>
+          <div style="display:flex;gap:4px;">
+            <button class="btn" id="rvBtnSaveRoom" style="flex:1;">Save room</button>
+            <button class="btn" id="rvBtnCancelRoom" style="flex:1;background:#b35533;color:#fff;">Cancel</button>
+          </div>
+        </div>
       </div>
       <div class="fp-main">
         <div class="fp-nav">
-          <span class="fp-nav-info" id="rvRoomSize">-</span>
           <span style="flex:1;"></span>
           <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
           <div class="fp-room-label" id="rvRoomLabel">-</div>
           <button class="btn" id="rvBtnNext" title="Next room">Next &rarr;</button>
           <span class="fp-nav-info" id="rvNavInfo">0 / 0</span>
           <span style="width:40px;"></span>
-          <button class="btn" id="rvBtnAdjustRoom" style="font-size:9px;padding:2px 8px;" title="Edit room geometry">Adjust room</button>
+          <button class="btn" id="rvBtnAdjustRoom" title="Edit room geometry">Adjust room</button>
           <span style="flex:1;"></span>
         </div>
         <div class="fp-canvas-wrap" id="rvCanvasWrap">
@@ -1192,9 +1186,9 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
           <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
           <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
           <span style="flex:1;"></span>
-          <button class="btn" id="fpBtnEditPattern" style="font-size:9px;padding:2px 8px;" title="Open source pattern in editor" disabled>Edit pattern</button>
-          <button class="btn" id="fpBtnAdjustLayout" style="font-size:9px;padding:2px 8px;" title="Amend layout in room" disabled>Amend layout</button>
-          <button class="btn" id="fpBtnDiscard" style="display:none;font-size:9px;padding:2px 8px;background:#b35533;color:#fff;" title="Discard amendment">Discard amendment</button>
+          <button class="btn" id="fpBtnEditPattern" title="Open source pattern in editor" disabled>Edit pattern</button>
+          <button class="btn" id="fpBtnAdjustLayout" title="Amend layout in room" disabled>Amend layout</button>
+          <button class="btn" id="fpBtnDiscard" style="display:none;background:#b35533;color:#fff;" title="Discard amendment">Discard amendment</button>
         </div>
         <div class="fp-canvas-wrap" id="fpCanvasWrap">
           <!-- Editor canvas is moved here when Floor Plan > Matching is active -->
@@ -1211,14 +1205,14 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
         <div class="section-title">Room</div>
         <table>
           <tr><td>Dimensions</td><td id="fpInfoDims">-</td></tr>
-          <tr><td>Area</td><td id="fpInfoArea">-</td></tr>
+          <tr><td>Area (m²)</td><td id="fpInfoArea">-</td></tr>
           <tr><td>Pattern</td><td id="fpInfoPattern">-</td></tr>
           <tr><td>Standard</td><td id="fpInfoStandard">-</td></tr>
         </table>
         <div class="section-title">Layout</div>
         <table>
           <tr><td>Desks</td><td id="fpInfoDesks">-</td></tr>
-          <tr><td>m²/desk</td><td id="fpInfoM2">-</td></tr>
+          <tr><td>Area/desk (m²)</td><td id="fpInfoM2">-</td></tr>
           <tr><td>Circulation</td><td id="fpInfoCirc">-</td></tr>
           <tr><td>Min passage</td><td id="fpInfoPassage">-</td></tr>
         </table>
@@ -1337,32 +1331,32 @@ function updateAutoName() {
 }
 
 function buildRoomDSL() {
-  var lines = ["PIECE " + state.room_width_cm + "x" + state.room_depth_cm];
+  var lines = ["ROOM " + state.room_width_cm + "x" + state.room_depth_cm];
   state.room_windows.forEach(function(w) {
     var wallLen = (w.face === "north" || w.face === "south") ? state.room_width_cm : state.room_depth_cm;
     if (w.offset_cm === 0 && w.width_cm === wallLen) {
-      lines.push("FEN " + faceToCode(w.face));
+      lines.push("WINDOW " + faceToCode(w.face));
     } else {
-      lines.push("FEN " + faceToCode(w.face) + " " + w.offset_cm + " " + w.width_cm);
+      lines.push("WINDOW " + faceToCode(w.face) + " " + w.offset_cm + " " + w.width_cm);
     }
   });
   state.room_openings.forEach(function(o) {
     if (o.has_door) {
       var dir = o.opens_inward ? "INT" : "EXT";
-      var hinge = o.hinge_side === "left" ? "G" : "D";
-      lines.push("PORTE " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm + " " + dir + " " + hinge);
+      var hinge = o.hinge_side === "left" ? "L" : "R";
+      lines.push("DOOR " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm + " " + dir + " " + hinge);
     } else {
-      lines.push("BAIE " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm);
+      lines.push("OPENING " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm);
     }
   });
   state.room_exclusions.forEach(function(z) {
-    lines.push("EXCL " + z.x_cm + " " + z.y_cm + " " + z.width_cm + " " + z.depth_cm);
+    lines.push("EXCLUSION " + z.x_cm + " " + z.y_cm + " " + z.width_cm + " " + z.depth_cm);
   });
   return lines.join("\n");
 }
 
 function faceToCode(face) {
-  return { north: "N", south: "S", east: "E", west: "O" }[face] || face;
+  return { north: "N", south: "S", east: "E", west: "W" }[face] || face;
 }
 
 function updateRoomDSL() {
@@ -1380,7 +1374,7 @@ async function applyRoomDSL() {
     });
     if (!resp.ok) {
       var err = await resp.json();
-      setStatus("Room DSL error: " + (err.error || "?"));
+      setStatus("Room definition error: " + (err.error || "?"));
       return;
     }
     var data = await resp.json();
@@ -1391,11 +1385,11 @@ async function applyRoomDSL() {
     state.room_exclusions = data.exclusion_zones || [];
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
-    updateAutoName();
+    if (!state.roomAmendMode) updateAutoName();
     zoomFit();
-    setStatus("Room DSL applied.");
+    setStatus("Room definition applied.");
   } catch (err) {
-    setStatus("Room DSL error: " + err.message);
+    setStatus("Room definition error: " + err.message);
   }
 }
 
@@ -1655,7 +1649,7 @@ function _renderImpl() {
       curRowBlocks.push({ x: bx, y: by, w: bw, h: bh, gap_cm: b.gap_cm || 0 });
 
       // Setback zone dimensions (always computed for the opaque background)
-      var isOrtho = (b.type === "BLOC_2_ORTHO_D" || b.type === "BLOC_2_ORTHO_G");
+      var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
       var wNSup = isOrtho ? 0 : (((f.west && f.west.non_superposable_cm) || 0) * SCALE);
       var eNSup = isOrtho ? 0 : (((f.east && f.east.non_superposable_cm) || 0) * SCALE);
       var nNSup = isOrtho ? 0 : (((f.north && f.north.non_superposable_cm) || 0) * SCALE);
@@ -1728,7 +1722,7 @@ function _renderImpl() {
       const blk = state.rows[ri].blocks[bi];
       const g = getEffectiveGeom(blk.type, blk.orientation);
       const ff = g.faces;
-      const isO = (blk.type === "BLOC_2_ORTHO_D" || blk.type === "BLOC_2_ORTHO_G");
+      const isO = (blk.type === "BLOCK_2_ORTHO_R" || blk.type === "BLOCK_2_ORTHO_L");
       // Visual footprint = desk + zones (non_superposable + candidate)
       const wZ = isO ? 0 : (((ff.west && ff.west.non_superposable_cm) || 0) + ((ff.west && ff.west.candidate_cm) || 0)) * SCALE;
       const eZ = isO ? 0 : (((ff.east && ff.east.non_superposable_cm) || 0) + ((ff.east && ff.east.candidate_cm) || 0)) * SCALE;
@@ -2058,7 +2052,7 @@ function _renderImpl() {
   updateViewBox();
   updateInfo();
   document.getElementById("canvasDims").textContent =
-    Math.round(totalW) + " x " + Math.round(totalH) + " px";
+    state.room_width_cm + " x " + state.room_depth_cm + " cm";
   document.getElementById("zoomLevel").textContent = Math.round(state.zoom * 100) + "%";
 }
 
@@ -2087,8 +2081,6 @@ function updateInfo() {
   updateRoomDSL();
 
   // Room info
-  _safeText("infoRoomWidth", state.room_width_cm);
-  _safeText("infoRoomDepth", state.room_depth_cm);
   _safeText("infoRoomArea", (state.room_width_cm * state.room_depth_cm / 10000).toFixed(1));
 
   _safeText("infoRows", nr);
@@ -2102,7 +2094,7 @@ function updateInfo() {
   var scoreColor = "var(--accent2)";
   if (nd > 0) {
     var m2pp = roomAreaM2 / nd;
-    _safeHtml("infoM2", '<span style="color:' + scoreColor + ';">' + m2pp.toFixed(1) + ' m²</span>');
+    _safeHtml("infoM2", '<span style="color:' + scoreColor + ';">' + m2pp.toFixed(1) + '</span>');
   } else {
     _safeText("infoM2", "-");
   }
@@ -2135,7 +2127,7 @@ function updateInfo() {
       var stN = document.getElementById("stickN"); if (stN) stN.checked = bs.indexOf("N") >= 0;
       var stS = document.getElementById("stickS"); if (stS) stS.checked = bs.indexOf("S") >= 0;
       var stE = document.getElementById("stickE"); if (stE) stE.checked = bs.indexOf("E") >= 0;
-      var stO = document.getElementById("stickO"); if (stO) stO.checked = bs.indexOf("O") >= 0;
+      var stW = document.getElementById("stickW"); if (stW) stW.checked = bs.indexOf("W") >= 0;
     } else {
       if (selInfo) selInfo.style.display = "none";
       if (selHint) selHint.style.display = "block";
@@ -2351,12 +2343,9 @@ async function save() {
     fpRoomAmendments[ramend.roomName] = amendedRoom;
     state.roomAmendMode = null;
     exitRoomAmendUI();
-    setStatus("Room saved. Re-running matching for \"" + ramend.roomName + "\"...");
-    // Switch back to Floor Plan > Review
-    document.querySelector('.tab-btn[data-tab="floorPlan"]').click();
-    document.querySelector('.sub-tab-btn[data-subtab="fpReview"]').click();
-    // Re-run matching for this room with amended geometry
+    // Re-run matching then refresh Review
     fpRematchRoom(ramend.roomName, amendedRoom);
+    rvRenderCurrent();
     return;
   }
 
@@ -2592,37 +2581,20 @@ var ROOM_AMEND_DISABLE_IDS = [
 ];
 
 function enterRoomAmendMode(room) {
-  // Build a minimal pattern data with just the room geometry (no blocks)
-  var roomData = {
-    rows: [],
-    row_gaps_cm: [],
-    room_width_cm: room.width_cm,
-    room_depth_cm: room.depth_cm,
-    standard: "AFNOR_ADVICE",
-    room_windows: JSON.parse(JSON.stringify(room.windows || [])),
-    room_openings: JSON.parse(JSON.stringify(room.openings || [])),
-    room_exclusions: JSON.parse(JSON.stringify(room.exclusion_zones || [])),
-  };
+  // Stay in Review — edit room in-place
   state.roomAmendMode = {
     roomName: room.name,
     originalRoom: JSON.parse(JSON.stringify(room)),
   };
-  document.querySelector('.tab-btn[data-tab="officeLayout"]').click();
-  document.querySelector('.sub-tab-btn[data-subtab="olEditor"]').click();
-  loadPatternFromData(roomData);
 
-  // Disable layout controls
-  ROOM_AMEND_DISABLE_IDS.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) { el.disabled = true; el.style.opacity = "0.4"; }
-  });
-  // Disable block palette clicks
-  document.getElementById("blockPalette").style.pointerEvents = "none";
-  document.getElementById("blockPalette").style.opacity = "0.4";
-
-  // Replace Save label, show Cancel
-  document.getElementById("btnSave").textContent = "Save room";
-  document.getElementById("btnAmendCancel").style.display = "";
+  // Load room geometry into shared state (no blocks)
+  state.rows = [];
+  state.row_gaps_cm = [];
+  state.room_width_cm = room.width_cm;
+  state.room_depth_cm = room.depth_cm;
+  state.room_windows = JSON.parse(JSON.stringify(room.windows || []));
+  state.room_openings = JSON.parse(JSON.stringify(room.openings || []));
+  state.room_exclusions = JSON.parse(JSON.stringify(room.exclusion_zones || []));
 
   // Inject overlay for visual reference
   if (window.fpOverlay) {
@@ -2630,30 +2602,43 @@ function enterRoomAmendMode(room) {
       dataUrl: window.fpOverlay.dataUrl,
       pxPerCm: window.fpOverlay.pxPerCm,
       opacity: 30,
-      offsetX: 0,
-      offsetY: 0,
-      imgW: window.fpOverlay.imgW,
-      imgH: window.fpOverlay.imgH,
+      offsetX: 0, offsetY: 0,
+      imgW: window.fpOverlay.imgW, imgH: window.fpOverlay.imgH,
     };
-    render();
   }
 
+  render();
+  zoomFit();
+
+  // Enable editing in Review sidebar
+  var dslEl = document.getElementById("rvRoomDsl");
+  dslEl.readOnly = false;
+  dslEl.style.color = "var(--text)";
+  dslEl.style.cursor = "";
+  document.getElementById("rvAmendControls").style.display = "";
+
+  // Disable navigation during edit
+  document.getElementById("rvBtnPrev").disabled = true;
+  document.getElementById("rvBtnNext").disabled = true;
+  document.getElementById("rvBtnAdjustRoom").disabled = true;
+
   // Visual cue
-  document.querySelector(".ol-header").classList.add("amend-mode");
-  _safeText("autoName", "\u270E Room: " + room.name);
-  setStatus("Edit room geometry for \"" + room.name + "\". Save to re-run matching, Cancel to discard.");
+  document.getElementById("rvRoomLabel").textContent = "\u270E " + room.name;
 }
 
 function exitRoomAmendUI() {
-  ROOM_AMEND_DISABLE_IDS.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) { el.disabled = false; el.style.opacity = ""; }
-  });
-  document.getElementById("blockPalette").style.pointerEvents = "";
-  document.getElementById("blockPalette").style.opacity = "";
-  document.getElementById("btnSave").textContent = "Save";
-  document.getElementById("btnAmendCancel").style.display = "none";
-  document.querySelector(".ol-header").classList.remove("amend-mode");
+  // Restore Review sidebar to read-only
+  var dslEl = document.getElementById("rvRoomDsl");
+  dslEl.readOnly = true;
+  dslEl.style.color = "var(--text-dim)";
+  dslEl.style.cursor = "default";
+  document.getElementById("rvAmendControls").style.display = "none";
+
+  // Re-enable navigation
+  document.getElementById("rvBtnPrev").disabled = false;
+  document.getElementById("rvBtnNext").disabled = false;
+  document.getElementById("rvBtnAdjustRoom").disabled = false;
+
   state.overlay = null;
 }
 
@@ -2703,16 +2688,16 @@ function resetState() {
 }
 
 const BLOCK_DESKS_FALLBACK = {
-  BLOC_1: 1, BLOC_2_FACE: 2, BLOC_2_COTE: 2,
-  BLOC_3_COTE: 3, BLOC_4_FACE: 4, BLOC_6_FACE: 6,
-  BLOC_2_ORTHO_G: 2, BLOC_2_ORTHO_D: 2,
+  BLOCK_1: 1, BLOCK_2_FACE: 2, BLOCK_2_SIDE: 2,
+  BLOCK_3_SIDE: 3, BLOCK_4_FACE: 4, BLOCK_6_FACE: 6,
+  BLOCK_2_ORTHO_L: 2, BLOCK_2_ORTHO_R: 2,
 };
 
 function buildPalette() {
   const container = document.getElementById("blockPalette");
   container.innerHTML = "";
-  const types = ["BLOC_1", "BLOC_2_FACE", "BLOC_2_COTE", "BLOC_3_COTE", "BLOC_4_FACE", "BLOC_6_FACE",
-                 "BLOC_2_ORTHO_G", "BLOC_2_ORTHO_D"];
+  const types = ["BLOCK_1", "BLOCK_2_FACE", "BLOCK_2_SIDE", "BLOCK_3_SIDE", "BLOCK_4_FACE", "BLOCK_6_FACE",
+                 "BLOCK_2_ORTHO_L", "BLOCK_2_ORTHO_R"];
   types.forEach(function(type) {
     const nd = countDesksInBlock(type) || BLOCK_DESKS_FALLBACK[type] || "?";
     const btn = document.createElement("button");
@@ -2991,7 +2976,7 @@ function getFilteredPatterns() {
 // --- Shared rendering functions (used by both _renderImpl and renderPatternMiniSvg) ---
 
 function renderBlockZones(elements, bx, by, bw, bh, blockType, orientation, faces, scale, strokeW) {
-  var isOrtho = (blockType === "BLOC_2_ORTHO_D" || blockType === "BLOC_2_ORTHO_G");
+  var isOrtho = (blockType === "BLOCK_2_ORTHO_R" || blockType === "BLOCK_2_ORTHO_L");
   if (isOrtho) {
     var orthoDesks = getDeskRects(blockType);
     var orthoOrient = orientation || 0;
@@ -4498,6 +4483,38 @@ async function init() {
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
   document.getElementById("btnApplyDSL").addEventListener("click", applyDSL);
   document.getElementById("btnApplyRoomDSL").addEventListener("click", applyRoomDSL);
+
+  // Review room amend controls
+  document.getElementById("rvBtnApplyDsl").addEventListener("click", async function() {
+    var text = document.getElementById("rvRoomDsl").value.trim();
+    if (!text) return;
+    try {
+      var resp = await fetch("/api/room-dsl/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dsl: text })
+      });
+      if (!resp.ok) { var err = await resp.json(); alert("Error: " + (err.error || "?")); return; }
+      var data = await resp.json();
+      state.room_width_cm = data.width_cm;
+      state.room_depth_cm = data.depth_cm;
+      state.room_windows = data.windows || [];
+      state.room_openings = data.openings || [];
+      state.room_exclusions = data.exclusion_zones || [];
+      render();
+      zoomFit();
+      rvUpdateRoomInfo();
+    } catch (err) { alert("Error: " + err.message); }
+  });
+  document.getElementById("rvBtnSaveRoom").addEventListener("click", function() {
+    if (state.roomAmendMode) save();
+  });
+  document.getElementById("rvBtnCancelRoom").addEventListener("click", function() {
+    if (!state.roomAmendMode) return;
+    state.roomAmendMode = null;
+    exitRoomAmendUI();
+    rvRenderCurrent();
+  });
   document.getElementById("btnResetSpacing").addEventListener("click", async function() {
     // Delete overrides file by posting empty values for each standard
     var stds = getStandards();
@@ -4524,34 +4541,33 @@ async function init() {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyRoomDSL(); }
   });
 
-  document.getElementById("dslHelpToggle").addEventListener("mouseenter", function(e) {
+  function showDslHelp(anchor) {
     var tip = document.getElementById("dslHelpTooltip");
-    var rect = e.target.getBoundingClientRect();
-    tip.style.left = rect.left + "px";
+    var visible = tip.style.display !== "none";
+    if (visible) { tip.style.display = "none"; return; }
+    var rect = anchor.getBoundingClientRect();
+    tip.style.left = Math.min(rect.left, window.innerWidth - 420) + "px";
     tip.style.top = (rect.bottom + 4) + "px";
     tip.style.display = "";
+    tip.style.pointerEvents = "none";
+  }
+  document.getElementById("dslHelpToggle").addEventListener("click", function(e) {
+    showDslHelp(e.target);
   });
-  document.getElementById("dslHelpToggle").addEventListener("mouseleave", function() {
-    document.getElementById("dslHelpTooltip").style.display = "none";
-  });
-
-  // Review DSL help — reuse same tooltip
   var rvHelp = document.getElementById("rvDslHelpToggle");
   if (rvHelp) {
-    rvHelp.addEventListener("mouseenter", function(e) {
-      var tip = document.getElementById("dslHelpTooltip");
-      var rect = e.target.getBoundingClientRect();
-      tip.style.left = Math.min(rect.left, window.innerWidth - 400) + "px";
-      tip.style.top = (rect.bottom + 4) + "px";
-      tip.style.display = "";
-    });
-    rvHelp.addEventListener("mouseleave", function() {
-      document.getElementById("dslHelpTooltip").style.display = "none";
+    rvHelp.addEventListener("click", function(e) {
+      showDslHelp(e.target);
     });
   }
+  document.addEventListener("click", function(e) {
+    if (e.target.id !== "dslHelpToggle" && e.target.id !== "rvDslHelpToggle") {
+      document.getElementById("dslHelpTooltip").style.display = "none";
+    }
+  });
 
   // Wall stick checkboxes
-  ["stickN", "stickS", "stickE", "stickO"].forEach(function(id) {
+  ["stickN", "stickS", "stickE", "stickW"].forEach(function(id) {
     document.getElementById(id).addEventListener("change", function() {
       var b = getSelectedBlock();
       if (!b) return;
@@ -4559,7 +4575,7 @@ async function init() {
       if (document.getElementById("stickN").checked) sticks.push("N");
       if (document.getElementById("stickS").checked) sticks.push("S");
       if (document.getElementById("stickE").checked) sticks.push("E");
-      if (document.getElementById("stickO").checked) sticks.push("O");
+      if (document.getElementById("stickW").checked) sticks.push("W");
       b.sticks = sticks.length > 0 ? sticks : undefined;
       updateDSL();
       render();
@@ -4637,21 +4653,63 @@ async function init() {
   var editorOnlyToolbar = document.getElementById("editorOnlyToolbar");
   var olHeader = document.querySelector(".ol-header");
 
+  var circLabel = document.getElementById("circToggle").parentElement;
+  var _editorSnapshot = null;
+  var _canvasInEditor = true;
+  function _saveEditorState() {
+    if (!_canvasInEditor) return;
+    _editorSnapshot = {
+      rows: JSON.parse(JSON.stringify(state.rows)),
+      row_gaps_cm: state.row_gaps_cm.slice(),
+      room_width_cm: state.room_width_cm,
+      room_depth_cm: state.room_depth_cm,
+      room_windows: JSON.parse(JSON.stringify(state.room_windows)),
+      room_openings: JSON.parse(JSON.stringify(state.room_openings)),
+      room_exclusions: JSON.parse(JSON.stringify(state.room_exclusions)),
+      name: state.name,
+      standard: state.standard,
+      _savedName: state._savedName,
+      selectedRow: state.selectedRow,
+      selectedBlock: state.selectedBlock,
+      overlay: null,
+    };
+  }
+  function _restoreEditorState() {
+    if (_editorSnapshot) {
+      Object.assign(state, _editorSnapshot);
+      _editorSnapshot = null;
+      render();
+      updateDSL();
+      zoomFit();
+    }
+    // If editor state is empty (no pattern loaded), load first from catalogue
+    if (state.rows.length === 0 && catalogueData.length > 0) {
+      loadPatternFromData(JSON.parse(JSON.stringify(catalogueData[0])));
+    }
+  }
+
+  var circLabel = document.getElementById("circToggle").parentElement;
   function moveCanvasToFloorPlan() {
+    _saveEditorState();
     var fpWrap = document.getElementById("fpCanvasWrap");
     fpWrap.appendChild(canvasToolbar);
     fpWrap.appendChild(canvasWrap);
     fpWrap.appendChild(statusBar);
     editorOnlyToolbar.style.display = "none";
     olHeader.style.display = "none";
+    circLabel.style.display = "";
+    _canvasInEditor = false;
   }
   function moveCanvasToReview() {
+    _saveEditorState();
     var rvWrap = document.getElementById("rvCanvasWrap");
     rvWrap.appendChild(canvasToolbar);
     rvWrap.appendChild(canvasWrap);
     rvWrap.appendChild(statusBar);
     editorOnlyToolbar.style.display = "none";
     olHeader.style.display = "none";
+    circLabel.style.display = "none";
+    _canvasInEditor = false;
   }
   function moveCanvasToEditor() {
     editorCanvasCol.appendChild(olHeader);
@@ -4660,6 +4718,9 @@ async function init() {
     editorCanvasCol.appendChild(statusBar);
     editorOnlyToolbar.style.display = "";
     olHeader.style.display = "";
+    circLabel.style.display = "";
+    _canvasInEditor = true;
+    _restoreEditorState();
   }
 
   // Main tabs
@@ -4972,11 +5033,11 @@ document.addEventListener("DOMContentLoaded", init);
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;
-      // Render Review tab and switch to it
-      rvRenderCurrent();
+      // Render and switch to Review tab
       var reviewBtn = document.querySelector('.sub-tab-btn[data-subtab="fpReview"]');
       if (reviewBtn && !reviewBtn.classList.contains("active")) reviewBtn.click();
       fpRenderCurrent();
+      rvRenderCurrent();
       document.activeElement.blur();
     })
     .catch(function(e) { alert("Network error: " + e); });
@@ -4992,12 +5053,18 @@ document.addEventListener("DOMContentLoaded", init);
 
   // ── Review tab rendering ───────────────────────────────────────────────
   window.rvRenderCurrent = rvRenderCurrent;
+  function rvUpdateRoomInfo() {
+    document.getElementById("rvRoomWidth").textContent = state.room_width_cm;
+    document.getElementById("rvRoomDepth").textContent = state.room_depth_cm;
+    var area = (state.room_width_cm * state.room_depth_cm / 10000).toFixed(1);
+    document.getElementById("rvRoomArea").textContent = area;
+  }
+
   function rvRenderCurrent() {
     var room = fpCurrent();
     if (!room) {
       document.getElementById("rvRoomLabel").textContent = "-";
       document.getElementById("rvNavInfo").textContent = "0 / 0";
-      document.getElementById("rvRoomSize").textContent = "-";
       document.getElementById("rvOpeningsList").innerHTML =
         '<span style="color:var(--text-dim);">No rooms loaded</span>';
       document.getElementById("rvExclusionsList").innerHTML =
@@ -5008,17 +5075,11 @@ document.addEventListener("DOMContentLoaded", init);
     // Floor properties (computed once from all rooms)
     var allRooms = fpRooms();
     var totalArea = 0;
-    var withOpenings = 0;
-    var withExcl = 0;
     allRooms.forEach(function(r) {
       totalArea += (r.width_cm || 0) * (r.depth_cm || 0) / 10000;
-      if (r.openings && r.openings.length > 0) withOpenings++;
-      if (r.exclusion_zones && r.exclusion_zones.length > 0) withExcl++;
     });
     document.getElementById("rvFloorRooms").textContent = allRooms.length;
-    document.getElementById("rvFloorArea").textContent = totalArea.toFixed(1) + " m\u00B2";
-    document.getElementById("rvFloorWithOpenings").textContent = withOpenings + " / " + allRooms.length;
-    document.getElementById("rvFloorWithExcl").textContent = withExcl + " / " + allRooms.length;
+    document.getElementById("rvFloorArea").textContent = totalArea.toFixed(1);
 
     // Room list (clickable)
     var listHtml = "";
@@ -5051,8 +5112,6 @@ document.addEventListener("DOMContentLoaded", init);
     document.getElementById("rvRoomLabel").textContent = roomData.name || "(unnamed)";
     document.getElementById("rvNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
-    document.getElementById("rvRoomSize").textContent =
-      roomData.width_cm + " x " + roomData.depth_cm + " cm";
 
     // Room dimensions
     document.getElementById("rvRoomWidth").textContent = roomData.width_cm || 0;
@@ -5060,29 +5119,29 @@ document.addEventListener("DOMContentLoaded", init);
     var area = ((roomData.width_cm || 0) * (roomData.depth_cm || 0) / 10000).toFixed(1);
     document.getElementById("rvRoomArea").textContent = area;
 
-    // Room DSL (read-only)
-    var dsl = "PIECE " + (roomData.width_cm || 0) + "x" + (roomData.depth_cm || 0);
-    var faceMap = { north: "N", south: "S", east: "E", west: "O" };
+    // Room definition (read-only)
+    var dsl = "ROOM " + (roomData.width_cm || 0) + "x" + (roomData.depth_cm || 0);
+    var faceMap = { north: "N", south: "S", east: "E", west: "W" };
     (roomData.windows || []).forEach(function(w) {
       var f = faceMap[w.face] || w.face || "?";
       if (w.offset_cm === 0 && w.width_cm === (f === "N" || f === "S" ? roomData.width_cm : roomData.depth_cm)) {
-        dsl += "\nFEN " + f;
+        dsl += "\nWINDOW " + f;
       } else {
-        dsl += "\nFEN " + f + " " + (w.offset_cm || 0) + " " + (w.width_cm || 0);
+        dsl += "\nWINDOW " + f + " " + (w.offset_cm || 0) + " " + (w.width_cm || 0);
       }
     });
     (roomData.openings || []).forEach(function(o) {
       var f = faceMap[o.face] || o.face || "?";
       if (o.has_door) {
         var dir = o.opens_inward ? "INT" : "EXT";
-        var side = (o.hinge_side === "left") ? "G" : "D";
-        dsl += "\nPORTE " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90) + " " + dir + " " + side;
+        var side = (o.hinge_side === "left") ? "L" : "R";
+        dsl += "\nDOOR " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90) + " " + dir + " " + side;
       } else {
-        dsl += "\nBAIE " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
+        dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
       }
     });
     (roomData.exclusion_zones || []).forEach(function(e) {
-      dsl += "\nEXCL " + (e.x_cm || 0) + " " + (e.y_cm || 0) + " " + (e.width_cm || 0) + " " + (e.depth_cm || 0);
+      dsl += "\nEXCLUSION " + (e.x_cm || 0) + " " + (e.y_cm || 0) + " " + (e.width_cm || 0) + " " + (e.depth_cm || 0);
     });
     document.getElementById("rvRoomDsl").value = dsl;
   }
@@ -5325,11 +5384,11 @@ document.addEventListener("DOMContentLoaded", init);
   function fpUpdateInfo(room, candidate) {
     var area = (room.width_cm * room.depth_cm / 10000).toFixed(1);
     document.getElementById("fpInfoDims").textContent = room.width_cm + " x " + room.depth_cm + " cm";
-    document.getElementById("fpInfoArea").textContent = area + " m²";
+    document.getElementById("fpInfoArea").textContent = area;
     document.getElementById("fpInfoPattern").textContent = candidate.pattern_name || "-";
     document.getElementById("fpInfoStandard").textContent = candidate.standard || "-";
     document.getElementById("fpInfoDesks").textContent = candidate.n_desks || "-";
-    document.getElementById("fpInfoM2").textContent = candidate.m2_per_desk ? candidate.m2_per_desk.toFixed(1) + " m²" : "-";
+    document.getElementById("fpInfoM2").textContent = candidate.m2_per_desk ? candidate.m2_per_desk.toFixed(1) : "-";
     document.getElementById("fpInfoCirc").textContent = candidate.circulation_grade || "-";
     document.getElementById("fpInfoPassage").textContent = candidate.min_passage_cm ? candidate.min_passage_cm + " cm" : "-";
 
@@ -5647,5 +5706,14 @@ document.addEventListener("DOMContentLoaded", init);
   });
 })();
 </script>
+<div id="dslHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);pointer-events:none;">ROOM 600x500          <span style="color:var(--text-dim)">-- room 600cm wide, 500cm deep</span>
+WINDOW N              <span style="color:var(--text-dim)">-- full-width window on north wall</span>
+WINDOW N 50 200       <span style="color:var(--text-dim)">-- 200cm window, 50cm from west corner</span>
+DOOR S 0 90 INT L     <span style="color:var(--text-dim)">-- door south, offset 0, 90cm, inward, hinge left</span>
+DOOR S 400 90 EXT R   <span style="color:var(--text-dim)">-- door south, offset 400, outward, hinge right</span>
+OPENING E 100 150     <span style="color:var(--text-dim)">-- free opening (no door) on east wall</span>
+EXCLUSION 560 0 40 40 <span style="color:var(--text-dim)">-- exclusion at x=560 y=0, 40x40cm</span>
+
+<span style="color:var(--text-dim)">Faces: N S E W  |  Door: INT/EXT L/R  |  All dimensions in cm</span></div>
 </body>
 </html>

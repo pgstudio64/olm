@@ -16,8 +16,8 @@ from olm.core.pattern_dsl import parse_dsl, to_dsl, DSLError
 from olm.core.room_dsl import parse_room_dsl, to_room_dsl, RoomDSLError
 from olm.core.pattern_generator import (
     DESK_W_CM, DESK_D_CM, CHAIR_CLEARANCE_CM, PASSAGE_CM, PASSAGE_SINGLE_CM,
-    BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE, BLOC_6_FACE,
-    BLOC_2_ORTHO_G, BLOC_2_ORTHO_D,
+    BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
+    BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R,
 )
 from olm.core.spacing_config import ALL_CONFIGS
 
@@ -58,16 +58,16 @@ def _find_pattern(patterns: list[dict], name: str) -> int:
     return -1
 
 
-_BASE_BLOCKS = [BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE, BLOC_6_FACE,
-                BLOC_2_ORTHO_G, BLOC_2_ORTHO_D]
+_BASE_BLOCKS = [BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
+                BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R]
 
 # Blocs face-à-face : E/W zones = chair + passage (ES-06)
-_FACE_TO_FACE_BLOCKS = {"BLOC_2_FACE", "BLOC_4_FACE", "BLOC_6_FACE"}
+_FACE_TO_FACE_BLOCKS = {"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"}
 
 # Blocs orthogonaux : zones chair + passage_single sur les faces chaise
 _ORTHO_BLOCKS = {
-    "BLOC_2_ORTHO_D": {"north", "east"},   # chaises desk1=N, desk2=E (L bas-gauche)
-    "BLOC_2_ORTHO_G": {"north", "west"},   # chaises desk1=N, desk2=W (L bas-droite)
+    "BLOCK_2_ORTHO_R": {"north", "east"},   # chaises desk1=N, desk2=E (L bas-gauche)
+    "BLOCK_2_ORTHO_L": {"north", "west"},   # chaises desk1=N, desk2=W (L bas-droite)
 }
 
 
@@ -414,7 +414,7 @@ def api_pattern_duplicate(name: str):
 def api_dsl_parse():
     """Parse du DSL texte en JSON.
 
-    Body JSON : {"dsl": "P_B4: BLOC_4_FACE, 180, BLOC_2_FACE"}
+    Body JSON : {"dsl": "P_B4: BLOCK_4_FACE, 180, BLOCK_2_FACE"}
     """
     try:
         data = request.json
