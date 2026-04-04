@@ -2345,9 +2345,9 @@ async function save() {
     state.roomAmendMode = null;
     exitRoomAmendUI();
     setStatus("Room saved. Re-running matching for \"" + ramend.roomName + "\"...");
-    // Switch back to Floor Plan
+    // Switch back to Floor Plan > Review
     document.querySelector('.tab-btn[data-tab="floorPlan"]').click();
-    document.querySelector('.sub-tab-btn[data-subtab="fpMatching"]').click();
+    document.querySelector('.sub-tab-btn[data-subtab="fpReview"]').click();
     // Re-run matching for this room with amended geometry
     fpRematchRoom(ramend.roomName, amendedRoom);
     return;
@@ -4452,9 +4452,9 @@ async function init() {
       state.amendMode = null;
       exitAmendUI();
     }
-    // Switch back to Floor Plan > Matching
+    // Switch back to Floor Plan > Review
     document.querySelector('.tab-btn[data-tab="floorPlan"]').click();
-    document.querySelector('.sub-tab-btn[data-subtab="fpMatching"]').click();
+    document.querySelector('.sub-tab-btn[data-subtab="fpReview"]').click();
     setStatus("Cancelled.");
   });
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
@@ -4971,8 +4971,9 @@ document.addEventListener("DOMContentLoaded", init);
     var listHtml = "";
     allRooms.forEach(function(r, idx) {
       var active = idx === fpData.currentIdx ? "font-weight:bold;color:var(--accent);" : "color:var(--text-dim);";
+      var amended = (r.room_amended || fpRoomAmendments[r.name]) ? ' <span style="font-size:9px;color:#c8a050;">(amended)</span>' : "";
       listHtml += '<div style="padding:2px 4px;cursor:pointer;' + active + '" data-rv-idx="' + idx + '">' +
-        r.name + ' <span style="font-size:10px;color:var(--text-dim);">' +
+        r.name + amended + ' <span style="font-size:10px;color:var(--text-dim);">' +
         r.width_cm + 'x' + r.depth_cm + '</span></div>';
     });
     document.getElementById("rvRoomList").innerHTML = listHtml;
