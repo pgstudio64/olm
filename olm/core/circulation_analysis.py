@@ -19,7 +19,7 @@ from typing import Dict, Deque, List, Optional, Set, Tuple
 import numpy as np
 
 from olm.core.matching_config import GRID_CELL_CM
-from solver.model import CellType
+from olm.core.types import CellType
 from olm.core.spacing_config import AFNOR_ADVICE
 
 logger = logging.getLogger(__name__)
@@ -77,8 +77,15 @@ def build_grid(
         Grille numpy int de shape (ROWS, COLS) initialisée avec les valeurs CellType.
     """
     # Imports locaux pour éviter la circularité au niveau module
-    from olm.core.pattern_generator import rotate_face_candidates
-    from static_matcher import _BLOCKS
+    from olm.core.pattern_generator import (
+        rotate_face_candidates,
+        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
+        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+    )
+    _BLOCKS = {b.name: b for b in [
+        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
+        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+    ]}
 
     room_eo = room["eo_cm"]
     room_ns = room["ns_cm"]
@@ -421,8 +428,13 @@ def _desk_access_cells(
     """
     from olm.core.pattern_generator import (
         DESK_W_CM, DESK_D_CM, rotate_face_candidates,
+        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
+        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
     )
-    from static_matcher import _BLOCKS
+    _BLOCKS = {b.name: b for b in [
+        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
+        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+    ]}
 
     block_type = block["type"]
     orientation = block.get("orientation", 0)
