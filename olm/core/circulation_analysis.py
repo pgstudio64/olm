@@ -81,12 +81,12 @@ def build_grid(
     # Imports locaux pour éviter la circularité au niveau module
     from olm.core.pattern_generator import (
         rotate_face_candidates,
-        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
-        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
+        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
     )
     _BLOCKS = {b.name: b for b in [
-        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
-        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
+        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
     ]}
 
     room_eo = room["eo_cm"]
@@ -417,11 +417,11 @@ def _desk_access_cells(
 ) -> list[DeskAccess]:
     """Cellules d'accès (côté fauteuil) de chaque desk d'un bloc.
 
-    Pour les blocs standard (BLOC_1, BLOC_2_FACE, BLOC_4_FACE, etc.),
+    Pour les blocs standard (BLOCK_1, BLOCK_2_FACE, BLOCK_4_FACE, etc.),
     le fauteuil est du côté de la face avec non_superposable_cm > 0.
     Un seul point d'accès par face active.
 
-    Pour les blocs ortho (BLOC_2_ORTHO_D/G), chaque poste a sa propre
+    Pour les blocs ortho (BLOCK_2_ORTHO_R/G), chaque poste a sa propre
     face chaise — un point d'accès par poste avec la zone de chaise
     restreinte à la sous-zone du poste dans le bloc.
 
@@ -430,12 +430,12 @@ def _desk_access_cells(
     """
     from olm.core.pattern_generator import (
         DESK_W_CM, DESK_D_CM, rotate_face_candidates,
-        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
-        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
+        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
     )
     _BLOCKS = {b.name: b for b in [
-        BLOC_1, BLOC_2_FACE, BLOC_2_COTE, BLOC_3_COTE, BLOC_4_FACE,
-        BLOC_6_FACE, BLOC_2_ORTHO_D, BLOC_2_ORTHO_G,
+        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
+        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
     ]}
 
     block_type = block["type"]
@@ -514,7 +514,7 @@ def _desk_access_cells(
     results: list[DeskAccess] = []
 
     # ── Blocs ortho : accès par poste individuel ──────────────────────────
-    if block_type in ("BLOC_2_ORTHO_D", "BLOC_2_ORTHO_G"):
+    if block_type in ("BLOCK_2_ORTHO_R", "BLOCK_2_ORTHO_L"):
         # Déterminer les sous-zones de chaque poste selon l'orientation
         # ORTHO_D@0 : desk1 (regard S, chaise N) en haut, desk2 (regard W, chaise E) en bas-gauche
         # ORTHO_G@0 : desk1 (regard S, chaise N) en haut, desk2 (regard E, chaise W) en bas-droite

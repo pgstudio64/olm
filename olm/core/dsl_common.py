@@ -1,25 +1,25 @@
-"""Helpers partagés entre les parseurs DSL (pattern_dsl, room_dsl).
+"""Shared helpers for DSL parsers (pattern_dsl, room_dsl).
 
-Fournit :
-- DSLError : classe d'erreur de base pour tous les DSL
-- strip_comment : suppression des commentaires ``--``
-- parse_int : conversion token -> int avec message d'erreur clair
+Provides:
+- DSLError: base error class for all DSLs
+- strip_comment: strip ``--`` comments
+- parse_int: token -> int conversion with clear error messages
 """
 from __future__ import annotations
 
 
 class DSLError(ValueError):
-    """Erreur de syntaxe ou de sémantique dans un DSL."""
+    """Syntax or semantic error in a DSL."""
 
 
 def strip_comment(line: str) -> str:
-    """Retire le commentaire ``--`` et les espaces de début/fin.
+    """Strip ``--`` comment and leading/trailing whitespace.
 
     Args:
-        line: Ligne brute pouvant contenir un commentaire.
+        line: Raw line possibly containing a comment.
 
     Returns:
-        Ligne nettoyée, potentiellement vide.
+        Cleaned line, possibly empty.
     """
     idx = line.find("--")
     if idx != -1:
@@ -28,24 +28,24 @@ def strip_comment(line: str) -> str:
 
 
 def parse_int(token: str, name: str, context: str = "") -> int:
-    """Convertit un token en entier avec message d'erreur clair.
+    """Convert a token to int with a clear error message.
 
     Args:
-        token: Chaîne à convertir.
-        name: Nom du champ (pour le message d'erreur).
-        context: Contexte additionnel pour le message d'erreur
-                 (ex. "Ligne 3").
+        token: String to convert.
+        name: Field name (for error message).
+        context: Additional context for error message
+                 (e.g. "Line 3").
 
     Returns:
-        Valeur entière.
+        Integer value.
 
     Raises:
-        DSLError: Si le token n'est pas un entier valide.
+        DSLError: If the token is not a valid integer.
     """
     try:
         return int(token)
     except ValueError:
-        prefix = f"{context} : " if context else ""
+        prefix = f"{context}: " if context else ""
         raise DSLError(
-            f"{prefix}{name} invalide '{token}' (entier attendu)"
+            f"{prefix}invalid {name} '{token}' (integer expected)"
         ) from None
