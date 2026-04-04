@@ -1125,15 +1125,24 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
   <!-- SUB-TAB: REVIEW -->
   <div class="sub-tab-content" id="subtabFpReview">
     <div class="fp-container">
-      <div class="fp-sidebar" style="min-width:240px;border-left:none;border-right:1px solid var(--border);">
+      <div class="fp-info-col" id="rvFloorCol" style="min-width:200px;max-width:220px;border-left:none;border-right:1px solid var(--border);">
+        <div class="section-title">Floor properties</div>
+        <table>
+          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
+          <tr><td>Total area</td><td id="rvFloorArea">-</td></tr>
+          <tr><td>With openings</td><td id="rvFloorWithOpenings">-</td></tr>
+          <tr><td>With exclusions</td><td id="rvFloorWithExcl">-</td></tr>
+        </table>
+        <div class="section-title" style="margin-top:12px;">Room list</div>
+        <div id="rvRoomList" style="max-height:calc(100vh - 300px);overflow-y:auto;font-size:11px;"></div>
+      </div>
+      <div class="fp-sidebar" style="min-width:220px;max-width:250px;border-left:none;border-right:1px solid var(--border);">
         <div class="fp-sidebar-title">Room properties</div>
-        <div style="padding:8px;font-size:12px;">
-          <div style="margin-bottom:8px;">
-            <label style="color:var(--text-dim);font-size:11px;">Width (cm)</label>
-            <input type="number" id="rvWidth" style="width:70px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:11px;padding:2px 4px;">
-            <label style="color:var(--text-dim);font-size:11px;margin-left:8px;">Depth (cm)</label>
-            <input type="number" id="rvDepth" style="width:70px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:11px;padding:2px 4px;">
-          </div>
+        <div style="padding:4px 8px;font-size:12px;">
+          <table style="width:100%;font-size:11px;">
+            <tr><td style="color:var(--text-dim);">Size</td><td id="rvRoomDims" style="text-align:right;">-</td></tr>
+            <tr><td style="color:var(--text-dim);">Area</td><td id="rvRoomArea" style="text-align:right;">-</td></tr>
+          </table>
         </div>
         <div class="fp-sidebar-title">Openings</div>
         <div id="rvOpeningsList" style="padding:4px 8px;font-size:11px;max-height:150px;overflow-y:auto;">
@@ -1144,10 +1153,6 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
         </div>
         <div id="rvExclusionsList" style="padding:4px 8px;font-size:11px;max-height:150px;overflow-y:auto;">
           <span style="color:var(--text-dim);">No exclusion zones</span>
-        </div>
-        <div style="padding:8px;margin-top:8px;">
-          <button class="btn" id="rvBtnSave" style="padding:4px 12px;">Save changes</button>
-          <span id="rvSaveStatus" style="color:var(--text-dim);font-size:10px;margin-left:8px;"></span>
         </div>
       </div>
       <div class="fp-main">
@@ -1165,17 +1170,6 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
         <div class="fp-canvas-wrap" id="rvCanvasWrap">
           <!-- Room SVG rendered here for review -->
         </div>
-      </div>
-      <div class="fp-info-col" id="rvFloorCol" style="min-width:200px;max-width:220px;">
-        <div class="section-title">Floor properties</div>
-        <table>
-          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
-          <tr><td>Total area</td><td id="rvFloorArea">-</td></tr>
-          <tr><td>With openings</td><td id="rvFloorWithOpenings">-</td></tr>
-          <tr><td>With exclusions</td><td id="rvFloorWithExcl">-</td></tr>
-        </table>
-        <div class="section-title" style="margin-top:12px;">Room list</div>
-        <div id="rvRoomList" style="max-height:calc(100vh - 300px);overflow-y:auto;font-size:11px;"></div>
       </div>
     </div>
   </div>
@@ -5006,9 +5000,11 @@ document.addEventListener("DOMContentLoaded", init);
     document.getElementById("rvRoomSize").textContent =
       roomData.width_cm + " x " + roomData.depth_cm + " cm";
 
-    // Dimensions
-    document.getElementById("rvWidth").value = roomData.width_cm || "";
-    document.getElementById("rvDepth").value = roomData.depth_cm || "";
+    // Dimensions (read-only)
+    document.getElementById("rvRoomDims").textContent =
+      (roomData.width_cm || 0) + " x " + (roomData.depth_cm || 0) + " cm";
+    var area = ((roomData.width_cm || 0) * (roomData.depth_cm || 0) / 10000).toFixed(1);
+    document.getElementById("rvRoomArea").textContent = area + " m\u00B2";
 
     // Openings list
     var openings = roomData.openings || [];
