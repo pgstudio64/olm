@@ -516,8 +516,8 @@ def _desk_access_cells(
     # ── Blocs ortho : accès par poste individuel ──────────────────────────
     if block_type in ("BLOCK_2_ORTHO_R", "BLOCK_2_ORTHO_L"):
         # Déterminer les sous-zones de chaque poste selon l'orientation
-        # ORTHO_D@0 : desk1 (regard S, chaise N) en haut, desk2 (regard W, chaise E) en bas-gauche
-        # ORTHO_G@0 : desk1 (regard S, chaise N) en haut, desk2 (regard E, chaise W) en bas-droite
+        # ORTHO_R@0 : desk1 (regard S, chaise N) en haut, desk2 (regard W, chaise E) en bas-gauche
+        # ORTHO_L@0 : desk1 (regard S, chaise N) en haut, desk2 (regard E, chaise W) en bas-droite
         # Après rotation, les faces chaise tournent avec rotate_face_candidates
         #
         # Stratégie : on connaît les faces chaise après rotation. Pour ORTHO,
