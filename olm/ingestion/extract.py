@@ -134,13 +134,14 @@ def detect_text_from_ground_truth(ground_truth: dict) -> list[DetectedText]:
 
 def classify_texts(texts: list[DetectedText]) -> dict:
     """Classify detected texts into codes, labels, and surfaces."""
-    codes = []     # "14" instances
+    from olm.core.app_config import get_room_code
+    codes = []     # room code instances
     labels = []    # alphanumeric room labels
     surfaces = []  # decimal numbers (m²)
 
     for t in texts:
         stripped = t.text.strip()
-        if stripped == "14":
+        if stripped == get_room_code():
             codes.append(t)
         elif _is_decimal(stripped):
             surfaces.append(t)

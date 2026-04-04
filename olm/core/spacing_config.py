@@ -7,19 +7,18 @@ Trois standards d'aménagement (cf. glossaire GLOSSARY.md) :
 
 Les valeurs dérivées (ES-04, ES-05) sont calculées à partir des primitives.
 
-Persistence : les valeurs peuvent être surchargées depuis un fichier JSON
-(`spacing_overrides.json`). Les valeurs par défaut servent de fallback.
+Persistence : les valeurs sont lues depuis project/config.json via app_config.
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
 from dataclasses import asdict, dataclass, fields
 
-logger = logging.getLogger(__name__)
+from olm.core.app_config import get_spacing, get_all_standards
+from olm.core.app_config import update_spacing as _update_spacing
+from olm.core.app_config import reset_spacing as _reset_spacing
 
-OVERRIDES_PATH = os.path.join(os.path.dirname(__file__), "spacing_overrides.json")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -66,82 +65,14 @@ class SpacingConfig:
         return cls(**filtered)
 
 
-# ── Default values ────────────────────────────────────────────────────────
-
-_DEFAULTS = {
-    "AFNOR_ADVICE": SpacingConfig(
-        name="AFNOR_ADVICE",
-        chair_clearance_cm=70,
-        front_access_cm=60,
-        access_single_desk_cm=100,
-        passage_behind_one_row_cm=160,
-        passage_between_back_to_back_cm=230,
-        passage_cm=90,
-        door_exclusion_depth_cm=180,
-        desk_to_wall_cm=20,
-        max_island_size=4,
-        min_block_separation_cm=90,
-        main_corridor_cm=140,
-    ),
-    "GROUP": SpacingConfig(
-        name="GROUP",
-        chair_clearance_cm=70,
-        front_access_cm=60,
-        access_single_desk_cm=90,
-        passage_behind_one_row_cm=120,
-        passage_between_back_to_back_cm=180,
-        passage_cm=90,
-        door_exclusion_depth_cm=180,
-        desk_to_wall_cm=10,
-        max_island_size=6,
-        min_block_separation_cm=90,
-        main_corridor_cm=140,
-    ),
-    "SITE": SpacingConfig(
-        name="SITE",
-        chair_clearance_cm=70,
-        front_access_cm=60,
-        access_single_desk_cm=90,
-        passage_behind_one_row_cm=140,
-        passage_between_back_to_back_cm=160,
-        passage_cm=90,
-        door_exclusion_depth_cm=120,
-        desk_to_wall_cm=0,
-        max_island_size=6,
-        min_block_separation_cm=90,
-        main_corridor_cm=140,
-    ),
-}
-
-
-# ── Mutable config with persistence ──────────────────────────────────────
-
-def _load_overrides() -> dict[str, dict]:
-    """Load overrides from JSON file if it exists."""
-    if os.path.exists(OVERRIDES_PATH):
-        try:
-            with open(OVERRIDES_PATH) as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning("Failed to load spacing overrides: %s", e)
-    return {}
-
-
-def _save_overrides(overrides: dict[str, dict]) -> None:
-    """Persist overrides to JSON file."""
-    with open(OVERRIDES_PATH, "w") as f:
-        json.dump(overrides, f, indent=2)
-
+# ── Build configs from app_config ─────────────────────────────────────────
 
 def _build_configs() -> dict[str, SpacingConfig]:
-    """Build configs by merging defaults with any saved overrides."""
-    overrides = _load_overrides()
+    """Build SpacingConfig instances from app_config."""
     configs = {}
-    for name, default in _DEFAULTS.items():
-        d = default.to_dict()
-        if name in overrides:
-            d.update(overrides[name])
-            d["name"] = name  # ensure name stays correct
+    for name in get_all_standards():
+        d = get_spacing(name)
+        d["name"] = name
         configs[name] = SpacingConfig.from_dict(d)
     return configs
 
@@ -161,14 +92,11 @@ def reset_config(name: str) -> SpacingConfig:
         name: Standard name.
 
     Returns:
-        The default SpacingConfig.
+        The reset SpacingConfig.
     """
-    if name not in _DEFAULTS:
-        raise ValueError(f"Unknown standard: {name}")
-    ALL_CONFIGS[name] = SpacingConfig.from_dict(_DEFAULTS[name].to_dict())
-    overrides = _load_overrides()
-    overrides.pop(name, None)
-    _save_overrides(overrides)
+    _reset_spacing(name)
+    ALL_CONFIGS[name] = SpacingConfig.from_dict(
+        {**get_spacing(name), "name": name})
     return ALL_CONFIGS[name]
 
 
@@ -182,23 +110,7 @@ def update_config(name: str, values: dict) -> SpacingConfig:
     Returns:
         The updated SpacingConfig.
     """
-    if name not in ALL_CONFIGS:
-        raise ValueError(f"Unknown standard: {name}")
-
-    current = ALL_CONFIGS[name].to_dict()
-    current.update(values)
-    current["name"] = name
-    updated = SpacingConfig.from_dict(current)
-    ALL_CONFIGS[name] = updated
-
-    # Persist only the delta from defaults
-    overrides = _load_overrides()
-    default_d = _DEFAULTS[name].to_dict()
-    delta = {k: v for k, v in current.items() if v != default_d.get(k)}
-    if delta:
-        overrides[name] = delta
-    elif name in overrides:
-        del overrides[name]
-    _save_overrides(overrides)
-
-    return updated
+    _update_spacing(name, values)
+    ALL_CONFIGS[name] = SpacingConfig.from_dict(
+        {**get_spacing(name), "name": name})
+    return ALL_CONFIGS[name]
