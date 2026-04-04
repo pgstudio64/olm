@@ -1101,20 +1101,31 @@ def score_candidate(
 # Étape 6 — Sélection du meilleur par standard
 # ---------------------------------------------------------------------------
 
-def _score_key(s: MatchScore) -> tuple:
-    """Clé de tri pour sélection du meilleur candidat.
+def _score_key(s: MatchScore) -> float:
+    """Score composite pour sélection du meilleur candidat.
 
-    Priorité :
-    1. Nombre de postes max (décroissant)
-    2. Grade de circulation (A > B > C > D > F)
-    3. m²/poste bas (croissant = plus dense)
+    Combine densité et confort avec les poids de config.json.
+    Score plus bas = meilleur candidat (utilisé avec min()).
+
+    Densité (0-1) : normalisée par n_desks (plus = mieux).
+    Confort (0-1) : dérivé du grade de circulation (A=1, F=0).
     """
-    grade_order = {"A": 0, "B": 1, "C": 2, "D": 3, "F": 4}
-    return (
-        -s.n_desks,
-        grade_order.get(s.circulation_grade, 5),
-        s.m2_per_desk,
-    )
+    from olm.core.app_config import get_matching
+
+    matching = get_matching()
+    w_density = matching.get("w_density", 0.5)
+    w_comfort = matching.get("w_comfort", 0.5)
+
+    # Normaliser densité : n_desks en [0, 1], inversé pour que min() fonctionne
+    # On utilise 1/n_desks comme proxy (plus de postes = meilleur)
+    density_score = 1.0 / max(s.n_desks, 1)
+
+    # Normaliser confort : grade A=0, B=0.25, C=0.5, D=0.75, F=1.0
+    grade_to_score = {"A": 0.0, "B": 0.25, "C": 0.5, "D": 0.75, "F": 1.0}
+    comfort_score = grade_to_score.get(s.circulation_grade, 1.0)
+
+    # Score composite (plus bas = meilleur)
+    return w_density * density_score + w_comfort * comfort_score
 
 
 def select_best(scores: list[MatchScore]) -> MatchScore | None:
