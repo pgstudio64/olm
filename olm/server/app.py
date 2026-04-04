@@ -21,7 +21,7 @@ from olm.core.pattern_generator import (
 )
 from olm.core.spacing_config import ALL_CONFIGS
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOGUE_DIR = os.path.join(os.path.dirname(BASE_DIR), "project", "catalogue")
@@ -165,7 +165,9 @@ def serve_test_rooms():
 @app.route("/test_floor_plan.png")
 def serve_test_floor_plan():
     """DEV: sert le raster de test."""
-    return send_from_directory(BASE_DIR, "test_floor_plan.png")
+    return send_from_directory(
+        os.path.join(os.path.dirname(BASE_DIR), "project", "plans"),
+        "test_floor_plan.png")
 
 
 @app.route("/specs/<path:filename>")
@@ -536,50 +538,8 @@ def api_mock_candidates():
 
 @app.route("/api/match", methods=["GET"])
 def api_match():
-    """Lance le matching statique du catalogue sur la pièce de référence."""
-    try:
-        from static_matcher import match_catalogue
-        from olm.core.circulation_analysis import analyse, build_grid
-        from olm.core.matching_config import GRID_CELL_CM
-        import numpy as np
-
-        patterns = _load_catalogue()
-        candidates = match_catalogue(patterns, MOCK_ROOM)
-
-        for candidate in candidates:
-            result = analyse(MOCK_ROOM, candidate["blocks"])
-            candidate["circulation_grade"] = result.grade
-            candidate["circulation_connectivity"] = result.connectivity_pct
-            candidate["circulation_worst_detour"] = result.worst_detour_ratio
-            candidate["circulation_violations"] = result.violations
-            candidate["grid"] = build_grid(MOCK_ROOM, candidate["blocks"]).tolist()
-            candidate["grid_cell_cm"] = GRID_CELL_CM
-            # Chemins BFS porte → fauteuil avec largeur par segment
-            from olm.core.circulation_analysis import _compute_desk_paths
-            desk_path_results = _compute_desk_paths(
-                build_grid(MOCK_ROOM, candidate["blocks"]),
-                candidate["blocks"],
-                MOCK_ROOM,
-            )
-            candidate["desk_paths"] = [
-                {
-                    "desk_id": r.desk_id,
-                    "path": r.path,
-                    "min_width_cm": r.min_width_cm,
-                    "widths_cm": r.widths_cm,
-                    "door_center": list(r.door_center),
-                    "chair_center": list(r.chair_center),
-                }
-                for r in desk_path_results
-            ]
-
-        return jsonify({
-            "room": MOCK_ROOM,
-            "candidates": candidates,
-            "pipelineStep": 1,
-        })
-    except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+    """Ancien endpoint de matching (abandonné D-35). Redirige vers /api/floor-plan/match."""
+    return jsonify({"error": "Deprecated. Use POST /api/floor-plan/match instead."}), 410
 
 
 @app.route("/api/floor-plan/match", methods=["POST"])
