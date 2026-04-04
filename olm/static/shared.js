@@ -526,12 +526,15 @@ function pointToLineDist(p, a, b) {
 
 function circGrade(circ) {
   // Grade based on minimum passage vs active standard thresholds
+  // A: above corridor (PS-04), B: above passage (ES-06), C: at passage,
+  // D: below passage but >50%, F: critically below
   var minW = circ.minPassageCm;
-  var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 0;       // ES-06
-  var corridor = CURRENT_SPACING ? CURRENT_SPACING.main_corridor_cm : 0; // PS-04
-  // Green if > passage, amber if = passage, red if < passage
-  if (minW > passage) return { grade: "A", color: "#58c080" };
-  if (minW >= passage) return { grade: "B", color: "#c8a050" };
+  var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 90;       // ES-06
+  var corridor = CURRENT_SPACING ? CURRENT_SPACING.main_corridor_cm : 140; // PS-04
+  if (minW >= corridor) return { grade: "A", color: "#58c080" };
+  if (minW > passage)   return { grade: "B", color: "#7ab060" };
+  if (minW >= passage)  return { grade: "C", color: "#c8a050" };
+  if (minW >= passage * 0.5) return { grade: "D", color: "#c07040" };
   return { grade: "F", color: "#c05858" };
 }
 
