@@ -989,6 +989,33 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
 <!-- SUB-TAB: SETTINGS -->
 <div class="sub-tab-content" id="subtabOlSettings">
   <div class="fp-input-page" style="max-width:900px;">
+
+    <div class="section-title">General</div>
+    <div style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;margin-bottom:16px;">
+      <label style="color:var(--text-dim);">Room code</label>
+      <input type="text" id="cfgRoomCode" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Default door width (cm)</label>
+      <input type="number" id="cfgDoorWidth" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Desk width (cm)</label>
+      <input type="number" id="cfgDeskW" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Desk depth (cm)</label>
+      <input type="number" id="cfgDeskD" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Grid cell (cm)</label>
+      <input type="number" id="cfgGrid" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+    </div>
+
+    <div class="section-title">Standard labels</div>
+    <div id="cfgStandardLabels" style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;margin-bottom:16px;">
+    </div>
+
+    <div class="section-title">Matching weights</div>
+    <div style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;margin-bottom:16px;">
+      <label style="color:var(--text-dim);">Density weight</label>
+      <input type="number" id="cfgWDensity" step="0.1" min="0" max="1" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Comfort weight</label>
+      <input type="number" id="cfgWComfort" step="0.1" min="0" max="1" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+    </div>
+
     <div class="section-title">Spacing standards</div>
     <div style="margin-bottom:12px;color:var(--text-dim);font-size:11px;">
       Edit spacing values per standard. Changes are saved immediately and affect block geometry and rendering.
@@ -1202,8 +1229,7 @@ function patternOverflowsRoom(p) {
 function computeAutoName() {
   const w = state.room_width_cm;
   const d = state.room_depth_cm;
-  const stdShort = { AFNOR_ADVICE: "AFNOR", GROUP: "GROUP", SITE: "SITE" };
-  return w + "x" + d + "_" + (stdShort[state.standard] || state.standard);
+  return w + "x" + d + "_" + getStdLabel(state.standard);
 }
 
 function updateAutoName() {
@@ -2758,8 +2784,7 @@ function renderCatalogue() {
           nDesks += countDesksInBlock(b.type) || 0;
         });
       });
-      var stdShort = { AFNOR_ADVICE: "AFNOR", GROUP: "GROUP", SITE: "SITE" };
-      var std = stdShort[p.standard] || p.standard || "?";
+      var std = getStdLabel(p.standard) || "?";
       var w = p.room_width_cm || "?";
       var d = p.room_depth_cm || "?";
 
@@ -3208,8 +3233,7 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
   }
 
   // Pattern name centered at top (z=10)
-  var stdShort = { AFNOR_ADVICE: "AFNOR", GROUP: "GROUP", SITE: "SITE" };
-  var stdLabel = stdShort[p.standard] || p.standard || "";
+  var stdLabel = getStdLabel(p.standard);
   var titleFontSize = Math.max(6, Math.min(12, roomW * 0.06));
   elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 14) +
     '" text-anchor="middle" fill="' + COLOR_GAP_LABEL + '" font-size="' + titleFontSize +
@@ -3495,7 +3519,7 @@ async function loadBlockDefs() {
 }
 
 async function loadAllBlockDefs() {
-  var stds = ["AFNOR_ADVICE", "GROUP", "SITE"];
+  var stds = getStandards();
   for (var i = 0; i < stds.length; i++) {
     try {
       var resp = await fetch("/api/blocks?standard=" + encodeURIComponent(stds[i]));
@@ -4119,6 +4143,47 @@ async function loadSpacingConfigs() {
   } catch (e) { /* silent */ }
 }
 
+var APP_CONFIG = {};
+
+async function loadAppConfig() {
+  try {
+    var resp = await fetch("/api/config");
+    if (resp.ok) APP_CONFIG = await resp.json();
+  } catch (e) { console.warn("Failed to load config:", e); }
+}
+
+function getStandards() {
+  if (APP_CONFIG.spacing) return Object.keys(APP_CONFIG.spacing);
+  return ["AFNOR_ADVICE", "GROUP", "SITE"];
+}
+
+function getStdLabel(key) {
+  if (APP_CONFIG.standard_labels && APP_CONFIG.standard_labels[key]) {
+    return APP_CONFIG.standard_labels[key];
+  }
+  return key;
+}
+
+async function saveConfigField(keyOrPath, value) {
+  var body;
+  if (Array.isArray(keyOrPath)) {
+    body = { path: keyOrPath, value: value };
+  } else {
+    body = { key: keyOrPath, value: value };
+  }
+  try {
+    var resp = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    await loadAppConfig();
+  } catch (e) {
+    console.error("Config save error:", e);
+  }
+}
+
 var SPACING_FIELDS = [
   { key: "chair_clearance_cm",             label: "ES-01 Chair clearance" },
   { key: "front_access_cm",               label: "ES-02 Front access" },
@@ -4136,11 +4201,11 @@ var SPACING_FIELDS = [
 function renderSpacingSettings() {
   var grid = document.getElementById("spacingSettingsGrid");
   if (!grid || !SPACING_CONFIGS) return;
-  var stds = ["AFNOR_ADVICE", "GROUP", "SITE"];
+  var stds = getStandards();
   var html = '<div style="font-weight:bold;color:var(--text-dim);">Parameter</div>';
   stds.forEach(function(s) {
     html += '<div style="font-weight:bold;text-align:center;color:var(--accent);">' +
-      s.replace("_ADVICE", "") + '</div>';
+      getStdLabel(s) + '</div>';
   });
   SPACING_FIELDS.forEach(function(f) {
     html += '<div style="color:var(--text-dim);padding:2px 0;">' + f.label + '</div>';
@@ -4159,6 +4224,52 @@ function renderSpacingSettings() {
       saveSpacingField(inp.dataset.std, inp.dataset.field, parseInt(inp.value) || 0);
     });
   });
+}
+
+function renderGeneralSettings() {
+  if (!APP_CONFIG) return;
+
+  var el;
+  el = document.getElementById("cfgRoomCode");
+  if (el) { el.value = APP_CONFIG.room_code || "14"; el.onchange = function() { saveConfigField("room_code", this.value); }; }
+
+  el = document.getElementById("cfgDoorWidth");
+  if (el) { el.value = APP_CONFIG.default_door_width_cm || 90; el.onchange = function() { saveConfigField("default_door_width_cm", parseInt(this.value)||90); }; }
+
+  el = document.getElementById("cfgDeskW");
+  if (el) { el.value = APP_CONFIG.desk_width_cm || 80; el.onchange = function() { saveConfigField("desk_width_cm", parseInt(this.value)||80); }; }
+
+  el = document.getElementById("cfgDeskD");
+  if (el) { el.value = APP_CONFIG.desk_depth_cm || 180; el.onchange = function() { saveConfigField("desk_depth_cm", parseInt(this.value)||180); }; }
+
+  el = document.getElementById("cfgGrid");
+  if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10); }; }
+
+  var matching = APP_CONFIG.matching || {};
+  el = document.getElementById("cfgWDensity");
+  if (el) { el.value = matching.w_density != null ? matching.w_density : 0.5; el.onchange = function() { saveConfigField(["matching", "w_density"], parseFloat(this.value)||0.5); }; }
+
+  el = document.getElementById("cfgWComfort");
+  if (el) { el.value = matching.w_comfort != null ? matching.w_comfort : 0.5; el.onchange = function() { saveConfigField(["matching", "w_comfort"], parseFloat(this.value)||0.5); }; }
+
+  var labelsDiv = document.getElementById("cfgStandardLabels");
+  if (labelsDiv) {
+    var html = "";
+    getStandards().forEach(function(s) {
+      var label = getStdLabel(s);
+      html += '<label style="color:var(--text-dim);">' + s + '</label>';
+      html += '<input type="text" data-std-label="' + s + '" value="' + label +
+        '" style="width:100px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">';
+    });
+    labelsDiv.innerHTML = html;
+    labelsDiv.querySelectorAll("input[data-std-label]").forEach(function(inp) {
+      inp.addEventListener("change", function() {
+        var labels = APP_CONFIG.standard_labels || {};
+        labels[inp.dataset.stdLabel] = inp.value;
+        saveConfigField("standard_labels", labels);
+      });
+    });
+  }
 }
 
 async function saveSpacingField(standard, field, value) {
@@ -4187,10 +4298,12 @@ async function saveSpacingField(standard, field, value) {
 var _BLOCK_DEFS_CACHE_JS = {};
 
 async function init() {
+  await loadAppConfig();
   await loadAllBlockDefs();
   await loadBlockDefs();
   await loadSpacingConfigs();
   renderSpacingSettings();
+  renderGeneralSettings();
 
   buildPalette();
   addRow(false);
@@ -4224,7 +4337,7 @@ async function init() {
   document.getElementById("btnApplyRoomDSL").addEventListener("click", applyRoomDSL);
   document.getElementById("btnResetSpacing").addEventListener("click", async function() {
     // Delete overrides file by posting empty values for each standard
-    var stds = ["AFNOR_ADVICE", "GROUP", "SITE"];
+    var stds = getStandards();
     for (var i = 0; i < stds.length; i++) {
       await fetch("/api/spacing", {
         method: "POST",
@@ -5061,7 +5174,8 @@ document.addEventListener("DOMContentLoaded", init);
     };
 
     // Summary table
-    var summary = { AFNOR_ADVICE: { rooms: 0, total_desks: 0 }, GROUP: { rooms: 0, total_desks: 0 }, SITE: { rooms: 0, total_desks: 0 } };
+    var summary = {};
+    getStandards().forEach(function(s) { summary[s] = { rooms: 0, total_desks: 0 }; });
     exportData.rooms.forEach(function(r) {
       for (var std in r.best_by_standard) {
         var b = r.best_by_standard[std];
