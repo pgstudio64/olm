@@ -266,7 +266,45 @@
     display: flex;
     gap: 0;
     margin-left: 24px;
+    flex: 1;
   }
+
+  /* Settings drawer (overlay) */
+  .settings-btn {
+    background: none; border: none; color: var(--text-dim); font-size: 32px;
+    cursor: pointer; padding: 4px 16px; margin-right: 8px;
+    transition: color 0.2s;
+  }
+  .settings-btn:hover { color: var(--accent); }
+
+  .settings-overlay {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 650px; max-width: 90vw;
+    background: var(--bg); border-left: 2px solid var(--accent);
+    box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+    z-index: 1000; overflow-y: auto;
+    transform: translateX(100%); transition: transform 0.25s ease;
+    padding: 20px 24px;
+  }
+  .settings-overlay.open { transform: translateX(0); }
+  .settings-overlay-backdrop {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.3); z-index: 999;
+    display: none;
+  }
+  .settings-overlay-backdrop.open { display: block; }
+  .settings-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .settings-header h2 { font-size: 16px; color: var(--accent); margin: 0; }
+  .settings-close {
+    background: none; border: none; color: var(--text-dim); font-size: 20px;
+    cursor: pointer; padding: 4px 8px;
+  }
+  .settings-close:hover { color: var(--text); }
+  .settings-section { margin-bottom: 20px; }
+  .settings-section .section-title { margin-bottom: 8px; }
   .tab-btn {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -758,19 +796,73 @@
 </head>
 <body>
 
-<header>
+<header style="display:flex;align-items:center;">
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="floorPlan">Floor Plan</button>
     <button class="tab-btn" data-tab="officeLayout">Office Layout</button>
   </div>
+  <button class="settings-btn" id="btnOpenSettings" title="Settings">&#9881;</button>
 </header>
+
+<!-- Settings drawer overlay -->
+<div class="settings-overlay-backdrop" id="settingsBackdrop"></div>
+<div class="settings-overlay" id="settingsDrawer">
+  <div class="settings-header">
+    <h2>&#9881; Settings</h2>
+    <button class="settings-close" id="btnCloseSettings">&times;</button>
+  </div>
+
+  <div class="settings-section">
+    <div class="section-title">General</div>
+    <div style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;">
+      <label style="color:var(--text-dim);">Room code</label>
+      <input type="text" id="cfgRoomCode" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Default door width (cm)</label>
+      <input type="number" id="cfgDoorWidth" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Desk width (cm)</label>
+      <input type="number" id="cfgDeskW" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Desk depth (cm)</label>
+      <input type="number" id="cfgDeskD" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Grid cell (cm)</label>
+      <input type="number" id="cfgGrid" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="section-title">Standard labels</div>
+    <div id="cfgStandardLabels" style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;">
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="section-title">Matching weights</div>
+    <div style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;">
+      <label style="color:var(--text-dim);">Density weight</label>
+      <input type="number" id="cfgWDensity" step="0.1" min="0" max="1" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+      <label style="color:var(--text-dim);">Comfort weight</label>
+      <input type="number" id="cfgWComfort" step="0.1" min="0" max="1" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="section-title">Spacing standards</div>
+    <div style="margin-bottom:8px;color:var(--text-dim);font-size:11px;">
+      Edit spacing values per standard. Changes are saved immediately.
+    </div>
+    <div id="spacingSettingsGrid" style="display:grid;grid-template-columns:200px repeat(3,120px);gap:2px 8px;font-size:11px;font-family:var(--font-mono);">
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn" id="btnResetSpacing" style="font-size:10px;">Reset to defaults</button>
+      <span id="spacingSaveStatus" style="color:var(--text-dim);font-size:10px;margin-left:12px;"></span>
+    </div>
+  </div>
+</div>
 
 <!-- MAIN TAB: OFFICE LAYOUT -->
 <div class="tab-content" id="tabOfficeLayout">
   <div class="sub-tab-bar">
     <button class="sub-tab-btn active" data-subtab="olCatalogue" data-parent="officeLayout">Catalogue</button>
     <button class="sub-tab-btn" data-subtab="olEditor" data-parent="officeLayout">Editor</button>
-    <button class="sub-tab-btn" data-subtab="olSettings" data-parent="officeLayout">Settings</button>
   </div>
 
 <!-- SUB-TAB: EDITOR -->
@@ -986,48 +1078,6 @@ EXCL 560 0 40 40      <span style="color:var(--text-dim)">-- exclusion at x=560 
   </div>
 </div><!-- /subtabOlCatalogue -->
 
-<!-- SUB-TAB: SETTINGS -->
-<div class="sub-tab-content" id="subtabOlSettings">
-  <div class="fp-input-page" style="max-width:900px;">
-
-    <div class="section-title">General</div>
-    <div style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;margin-bottom:16px;">
-      <label style="color:var(--text-dim);">Room code</label>
-      <input type="text" id="cfgRoomCode" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-      <label style="color:var(--text-dim);">Default door width (cm)</label>
-      <input type="number" id="cfgDoorWidth" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-      <label style="color:var(--text-dim);">Desk width (cm)</label>
-      <input type="number" id="cfgDeskW" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-      <label style="color:var(--text-dim);">Desk depth (cm)</label>
-      <input type="number" id="cfgDeskD" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-      <label style="color:var(--text-dim);">Grid cell (cm)</label>
-      <input type="number" id="cfgGrid" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-    </div>
-
-    <div class="section-title">Standard labels</div>
-    <div id="cfgStandardLabels" style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;margin-bottom:16px;">
-    </div>
-
-    <div class="section-title">Matching weights</div>
-    <div style="display:grid;grid-template-columns:200px 120px;gap:4px 12px;font-size:12px;margin-bottom:16px;">
-      <label style="color:var(--text-dim);">Density weight</label>
-      <input type="number" id="cfgWDensity" step="0.1" min="0" max="1" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-      <label style="color:var(--text-dim);">Comfort weight</label>
-      <input type="number" id="cfgWComfort" step="0.1" min="0" max="1" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">
-    </div>
-
-    <div class="section-title">Spacing standards</div>
-    <div style="margin-bottom:12px;color:var(--text-dim);font-size:11px;">
-      Edit spacing values per standard. Changes are saved immediately and affect block geometry and rendering.
-    </div>
-    <div id="spacingSettingsGrid" style="display:grid;grid-template-columns:200px repeat(3,120px);gap:2px 8px;font-size:11px;font-family:var(--font-mono);">
-    </div>
-    <div style="margin-top:12px;">
-      <button class="btn" id="btnResetSpacing" style="font-size:10px;">Reset to defaults</button>
-      <span id="spacingSaveStatus" style="color:var(--text-dim);font-size:10px;margin-left:12px;"></span>
-    </div>
-  </div>
-</div><!-- /subtabOlSettings -->
 
 </div><!-- /tabOfficeLayout -->
 
@@ -4161,7 +4211,10 @@ function getStdLabel(key) {
   if (APP_CONFIG.standard_labels && APP_CONFIG.standard_labels[key]) {
     return APP_CONFIG.standard_labels[key];
   }
-  return key;
+  // Generic fallback: "Std 1", "Std 2"...
+  var stds = getStandards();
+  var idx = stds.indexOf(key);
+  return idx >= 0 ? "Std " + (idx + 1) : key;
 }
 
 async function saveConfigField(keyOrPath, value) {
@@ -4297,6 +4350,11 @@ async function saveSpacingField(standard, field, value) {
 }
 var _BLOCK_DEFS_CACHE_JS = {};
 
+function closeSettings() {
+  document.getElementById("settingsDrawer").classList.remove("open");
+  document.getElementById("settingsBackdrop").classList.remove("open");
+}
+
 async function init() {
   await loadAppConfig();
   await loadAllBlockDefs();
@@ -4304,6 +4362,14 @@ async function init() {
   await loadSpacingConfigs();
   renderSpacingSettings();
   renderGeneralSettings();
+
+  // Settings drawer open/close
+  document.getElementById("btnOpenSettings").addEventListener("click", function() {
+    document.getElementById("settingsDrawer").classList.add("open");
+    document.getElementById("settingsBackdrop").classList.add("open");
+  });
+  document.getElementById("btnCloseSettings").addEventListener("click", closeSettings);
+  document.getElementById("settingsBackdrop").addEventListener("click", closeSettings);
 
   buildPalette();
   addRow(false);
