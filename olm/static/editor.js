@@ -369,9 +369,14 @@ function _renderImpl(targetSvg) {
   // zf = SVG units per CSS pixel — text scaled by zf appears at constant visual size.
   // zf converts a target CSS-pixel size to SVG units: fontSize_svg = targetPx * zf
   // With preserveAspectRatio="meet", scale = min(pxW/vbW, pxH/vbH)
+  // If SVG is hidden (inactive tab), reuse last known size
   var svgRect = svg.getBoundingClientRect();
-  var pxW = svgRect.width || 600;
-  var pxH = svgRect.height || 400;
+  if (svgRect.width > 0 && svgRect.height > 0) {
+    svg._lastPxW = svgRect.width;
+    svg._lastPxH = svgRect.height;
+  }
+  var pxW = svg._lastPxW || svgRect.width || 800;
+  var pxH = svg._lastPxH || svgRect.height || 600;
   var vb = state.viewBox;
   var svgScale = Math.min(pxW / vb.w, pxH / vb.h);
   var zf = 1 / svgScale;
