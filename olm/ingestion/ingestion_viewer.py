@@ -14,7 +14,7 @@ IMAGES = {
     "comb904": ("/tmp/comb_904_debug.png", "Peigne 904"),
     "comb909": ("/tmp/comb_909_debug.png", "Peigne 909"),
     "comb919": ("/tmp/comb_919_debug.png", "Peigne 919"),
-    "closed": ("/tmp/closed_plan.png", "Fermeture morpho"),
+    "ortho": ("/tmp/ortho_plan.png", "Sans arcs (ortho)"),
 }
 HTML = """<!DOCTYPE html>
 <html><head><title>OLM Ingestion</title>
