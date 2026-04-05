@@ -118,7 +118,7 @@
       <textarea id="dslRoom" rows="8" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;"
         placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
       <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;">Apply</button>
-      <div style="margin-bottom:8px;position:relative;">
+      <div style="margin-bottom:8px;text-align:right;">
         <span id="dslHelpToggle" class="help-link">Syntax help</span>
       </div>
 
@@ -126,7 +126,10 @@
 
       <div class="section-title">Layout</div>
       <textarea id="dslText" rows="2" spellcheck="false" style="width:100%;margin-bottom:4px;"></textarea>
-      <button class="btn" id="btnApplyDSL" style="width:100%;margin-bottom:8px;">Apply</button>
+      <button class="btn" id="btnApplyDSL" style="width:100%;margin-bottom:4px;">Apply</button>
+      <div style="margin-bottom:8px;text-align:right;">
+        <span id="dslLayoutHelpToggle" class="help-link">Syntax help</span>
+      </div>
 
       <div class="section-title">Blocks</div>
       <div id="blockPalette"></div>
@@ -489,7 +492,7 @@
 <script src="/static/catalogue.js"></script>
 <script src="/static/floor_plan.js"></script>
 <script src="/static/init.js"></script>
-<div id="dslHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);pointer-events:none;">ROOM 600x500          <span style="color:var(--text-dim)">-- room 600cm wide, 500cm deep</span>
+<div id="dslHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);max-height:80vh;overflow-y:auto;"><span class="tooltip-close" onclick="this.parentElement.style.display='none'">&times;</span>ROOM 600x500          <span style="color:var(--text-dim)">-- room 600cm wide, 500cm deep</span>
 WINDOW N              <span style="color:var(--text-dim)">-- full-width window on north wall</span>
 WINDOW N 50 200       <span style="color:var(--text-dim)">-- 200cm window, 50cm from west corner</span>
 DOOR S 0 90 INT L     <span style="color:var(--text-dim)">-- door south, offset 0, 90cm, inward, hinge left</span>
@@ -498,5 +501,19 @@ OPENING E 100 150     <span style="color:var(--text-dim)">-- free opening (no do
 EXCLUSION 560 0 40 40 <span style="color:var(--text-dim)">-- exclusion at x=560 y=0, 40x40cm</span>
 
 <span style="color:var(--text-dim)">Faces: N S E W  |  Door: INT/EXT L/R  |  All dimensions in cm</span></div>
+<div id="dslLayoutHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);max-height:80vh;overflow-y:auto;"><span class="tooltip-close" onclick="this.parentElement.style.display='none'">&times;</span>name: BLOCK, gap, BLOCK ; gap ; BLOCK
+                                          <span style="color:var(--text-dim)">name: rows separated by ; with inter-row gap</span>
+P1: BLOCK_4_FACE                          <span style="color:var(--text-dim)">-- single block</span>
+P2: BLOCK_4_FACE, 180, BLOCK_2_FACE       <span style="color:var(--text-dim)">-- two blocks, 180cm gap</span>
+P3: BLOCK_4_FACE; 230; BLOCK_4_FACE       <span style="color:var(--text-dim)">-- two rows, 230cm inter-row gap</span>
+P4: 50, BLOCK_2_FACE                      <span style="color:var(--text-dim)">-- 50cm gap before first block (wall offset)</span>
+P5: BLOCK_4_FACE@90                       <span style="color:var(--text-dim)">-- block rotated 90deg</span>
+P6: BLOCK_1 S20                           <span style="color:var(--text-dim)">-- block offset 20cm south (N20 = north)</span>
+P7: BLOCK_2_FACE @SN @SW                  <span style="color:var(--text-dim)">-- stick to north and west walls</span>
+
+<span style="color:var(--text-dim)">Blocks: BLOCK_1  BLOCK_2_FACE  BLOCK_2_SIDE  BLOCK_3_SIDE  BLOCK_4_FACE  BLOCK_6_FACE
+        BLOCK_2_ORTHO_L  BLOCK_2_ORTHO_R
+Orientation: @0 @90 @180 @270  |  Offset: N/S + cm  |  Stick: @SN @SS @SE @SW
+Row: blocks separated by ,  with gap (cm) between  |  ; = new row + inter-row gap</span></div>
 </body>
 </html>

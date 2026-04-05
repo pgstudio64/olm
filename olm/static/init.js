@@ -20,6 +20,10 @@ async function init() {
   document.getElementById("settingsBackdrop").addEventListener("click", closeSettings);
 
   buildPalette();
+  // Pre-create ruler boxes before first render (avoids layout shift)
+  _ensureRulers(document.getElementById("canvas"));
+  _ensureRulers(document.getElementById("fpCanvas"));
+  _ensureRulers(document.getElementById("rvCanvas"));
   addRow(false);
   // Default room
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
@@ -115,15 +119,17 @@ async function init() {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyRoomDSL(); }
   });
 
-  function showDslHelp(anchor) {
-    var tip = document.getElementById("dslHelpTooltip");
+  function showTooltipCentered(tip) {
     var visible = tip.style.display !== "none";
     if (visible) { tip.style.display = "none"; return; }
-    var rect = anchor.getBoundingClientRect();
-    tip.style.left = Math.min(rect.left, window.innerWidth - 420) + "px";
-    tip.style.top = (rect.bottom + 4) + "px";
     tip.style.display = "";
-    tip.style.pointerEvents = "none";
+    tip.style.pointerEvents = "auto";
+    var tipRect = tip.getBoundingClientRect();
+    tip.style.left = Math.max(8, (window.innerWidth - tipRect.width) / 2) + "px";
+    tip.style.top = Math.max(8, (window.innerHeight - tipRect.height) / 2) + "px";
+  }
+  function showDslHelp() {
+    showTooltipCentered(document.getElementById("dslHelpTooltip"));
   }
   document.getElementById("dslHelpToggle").addEventListener("click", function(e) {
     showDslHelp(e.target);
@@ -134,9 +140,24 @@ async function init() {
       showDslHelp(e.target);
     });
   }
+
+  function showLayoutDslHelp() {
+    showTooltipCentered(document.getElementById("dslLayoutHelpTooltip"));
+  }
+  var layoutHelp = document.getElementById("dslLayoutHelpToggle");
+  if (layoutHelp) {
+    layoutHelp.addEventListener("click", function(e) {
+      showLayoutDslHelp(e.target);
+    });
+  }
+
   document.addEventListener("click", function(e) {
     if (e.target.id !== "dslHelpToggle" && e.target.id !== "rvDslHelpToggle") {
       document.getElementById("dslHelpTooltip").style.display = "none";
+    }
+    if (e.target.id !== "dslLayoutHelpToggle") {
+      var lt = document.getElementById("dslLayoutHelpTooltip");
+      if (lt) lt.style.display = "none";
     }
   });
 
