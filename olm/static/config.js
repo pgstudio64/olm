@@ -16,6 +16,10 @@ async function loadAppConfig() {
     var resp = await fetch("/api/config");
     if (resp.ok) APP_CONFIG = await resp.json();
   } catch (e) { console.warn("Failed to load config:", e); }
+  // Propagate config to rendering constants (direct mapping)
+  if (APP_CONFIG.desk_width_cm) DESK_W = APP_CONFIG.desk_width_cm;
+  if (APP_CONFIG.desk_depth_cm) DESK_D = APP_CONFIG.desk_depth_cm;
+  if (APP_CONFIG.grid_cell_cm) GRID_STEP_CM = APP_CONFIG.grid_cell_cm;
 }
 
 function getStandards() {
@@ -145,13 +149,21 @@ function renderGeneralSettings() {
   if (el) { el.value = APP_CONFIG.default_door_width_cm || 90; el.onchange = function() { saveConfigField("default_door_width_cm", parseInt(this.value)||90); }; }
 
   el = document.getElementById("cfgDeskW");
-  if (el) { el.value = APP_CONFIG.desk_width_cm || 80; el.onchange = function() { saveConfigField("desk_width_cm", parseInt(this.value)||80); }; }
+  if (el) { el.value = APP_CONFIG.desk_width_cm || 80; el.onchange = function() {
+    saveConfigField("desk_width_cm", parseInt(this.value)||80).then(function() {
+      loadAllBlockDefs().then(function() { loadBlockDefs().then(function() { render(); }); });
+    });
+  }; }
 
   el = document.getElementById("cfgDeskD");
-  if (el) { el.value = APP_CONFIG.desk_depth_cm || 180; el.onchange = function() { saveConfigField("desk_depth_cm", parseInt(this.value)||180); }; }
+  if (el) { el.value = APP_CONFIG.desk_depth_cm || 180; el.onchange = function() {
+    saveConfigField("desk_depth_cm", parseInt(this.value)||180).then(function() {
+      loadAllBlockDefs().then(function() { loadBlockDefs().then(function() { render(); }); });
+    });
+  }; }
 
   el = document.getElementById("cfgGrid");
-  if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10); }; }
+  if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
 
   var matching = APP_CONFIG.matching || {};
   el = document.getElementById("cfgWDensity");

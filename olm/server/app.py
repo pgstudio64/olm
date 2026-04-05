@@ -71,12 +71,36 @@ _ORTHO_BLOCKS = {
 }
 
 
+# Block dimension formulas: (eo_factor_w, eo_factor_d, ns_factor_w, ns_factor_d)
+# eo_cm = fw * DESK_W + fd * DESK_D, ns_cm = gw * DESK_W + gd * DESK_D
+# DESK_W = width (180, wide side), DESK_D = depth (80, front-to-back)
+_BLOCK_DESK_FACTORS = {
+    "BLOCK_1":          (0, 1, 1, 0),   # eo=D,  ns=W
+    "BLOCK_2_FACE":     (0, 2, 1, 0),   # eo=2D, ns=W
+    "BLOCK_2_SIDE":     (0, 1, 2, 0),   # eo=D,  ns=2W
+    "BLOCK_3_SIDE":     (0, 1, 3, 0),   # eo=D,  ns=3W
+    "BLOCK_4_FACE":     (0, 2, 2, 0),   # eo=2D, ns=2W
+    "BLOCK_6_FACE":     (0, 2, 3, 0),   # eo=2D, ns=3W
+    "BLOCK_2_ORTHO_R":  (1, 0, 1, 1),   # eo=W,  ns=W+D
+    "BLOCK_2_ORTHO_L":  (1, 0, 1, 1),   # eo=W,  ns=W+D
+}
+
+
 def _block_def_to_json(block) -> dict:
-    """Convertit un Block en dict JSON."""
+    """Convertit un Block en dict JSON, recalculant les dimensions depuis la config."""
+    from olm.core.pattern_generator import DESK_W_CM, DESK_D_CM
+    factors = _BLOCK_DESK_FACTORS.get(block.name)
+    if factors:
+        fw, fd, gw, gd = factors
+        eo = fw * DESK_W_CM + fd * DESK_D_CM
+        ns = gw * DESK_W_CM + gd * DESK_D_CM
+    else:
+        eo = block.eo_cm
+        ns = block.ns_cm
     return {
         "name": block.name,
-        "eo_cm": block.eo_cm,
-        "ns_cm": block.ns_cm,
+        "eo_cm": eo,
+        "ns_cm": ns,
         "n_desks": block.n_desks,
         "derogatory": block.derogatory,
         "faces": {
@@ -191,12 +215,13 @@ def api_blocks():
     standard = request.args.get("standard", "AFNOR_ADVICE")
     cfg = ALL_CONFIGS.get(standard, ALL_CONFIGS["AFNOR_ADVICE"])
     block_defs = _get_block_defs(standard)
+    import olm.core.pattern_generator as pg
     return jsonify({
         "blocks": block_defs,
         "standard": standard,
         "constants": {
-            "DESK_W_CM": DESK_W_CM,
-            "DESK_D_CM": DESK_D_CM,
+            "DESK_W_CM": pg.DESK_W_CM,
+            "DESK_D_CM": pg.DESK_D_CM,
             "CHAIR_CLEARANCE_CM": cfg.chair_clearance_cm,
             "PASSAGE_CM": cfg.passage_cm,
             "PASSAGE_SINGLE_CM": cfg.access_single_desk_cm - cfg.chair_clearance_cm,
@@ -256,6 +281,13 @@ def api_config_post():
         app_config.update(data["key"], data["value"])
     else:
         return jsonify({"error": "Missing 'key' or 'path'"}), 400
+    # Invalidate block defs cache when desk dimensions change
+    key = data.get("key", "")
+    if key in ("desk_width_cm", "desk_depth_cm"):
+        import olm.core.pattern_generator as pg
+        pg.DESK_W_CM = app_config.get("desk_width_cm", 180)
+        pg.DESK_D_CM = app_config.get("desk_depth_cm", 80)
+        _BLOCK_DEFS_CACHE.clear()
     return jsonify({"ok": True})
 
 

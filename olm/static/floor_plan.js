@@ -45,7 +45,7 @@
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;
       // Render and switch to Review tab
-      var reviewBtn = document.querySelector('.sub-tab-btn[data-subtab="fpReview"]');
+      var reviewBtn = document.querySelector('.tab-btn[data-tab="review"]');
       if (reviewBtn && !reviewBtn.classList.contains("active")) reviewBtn.click();
       fpRenderCurrent();
       rvRenderCurrent();
@@ -115,7 +115,7 @@
     var roomData = fpRoomAmendments[room.name] || room;
 
     // Render room SVG in canvas (empty room, no blocks)
-    var rvTab = document.getElementById("subtabFpReview");
+    var rvTab = document.getElementById("tabReview");
     if (rvTab && rvTab.classList.contains("active")) {
       fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
     }
@@ -669,17 +669,17 @@
       radio.addEventListener("change", function() { fpRenderCurrent(); });
     });
 
-    // Keyboard nav
+    // Keyboard nav — Design tab (Left/Right = rooms, Up/Down = candidates)
     document.addEventListener("keydown", function(e) {
-      // Only when Floor Plan > Matching is active
-      var fpTab = document.getElementById("tabFloorPlan");
-      if (!fpTab || !fpTab.classList.contains("active")) return;
-      var matchSub = document.getElementById("subtabFpMatching");
-      if (!matchSub || !matchSub.classList.contains("active")) return;
+      var designTab = document.getElementById("tabDesign");
+      var reviewTab = document.getElementById("tabReview");
+      var inDesign = designTab && designTab.classList.contains("active");
+      var inReview = reviewTab && reviewTab.classList.contains("active");
+      if (!inDesign && !inReview) return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       if (e.key === "ArrowLeft") { e.preventDefault(); fpGo(-1); }
       else if (e.key === "ArrowRight") { e.preventDefault(); fpGo(1); }
-      else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      else if (inDesign && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
         e.preventDefault();
         var container = document.getElementById("fpCandidatesList");
         var items = container.querySelectorAll(".fp-candidate");

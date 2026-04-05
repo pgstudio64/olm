@@ -26,8 +26,8 @@ _EMBEDDED_DEFAULTS = {
         "SITE": "SITE",
     },
     "default_door_width_cm": 90,
-    "desk_width_cm": 80,
-    "desk_depth_cm": 180,
+    "desk_width_cm": 180,
+    "desk_depth_cm": 80,
     "grid_cell_cm": 10,
     "matching": {
         "w_density": 0.5,

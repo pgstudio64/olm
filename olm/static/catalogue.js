@@ -10,11 +10,7 @@ async function loadCatalogue() {
     var data = await resp.json();
     catalogueData = data.patterns || [];
     try {
-      if (catalogueViewMode === "matrix") {
-        renderMatrixView();
-      } else {
-        renderCatalogue();
-      }
+      renderCatalogue();
     } catch (renderErr) {
       console.error("renderCatalogue error:", renderErr);
       document.getElementById("catalogueGrid").innerHTML =
@@ -98,7 +94,7 @@ function renderCatalogue() {
       if (e.target.classList.contains("card-delete")) return;
       var name = card.dataset.patternName;
       if (name) {
-        document.querySelector('.sub-tab-btn[data-subtab="olEditor"]').click();
+        document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
         loadPattern(name);
       }
     });
@@ -124,36 +120,12 @@ function renderCatalogue() {
 
 // ========== MATRIX VIEW ==========
 
-let catalogueViewMode = "cards";  // "cards" | "matrix"
 let matrixViewBox = { x: 0, y: 0, w: 1000, h: 800 };
 let matrixPanning = false;
 let matrixPanStart = { x: 0, y: 0 };
 // Metadata for fixed rulers
 let matrixMeta = { widths: [], depths: [], colXs: [], rowYs: [], colWidths: [], rowHeights: [], labelW: 60, labelH: 30, margin: 20 };
 
-function setCatalogueView(mode) {
-  catalogueViewMode = mode;
-  var cardsEl = document.getElementById("catalogueGrid");
-  var matrixEl = document.getElementById("matrixContainer");
-  var btnCards = document.getElementById("btnViewCards");
-  var btnMatrix = document.getElementById("btnViewMatrix");
-  var isMatrix = (mode === "matrix");
-  // Show/hide dimension filters and zoom buttons
-  document.querySelectorAll(".cat-dim-filter").forEach(function(el) { el.style.display = isMatrix ? "none" : ""; });
-  document.querySelectorAll(".cat-matrix-btn").forEach(function(el) { el.style.display = isMatrix ? "" : "none"; });
-  if (isMatrix) {
-    cardsEl.style.display = "none";
-    matrixEl.style.display = "flex";
-    btnCards.classList.remove("active");
-    btnMatrix.classList.add("active");
-    renderMatrixView();
-  } else {
-    cardsEl.style.display = "";
-    matrixEl.style.display = "none";
-    btnCards.classList.add("active");
-    btnMatrix.classList.remove("active");
-  }
-}
 
 function getFilteredPatterns() {
   var stdFilter = document.getElementById("catFilterStandard").value;
@@ -714,7 +686,7 @@ function renderMatrixView() {
       e.stopPropagation();
       var name = el.dataset.matrixPattern;
       if (!name) return;
-      document.querySelector('.sub-tab-btn[data-subtab="olEditor"]').click();
+      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
       loadPattern(name);
     });
   });

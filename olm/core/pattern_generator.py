@@ -4,8 +4,11 @@ import json
 from olm.core.app_config import get as _cfg_get
 
 # AFNOR NF X35-102
-DESK_W_CM: int = _cfg_get("desk_width_cm", 80)    # largeur bureau (axe EO dans les patterns)
-DESK_D_CM: int = _cfg_get("desk_depth_cm", 180)   # profondeur bureau (axe NS)
+# Desk dimensions — human perspective:
+#   width  = large side (left-right when seated) = 180 cm
+#   depth  = front-to-back (towards screen)      = 80 cm
+DESK_W_CM: int = _cfg_get("desk_width_cm", 180)   # largeur bureau
+DESK_D_CM: int = _cfg_get("desk_depth_cm", 80)    # profondeur bureau
 CHAIR_CLEARANCE_CM = 70   # ES-01 débattement chaise — zone fixe non superposable
 PASSAGE_CM = 90           # ES-06 zone minimale de circulation — obligatoire, extensible
 PASSAGE_SINGLE_CM = 30    # ES-03 zone minimale de circulation accès poste seul
@@ -96,8 +99,8 @@ _FACE_CHAIR_ACCESS = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_SINGLE_CM)   # 70 + 30
 
 BLOCK_2_FACE = Block(
     name="BLOCK_2_FACE",
-    eo_cm=DESK_W_CM * 2,     # 160 cm
-    ns_cm=DESK_D_CM,          # 180 cm
+    eo_cm=DESK_D_CM * 2,     # 160 cm (2 × depth)
+    ns_cm=DESK_W_CM,          # 180 cm (1 × width)
     n_desks=2,
     faces=FaceCandidates(
         north=FaceZone.absent(),
@@ -110,8 +113,8 @@ BLOCK_2_FACE = Block(
 
 BLOCK_1 = Block(
     name="BLOCK_1",
-    eo_cm=DESK_W_CM,
-    ns_cm=DESK_D_CM,
+    eo_cm=DESK_D_CM,          # 80 cm (depth)
+    ns_cm=DESK_W_CM,          # 180 cm (width)
     n_desks=1,
     faces=FaceCandidates(
         north=FaceZone.absent(),
@@ -123,8 +126,8 @@ BLOCK_1 = Block(
 
 BLOCK_2_SIDE = Block(
     name="BLOCK_2_SIDE",
-    eo_cm=DESK_W_CM,
-    ns_cm=DESK_D_CM * 2,
+    eo_cm=DESK_D_CM,          # 80 cm (depth)
+    ns_cm=DESK_W_CM * 2,      # 360 cm (2 × width)
     n_desks=2,
     faces=FaceCandidates(
         north=FaceZone.absent(),
@@ -136,8 +139,8 @@ BLOCK_2_SIDE = Block(
 
 BLOCK_3_SIDE = Block(
     name="BLOCK_3_SIDE",
-    eo_cm=DESK_W_CM,          # 80 cm — 1 seule colonne
-    ns_cm=DESK_D_CM * 3,      # 540 cm — 3 postes empilés NS
+    eo_cm=DESK_D_CM,          # 80 cm (depth)
+    ns_cm=DESK_W_CM * 3,      # 540 cm (3 × width)
     n_desks=3,
     faces=FaceCandidates(
         north=FaceZone.absent(),
@@ -149,8 +152,8 @@ BLOCK_3_SIDE = Block(
 
 BLOCK_4_FACE = Block(
     name="BLOCK_4_FACE",
-    eo_cm=DESK_W_CM * 2,     # 160 cm — 2 paires EO
-    ns_cm=DESK_D_CM * 2,     # 360 cm — 2 paires empilées NS
+    eo_cm=DESK_D_CM * 2,     # 160 cm (2 × depth)
+    ns_cm=DESK_W_CM * 2,     # 360 cm (2 × width)
     n_desks=4,
     faces=FaceCandidates(
         north=FaceZone.absent(),
@@ -163,8 +166,8 @@ BLOCK_4_FACE = Block(
 
 BLOCK_6_FACE = Block(
     name="BLOCK_6_FACE",
-    eo_cm=DESK_W_CM * 2,     # 160 cm — identique BLOCK_4_FACE
-    ns_cm=DESK_D_CM * 3,     # 540 cm — 3 paires empilées NS
+    eo_cm=DESK_D_CM * 2,     # 160 cm (2 × depth)
+    ns_cm=DESK_W_CM * 3,     # 540 cm (3 × width)
     n_desks=6,
     faces=FaceCandidates(
         north=FaceZone.absent(),
@@ -189,8 +192,8 @@ BLOCK_6_FACE = Block(
 # Chaises : desk1=nord, desk2=est
 BLOCK_2_ORTHO_R = Block(
     name="BLOCK_2_ORTHO_R",
-    eo_cm=DESK_D_CM,          # 180 cm (largeur desk1)
-    ns_cm=DESK_W_CM + DESK_D_CM,  # 260 cm (80+180)
+    eo_cm=DESK_W_CM,          # 180 cm (width of desk1)
+    ns_cm=DESK_D_CM + DESK_W_CM,  # 260 cm (80+180)
     n_desks=2,
     faces=FaceCandidates(
         north=_FACE_CHAIR_ACCESS,    # ES-03 : chaise desk1
@@ -212,8 +215,8 @@ BLOCK_2_ORTHO_R = Block(
 # Chaises : desk1=nord, desk2=ouest
 BLOCK_2_ORTHO_L = Block(
     name="BLOCK_2_ORTHO_L",
-    eo_cm=DESK_D_CM,          # 180 cm
-    ns_cm=DESK_W_CM + DESK_D_CM,  # 260 cm
+    eo_cm=DESK_W_CM,          # 180 cm (width)
+    ns_cm=DESK_D_CM + DESK_W_CM,  # 260 cm (80+180)
     n_desks=2,
     faces=FaceCandidates(
         north=_FACE_CHAIR_ACCESS,    # ES-03 : chaise desk1
