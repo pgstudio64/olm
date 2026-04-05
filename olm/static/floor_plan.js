@@ -218,9 +218,10 @@
     state.selectedRow = 0;
     state.selectedBlock = -1;
 
-    // Inject overlay if active
-    var fpOvToggle = document.getElementById("fpOverlayToggle");
-    if (window.fpOverlay && fpOvToggle && fpOvToggle.checked) {
+    // Inject overlay if active (check both Design and Review toggles)
+    var fpOvChecked = document.getElementById("fpOverlayToggle").checked;
+    var rvOvChecked = document.getElementById("rvOverlayToggle").checked;
+    if (window.fpOverlay && (fpOvChecked || rvOvChecked)) {
       var ov = window.fpOverlay;
       var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
       state.overlay = {
@@ -648,14 +649,30 @@
       }
     });
     document.getElementById("fpOverlayToggle").addEventListener("change", function() {
+      document.getElementById("rvOverlayToggle").checked = this.checked;
       fpRenderCurrent();
     });
     document.getElementById("fpOverlayOpacity").addEventListener("input", function() {
       document.getElementById("fpOverlayOpacityVal").textContent = this.value + "%";
-      // Live update if overlay is showing
+      document.getElementById("rvOverlayOpacity").value = this.value;
+      document.getElementById("rvOverlayOpacityVal").textContent = this.value + "%";
       if (document.getElementById("fpOverlayToggle").checked && state.overlay) {
         state.overlay.opacity = parseInt(this.value);
         render(document.getElementById('fpCanvas'));
+      }
+    });
+    // Review overlay controls
+    document.getElementById("rvOverlayToggle").addEventListener("change", function() {
+      document.getElementById("fpOverlayToggle").checked = this.checked;
+      rvRenderCurrent();
+    });
+    document.getElementById("rvOverlayOpacity").addEventListener("input", function() {
+      document.getElementById("rvOverlayOpacityVal").textContent = this.value + "%";
+      document.getElementById("fpOverlayOpacity").value = this.value;
+      document.getElementById("fpOverlayOpacityVal").textContent = this.value + "%";
+      if (document.getElementById("rvOverlayToggle").checked && state.overlay) {
+        state.overlay.opacity = parseInt(this.value);
+        render(document.getElementById('rvCanvas'));
       }
     });
 
@@ -736,6 +753,8 @@
             };
             document.getElementById("fpOverlayStatus").textContent =
               img.width + "x" + img.height + " px loaded";
+            document.getElementById("fpOverlayToggle").checked = true;
+            document.getElementById("rvOverlayToggle").checked = true;
           };
           img.src = ev.target.result;
         };

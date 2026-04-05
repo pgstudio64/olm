@@ -363,6 +363,11 @@
       </div>
       <div class="fp-main">
         <div class="fp-nav" style="position:relative;">
+          <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:3px;">
+            <input type="checkbox" id="rvOverlayToggle"> Overlay
+          </label>
+          <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
+          <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
           <span style="flex:1;"></span>
           <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
           <div class="fp-room-label" id="rvRoomLabel">-</div>
