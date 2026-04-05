@@ -25,6 +25,7 @@ let state = {
   selectedExclusion: -1,
   gridVisible: true,
   circVisible: false,
+  dirty: false,          // true when pattern has unsaved changes
   amendMode: null,       // { roomName, roomIdx, candidate } when adjusting a solution
   roomAmendMode: null,   // { roomName, originalRoom } when editing room geometry
   overlay: null,         // { dataUrl, pxPerCm, opacity, offsetX, offsetY, imgW, imgH }
@@ -33,6 +34,21 @@ let state = {
   isPanning: false,
   panStart: { x: 0, y: 0 },
 };
+
+function markDirty() {
+  if (!state.dirty) {
+    state.dirty = true;
+    document.querySelector(".ol-header").classList.add("edit-mode");
+    document.getElementById("btnAmendCancel").style.display = "";
+  }
+}
+function clearDirty() {
+  state.dirty = false;
+  document.querySelector(".ol-header").classList.remove("edit-mode");
+  if (!state.amendMode) {
+    document.getElementById("btnAmendCancel").style.display = "none";
+  }
+}
 
 function patternOverflowsRoom(p) {
   // Check if block footprints exceed the room
@@ -112,6 +128,7 @@ function updateRoomDSL() {
 }
 
 async function applyRoomDSL() {
+  markDirty();
   var text = document.getElementById("dslRoom").value.trim();
   if (!text) return;
   try {
@@ -148,7 +165,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx) {
     var pos = wallSegment(w.face, w.offset_cm, w.width_cm, roomX, roomY, roomWPx, roomHPx, wallThick);
     elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#50b8d0" stroke-width="2.5" stroke-linecap="round"/>' });
+      '" stroke="#50b8d0" stroke-width="1.5" stroke-linecap="round"/>' });
   });
 
   // Doors and open bays
@@ -348,6 +365,17 @@ function _renderImpl(targetSvg) {
   const MARGIN = 0;
   const hasBlocks = state.rows.length > 0 && totalBlocks() > 0;
   const elements = [];
+  // Zoom-compensated font size: labels stay visually constant regardless of zoom/room size.
+  // zf = SVG units per CSS pixel — text scaled by zf appears at constant visual size.
+  // zf converts a target CSS-pixel size to SVG units: fontSize_svg = targetPx * zf
+  // With preserveAspectRatio="meet", scale = min(pxW/vbW, pxH/vbH)
+  var svgRect = svg.getBoundingClientRect();
+  var pxW = svgRect.width || 600;
+  var pxH = svgRect.height || 400;
+  var vb = state.viewBox;
+  var svgScale = Math.min(pxW / vb.w, pxH / vb.h);
+  var zf = 1 / svgScale;
+  window._currentZf = zf;  // shared with block_svg.js
 
   let globalWestOffset = 0;  // obsolete, kept for viewBox compatibility
   let totalW = 0;
@@ -527,7 +555,7 @@ function _renderImpl(targetSvg) {
       const overlapTop = Math.max(a.deskY, nearestRight.deskY);
       const overlapBot = Math.min(a.deskY + a.deskH, nearestRight.deskY + nearestRight.deskH);
       const ly = (overlapTop + overlapBot) / 2;
-      pushDistLabel(elements, lx, ly + 4, gapCm, COLOR_GAP_LABEL);
+      pushDistLabel(elements, lx, ly + 4 * zf, gapCm, COLOR_GAP_LABEL, zf);
     }
 
     if (nearestBelow) {
@@ -536,7 +564,7 @@ function _renderImpl(targetSvg) {
       const overlapRight = Math.min(a.deskX + a.deskW, nearestBelow.deskX + nearestBelow.deskW);
       const lx = (overlapLeft + overlapRight) / 2;
       const ly = a.deskY + a.deskH + nearestBelowGap / 2;
-      pushDistLabel(elements, lx, ly + 4, gapCm, COLOR_GAP_LABEL);
+      pushDistLabel(elements, lx, ly + 4 * zf, gapCm, COLOR_GAP_LABEL, zf);
     }
   }
 
@@ -602,12 +630,15 @@ function _renderImpl(targetSvg) {
     '" width="' + roomWPx + '" height="' + roomHPx +
     '" fill="none" stroke="#4a4640" stroke-width="1.5"/>' });
   // Room dimension labels
-  elements.push({ z: 10, s: '<text x="' + (roomX + roomWPx / 2) + '" y="' + (roomY - 4) +
-    '" text-anchor="middle" fill="#6e6a62" font-size="7" font-family="monospace">' +
+  var dimFs = (16.5 * zf).toFixed(1);
+  var dimOffY = 16 * zf;
+  var dimOffX = 16 * zf;
+  elements.push({ z: 10, s: '<text x="' + (roomX + roomWPx / 2) + '" y="' + (roomY - dimOffY) +
+    '" text-anchor="middle" fill="#6e6a62" font-size="' + dimFs + '" font-family="monospace">' +
     state.room_width_cm + ' cm</text>' });
-  elements.push({ z: 10, s: '<text x="' + (roomX - 4) + '" y="' + (roomY + roomHPx / 2) +
-    '" text-anchor="middle" fill="#6e6a62" font-size="7" font-family="monospace"' +
-    ' transform="rotate(-90,' + (roomX - 4) + ',' + (roomY + roomHPx / 2) + ')">' +
+  elements.push({ z: 10, s: '<text x="' + (roomX - dimOffX) + '" y="' + (roomY + roomHPx / 2) +
+    '" text-anchor="middle" fill="#6e6a62" font-size="' + dimFs + '" font-family="monospace"' +
+    ' transform="rotate(-90,' + (roomX - dimOffX) + ',' + (roomY + roomHPx / 2) + ')">' +
     state.room_depth_cm + ' cm</text>' });
 
   // Windows, doors, openings, exclusion zones
@@ -732,10 +763,12 @@ function _renderImpl(targetSvg) {
     const stepPx = GRID_STEP_CM * SCALE;
     const meterPx = 100 * SCALE;
     const vb = state.viewBox;
-    const gxStart = Math.floor(vb.x / stepPx) * stepPx;
-    const gyStart = Math.floor(vb.y / stepPx) * stepPx;
-    const gxEnd = vb.x + vb.w;
-    const gyEnd = vb.y + vb.h;
+    // Render grid with margin beyond viewBox to survive panning
+    var gridMargin = Math.max(vb.w, vb.h) * 0.5;
+    const gxStart = Math.floor((vb.x - gridMargin) / stepPx) * stepPx;
+    const gyStart = Math.floor((vb.y - gridMargin) / stepPx) * stepPx;
+    const gxEnd = vb.x + vb.w + gridMargin;
+    const gyEnd = vb.y + vb.h + gridMargin;
 
     // 10cm dots
     for (let gx = gxStart; gx <= gxEnd; gx += stepPx) {
@@ -759,19 +792,7 @@ function _renderImpl(targetSvg) {
         '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
     }
 
-    // Ruler: meter labels (z=10: foreground)
-    const rulerY = vb.y + 6;
-    const rulerX = vb.x + 2;
-    for (let mx = mxStart; mx <= gxEnd; mx += meterPx) {
-      const m = Math.round(mx / meterPx);
-      elements.push({ z: 10, s: '<text x="' + mx.toFixed(1) + '" y="' + rulerY.toFixed(1) +
-        '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="6" font-family="monospace">' + m + 'm</text>' });
-    }
-    for (let my = myStart; my <= gyEnd; my += meterPx) {
-      const m = Math.round(my / meterPx);
-      elements.push({ z: 10, s: '<text x="' + rulerX.toFixed(1) + '" y="' + (my + 2).toFixed(1) +
-        '" fill="' + COLOR_RULER + '" font-size="6" font-family="monospace">' + m + 'm</text>' });
-    }
+    // Ruler labels rendered in HTML overlays (updateRulers), not in SVG
   }
 
   // Overlay raster background
@@ -801,13 +822,84 @@ function _renderImpl(targetSvg) {
   updateInfo();
   document.getElementById("canvasDims").textContent =
     state.room_width_cm + " x " + state.room_depth_cm + " cm";
-  document.getElementById("zoomLevel").textContent = Math.round(state.zoom * 100) + "%";
+  // zoomLevel display removed — simplified toolbar
 }
 
 function updateViewBox(targetSvg) {
   const svg = targetSvg || document.getElementById("canvas");
   const vb = state.viewBox;
   svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
+  updateRulers(svg);
+}
+
+function _ensureRulers(svg) {
+  // Create a ruler container around the SVG if it doesn't exist
+  if (svg._rulersReady) return;
+  var parent = svg.parentElement;
+  var rulerBox = document.createElement("div");
+  rulerBox.className = "ruler-box";
+  parent.insertBefore(rulerBox, svg);
+  rulerBox.appendChild(svg);
+  ["ruler-top", "ruler-bottom", "ruler-left", "ruler-right"].forEach(function(cls) {
+    var div = document.createElement("div");
+    div.className = "ruler " + cls;
+    rulerBox.appendChild(div);
+  });
+  svg._rulersReady = true;
+  svg._rulerBox = rulerBox;
+}
+
+function updateRulers(targetSvg) {
+  var svg = targetSvg || document.getElementById("canvas");
+  _ensureRulers(svg);
+  var box = svg._rulerBox;
+  if (!box) return;
+  var rulerTop = box.querySelector(".ruler-top");
+  var rulerBottom = box.querySelector(".ruler-bottom");
+  var rulerLeft = box.querySelector(".ruler-left");
+  var rulerRight = box.querySelector(".ruler-right");
+
+  var wrapRect = box.getBoundingClientRect();
+  var vb = state.viewBox;
+  var meterPx = 100 * SCALE;
+  var htmlH = "";
+  var htmlV = "";
+
+  // Use getScreenCTM for exact SVG-to-screen coordinate mapping
+  var ctm = svg.getScreenCTM();
+  if (!ctm) return;
+
+  function svgToWrap(svgX, svgY) {
+    return {
+      x: ctm.a * svgX + ctm.c * svgY + ctm.e - wrapRect.left,
+      y: ctm.b * svgX + ctm.d * svgY + ctm.f - wrapRect.top
+    };
+  }
+
+  // Horizontal labels (top + bottom)
+  var mxStart = Math.max(0, Math.floor(vb.x / meterPx) * meterPx);
+  var mxEnd = vb.x + vb.w;
+  for (var mx = mxStart; mx <= mxEnd; mx += meterPx) {
+    var p = svgToWrap(mx, 0);
+    if (p.x < 22 || p.x > wrapRect.width - 22) continue;
+    var m = Math.round(mx / meterPx);
+    htmlH += '<span style="left:' + p.x.toFixed(0) + 'px;">' + m + 'm</span>';
+  }
+
+  // Vertical labels (left + right)
+  var myStart = Math.max(0, Math.floor(vb.y / meterPx) * meterPx);
+  var myEnd = vb.y + vb.h;
+  for (var my = myStart; my <= myEnd; my += meterPx) {
+    var p = svgToWrap(0, my);
+    if (p.y < 0 || p.y > wrapRect.height - 36) continue;
+    var m = Math.round(my / meterPx);
+    htmlV += '<span style="top:' + p.y.toFixed(0) + 'px;">' + m + 'm</span>';
+  }
+
+  rulerTop.innerHTML = htmlH;
+  if (rulerBottom) rulerBottom.innerHTML = htmlH;
+  rulerLeft.innerHTML = htmlV;
+  if (rulerRight) rulerRight.innerHTML = htmlV;
 }
 
 function _safeText(id, val) {
@@ -969,6 +1061,7 @@ async function updateDSL() {
 }
 
 async function applyDSL() {
+  markDirty();
   const text = document.getElementById("dslText").value.trim();
   try {
     const resp = await fetch("/api/dsl/parse", {
@@ -1031,6 +1124,7 @@ function buildPatternPayload() {
 }
 
 function addBlock(blockType) {
+  markDirty();
   if (state.rows.length === 0) addRow(false);
   const row = state.rows[state.selectedRow];
   const block = { type: blockType, orientation: 0, offset_ns_cm: 0 };
@@ -1061,6 +1155,7 @@ function addBlock(blockType) {
 }
 
 function addRow(andRender) {
+  markDirty();
   if (andRender === undefined) andRender = true;
   if (state.rows.length > 0) {
     const gap = DEFAULT_ROW_GAP_CM;
@@ -1100,6 +1195,16 @@ async function save() {
   // Amend mode: store amendment locally and return to Floor Plan
   if (state.amendMode) {
     var amend = state.amendMode;
+    if (!state.dirty) {
+      // No changes — exit without creating an amendment
+      state.amendMode = null;
+      exitAmendUI();
+      clearDirty();
+      document.querySelector('.tab-btn[data-tab="design"]').click();
+      fpRenderCurrent();
+      setStatus("No changes — amendment discarded.");
+      return;
+    }
     var payload = buildPatternPayload();
     // Recompute desk count
     var nd = totalDesks();
@@ -1154,6 +1259,7 @@ async function save() {
       state._savedName = result.name;
       document.getElementById("autoName").textContent = result.name;
     }
+    clearDirty();
     setStatus("Pattern \"" + state._savedName + "\" saved.");
     loadCatalogue();
   } catch (err) {
@@ -1223,6 +1329,7 @@ async function loadPattern(name) {
     render();
     zoomFit();
     updateDSL();
+    clearDirty();
     setStatus("Pattern \"" + state.name + "\" loaded.");
   } catch (err) {
     setStatus("Load error: " + err.message);
@@ -1230,6 +1337,7 @@ async function loadPattern(name) {
 }
 
 function loadPatternFromData(data) {
+  clearDirty();
   state.rows = data.rows || [];
   state.row_gaps_cm = data.row_gaps_cm || [];
   state.room_width_cm = data.room_width_cm || 300;
@@ -1240,7 +1348,7 @@ function loadPatternFromData(data) {
   state.room_exclusions = data.room_exclusions || [];
   state.selectedRow = 0;
   state.selectedBlock = -1;
-  state._savedName = null;
+  state._savedName = data.name || null;
   document.getElementById("roomWidth").value = state.room_width_cm;
   document.getElementById("roomDepth").value = state.room_depth_cm;
   var radios = document.querySelectorAll('input[name="standard"]');
@@ -1281,8 +1389,15 @@ function enterAmendMode(room, candidate) {
   if (candidate.standard && BLOCK_DEFS_BY_STD[candidate.standard]) {
     BLOCK_DEFS = BLOCK_DEFS_BY_STD[candidate.standard];
   }
-  document.querySelector('.tab-btn[data-tab="catalogue"]').click();
-  document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+  // Show editor content, keep Design tab visually active
+  document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
+  document.getElementById("tabCatalogue").classList.add("active");
+  document.querySelectorAll(".sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
+  document.getElementById("subtabCatEditor").classList.add("active");
+  document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
+  document.querySelector('.tab-btn[data-tab="design"]').classList.add("active");
+  // Hide sub-tab bar (Card view / Grid view / Pattern editor)
+  document.querySelector("#tabCatalogue .sub-tab-bar").style.display = "none";
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));
 
   // Disable room controls + irrelevant actions
@@ -1301,7 +1416,7 @@ function enterAmendMode(room, candidate) {
   document.getElementById("btnAmendCancel").style.display = "";
 
   // Visual cue: amend mode banner
-  document.querySelector(".ol-header").classList.add("amend-mode");
+  document.querySelector(".ol-header").classList.add("edit-mode");
   _safeText("autoName", "\u270E " + room.name);
   setStatus("Adjusting layout for room \"" + room.name + "\". Save to apply, Cancel to discard.");
 }
@@ -1317,7 +1432,10 @@ function exitAmendUI() {
   document.getElementById("headerStandard").style.opacity = "";
   document.getElementById("btnSave").textContent = "Save";
   document.getElementById("btnAmendCancel").style.display = "none";
-  document.querySelector(".ol-header").classList.remove("amend-mode");
+  document.querySelector(".ol-header").classList.remove("edit-mode");
+  // Restore sub-tab bar
+  var subBar = document.querySelector("#tabCatalogue .sub-tab-bar");
+  if (subBar) subBar.style.display = "";
 }
 
 // IDs to disable in room-amend mode (layout controls + catalogue actions)
@@ -1373,8 +1491,8 @@ function enterRoomAmendMode(room) {
   document.getElementById("rvBtnPrev").disabled = true;
   document.getElementById("rvBtnNext").disabled = true;
 
-  // Visual cue: amber border on nav bar
-  document.querySelector("#tabReview .fp-nav").style.borderBottom = "2px solid var(--accent)";
+  // Visual cue: amber edit-mode on nav bar
+  document.querySelector("#tabReview .fp-nav").classList.add("edit-mode");
   document.getElementById("rvRoomLabel").textContent = "\u270E " + room.name;
 }
 
@@ -1395,8 +1513,8 @@ function exitRoomAmendUI() {
   document.getElementById("rvBtnPrev").disabled = false;
   document.getElementById("rvBtnNext").disabled = false;
 
-  // Remove amber border
-  document.querySelector("#tabReview .fp-nav").style.borderBottom = "";
+  // Remove edit-mode
+  document.querySelector("#tabReview .fp-nav").classList.remove("edit-mode");
 
   state.overlay = null;
 }
@@ -1427,6 +1545,7 @@ async function deletePattern() {
 }
 
 function resetState() {
+  clearDirty();
   state.rows = [];
   state.row_gaps_cm = [];
   state.room_width_cm = parseInt(document.getElementById("roomWidth").value) || 300;
@@ -1529,6 +1648,7 @@ function getSelectedBlock() {
 function rotateSelectedBlock() {
   const b = getSelectedBlock();
   if (!b) { setStatus("No block selected for rotation"); return; }
+  markDirty();
   b.orientation = ((b.orientation || 0) + 90) % 360;
   setStatus("Rotation " + b.type + " -> " + b.orientation + "\u00B0");
   updateDSL(); updateRowList(); zoomFit();
@@ -1546,6 +1666,7 @@ function cleanSticks(b) {
 function offsetSelectedBlock(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
+  markDirty();
   b.offset_ns_cm = (b.offset_ns_cm || 0) + deltaCm;
   cleanSticks(b);
   render(); updateDSL();
@@ -1554,6 +1675,7 @@ function offsetSelectedBlock(deltaCm) {
 function offsetSelectedBlockEO(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
+  markDirty();
   b.gap_cm = Math.max(0, (b.gap_cm || 0) + deltaCm);
   cleanSticks(b);
   render(); updateDSL();

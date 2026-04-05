@@ -25,6 +25,7 @@ async function init() {
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
   state.room_openings = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, has_door: true, opens_inward: true, hinge_side: "left" }];
   updateAutoName();
+  clearDirty();
   requestAnimationFrame(function() { zoomFit(); });
   loadCatalogue();
 
@@ -34,15 +35,23 @@ async function init() {
   document.getElementById("btnDuplicate").addEventListener("click", duplicatePattern);
   document.getElementById("btnDelete").addEventListener("click", deletePattern);
   document.getElementById("btnAmendCancel").addEventListener("click", function() {
+    clearDirty();
     if (state.roomAmendMode) {
       state.roomAmendMode = null;
       exitRoomAmendUI();
-    } else {
+      document.querySelector('.tab-btn[data-tab="review"]').click();
+    } else if (state.amendMode) {
       state.amendMode = null;
       exitAmendUI();
+      document.querySelector('.tab-btn[data-tab="design"]').click();
+      fpRenderCurrent();
+    } else if (state._savedName) {
+      // Dirty editor, not amend — reload saved pattern
+      loadPattern(state._savedName);
+    } else {
+      // New unsaved pattern — reset to empty
+      resetState();
     }
-    // Switch back to Review
-    document.querySelector('.tab-btn[data-tab="review"]').click();
     setStatus("Cancelled.");
   });
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
@@ -151,15 +160,20 @@ async function init() {
   });
   document.getElementById("gridToggle").addEventListener("change", function(e) {
     state.gridVisible = e.target.checked;
+    document.getElementById("fpGridToggle").checked = e.target.checked;
     render();
   });
   document.getElementById("circToggle").addEventListener("change", function(e) {
     state.circVisible = e.target.checked;
+    document.getElementById("fpCircToggle").checked = e.target.checked;
     render();
   });
+  // fpGridToggle and fpCircToggle are wired in floor_plan.js
+  // (they need access to fpCurrent/fpCurrentCandidate to re-render correctly)
 
   // Room dimensions
   function onRoomChange() {
+    markDirty();
     var oldW = state.room_width_cm;
     var oldD = state.room_depth_cm;
     state.room_width_cm = parseInt(document.getElementById("roomWidth").value) || 300;
@@ -282,6 +296,13 @@ async function init() {
       var descBar = document.getElementById("tabDescBar");
       if (descBar) descBar.textContent = TAB_DESCRIPTIONS[btn.dataset.tab] || "";
       if (btn.dataset.tab === "catalogue") {
+        // Reset to Card view sub-tab
+        document.querySelectorAll(".sub-tab-btn").forEach(function(b) { b.classList.remove("active"); });
+        document.querySelectorAll(".sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
+        var cardsBtn = document.querySelector('.sub-tab-btn[data-subtab="catCards"]');
+        if (cardsBtn) cardsBtn.classList.add("active");
+        var cardsTab = document.getElementById("subtabCatCards");
+        if (cardsTab) cardsTab.classList.add("active");
         _restoreEditorState();
         loadCatalogue();
       }
@@ -389,35 +410,43 @@ async function init() {
   document.getElementById("btnZoomFit").addEventListener("click", function() { zoomFit(); });
 
   const canvas = document.getElementById("canvas");
+  var _panSvg = null;  // which SVG is currently being panned
 
-  canvas.addEventListener("mousedown", function(e) {
-    if (e.target.closest("[data-row]") || e.target.closest("[data-excl]")) return;
-    if (e.button !== 0) return;
-    // Shift+drag = zoom rectangle
-    if (zoomSelStart(e, canvas, state.viewBox, function() { updateViewBox(); render(); })) return;
-    state.isPanning = true;
-    state.panStart = { x: e.clientX, y: e.clientY };
-    canvas.classList.add("panning");
-    e.preventDefault();
-  });
+  function setupPan(svg) {
+    svg.addEventListener("mousedown", function(e) {
+      if (e.target.closest("[data-row]") || e.target.closest("[data-excl]")) return;
+      if (e.button !== 0) return;
+      if (zoomSelStart(e, svg, state.viewBox, function() { updateViewBox(svg); render(svg); })) return;
+      state.isPanning = true;
+      state.panStart = { x: e.clientX, y: e.clientY };
+      _panSvg = svg;
+      svg.classList.add("panning");
+      e.preventDefault();
+    });
+  }
+  setupPan(canvas);
+  setupPan(document.getElementById("fpCanvas"));
+  setupPan(document.getElementById("rvCanvas"));
 
   document.addEventListener("mousemove", function(e) {
     if (zoomSel.active) { zoomSelMove(e); return; }
-    if (!state.isPanning) return;
+    if (!state.isPanning || !_panSvg) return;
     const dx = e.clientX - state.panStart.x;
     const dy = e.clientY - state.panStart.y;
     state.panStart = { x: e.clientX, y: e.clientY };
-    const rect = canvas.getBoundingClientRect();
+    const rect = _panSvg.getBoundingClientRect();
     state.viewBox.x -= dx * (state.viewBox.w / rect.width);
     state.viewBox.y -= dy * (state.viewBox.h / rect.height);
-    updateViewBox();
+    updateViewBox(_panSvg);
   });
 
   document.addEventListener("mouseup", function(e) {
     if (zoomSel.active) { zoomSelEnd(e); return; }
-    if (state.isPanning) {
+    if (state.isPanning && _panSvg) {
       state.isPanning = false;
-      canvas.classList.remove("panning");
+      _panSvg.classList.remove("panning");
+      render(_panSvg);
+      _panSvg = null;
     }
   });
 
@@ -431,9 +460,11 @@ async function init() {
       return;
     }
     var target = e.target.closest("[data-row]");
-    // Block selection only in Catalogue > Editor
+    // Block selection only in Catalogue > Editor or amend mode
     var activeTab = document.querySelector(".tab-btn.active");
-    if (!activeTab || activeTab.dataset.tab !== "catalogue") return;
+    var inEditor = activeTab && activeTab.dataset.tab === "catalogue";
+    var inAmend = !!state.amendMode;
+    if (!inEditor && !inAmend) return;
     var editorSub = document.getElementById("subtabCatEditor");
     if (!editorSub || !editorSub.classList.contains("active")) return;
     if (target) {
@@ -450,9 +481,11 @@ async function init() {
 
   document.addEventListener("keydown", function(e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-    // Keyboard editing only in Catalogue > Editor
+    // Keyboard editing only in Catalogue > Editor or amend mode
     var activeTab = document.querySelector(".tab-btn.active");
-    if (!activeTab || activeTab.dataset.tab !== "catalogue") return;
+    var inEditor = activeTab && activeTab.dataset.tab === "catalogue";
+    var inAmend = !!state.amendMode;
+    if (!inEditor && !inAmend) return;
     var editorSub = document.getElementById("subtabCatEditor");
     if (!editorSub || !editorSub.classList.contains("active")) return;
     const step = e.shiftKey ? GRID_STEP_CM * 5 : GRID_STEP_CM;
@@ -471,6 +504,7 @@ async function init() {
         e.preventDefault(); excl.y_cm = Math.max(0, excl.y_cm - step); render(); updateDSL();
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
+        markDirty();
         state.room_exclusions.splice(state.selectedExclusion, 1);
         state.selectedExclusion = -1;
         render(); updateDSL();
@@ -502,6 +536,7 @@ async function init() {
       rotateSelectedBlock();
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
+      markDirty();
       row.blocks.splice(state.selectedBlock, 1);
       state.selectedBlock = -1;
       render(); updateDSL(); updateRowList();

@@ -473,17 +473,20 @@ function distanceConformity(gapCm, role) {
   return COLOR_GAP_LABEL;
 }
 
-function pushDistLabel(elements, x, y, valueCm, color) {
+function pushDistLabel(elements, x, y, valueCm, color, zf) {
+  if (!zf) {
+    zf = window._currentZf || 1;
+  }
   var text = String(valueCm);
-  var charW = 5.5, padX = 2, padY = 1, fontSize = 10;
+  var charW = 10.5 * zf, padX = 4.5 * zf, padY = 3 * zf, fontSize = 18 * zf;
   var bgW = text.length * charW + padX * 2;
   var bgH = fontSize + padY * 2;
   elements.push({ z: 6.9, s: '<rect x="' + (x - bgW / 2).toFixed(1) + '" y="' + (y - bgH + padY).toFixed(1) +
     '" width="' + bgW.toFixed(1) + '" height="' + bgH.toFixed(1) +
-    '" rx="2" fill="#0e0e0d" fill-opacity="0.75"/>' });
+    '" rx="' + (2 * zf).toFixed(1) + '" fill="#0e0e0d" fill-opacity="0.75"/>' });
   elements.push({ z: 7, s: '<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
     '" text-anchor="middle" fill="' + color +
-    '" font-size="' + fontSize + '" font-weight="bold" font-family="monospace">' + valueCm + '</text>' });
+    '" font-size="' + fontSize.toFixed(1) + '" font-weight="bold" font-family="monospace">' + valueCm + '</text>' });
 }
 
 function smoothPath(pts) {
