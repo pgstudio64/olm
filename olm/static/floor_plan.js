@@ -574,6 +574,29 @@
     document.getElementById("fpZoomFit").addEventListener("click", function() { zoomFit(fpSvg); });
     document.getElementById("fpZoomIn").addEventListener("click", function() { zoomIn(fpSvg); });
 
+    // Standard filter — re-render candidates on change
+    document.getElementById("fpStandardFilter").addEventListener("change", function() {
+      fpRenderCurrent();
+    });
+
+    // Design layout toggles — re-render from current candidate (not stale state)
+    document.getElementById("fpGridToggle").addEventListener("change", function(e) {
+      state.gridVisible = e.target.checked;
+      document.getElementById("gridToggle").checked = e.target.checked;
+      var room = fpCurrent();
+      if (room && fpCurrentCandidate) {
+        fpRenderSvg(room, fpCurrentCandidate);
+      }
+    });
+    document.getElementById("fpCircToggle").addEventListener("change", function(e) {
+      state.circVisible = e.target.checked;
+      document.getElementById("circToggle").checked = e.target.checked;
+      var room = fpCurrent();
+      if (room && fpCurrentCandidate) {
+        fpRenderSvg(room, fpCurrentCandidate);
+      }
+    });
+
     // Review tab — Adjust room (same function as before, now in Review)
     document.getElementById("rvBtnAdjustRoom").addEventListener("click", function() {
       var room = fpCurrent();
