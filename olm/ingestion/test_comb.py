@@ -267,16 +267,127 @@ def largest_rect_no_hits(hits, cx, cy):
     return best_rect
 
 
-def detect_room(binary, cx, cy, step_px):
-    """Détecte le rectangle d'une pièce : peigne → hits → plus grand rectangle."""
+DOOR_PROBE_PX = 4   # ~2cm, décalage pour sonder la position de la porte
+DOOR_GROUP_GAP_PX = 25  # gap max entre pixels d'un même arc (~largeur porte)
+WALL_MARGIN_PX = 3   # exclure les pixels proches des murs perpendiculaires
+
+
+def _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX):
+    """Regroupe des pixels contigus (avec gap max)."""
+    if not pixels:
+        return []
+    pixels = sorted(pixels)
+    groups = []
+    current = [pixels[0]]
+    for p in pixels[1:]:
+        if p - current[-1] <= max_gap:
+            current.append(p)
+        else:
+            groups.append(current)
+            current = [p]
+    groups.append(current)
+    return groups
+
+
+def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
+    """Détecte les arcs de porte sur une face du rectangle.
+
+    Returns:
+        (new_edge, door_infos) ou (None, []).
+    """
+    from collections import Counter
+    x0, y0, x1, y1 = rect
+    min_dist = door_width_px * (1 - tolerance)
+    max_dist = door_width_px * (1 + tolerance)
+    m = WALL_MARGIN_PX
+
+    if face == "south":
+        far = [h for h in hits if h[1] > y1 and min_dist <= h[1] - y1 <= max_dist]
+        if not far: return None, []
+        wall, n = Counter(h[1] for h in far).most_common(1)[0]
+        contact = sum(1 for x in range(x0, x1+1) if 0<=y1<binary.shape[0] and binary[y1,x])
+        if n < 5 or contact > 10: return None, []
+        probe = wall - DOOR_PROBE_PX
+        pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
+    elif face == "north":
+        far = [h for h in hits if h[1] < y0 and min_dist <= y0 - h[1] <= max_dist]
+        if not far: return None, []
+        wall, n = Counter(h[1] for h in far).most_common(1)[0]
+        contact = sum(1 for x in range(x0, x1+1) if 0<=y0<binary.shape[0] and binary[y0,x])
+        if n < 5 or contact > 10: return None, []
+        probe = wall + DOOR_PROBE_PX
+        pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
+    elif face == "east":
+        far = [h for h in hits if h[0] > x1 and min_dist <= h[0] - x1 <= max_dist]
+        if not far: return None, []
+        wall, n = Counter(h[0] for h in far).most_common(1)[0]
+        contact = sum(1 for y in range(y0, y1+1) if 0<=x1<binary.shape[1] and binary[y,x1])
+        if n < 5 or contact > 10: return None, []
+        probe = wall - DOOR_PROBE_PX
+        pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
+    elif face == "west":
+        far = [h for h in hits if h[0] < x0 and min_dist <= x0 - h[0] <= max_dist]
+        if not far: return None, []
+        wall, n = Counter(h[0] for h in far).most_common(1)[0]
+        contact = sum(1 for y in range(y0, y1+1) if 0<=x0<binary.shape[1] and binary[y,x0])
+        if n < 5 or contact > 10: return None, []
+        probe = wall + DOOR_PROBE_PX
+        pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
+    else:
+        return None, []
+
+    groups = _group_pixels(pixels)
+    origin = x0 if face in ("south", "north") else y0
+    size = (x1 - x0) if face in ("south", "north") else (y1 - y0)
+    doors = []
+    for g in groups:
+        offset = min(g) - origin
+        width = max(g) - min(g) + 1
+        hinge_side = "left" if (offset < size / 2) else "right"
+        doors.append({"face": face, "offset_px": offset,
+                      "width_px": width, "hinge_side": hinge_side})
+
+    return wall, doors
+
+
+def expand_door_arcs(binary, rect, hits, cx, cy,
+                     door_width_px=23, tolerance=0.35):
+    """Phase 3 : détecte les arcs de porte et agrandit le rectangle.
+
+    Returns:
+        (expanded_rect, doors) où doors = liste de door_info dicts.
+    """
+    x0, y0, x1, y1 = rect
+    doors = []
+
+    for face in ("south", "north", "east", "west"):
+        new_edge, face_doors = _detect_doors_on_face(
+            binary, (x0, y0, x1, y1), hits, face,
+            door_width_px, tolerance)
+        if new_edge is not None:
+            if face == "south": y1 = new_edge
+            elif face == "north": y0 = new_edge
+            elif face == "east": x1 = new_edge
+            elif face == "west": x0 = new_edge
+            doors.extend(face_doors)
+
+    return (x0, y0, x1, y1), doors
+
+
+def detect_room(binary, cx, cy, step_px, door_width_px=23):
+    """Détecte le rectangle d'une pièce : peigne → hits → plus grand rectangle → expansion arcs."""
     hits = comb_collect_hits(binary, cx, cy, step_px)
 
     rect = largest_rect_no_hits(hits, cx, cy)
 
     if rect is None:
-        return (cx - 1, cy - 1, cx + 1, cy + 1), hits
+        return (cx - 1, cy - 1, cx + 1, cy + 1), hits, []
 
-    return rect, hits
+    # Phase 3 : expansion arcs de porte
+    rect, doors = expand_door_arcs(binary, rect, hits, cx, cy,
+                                   door_width_px=door_width_px)
+
+    return rect, hits, doors
 
 
 def draw_debug_all(image, results, output_path):
@@ -288,7 +399,7 @@ def draw_debug_all(image, results, output_path):
         (180, 0, 180), (0, 180, 180), (128, 128, 0), (255, 0, 128),
     ]
 
-    for i, (name, bbox, cx, cy, _hits) in enumerate(results):
+    for i, (name, bbox, cx, cy, _hits, _doors) in enumerate(results):
         x0, y0, x1, y1 = bbox
         color = colors[i % len(colors)]
         draw.rectangle([x0, y0, x1, y1], outline=color, width=2)
@@ -364,21 +475,26 @@ def main():
             return
         cx, cy = seeds[target_room]
         print(f"\n=== {target_room} (seed {cx},{cy}) ===")
-        bbox, hits = detect_room(binary, cx, cy, step_px)
+        bbox, hits, doors = detect_room(binary, cx, cy, step_px)
         x0, y0, x1, y1 = bbox
         print(f"Rectangle: ({x0},{y0}) → ({x1},{y1})")
         print(f"Taille: {x1 - x0} x {y1 - y0} px")
         print(f"Hits: {len(hits)}")
+        for d in doors:
+            print(f"Porte: face={d['face']}, offset={d['offset_px']}px, "
+                  f"largeur={d['width_px']}px, charnière={d['hinge_side']}")
         draw_debug_single(Image.fromarray(cleaned_arr), binary,
                           target_room, bbox, hits, cx, cy,
                           f"/tmp/comb_{target_room}.png")
     else:
         results = []
         for name, (cx, cy) in sorted(seeds.items()):
-            bbox, hits = detect_room(binary, cx, cy, step_px)
+            bbox, hits, doors = detect_room(binary, cx, cy, step_px)
             x0, y0, x1, y1 = bbox
-            print(f"  {name}: ({x0},{y0}) → ({x1},{y1}) = {x1 - x0}x{y1 - y0}px")
-            results.append((name, bbox, cx, cy, hits))
+            door_str = f" | {len(doors)} porte(s)" if doors else ""
+            print(f"  {name}: ({x0},{y0}) → ({x1},{y1}) = "
+                  f"{x1 - x0}x{y1 - y0}px{door_str}")
+            results.append((name, bbox, cx, cy, hits, doors))
 
         draw_debug_all(Image.fromarray(cleaned_arr), results,
                        "/tmp/comb_all.png")
