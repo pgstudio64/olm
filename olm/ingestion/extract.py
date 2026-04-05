@@ -5,6 +5,7 @@ Pipeline:
   1. OCR: detect text positions ("14", labels, surfaces)
   2. Clean: erase text from image
   3. Binarize: adaptive threshold → black walls / white interior
+  3b. Remove non-orthogonal elements (door arcs, annotations) — H-04
   4. Ray-cast: fan of rays from each "14" centroid → bbox, openings, obstacles
   5. Wall texture analysis: classify wall/window/opening/door
   6. Assemble rooms JSON
@@ -19,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+import cv2
 from PIL import Image, ImageDraw, ImageFilter
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ MIN_OBSTACLE_PX = 10         # minimum width of a detected obstacle
 DOOR_ARC_R2_THRESHOLD = 0.7  # R² threshold for arc detection
 MODE_TOLERANCE_PX = 5        # distance from mode to count as "wall"
 EXTERIOR_PROBE_PX = 200      # how far beyond wall to probe for exterior
+ORTHO_ANGLE_TOLERANCE = 5    # degrees tolerance for orthogonal filter
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +227,41 @@ def binarize(image: Image.Image) -> tuple[np.ndarray, np.ndarray]:
         binary_dilated = np.array(bin_img) > 127
 
     return binary_dilated, binary_raw
+
+
+def remove_non_ortho(binary: np.ndarray,
+                     tolerance_deg: float = ORTHO_ANGLE_TOLERANCE,
+                     min_component_px: int = 5) -> np.ndarray:
+    """Remove non-orthogonal elements from binary image (H-04).
+
+    Analyses each connected component via minAreaRect. Components whose
+    dominant orientation is not ~0° or ~90° (within tolerance) are erased.
+    This removes door arcs, diagonal annotations, hatching, etc.
+
+    Args:
+        binary: wall mask (True = wall)
+        tolerance_deg: angle tolerance in degrees
+        min_component_px: ignore components smaller than this
+
+    Returns:
+        Cleaned binary mask (True = wall, non-ortho removed).
+    """
+    binary_u8 = binary.astype(np.uint8) * 255
+    num, labels = cv2.connectedComponents(binary_u8)
+    cleaned = binary.copy()
+
+    for label_id in range(1, num):
+        component = np.argwhere(labels == label_id)
+        if len(component) < min_component_px:
+            continue
+        rect = cv2.minAreaRect(component[:, ::-1].astype(np.float32))
+        angle = rect[2] % 90
+        if tolerance_deg < angle < (90 - tolerance_deg):
+            cleaned[labels == label_id] = False
+
+    logger.info("remove_non_ortho: %d components, removed %d non-ortho",
+                num - 1, int(np.sum(binary) - np.sum(cleaned)))
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -1019,6 +1057,10 @@ def extract_rooms(image: Image.Image,
     binary, binary_raw = binarize(cleaned)
     logger.info("Binarized image: %s, wall pixels: %d (dilated), %d (raw)",
                 binary.shape, np.sum(binary), np.sum(binary_raw))
+
+    # Step 3b: Remove non-orthogonal elements (door arcs, annotations)
+    binary = remove_non_ortho(binary)
+    binary_raw = remove_non_ortho(binary_raw)
 
     # Build expanded text bboxes for skip zones (margin accounts for
     # cleaning area that may have erased window lines)
