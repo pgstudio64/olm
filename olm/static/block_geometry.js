@@ -55,15 +55,17 @@ function getDeskRects(type) {
   const eo = def.eo_cm || 80;
   const ns = def.ns_cm || 160;
 
+  // DESK_W = width (wide side, 180), DESK_D = depth (front-to-back, 80)
+  // In block layout: EO axis = DESK_D, NS axis = DESK_W
   const symmetric = ["BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"];
   if (symmetric.includes(type)) {
     const pairs = n / 2;
     const rects = [];
     for (let p = 0; p < pairs; p++) {
-      rects.push({ x: 0,      y: p * DESK_D, w: DESK_W, h: DESK_D,
+      rects.push({ x: 0,      y: p * DESK_W, w: DESK_D, h: DESK_W,
                    label: "WS" + String(p * 2 + 1).padStart(2, "0"),
                    screenSide: "E", chairSide: "W" });
-      rects.push({ x: DESK_W, y: p * DESK_D, w: DESK_W, h: DESK_D,
+      rects.push({ x: DESK_D, y: p * DESK_W, w: DESK_D, h: DESK_W,
                    label: "WS" + String(p * 2 + 2).padStart(2, "0"),
                    screenSide: "W", chairSide: "E" });
     }
@@ -74,25 +76,25 @@ function getDeskRects(type) {
   if (type === "BLOCK_2_ORTHO_R") {
     // L en bas-gauche : desk2 regarde ouest, chaise est
     return [
-      { x: 0, y: 0, w: DESK_D, h: DESK_W,
+      { x: 0, y: 0, w: DESK_W, h: DESK_D,
         label: "WS01", screenSide: "S", chairSide: "N" },
-      { x: 0, y: DESK_W, w: DESK_W, h: DESK_D,
+      { x: 0, y: DESK_D, w: DESK_D, h: DESK_W,
         label: "WS02", screenSide: "W", chairSide: "E" },
     ];
   }
   if (type === "BLOCK_2_ORTHO_L") {
     // L en bas-droite (miroir) : desk2 regarde est, chaise ouest
     return [
-      { x: 0, y: 0, w: DESK_D, h: DESK_W,
+      { x: 0, y: 0, w: DESK_W, h: DESK_D,
         label: "WS01", screenSide: "S", chairSide: "N" },
-      { x: DESK_D - DESK_W, y: DESK_W, w: DESK_W, h: DESK_D,
+      { x: DESK_W - DESK_D, y: DESK_D, w: DESK_D, h: DESK_W,
         label: "WS02", screenSide: "E", chairSide: "W" },
     ];
   }
 
   const rects = [];
   for (let i = 0; i < n; i++) {
-    rects.push({ x: 0, y: i * DESK_D, w: DESK_W, h: DESK_D,
+    rects.push({ x: 0, y: i * DESK_W, w: DESK_D, h: DESK_W,
                  label: "WS" + String(i + 1).padStart(2, "0"),
                  screenSide: "E", chairSide: "W" });
   }

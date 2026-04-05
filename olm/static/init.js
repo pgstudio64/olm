@@ -23,7 +23,7 @@ async function init() {
   addRow(false);
   // Default room
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
-  state.room_openings = [{ face: "south", offset_cm: 0, width_cm: 90, has_door: true, opens_inward: true, hinge_side: "left" }];
+  state.room_openings = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, has_door: true, opens_inward: true, hinge_side: "left" }];
   updateAutoName();
   requestAnimationFrame(function() { zoomFit(); });
   loadCatalogue();
@@ -41,9 +41,8 @@ async function init() {
       state.amendMode = null;
       exitAmendUI();
     }
-    // Switch back to Floor Plan > Review
-    document.querySelector('.tab-btn[data-tab="floorPlan"]').click();
-    document.querySelector('.sub-tab-btn[data-subtab="fpReview"]').click();
+    // Switch back to Review
+    document.querySelector('.tab-btn[data-tab="review"]').click();
     setStatus("Cancelled.");
   });
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
@@ -255,11 +254,21 @@ async function init() {
     }
   }
 
+  // Tab descriptions
+  var TAB_DESCRIPTIONS = {
+    "import": "Load floor plan image and room data",
+    "review": "Inspect and adjust room geometry",
+    "merge": "Merge adjacent rooms by removing shared walls",
+    "design": "Select and refine the layout for each room",
+    "export": "Export matching results",
+    "catalogue": "Browse, create and edit layout patterns",
+  };
+
   // Main tabs
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
-      // Cancel amend mode when leaving Office Layout
-      if (btn.dataset.tab !== "officeLayout") {
+      // Cancel amend mode when leaving Catalogue
+      if (btn.dataset.tab !== "catalogue") {
         _cancelAmendIfActive();
         _saveEditorState();
       }
@@ -269,21 +278,26 @@ async function init() {
       var tabId = "tab" + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1);
       var tab = document.getElementById(tabId);
       if (tab) tab.classList.add("active");
-      if (btn.dataset.tab === "officeLayout") {
+      // Update description banner
+      var descBar = document.getElementById("tabDescBar");
+      if (descBar) descBar.textContent = TAB_DESCRIPTIONS[btn.dataset.tab] || "";
+      if (btn.dataset.tab === "catalogue") {
         _restoreEditorState();
         loadCatalogue();
+      }
+      if (btn.dataset.tab === "review") {
+        rvRenderCurrent();
       }
     });
   });
 
-  // Sub-tabs
+  // Sub-tabs (Catalogue only)
   document.querySelectorAll(".sub-tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       // Cancel amend mode when leaving editor sub-tab
-      if (btn.dataset.subtab !== "olEditor") {
+      if (btn.dataset.subtab !== "catEditor") {
         _cancelAmendIfActive();
       }
-      var parent = btn.dataset.parent;
       // Deactivate sibling sub-tabs
       var bar = btn.parentElement;
       bar.querySelectorAll(".sub-tab-btn").forEach(function(b) { b.classList.remove("active"); });
@@ -294,15 +308,12 @@ async function init() {
       var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
       if (subtab) subtab.classList.add("active");
       // Trigger view-specific renders
-      if (btn.dataset.subtab === "fpReview") rvRenderCurrent();
-      if (btn.dataset.subtab === "olCatalogue") loadCatalogue();
+      if (btn.dataset.subtab === "catCards") loadCatalogue();
+      if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
     });
   });
 
-  // Catalogue view toggle
-  document.getElementById("btnViewCards").classList.add("active");
-  document.getElementById("btnViewCards").addEventListener("click", function() { setCatalogueView("cards"); });
-  document.getElementById("btnViewMatrix").addEventListener("click", function() { setCatalogueView("matrix"); });
+  // Matrix pan/zoom
   initMatrixPanZoom();
   document.getElementById("btnMatrixZoomIn").addEventListener("click", function() { matrixZoomBy(0.8); });
   document.getElementById("btnMatrixZoomOut").addEventListener("click", function() { matrixZoomBy(1.25); });
@@ -355,11 +366,7 @@ async function init() {
 
   // Catalogue filters — update both views
   function onCatalogueFilterChange() {
-    if (catalogueViewMode === "matrix") {
-      renderMatrixView();
-    } else {
-      renderCatalogue();
-    }
+    renderCatalogue();
   }
   document.getElementById("catFilterStandard").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMinW").addEventListener("change", onCatalogueFilterChange);
@@ -367,19 +374,19 @@ async function init() {
   document.getElementById("catFilterMinD").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMaxD").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("btnRotate").addEventListener("click", rotateSelectedBlock);
-  document.getElementById("btnOffsetN").addEventListener("click", function() { offsetSelectedBlock(-10); });
-  document.getElementById("btnOffsetS").addEventListener("click", function() { offsetSelectedBlock(10); });
-  document.getElementById("btnOffsetW").addEventListener("click", function() { offsetSelectedBlockEO(-10); });
-  document.getElementById("btnOffsetE").addEventListener("click", function() { offsetSelectedBlockEO(10); });
+  document.getElementById("btnOffsetN").addEventListener("click", function() { offsetSelectedBlock(-GRID_STEP_CM); });
+  document.getElementById("btnOffsetS").addEventListener("click", function() { offsetSelectedBlock(GRID_STEP_CM); });
+  document.getElementById("btnOffsetW").addEventListener("click", function() { offsetSelectedBlockEO(-GRID_STEP_CM); });
+  document.getElementById("btnOffsetE").addEventListener("click", function() { offsetSelectedBlockEO(GRID_STEP_CM); });
   document.getElementById("loadModal").addEventListener("click", function(e) {
     if (e.target === document.getElementById("loadModal")) {
       document.getElementById("loadModal").classList.remove("active");
     }
   });
 
-  document.getElementById("btnZoomIn").addEventListener("click", zoomIn);
-  document.getElementById("btnZoomOut").addEventListener("click", zoomOut);
-  document.getElementById("btnZoomFit").addEventListener("click", zoomFit);
+  document.getElementById("btnZoomIn").addEventListener("click", function() { zoomIn(); });
+  document.getElementById("btnZoomOut").addEventListener("click", function() { zoomOut(); });
+  document.getElementById("btnZoomFit").addEventListener("click", function() { zoomFit(); });
 
   const canvas = document.getElementById("canvas");
 
@@ -424,9 +431,11 @@ async function init() {
       return;
     }
     var target = e.target.closest("[data-row]");
-    // No block selection in Floor Plan mode
+    // Block selection only in Catalogue > Editor
     var activeTab = document.querySelector(".tab-btn.active");
-    if (activeTab && activeTab.dataset.tab === "floorPlan") return;
+    if (!activeTab || activeTab.dataset.tab !== "catalogue") return;
+    var editorSub = document.getElementById("subtabCatEditor");
+    if (!editorSub || !editorSub.classList.contains("active")) return;
     if (target) {
       state.selectedRow = parseInt(target.dataset.row);
       state.selectedBlock = parseInt(target.dataset.block);
@@ -441,10 +450,12 @@ async function init() {
 
   document.addEventListener("keydown", function(e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-    // No keyboard editing in Floor Plan mode (arrows, rotation, delete)
+    // Keyboard editing only in Catalogue > Editor
     var activeTab = document.querySelector(".tab-btn.active");
-    if (activeTab && activeTab.dataset.tab === "floorPlan") return;
-    const step = e.shiftKey ? 50 : 10;
+    if (!activeTab || activeTab.dataset.tab !== "catalogue") return;
+    var editorSub = document.getElementById("subtabCatEditor");
+    if (!editorSub || !editorSub.classList.contains("active")) return;
+    const step = e.shiftKey ? GRID_STEP_CM * 5 : GRID_STEP_CM;
 
     // Exclusion selected
     if (state.selectedExclusion >= 0) {
@@ -482,10 +493,10 @@ async function init() {
       offsetSelectedBlockEO(-step);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      offsetSelectedBlock(e.shiftKey ? -50 : -10);
+      offsetSelectedBlock(-step);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      offsetSelectedBlock(e.shiftKey ? 50 : 10);
+      offsetSelectedBlock(step);
     } else if (e.key === "r" || e.key === "R") {
       e.preventDefault();
       rotateSelectedBlock();

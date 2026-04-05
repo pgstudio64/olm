@@ -258,6 +258,46 @@
     gap: 0;
     margin-left: 24px;
     flex: 1;
+    align-items: stretch;
+  }
+  .tab-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: bold;
+    background: var(--border);
+    color: var(--text-dim);
+    margin-right: 5px;
+    line-height: 1;
+  }
+  .tab-btn.active .tab-step {
+    background: #1e1e1e;
+    color: var(--accent);
+  }
+  .tab-desc-bar {
+    padding: 4px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .tab-btn.catalogue-tab {
+    margin-left: 48px;
+  }
+  .app-title {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--accent);
+    letter-spacing: 0.03em;
+    margin-right: -14px;
+    white-space: nowrap;
   }
 
   /* Settings drawer (overlay) */

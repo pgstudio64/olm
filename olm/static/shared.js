@@ -624,8 +624,26 @@ function zoomSelEnd(e) {
 }
 
 function pxToSvg(clientX, clientY, domRect, viewBox) {
+  // Account for preserveAspectRatio="xMidYMid meet" letter-boxing:
+  // the rendered content may not fill the full element bounding box.
+  var elAspect = domRect.width / domRect.height;
+  var vbAspect = viewBox.w / viewBox.h;
+  var renderW, renderH, offsetX, offsetY;
+  if (vbAspect > elAspect) {
+    // ViewBox wider than element: horizontal fit, vertical letter-box
+    renderW = domRect.width;
+    renderH = domRect.width / vbAspect;
+    offsetX = 0;
+    offsetY = (domRect.height - renderH) / 2;
+  } else {
+    // ViewBox taller than element: vertical fit, horizontal letter-box
+    renderH = domRect.height;
+    renderW = domRect.height * vbAspect;
+    offsetX = (domRect.width - renderW) / 2;
+    offsetY = 0;
+  }
   return {
-    x: viewBox.x + (clientX - domRect.left) / domRect.width * viewBox.w,
-    y: viewBox.y + (clientY - domRect.top) / domRect.height * viewBox.h
+    x: viewBox.x + (clientX - domRect.left - offsetX) / renderW * viewBox.w,
+    y: viewBox.y + (clientY - domRect.top - offsetY) / renderH * viewBox.h
   };
 }

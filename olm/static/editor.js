@@ -1,7 +1,7 @@
 "use strict";
 
 const SCALE = 0.5;
-const GRID_STEP_CM = 10;
+var GRID_STEP_CM = 10;  // updated from APP_CONFIG.grid_cell_cm
 const DEFAULT_ROW_GAP_CM = 180;
 
 let BLOCK_DEFS = {};
@@ -1123,9 +1123,8 @@ async function save() {
     state.amendMode = null;
     exitAmendUI();
     setStatus("Amendment saved for room \"" + amend.roomName + "\".");
-    // Switch back to Floor Plan > Matching
-    document.querySelector('.tab-btn[data-tab="floorPlan"]').click();
-    document.querySelector('.sub-tab-btn[data-subtab="fpMatching"]').click();
+    // Switch back to Design
+    document.querySelector('.tab-btn[data-tab="design"]').click();
     fpRenderCurrent();
     return;
   }
@@ -1260,8 +1259,8 @@ function switchToEditorWithPattern(data) {
   state.roomAmendMode = null;
   exitAmendUI();
   exitRoomAmendUI();
-  document.querySelector('.tab-btn[data-tab="officeLayout"]').click();
-  document.querySelector('.sub-tab-btn[data-subtab="olEditor"]').click();
+  document.querySelector('.tab-btn[data-tab="catalogue"]').click();
+  document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
   loadPatternFromData(JSON.parse(JSON.stringify(data)));
 }
 
@@ -1282,8 +1281,8 @@ function enterAmendMode(room, candidate) {
   if (candidate.standard && BLOCK_DEFS_BY_STD[candidate.standard]) {
     BLOCK_DEFS = BLOCK_DEFS_BY_STD[candidate.standard];
   }
-  document.querySelector('.tab-btn[data-tab="officeLayout"]').click();
-  document.querySelector('.sub-tab-btn[data-subtab="olEditor"]').click();
+  document.querySelector('.tab-btn[data-tab="catalogue"]').click();
+  document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));
 
   // Disable room controls + irrelevant actions
@@ -1375,7 +1374,7 @@ function enterRoomAmendMode(room) {
   document.getElementById("rvBtnNext").disabled = true;
 
   // Visual cue: amber border on nav bar
-  document.querySelector("#subtabFpReview .fp-nav").style.borderBottom = "2px solid var(--accent)";
+  document.querySelector("#tabReview .fp-nav").style.borderBottom = "2px solid var(--accent)";
   document.getElementById("rvRoomLabel").textContent = "\u270E " + room.name;
 }
 
@@ -1397,7 +1396,7 @@ function exitRoomAmendUI() {
   document.getElementById("rvBtnNext").disabled = false;
 
   // Remove amber border
-  document.querySelector("#subtabFpReview .fp-nav").style.borderBottom = "";
+  document.querySelector("#tabReview .fp-nav").style.borderBottom = "";
 
   state.overlay = null;
 }
@@ -1434,7 +1433,7 @@ function resetState() {
   state.room_depth_cm = parseInt(document.getElementById("roomDepth").value) || 480;
   state.standard = document.querySelector('input[name="standard"]:checked').value;
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
-  state.room_openings = [{ face: "south", offset_cm: 0, width_cm: 90, has_door: true, opens_inward: true, hinge_side: "left" }];
+  state.room_openings = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, has_door: true, opens_inward: true, hinge_side: "left" }];
   state.room_exclusions = [];
   state.selectedRow = 0;
   state.selectedBlock = -1;

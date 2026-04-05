@@ -19,8 +19,8 @@ const COLOR_CHAIR        = "#8B6914";
 const COLOR_CHAIR_BACK   = "#6a4e0e";
 const COLOR_CHAIR_ARM    = "#7a5c10";
 
-const DESK_W = 80;   // cm, largeur poste axe regard
-const DESK_D = 180;  // cm, profondeur poste
+var DESK_W = 180;  // cm, desk width (wide side, left-right) — updated from APP_CONFIG
+var DESK_D = 80;   // cm, desk depth (front-to-back) — updated from APP_CONFIG
 const CHAIR_W_CM = 65;   // cm, largeur assise fauteuil
 const CHAIR_D_CM = 60;   // cm, profondeur assise fauteuil
 
