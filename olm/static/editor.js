@@ -1614,14 +1614,32 @@ function zoomOut(targetSvg) {
 }
 
 function fitViewBoxToContent(svg, totalW, totalH, minX) {
-  var padLeft = 30;   // left margin (depth labels + ruler)
-  var padTop = 30;    // top margin (title + width label + ruler)
-  var padRight = 10;
-  var padBottom = 10;
+  var padLeft = 35;   // left margin (depth labels + ruler)
+  var padTop = 50;    // top margin (title + width label + ruler)
+  var padRight = 15;
+  var padBottom = 30;
   var x = minX - padLeft;
   var y = -padTop;
   var w = totalW - minX + padLeft + padRight;
   var h = totalH + padTop + padBottom;
+
+  // Match viewBox aspect ratio to SVG element to avoid wasted space
+  var rect = svg.getBoundingClientRect();
+  var svgW = rect.width || 1;
+  var svgH = rect.height || 1;
+  var svgRatio = svgW / svgH;
+  var vbRatio = w / h;
+  if (vbRatio < svgRatio) {
+    // Content is taller than SVG — widen viewBox
+    var newW = h * svgRatio;
+    x -= (newW - w) / 2;
+    w = newW;
+  } else {
+    // Content is wider than SVG — heighten viewBox
+    var newH = w / svgRatio;
+    y -= (newH - h) / 2;
+    h = newH;
+  }
 
   state.viewBox = { x: x, y: y, w: w, h: h };
   state.zoom = 1.0;

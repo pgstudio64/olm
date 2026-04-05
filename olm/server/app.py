@@ -191,7 +191,7 @@ def serve_test_floor_plan():
     """DEV: sert le raster de test."""
     return send_from_directory(
         os.path.join(os.path.dirname(BASE_DIR), "project", "plans"),
-        "test_floor_plan.png")
+        "test_floorplan.png")
 
 
 @app.route("/specs/<path:filename>")

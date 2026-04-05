@@ -49,7 +49,7 @@
 
   header {
     padding: var(--sp-lg) var(--sp-xxl) 0 var(--sp-xxl);
-    border-bottom: 1px solid var(--border);
+    border-bottom: none;
     display: flex;
     align-items: flex-end;
     column-gap: var(--sp-lg);
@@ -229,6 +229,8 @@
     overflow: hidden;
     position: relative;
     padding: 0;
+    display: flex;
+    flex-direction: column;
   }
   #canvas {
     display: block;
@@ -302,6 +304,7 @@
   .tab-desc-bar {
     padding: 6px var(--sp-xxl);
     background: var(--surface);
+    border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     color: var(--text-dim);
     font-size: var(--fs-sm);
@@ -362,10 +365,11 @@
   .tab-btn {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-bottom: none;
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: var(--fs-base);
-    padding: 6px var(--sp-lg);
+    padding: 4px var(--sp-lg);
     cursor: pointer;
     letter-spacing: 0.03em;
   }
@@ -879,6 +883,17 @@
   }
 
   /* Help link */
+  .tooltip-close {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 18px;
+    color: var(--text-dim);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .tooltip-close:hover { color: var(--text); }
+
   .help-link {
     color: var(--accent);
     font-size: var(--fs-sm);
