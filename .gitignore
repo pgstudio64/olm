@@ -1,10 +1,33 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.egg-info/
+dist/
+build/
+*.egg
 venv/
 .venv/
+
+# Generated files
 output/
 *.png
 *.svg
 !olm/static/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project-specific (not published to open-source repo)
+project/
+docs/
+solver_lab/
+CLAUDE.md
+CLAUDE_IMPLEMENTER.md
+.claude/

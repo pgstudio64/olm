@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "olm"
+version = "0.1.0-alpha"
+description = "Office Layout Matching — local tool for matching desk layout patterns to floor plan rooms"
+readme = "olm/README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Patrick Guehl" },
+]
+keywords = ["office", "layout", "floor-plan", "pattern-matching", "desk"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "flask>=3.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+ingestion = [
+    "opencv-python>=4.8",
+    "Pillow>=10.0",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.urls]
+Repository = "https://github.com/patrickguehl/olm"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["olm*"]
+exclude = ["project*", "docs*", "solver_lab*"]
