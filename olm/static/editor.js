@@ -632,9 +632,9 @@ function _renderImpl(targetSvg) {
   var roomHPx = state.room_depth_cm * SCALE;
   var roomX = MARGIN;
   var roomY = MARGIN;
-  var isReview = svg.id === "rvCanvas";
-  var wallColor = isReview ? "#ffffff" : "#4a4640";
-  var wallWidth = isReview ? 2 : 1.5;
+  var isEditor = svg.id === "canvas";
+  var wallColor = isEditor ? "#4a4640" : "#ffffff";
+  var wallWidth = isEditor ? 1.5 : 2;
   elements.push({ z: 0.05, s: '<rect x="' + roomX + '" y="' + roomY +
     '" width="' + roomWPx + '" height="' + roomHPx +
     '" fill="none" stroke="' + wallColor + '" stroke-width="' + wallWidth + '"/>' });
