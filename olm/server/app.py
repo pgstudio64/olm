@@ -194,6 +194,114 @@ def serve_test_floor_plan():
         "test_floorplan.png")
 
 
+@app.route("/api/ingestion/extract", methods=["POST"])
+def api_ingestion_extract():
+    """Extract rooms from a raster floor plan image.
+
+    Accepts multipart form with:
+      - 'image': the floor plan image file
+      - 'scale' (optional): cm per pixel (default 0.5)
+      - 'threshold' (optional): binarization threshold (default 110)
+
+    Returns JSON with detected rooms (bbox, doors, windows, openings, hits).
+    """
+    import tempfile
+    try:
+        # Get image from upload or from a plan path
+        plan_path = request.form.get('plan_path', '')
+        scale_str = request.form.get('scale', '')
+        scale = float(scale_str) if scale_str else None
+        threshold = int(request.form.get('threshold', 110))
+
+        if 'image' in request.files:
+            f = request.files['image']
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            f.save(tmp.name)
+            plan_path = tmp.name
+        elif plan_path:
+            # Use provided path (dev mode)
+            pass
+        else:
+            return jsonify({"error": "No image provided"}), 400
+
+        import sys
+        sys.path.insert(0, os.path.join(BASE_DIR, 'ingestion'))
+        from test_comb import extract_all_rooms
+
+        result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
+                                   threshold=threshold)
+
+        # Clean up temp file if created
+        if 'image' in request.files:
+            os.unlink(plan_path)
+
+        return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ingestion/plans", methods=["GET"])
+def api_ingestion_plans():
+    """List available plan images in project/plans/."""
+    plans_dir = os.path.join(os.path.dirname(BASE_DIR), "project", "plans")
+    if not os.path.isdir(plans_dir):
+        return jsonify({"plans": []})
+    plans = [f for f in os.listdir(plans_dir)
+             if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff'))]
+    return jsonify({"plans": sorted(plans)})
+
+
+@app.route("/api/ingestion/plan/<filename>")
+def api_ingestion_plan_image(filename):
+    """Serve a plan image from project/plans/."""
+    plans_dir = os.path.join(os.path.dirname(BASE_DIR), "project", "plans")
+    return send_from_directory(plans_dir, filename)
+
+
+@app.route("/api/ingestion/binarize", methods=["POST"])
+def api_ingestion_binarize():
+    """Return the binarized version of a plan image (for visualization).
+
+    Accepts: plan_path or uploaded image + threshold.
+    Returns: PNG image of the binarized plan.
+    """
+    import io
+    from PIL import Image as PILImage
+    try:
+        plan_path = request.form.get('plan_path', '')
+        threshold = int(request.form.get('threshold', 110))
+
+        if 'image' in request.files:
+            import tempfile
+            f = request.files['image']
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            f.save(tmp.name)
+            plan_path = tmp.name
+
+        if not plan_path or not os.path.exists(plan_path):
+            return jsonify({"error": "No image"}), 400
+
+        import numpy as np
+        img = PILImage.open(plan_path).convert("L")
+        gray = np.array(img)
+        binary = gray < threshold
+        bin_img = PILImage.fromarray((~binary * 255).astype(np.uint8))
+
+        buf = io.BytesIO()
+        bin_img.save(buf, format='PNG')
+        buf.seek(0)
+
+        if 'image' in request.files:
+            os.unlink(plan_path)
+
+        from flask import send_file
+        return send_file(buf, mimetype='image/png')
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/specs/<path:filename>")
 def serve_specs(filename: str):
     """Sert les fichiers de specs."""
