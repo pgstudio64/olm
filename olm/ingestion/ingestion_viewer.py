@@ -1,22 +1,29 @@
+import os
+import tempfile
 from flask import Flask, send_file, render_template_string
+
 app = Flask(__name__)
+
+_TMP = tempfile.gettempdir()
+
 IMAGES = {
-    "source": ("/tmp/source_plan.png", "Plan source"),
-    "cartouches": ("/tmp/cartouche_boxes.png", "Cartouches (rectangles rouges)"),
-    "bin80": ("/tmp/binarized_80.png", "Seuil 80"),
-    "cleaned": ("/tmp/cleaned_plan.png", "Plan nettoyé"),
-    "raycast": ("/tmp/raycast_debug.png", "Ray-cast debug"),
-    "filtered": ("/tmp/extraction_filtered.png", "Comparaison"),
-    "flood": ("/tmp/exterior_flood.png", "Flood fill extérieur"),
-    "comb": ("/tmp/comb_all.png", "Peigne adaptatif (toutes)"),
-    "comb916": ("/tmp/comb_916.png", "Peigne 916 (détail)"),
-    "comb901": ("/tmp/comb_901_debug.png", "Peigne 901"),
-    "comb904": ("/tmp/comb_904_debug.png", "Peigne 904"),
-    "comb909": ("/tmp/comb_909_debug.png", "Peigne 909"),
-    "comb919": ("/tmp/comb_919_debug.png", "Peigne 919"),
-    "ortho": ("/tmp/ortho_plan.png", "Sans arcs (ortho)"),
-    "walls": ("/tmp/wall_classification.png", "Classification murale"),
+    "source": (os.path.join(_TMP, "source_plan.png"), "Source plan"),
+    "cartouches": (os.path.join(_TMP, "cartouche_boxes.png"), "Cartouches (red boxes)"),
+    "bin80": (os.path.join(_TMP, "binarized_80.png"), "Threshold 80"),
+    "cleaned": (os.path.join(_TMP, "cleaned_plan.png"), "Cleaned plan"),
+    "raycast": (os.path.join(_TMP, "raycast_debug.png"), "Ray-cast debug"),
+    "filtered": (os.path.join(_TMP, "extraction_filtered.png"), "Comparison"),
+    "flood": (os.path.join(_TMP, "exterior_flood.png"), "Exterior flood fill"),
+    "comb": (os.path.join(_TMP, "comb_all.png"), "Adaptive comb (all rooms)"),
+    "comb916": (os.path.join(_TMP, "comb_916.png"), "Comb 916 (detail)"),
+    "comb901": (os.path.join(_TMP, "comb_901_debug.png"), "Comb 901"),
+    "comb904": (os.path.join(_TMP, "comb_904_debug.png"), "Comb 904"),
+    "comb909": (os.path.join(_TMP, "comb_909_debug.png"), "Comb 909"),
+    "comb919": (os.path.join(_TMP, "comb_919_debug.png"), "Comb 919"),
+    "ortho": (os.path.join(_TMP, "ortho_plan.png"), "Ortho only (no arcs)"),
+    "walls": (os.path.join(_TMP, "wall_classification.png"), "Wall classification"),
 }
+
 HTML = """<!DOCTYPE html>
 <html><head><title>OLM Ingestion</title>
 <style>
@@ -30,12 +37,24 @@ img{max-width:100%;border:2px solid #333;border-radius:4px;margin-top:10px}
 <div class="nav">{% for key,(path,label) in images.items() %}<a href="/view/{{key}}" {% if key==current %}class="active"{% endif %}>{{label}}</a>{% endfor %}</div>
 {% if current %}<h2>{{images[current][1]}}</h2><img src="/img/{{current}}">{% endif %}
 </body></html>"""
+
+
 @app.route("/")
-def index(): return render_template_string(HTML,images=IMAGES,current="cartouches")
+def index():
+    return render_template_string(HTML, images=IMAGES, current="cartouches")
+
+
 @app.route("/view/<key>")
-def view(key): return render_template_string(HTML,images=IMAGES,current=key)
+def view(key):
+    return render_template_string(HTML, images=IMAGES, current=key)
+
+
 @app.route("/img/<key>")
 def img(key):
-    if key in IMAGES: return send_file(IMAGES[key][0],mimetype="image/png")
-    return "Not found",404
-if __name__=="__main__": app.run(host="0.0.0.0",port=5070,debug=False)
+    if key in IMAGES:
+        return send_file(IMAGES[key][0], mimetype="image/png")
+    return "Not found", 404
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5070, debug=False)

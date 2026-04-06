@@ -223,9 +223,9 @@ def api_ingestion_extract():
 
         if 'image' in request.files:
             f = request.files['image']
-            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-            f.save(tmp.name)
-            plan_path = tmp.name
+            fd, plan_path = tempfile.mkstemp(suffix='.png')
+            os.close(fd)
+            f.save(plan_path)
         elif plan_path:
             # Resolve relative plan names to project/plans/ directory
             if not os.path.isabs(plan_path):
@@ -288,9 +288,9 @@ def api_ingestion_binarize():
         if 'image' in request.files:
             import tempfile
             f = request.files['image']
-            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-            f.save(tmp.name)
-            plan_path = tmp.name
+            fd, plan_path = tempfile.mkstemp(suffix='.png')
+            os.close(fd)
+            f.save(plan_path)
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "No image"}), 400

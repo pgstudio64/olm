@@ -17,10 +17,13 @@ Usage:
 
 import os
 import sys
+import tempfile
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw
 from collections import deque
+
+_TMP = tempfile.gettempdir()
 
 # --- Paramètres ---
 PLAN_PATH = os.path.join(
@@ -991,7 +994,7 @@ def main():
     print("Étape 4 : effacement des cartouches...")
     gray_arr = np.array(img_gray)
     cleaned_arr = erase_cartouches(gray_arr, cartouche_bboxes)
-    Image.fromarray(cleaned_arr).save("/tmp/cleaned_plan.png")
+    Image.fromarray(cleaned_arr).save(os.path.join(_TMP, "cleaned_plan.png"))
 
     print("Étape 3 : binarisation seuil 80...")
     binary = binarize(cleaned_arr)
@@ -1004,7 +1007,7 @@ def main():
     print(f"  Pixels mur après: {np.sum(binary)}")
 
     # Sauvegarder pour debug
-    Image.fromarray((~binary * 255).astype(np.uint8)).save("/tmp/ortho_plan.png")
+    Image.fromarray((~binary * 255).astype(np.uint8)).save(os.path.join(_TMP, "ortho_plan.png"))
 
     step_px = COMB_STEP_PX
 
@@ -1028,7 +1031,7 @@ def main():
                   f"largeur={d['width_px']}px, charnière={d['hinge_side']}")
         draw_debug_single(Image.fromarray(cleaned_arr), binary,
                           target_room, bbox, hits, cx, cy,
-                          f"/tmp/comb_{target_room}.png")
+                          os.path.join(_TMP, f"comb_{target_room}.png"))
     else:
         results = []
         for name, seed_data in sorted(seeds.items()):
@@ -1042,7 +1045,7 @@ def main():
             results.append((name, bbox, cx, cy, hits, doors))
 
         draw_debug_all(Image.fromarray(cleaned_arr), results,
-                       "/tmp/comb_all.png")
+                       os.path.join(_TMP, "comb_all.png"))
 
 
 if __name__ == "__main__":

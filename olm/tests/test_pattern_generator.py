@@ -89,7 +89,7 @@ def test_export_json_keys():
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = f.name
     export_catalogue(PATTERNS, DOUBLE_ROW_PATTERNS, path)
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     assert "single_row" in data
     assert "double_row" in data
@@ -102,7 +102,7 @@ def test_render_svg_creates_file():
     with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
         path = f.name
     render_pattern_svg(p, path)
-    content = open(path).read()
+    content = open(path, encoding="utf-8").read()
     assert "<svg" in content
     assert "4a90c4" in content   # zone candidate présente
     assert "d0d0d0" in content   # bureau présent
@@ -153,7 +153,7 @@ def test_render_svg_dark_background():
     with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
         path = f.name
     render_pattern_svg(p, path)
-    content = open(path).read()
+    content = open(path, encoding="utf-8").read()
     assert "1e1e1e" in content      # fond sombre
     assert "4a90c4" in content      # zone bleue
     assert "8B6914" in content      # fauteuil
