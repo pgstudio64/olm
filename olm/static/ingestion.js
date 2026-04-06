@@ -20,9 +20,10 @@
     show: {
       bbox: true, window: true, door: true, opening: true,
       names: true, vrays: false, hrays: false, candidates: false,
-      grid: false,
+      grid: true,
     },
     zoomRoom: '',
+    merges: {},  // key: "roomA|roomB" → true if merge checked
     opacity: 0.3,
     overlayVisible: true,
     // Viewbox state for pan/zoom
@@ -86,6 +87,7 @@
           ingState.scale + ' cm/px';
         renderIngestion();
         populateRoomsJson();
+        updateIngRoomList();
 
         // Feed rooms into the floor plan pipeline (Review + Design)
         var json = document.getElementById('fpRoomsJson').value;
@@ -100,8 +102,63 @@
           imgW: ingState.planW,
           imgH: ingState.planH,
         };
+        document.getElementById("fpOverlayToggle").checked = true;
+        document.getElementById("rvOverlayToggle").checked = true;
       })
       .catch(function (e) { status.textContent = 'Error: ' + e; });
+  }
+
+  // --- Room list (clickable, same style as Review) ---
+  window.updateIngRoomList = updateIngRoomList;
+  function updateIngRoomList() {
+    var listEl = document.getElementById('ingRoomList');
+    if (!listEl) return;
+    var inRoomView = document.getElementById('ingRoomView') &&
+      document.getElementById('ingRoomView').style.display !== 'none';
+    var selectedName = inRoomView && window.fpData && window.fpData.rooms.length
+      ? (window.fpData.rooms[window.fpData.currentIdx] || {}).name : '';
+    var rooms = ingState.rooms.slice().sort(function(a, b) {
+      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+    });
+    var html = '';
+    rooms.forEach(function(r) {
+      var active = (inRoomView ? selectedName === r.name : ingState.zoomRoom === r.name)
+        ? 'font-weight:bold;color:var(--accent);' : 'color:var(--text-dim);';
+      var dims = r.width_cm + 'x' + r.depth_cm;
+      html += '<div style="padding:2px 4px;cursor:pointer;' + active +
+        '" data-ing-room="' + r.name + '">' + r.name +
+        ' <span style="font-size:10px;color:var(--text-dim);">' + dims + '</span></div>';
+    });
+    // "All" entry — always visible, returns to plan view
+    var allActive = (!inRoomView && !ingState.zoomRoom)
+      ? 'font-weight:bold;color:var(--accent);' : 'color:var(--text-dim);';
+    html = '<div style="padding:2px 4px;cursor:pointer;' + allActive +
+      '" data-ing-room="">&#9664; All (' + rooms.length + ')</div>' + html;
+    listEl.innerHTML = html;
+    listEl.querySelectorAll('[data-ing-room]').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var name = this.dataset.ingRoom;
+        if (name) {
+          // Select room in fpData and switch to room view
+          if (window.fpData) {
+            var rooms = window.fpData.rooms || [];
+            for (var i = 0; i < rooms.length; i++) {
+              if (rooms[i].name === name) {
+                window.fpData.currentIdx = i;
+                break;
+              }
+            }
+          }
+          if (window.ingShowRoomView) window.ingShowRoomView();
+        } else {
+          // "All" — back to plan view
+          ingState.zoomRoom = '';
+          if (window.ingShowPlanView) window.ingShowPlanView();
+          zoomFit();
+          updateIngRoomList();
+        }
+      });
+    });
   }
 
   // --- Populate the rooms JSON textarea for matching ---
@@ -144,6 +201,7 @@
         exclusion_zones: [],
         exterior_faces: r.exterior_faces,
         corridor_face: r.corridor_face,
+        bbox_px: r.bbox_px,
       };
     });
     textarea.value = JSON.stringify({ rooms: rooms }, null, 2);
@@ -171,17 +229,38 @@
         '" opacity="' + ingState.opacity + '" />');
     }
 
-    // Grid (every 10px ≈ scale-dependent)
-    if (ingState.show.grid) {
-      var gridStep = Math.round(100 / (ingState.scale * 100)) * 10; // ~1m grid
-      if (gridStep < 10) gridStep = 10;
-      for (var gx = 0; gx < W; gx += gridStep) {
-        els.push('<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + H +
-          '" stroke="#2a2826" stroke-width="0.5"/>');
+    // Grid: 10cm dots + 1m lines (same style as pattern editor)
+    if (ingState.show.grid && ingState.scale > 0) {
+      var cmPerPx = ingState.scale;
+      var step10cm = 10 / cmPerPx;    // 10cm in pixels
+      var step1m = 100 / cmPerPx;     // 1m in pixels
+      var vb = ingState.vb;
+      var margin = Math.max(vb.w, vb.h) * 0.3;
+      var gxS = Math.floor((vb.x - margin) / step10cm) * step10cm;
+      var gyS = Math.floor((vb.y - margin) / step10cm) * step10cm;
+      var gxE = vb.x + vb.w + margin;
+      var gyE = vb.y + vb.h + margin;
+      // 10cm dots (skip when zoomed out too far)
+      if (vb.w / step10cm < 150) {
+        for (var gx = gxS; gx <= gxE; gx += step10cm) {
+          for (var gy = gyS; gy <= gyE; gy += step10cm) {
+            els.push('<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
+              '" r="0.6" fill="#6e6a62"/>');
+          }
+        }
       }
-      for (var gy = 0; gy < H; gy += gridStep) {
-        els.push('<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy +
-          '" stroke="#2a2826" stroke-width="0.5"/>');
+      // 1m lines
+      var mxS = Math.max(0, Math.floor(vb.x / step1m) * step1m);
+      var myS = Math.max(0, Math.floor(vb.y / step1m) * step1m);
+      for (var mx = mxS; mx <= gxE; mx += step1m) {
+        els.push('<line x1="' + mx.toFixed(1) + '" y1="' + gyS.toFixed(1) +
+          '" x2="' + mx.toFixed(1) + '" y2="' + gyE.toFixed(1) +
+          '" stroke="#6e6a62" stroke-width="0.5"/>');
+      }
+      for (var my = myS; my <= gyE; my += step1m) {
+        els.push('<line x1="' + gxS.toFixed(1) + '" y1="' + my.toFixed(1) +
+          '" x2="' + gxE.toFixed(1) + '" y2="' + my.toFixed(1) +
+          '" stroke="#6e6a62" stroke-width="0.5"/>');
       }
     }
 
@@ -320,12 +399,91 @@
         var mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
         els.push('<text x="' + mx + '" y="' + my +
           '" text-anchor="middle" dominant-baseline="central" fill="' +
-          COLORS.name + '" font-size="16" font-weight="bold" font-family="monospace">' +
+          COLORS.name + '" font-size="16" font-weight="bold" font-family="monospace" style="pointer-events:none;">' +
           room.name + '</text>');
       }
+
+      // Clickable hit area (transparent rect on top)
+      els.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w +
+        '" height="' + h + '" fill="transparent" stroke="none" ' +
+        'style="cursor:pointer;" data-room="' + room.name + '"/>');
     });
 
+    // Merge checkboxes between contiguous rooms
+    if (show.bbox && !zoomRoom) {
+      var MERGE_TOL = 8; // px tolerance for shared wall detection
+      var pairs = [];
+      for (var i = 0; i < ingState.rooms.length; i++) {
+        var ri = ingState.rooms[i];
+        var ai = ri.bbox_px;
+        for (var j = i + 1; j < ingState.rooms.length; j++) {
+          var rj = ingState.rooms[j];
+          var aj = rj.bbox_px;
+          // Check if they share a vertical wall (east-west adjacency)
+          var sharedV = Math.min(ai[3], aj[3]) - Math.max(ai[1], aj[1]);
+          if (sharedV > MERGE_TOL &&
+              (Math.abs(ai[2] - aj[0]) < MERGE_TOL || Math.abs(aj[2] - ai[0]) < MERGE_TOL)) {
+            var wallX = Math.abs(ai[2] - aj[0]) < MERGE_TOL ? ai[2] : ai[0];
+            var midY = (Math.max(ai[1], aj[1]) + Math.min(ai[3], aj[3])) / 2;
+            pairs.push({ a: ri.name, b: rj.name, x: wallX, y: midY, orient: 'v' });
+          }
+          // Check if they share a horizontal wall (north-south adjacency)
+          var sharedH = Math.min(ai[2], aj[2]) - Math.max(ai[0], aj[0]);
+          if (sharedH > MERGE_TOL &&
+              (Math.abs(ai[3] - aj[1]) < MERGE_TOL || Math.abs(aj[3] - ai[1]) < MERGE_TOL)) {
+            var wallY = Math.abs(ai[3] - aj[1]) < MERGE_TOL ? ai[3] : ai[1];
+            var midX = (Math.max(ai[0], aj[0]) + Math.min(ai[2], aj[2])) / 2;
+            pairs.push({ a: ri.name, b: rj.name, x: midX, y: wallY, orient: 'h' });
+          }
+        }
+      }
+      pairs.forEach(function(p) {
+        var key = p.a + '|' + p.b;
+        var checked = ingState.merges[key] || false;
+        var sz = 10;
+        var fill = checked ? '#c8a050' : 'rgba(30,30,30,0.7)';
+        var stroke = checked ? '#c8a050' : '#6e6a62';
+        els.push('<rect x="' + (p.x - sz/2) + '" y="' + (p.y - sz/2) +
+          '" width="' + sz + '" height="' + sz + '" rx="2" fill="' + fill +
+          '" stroke="' + stroke + '" stroke-width="1" style="cursor:pointer;" data-merge="' + key + '"/>');
+        if (checked) {
+          els.push('<text x="' + p.x + '" y="' + (p.y + 1) +
+            '" text-anchor="middle" dominant-baseline="central" fill="#1e1e1e" ' +
+            'font-size="10" font-weight="bold" style="pointer-events:none;">&#10003;</text>');
+        }
+      });
+    }
+
     svg.innerHTML = els.join('\n');
+
+    // Click handler: merge checkboxes
+    svg.querySelectorAll('[data-merge]').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var key = this.dataset.merge;
+        ingState.merges[key] = !ingState.merges[key];
+        renderIngestion();
+      });
+    });
+
+    // Click handler: navigate to Room view
+    svg.querySelectorAll('[data-room]').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var name = this.dataset.room;
+        if (window.fpData) {
+          var rooms = window.fpData.rooms || [];
+          for (var i = 0; i < rooms.length; i++) {
+            if (rooms[i].name === name) {
+              window.fpData.currentIdx = i;
+              break;
+            }
+          }
+        }
+        // Switch to room view
+        if (window.ingShowRoomView) window.ingShowRoomView();
+      });
+    });
   }
 
   // --- Zoom/Pan ---
@@ -494,14 +652,7 @@
       if (e.key.toLowerCase() === 'f') { zoomFit(); return; }
     });
 
-    // Room zoom
-    var roomInput = document.getElementById('ingRoomZoom');
-    if (roomInput) {
-      roomInput.addEventListener('change', function () {
-        ingState.zoomRoom = roomInput.value.trim();
-        zoomFit();
-      });
-    }
+    // Room list is populated after extraction via updateIngRoomList()
   }
 
   // --- Load plan list ---

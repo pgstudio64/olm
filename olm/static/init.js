@@ -43,7 +43,7 @@ async function init() {
     if (state.roomAmendMode) {
       state.roomAmendMode = null;
       exitRoomAmendUI();
-      document.querySelector('.tab-btn[data-tab="review"]').click();
+      document.querySelector('.tab-btn[data-tab="import"]').click();
     } else if (state.amendMode) {
       state.amendMode = null;
       exitAmendUI();
@@ -118,6 +118,16 @@ async function init() {
   document.getElementById("dslRoom").addEventListener("keydown", function(e) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyRoomDSL(); }
   });
+  var rvDslEl = document.getElementById("rvRoomDsl");
+  if (rvDslEl) {
+    rvDslEl.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        var btn = document.getElementById("rvBtnApplyDsl");
+        if (btn) btn.click();
+      }
+    });
+  }
 
   function showTooltipCentered(tip) {
     var visible = tip.style.display !== "none";
@@ -327,8 +337,11 @@ async function init() {
         _restoreEditorState();
         loadCatalogue();
       }
-      if (btn.dataset.tab === "review") {
-        rvRenderCurrent();
+      if (btn.dataset.tab === "import") {
+        // If in room view, re-render current room
+        if (document.getElementById("ingRoomView").style.display !== "none") {
+          rvRenderCurrent();
+        }
       }
     });
   });
