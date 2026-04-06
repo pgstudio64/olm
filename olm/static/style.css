@@ -881,6 +881,11 @@
     color: #fff;
     font-weight: bold;
   }
+  .btn:disabled, .btn-toolbar:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
 
   /* Help link */
   .tooltip-close {

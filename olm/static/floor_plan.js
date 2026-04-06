@@ -3,7 +3,7 @@
 // FLOOR PLAN VIEWER
 // ========================================================================
 (function() {
-  var fpData = { rooms: [], currentIdx: 0 };
+  var fpData = window.fpData = { rooms: [], currentIdx: 0 };
   window.fpAmendments = {};      // { roomName: { candidate, pattern } }
   window.fpRoomAmendments = {};  // { roomName: { name, width_cm, depth_cm, windows, openings, exclusion_zones } }
   window.fpOverlay = null;       // { dataUrl, pxPerCm, imgW, imgH }
@@ -29,6 +29,12 @@
     // Sort by alphanumeric name
     parsed.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
 
+    // Preserve bbox_px from input (not returned by matching API)
+    var bboxByName = {};
+    parsed.rooms.forEach(function(r) {
+      if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
+    });
+
     document.getElementById("fpCandidatesList").innerHTML =
       '<div class="fp-no-match">Matching in progress...</div>';
 
@@ -42,11 +48,13 @@
       if (data.error) { alert("Error: " + data.error); return; }
       // Sort results by name
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
+      // Re-attach bbox_px from input
+      data.rooms.forEach(function(r) {
+        if (bboxByName[r.name]) r.bbox_px = bboxByName[r.name];
+      });
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;
-      // Render and switch to Review tab
-      var reviewBtn = document.querySelector('.tab-btn[data-tab="review"]');
-      if (reviewBtn && !reviewBtn.classList.contains("active")) reviewBtn.click();
+      // Render Review data (but stay on current tab)
       fpRenderCurrent();
       rvRenderCurrent();
       document.activeElement.blur();
@@ -77,10 +85,6 @@
     if (!room) {
       document.getElementById("rvRoomLabel").textContent = "-";
       document.getElementById("rvNavInfo").textContent = "0 / 0";
-      document.getElementById("rvOpeningsList").innerHTML =
-        '<span style="color:var(--text-dim);">No rooms loaded</span>';
-      document.getElementById("rvExclusionsList").innerHTML =
-        '<span style="color:var(--text-dim);">No exclusion zones</span>';
       return;
     }
 
@@ -93,30 +97,15 @@
     document.getElementById("rvFloorRooms").textContent = allRooms.length;
     document.getElementById("rvFloorArea").textContent = totalArea.toFixed(1);
 
-    // Room list (clickable)
-    var listHtml = "";
-    allRooms.forEach(function(r, idx) {
-      var active = idx === fpData.currentIdx ? "font-weight:bold;color:var(--accent);" : "color:var(--text-dim);";
-      var amended = (r.room_amended || fpRoomAmendments[r.name]) ? ' <span style="font-size:9px;color:#c8a050;">(amended)</span>' : "";
-      listHtml += '<div style="padding:2px 4px;cursor:pointer;' + active + '" data-rv-idx="' + idx + '">' +
-        r.name + amended + ' <span style="font-size:10px;color:var(--text-dim);">' +
-        r.width_cm + 'x' + r.depth_cm + '</span></div>';
-    });
-    document.getElementById("rvRoomList").innerHTML = listHtml;
-    document.getElementById("rvRoomList").querySelectorAll("[data-rv-idx]").forEach(function(el) {
-      el.addEventListener("click", function() {
-        fpData.currentIdx = parseInt(this.dataset.rvIdx);
-        fpRenderCurrent();
-        rvRenderCurrent();
-      });
-    });
+    // Update ingestion room list to reflect current selection
+    if (window.updateIngRoomList) window.updateIngRoomList();
 
     // Use amended data if available
     var roomData = fpRoomAmendments[room.name] || room;
 
     // Render room SVG in canvas (empty room, no blocks)
-    var rvTab = document.getElementById("tabReview");
-    if (rvTab && rvTab.classList.contains("active")) {
+    var rvView = document.getElementById("ingRoomView");
+    if (rvView && rvView.style.display !== "none") {
       fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
     }
 
@@ -219,21 +208,30 @@
     state.selectedBlock = -1;
 
     // Inject overlay if active (check both Design and Review toggles)
+    // Auto-align: use bbox_px to offset the plan image so the room aligns at (0,0)
     var fpOvChecked = document.getElementById("fpOverlayToggle").checked;
     var rvOvChecked = document.getElementById("rvOverlayToggle").checked;
     if (window.fpOverlay && (fpOvChecked || rvOvChecked)) {
       var ov = window.fpOverlay;
-      var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
+      var fpOvOpacity = parseInt(document.getElementById("rvOverlayOpacity").value) ||
+        parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
+      // bbox_px gives the room position in the plan image (pixels)
+      var ovOffX = 0, ovOffY = 0;
+      if (room.bbox_px) {
+        ovOffX = room.bbox_px[0] / ov.pxPerCm;  // px → cm
+        ovOffY = room.bbox_px[1] / ov.pxPerCm;
+      }
       state.overlay = {
         dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
-        offsetX: 0, offsetY: 0, imgW: ov.imgW, imgH: ov.imgH,
+        offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,
       };
     } else {
       state.overlay = null;
     }
 
     render(targetSvg);
-    zoomFit(targetSvg);
+    // Delay zoomFit to ensure the SVG container is laid out
+    requestAnimationFrame(function() { zoomFit(targetSvg); });
   }
 
   // ── Candidate list ─────────────────────────────────────────────────────
@@ -580,10 +578,16 @@
       fpRenderCurrent();
     });
 
-    // Design layout toggles — re-render from current candidate (not stale state)
+    // Grid toggle sync across all tabs (Review, Design, Editor)
+    function syncGridToggle(checked) {
+      state.gridVisible = checked;
+      ['gridToggle', 'fpGridToggle', 'rvGridToggle'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.checked = checked;
+      });
+    }
     document.getElementById("fpGridToggle").addEventListener("change", function(e) {
-      state.gridVisible = e.target.checked;
-      document.getElementById("gridToggle").checked = e.target.checked;
+      syncGridToggle(e.target.checked);
       var room = fpCurrent();
       if (room && fpCurrentCandidate) {
         fpRenderSvg(room, fpCurrentCandidate);
@@ -617,37 +621,47 @@
         enterAmendMode(room, fpCurrentCandidate);
       }
     });
-    // Floor plan overlay loading
-    document.getElementById("fpBtnLoadOverlay").addEventListener("click", function() {
-      document.getElementById("fpOverlayFileInput").click();
-    });
-    document.getElementById("fpOverlayFileInput").addEventListener("change", function(e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        var img = new Image();
-        img.onload = function() {
-          var pxPerCm = parseFloat(document.getElementById("fpOverlayScale").value) || 2;
-          window.fpOverlay = {
-            dataUrl: ev.target.result,
-            pxPerCm: pxPerCm,
-            imgW: img.width,
-            imgH: img.height,
+    // Floor plan overlay loading (elements may not exist if overlay is set via ingestion)
+    var _fpBtnLoadOv = document.getElementById("fpBtnLoadOverlay");
+    if (_fpBtnLoadOv) {
+      _fpBtnLoadOv.addEventListener("click", function() {
+        document.getElementById("fpOverlayFileInput").click();
+      });
+    }
+    var _fpOvFileInput = document.getElementById("fpOverlayFileInput");
+    if (_fpOvFileInput) {
+      _fpOvFileInput.addEventListener("change", function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          var img = new Image();
+          img.onload = function() {
+            var scaleEl = document.getElementById("fpOverlayScale");
+            var pxPerCm = scaleEl ? (parseFloat(scaleEl.value) || 2) : 2;
+            window.fpOverlay = {
+              dataUrl: ev.target.result,
+              pxPerCm: pxPerCm,
+              imgW: img.width,
+              imgH: img.height,
+            };
+            var statusEl = document.getElementById("fpOverlayStatus");
+            if (statusEl) statusEl.textContent = img.width + "x" + img.height + " px loaded";
           };
-          document.getElementById("fpOverlayStatus").textContent =
-            img.width + "x" + img.height + " px loaded";
+          img.src = ev.target.result;
         };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-    document.getElementById("fpOverlayScale").addEventListener("change", function() {
-      if (window.fpOverlay) {
-        window.fpOverlay.pxPerCm = parseFloat(this.value) || 2;
-        fpRenderCurrent();
-      }
-    });
+        reader.readAsDataURL(file);
+      });
+    }
+    var _fpOvScale = document.getElementById("fpOverlayScale");
+    if (_fpOvScale) {
+      _fpOvScale.addEventListener("change", function() {
+        if (window.fpOverlay) {
+          window.fpOverlay.pxPerCm = parseFloat(this.value) || 2;
+          fpRenderCurrent();
+        }
+      });
+    }
     document.getElementById("fpOverlayToggle").addEventListener("change", function() {
       document.getElementById("rvOverlayToggle").checked = this.checked;
       fpRenderCurrent();
@@ -661,19 +675,45 @@
         render(document.getElementById('fpCanvas'));
       }
     });
-    // Review overlay controls
-    document.getElementById("rvOverlayToggle").addEventListener("change", function() {
-      document.getElementById("fpOverlayToggle").checked = this.checked;
-      rvRenderCurrent();
-    });
-    document.getElementById("rvOverlayOpacity").addEventListener("input", function() {
-      document.getElementById("rvOverlayOpacityVal").textContent = this.value + "%";
-      document.getElementById("fpOverlayOpacity").value = this.value;
-      document.getElementById("fpOverlayOpacityVal").textContent = this.value + "%";
-      if (document.getElementById("rvOverlayToggle").checked && state.overlay) {
-        state.overlay.opacity = parseInt(this.value);
-        render(document.getElementById('rvCanvas'));
+    // Review refresh — exposed on window for inline handlers
+    window._rvRefresh = function() {
+      // Sync toggles
+      var rvGrid = document.getElementById("rvGridToggle");
+      if (rvGrid) syncGridToggle(rvGrid.checked);
+      var rvOv = document.getElementById("rvOverlayToggle");
+      var fpOv = document.getElementById("fpOverlayToggle");
+      if (rvOv && fpOv) fpOv.checked = rvOv.checked;
+      // Sync opacity
+      var rvOp = document.getElementById("rvOverlayOpacity");
+      var fpOp = document.getElementById("fpOverlayOpacity");
+      if (rvOp && fpOp) {
+        fpOp.value = rvOp.value;
+        document.getElementById("fpOverlayOpacityVal").textContent = rvOp.value + "%";
       }
+      // Re-render
+      var room = fpCurrent();
+      if (!room) return;
+      var roomData = fpRoomAmendments[room.name] || room;
+      fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
+    };
+
+    // --- Plan view / Room view toggle ---
+    window.ingShowRoomView = function() {
+      document.getElementById("ingPlanView").style.display = "none";
+      document.getElementById("ingRoomView").style.display = "flex";
+      document.getElementById("rvRoomSidebar").style.display = "";
+      rvRenderCurrent();
+      // Update ingestion room list to highlight selected room
+      if (window.updateIngRoomList) window.updateIngRoomList();
+    };
+    window.ingShowPlanView = function() {
+      document.getElementById("ingPlanView").style.display = "flex";
+      document.getElementById("ingRoomView").style.display = "none";
+      document.getElementById("rvRoomSidebar").style.display = "none";
+      if (window.updateIngRoomList) window.updateIngRoomList();
+    };
+    document.getElementById("rvBtnBack").addEventListener("click", function() {
+      window.ingShowPlanView();
     });
 
     document.getElementById("fpBtnDiscard").addEventListener("click", function() {

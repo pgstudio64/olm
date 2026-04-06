@@ -158,14 +158,15 @@ async function applyRoomDSL() {
   }
 }
 
-function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx) {
-  // Windows — cyan line offset outward
-  var wallThick = 1.5;
+function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) {
+  // Windows — cyan line offset outward (or on wall in review mode)
+  var wallThick = isReview ? 0 : 1.5;
+  var winStroke = isReview ? 3 : 1.5;
   state.room_windows.forEach(function(w) {
     var pos = wallSegment(w.face, w.offset_cm, w.width_cm, roomX, roomY, roomWPx, roomHPx, wallThick);
     elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#50b8d0" stroke-width="1.5" stroke-linecap="round"/>' });
+      '" stroke="#50b8d0" stroke-width="' + winStroke + '" stroke-linecap="round"/>' });
   });
 
   // Doors and open bays
@@ -631,9 +632,12 @@ function _renderImpl(targetSvg) {
   var roomHPx = state.room_depth_cm * SCALE;
   var roomX = MARGIN;
   var roomY = MARGIN;
+  var isReview = svg.id === "rvCanvas";
+  var wallColor = isReview ? "#ffffff" : "#4a4640";
+  var wallWidth = isReview ? 2 : 1.5;
   elements.push({ z: 0.05, s: '<rect x="' + roomX + '" y="' + roomY +
     '" width="' + roomWPx + '" height="' + roomHPx +
-    '" fill="none" stroke="#4a4640" stroke-width="1.5"/>' });
+    '" fill="none" stroke="' + wallColor + '" stroke-width="' + wallWidth + '"/>' });
   // Room dimension labels
   var dimFs = (16.5 * zf).toFixed(1);
   var dimOffY = 16 * zf;
@@ -647,7 +651,7 @@ function _renderImpl(targetSvg) {
     state.room_depth_cm + ' cm</text>' });
 
   // Windows, doors, openings, exclusion zones
-  renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx);
+  renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview);
 
   // Circulation — smoothed polylines, width proportional to traffic (z=0.2)
   if (hasBlocks && state.circVisible) {
@@ -775,11 +779,13 @@ function _renderImpl(targetSvg) {
     const gxEnd = vb.x + vb.w + gridMargin;
     const gyEnd = vb.y + vb.h + gridMargin;
 
-    // 10cm dots
-    for (let gx = gxStart; gx <= gxEnd; gx += stepPx) {
-      for (let gy = gyStart; gy <= gyEnd; gy += stepPx) {
-        elements.push({ z: 0, s: '<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
-          '" r="0.6" fill="' + COLOR_GRID + '"/>' });
+    // 10cm dots (skip when zoomed out too far — dots would overlap)
+    if (vb.w / stepPx < 150) {
+      for (let gx = gxStart; gx <= gxEnd; gx += stepPx) {
+        for (let gy = gyStart; gy <= gyEnd; gy += stepPx) {
+          elements.push({ z: -0.5, s: '<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
+            '" r="0.6" fill="' + COLOR_GRID + '"/>' });
+        }
       }
     }
 
@@ -787,12 +793,12 @@ function _renderImpl(targetSvg) {
     const mxStart = Math.max(0, Math.floor(vb.x / meterPx) * meterPx);
     const myStart = Math.max(0, Math.floor(vb.y / meterPx) * meterPx);
     for (let mx = mxStart; mx <= gxEnd; mx += meterPx) {
-      elements.push({ z: 0.1, s: '<line x1="' + mx.toFixed(1) + '" y1="' + gyStart.toFixed(1) +
+      elements.push({ z: -0.4, s: '<line x1="' + mx.toFixed(1) + '" y1="' + gyStart.toFixed(1) +
         '" x2="' + mx.toFixed(1) + '" y2="' + gyEnd.toFixed(1) +
         '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
     }
     for (let my = myStart; my <= gyEnd; my += meterPx) {
-      elements.push({ z: 0.1, s: '<line x1="' + gxStart.toFixed(1) + '" y1="' + my.toFixed(1) +
+      elements.push({ z: -0.4, s: '<line x1="' + gxStart.toFixed(1) + '" y1="' + my.toFixed(1) +
         '" x2="' + gxEnd.toFixed(1) + '" y2="' + my.toFixed(1) +
         '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
     }
@@ -814,6 +820,9 @@ function _renderImpl(targetSvg) {
       '" opacity="' + (ov.opacity / 100).toFixed(2) +
       '" preserveAspectRatio="none"/>' });
   }
+
+  // Hide canvas background when overlay is active (avoid dark veil)
+  svg.style.background = state.overlay ? 'transparent' : '';
 
   elements.sort(function(a, b) { return a.z - b.z; });
   const svgContent = elements.map(function(e) { return e.s; }).join("\n");
@@ -1466,14 +1475,19 @@ function enterRoomAmendMode(room) {
   state.room_openings = JSON.parse(JSON.stringify(room.openings || []));
   state.room_exclusions = JSON.parse(JSON.stringify(room.exclusion_zones || []));
 
-  // Inject overlay for visual reference
+  // Inject overlay for visual reference, aligned to room bbox
   if (window.fpOverlay) {
+    var ov = window.fpOverlay;
+    var ovOffX = 0, ovOffY = 0;
+    if (room.bbox_px) {
+      ovOffX = room.bbox_px[0] / ov.pxPerCm;
+      ovOffY = room.bbox_px[1] / ov.pxPerCm;
+    }
     state.overlay = {
-      dataUrl: window.fpOverlay.dataUrl,
-      pxPerCm: window.fpOverlay.pxPerCm,
+      dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm,
       opacity: 30,
-      offsetX: 0, offsetY: 0,
-      imgW: window.fpOverlay.imgW, imgH: window.fpOverlay.imgH,
+      offsetX: ovOffX, offsetY: ovOffY,
+      imgW: ov.imgW, imgH: ov.imgH,
     };
   }
 

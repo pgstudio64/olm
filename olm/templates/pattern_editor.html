@@ -5,17 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OLS — Office Layout Studio</title>
 <link rel="stylesheet" href="/static/style.css">
+<style>html, body { touch-action: none; }</style>
 </head>
 <body>
+<script>
+// Disable browser pinch-zoom (Ctrl+wheel / trackpad gesture)
+document.addEventListener('wheel', function(e) {
+  if (e.ctrlKey || e.metaKey) e.preventDefault();
+}, { passive: false });
+document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
+</script>
 
 <header style="display:flex;align-items:center;">
   <div class="app-title">Office Layout Studio</div>
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="import" title="Load floor plan image and room data"><span class="tab-step">1</span> Import floor plan</button>
-    <button class="tab-btn" data-tab="review" title="Inspect and adjust room geometry"><span class="tab-step">2</span> Review rooms</button>
-    <button class="tab-btn" data-tab="merge" title="Merge adjacent rooms by removing shared walls"><span class="tab-step">3</span> Identify merges</button>
-    <button class="tab-btn" data-tab="design" title="Select and refine the layout for each room"><span class="tab-step">4</span> Design layout</button>
-    <button class="tab-btn" data-tab="export" title="Export matching results"><span class="tab-step">5</span> Export results</button>
+    <button class="tab-btn" data-tab="design" title="Select and refine the layout for each room"><span class="tab-step">2</span> Design layout</button>
+    <button class="tab-btn" data-tab="export" title="Export matching results"><span class="tab-step">3</span> Export results</button>
     <button class="tab-btn catalogue-tab" data-tab="catalogue" title="Browse and edit layout patterns">Edit catalogue</button>
   </div>
   <button class="settings-btn" id="btnOpenSettings" title="Settings">&#9881;</button>
@@ -167,8 +174,8 @@
       <span id="deskCount">0 desk(s)</span>
     </div>
     <div class="canvas-toolbar">
-      <label><input type="checkbox" id="gridToggle" checked> Grid</label>
       <label><input type="checkbox" id="circToggle"> Circulation</label>
+      <label><input type="checkbox" id="gridToggle" checked> Grid</label>
       <button id="btnZoomOut" class="btn btn-toolbar" title="Zoom out">&#8722;</button>
       <button id="btnZoomFit" class="btn btn-toolbar" title="Fit all">&#8861;</button>
       <button id="btnZoomIn" class="btn btn-toolbar" title="Zoom in">+</button>
@@ -300,10 +307,10 @@
 
 </div><!-- /tabCatalogue -->
 
-<!-- MAIN TAB: IMPORT -->
+<!-- MAIN TAB: IMPORT (merged with Review) -->
 <div class="tab-content active" id="tabImport">
   <div class="fp-container">
-    <!-- Left panel: extraction settings -->
+    <!-- Left panel: extraction settings + room list -->
     <div class="fp-info-col" style="min-width:220px;max-width:240px;border-left:none;border-right:1px solid var(--border);order:-2;">
       <div class="section-title">Floor plan</div>
       <table>
@@ -313,87 +320,74 @@
       </table>
       <button class="btn btn-ok" id="ingBtnExtract" style="width:100%;padding:6px;margin-top:var(--sp-sm);">Extract rooms</button>
 
-      <div class="section-title">Display</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:var(--fs-sm);color:var(--text-dim);">
-        <label><input type="checkbox" id="ing_bbox" checked> <span style="color:#ffffff;">&#9632;</span> Rooms</label>
-        <label><input type="checkbox" id="ing_window" checked> <span style="color:#50b8d0;">&#9632;</span> Windows</label>
-        <label><input type="checkbox" id="ing_door" checked> <span style="color:#e4e0d8;">&#9632;</span> Doors</label>
-        <label><input type="checkbox" id="ing_opening" checked> <span style="color:#80c060;">&#9632;</span> Openings</label>
-        <label><input type="checkbox" id="ing_vrays"> V-Rays</label>
-        <label><input type="checkbox" id="ing_hrays"> H-Rays</label>
-        <label><input type="checkbox" id="ing_grid"> Grid</label>
-      </div>
+      <!-- Display toggles moved to plan view toolbar -->
 
-      <div class="section-title">Focus</div>
+      <div class="section-title">Floor properties</div>
       <table>
-        <tr><td>Room</td><td><input type="text" id="ingRoomZoom" placeholder="" style="width:60px;"></td></tr>
+        <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
+        <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
       </table>
 
-      <div class="section-title">Room data</div>
+      <div class="section-title">Room list</div>
+      <div id="ingRoomList" style="max-height:300px;overflow-y:auto;font-size:11px;"></div>
+
+      <div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
       <textarea id="fpRoomsJson" placeholder='{"rooms": [...]}'
-        class="sidebar-textarea" rows="8"></textarea>
-      <div style="margin-top:4px;">
+        class="sidebar-textarea" rows="8" style="display:none;"></textarea>
+      <div style="margin-top:4px;display:none;" id="ingLoadFileWrap">
         <button class="btn" id="fpBtnLoadFile" style="width:100%;padding:4px;font-size:var(--fs-sm);">Load JSON file</button>
         <input type="file" id="fpFileInput" accept=".json" style="display:none;">
       </div>
     </div>
 
-    <!-- Main: SVG viewer -->
-    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="fp-nav">
-        <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:3px;">
-          <input type="checkbox" id="ingOverlayToggle" checked> Overlay
-        </label>
-        <input type="range" id="ingOpacity" min="0" max="100" value="30" style="width:60px;" title="Overlay opacity">
-        <span id="ingOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">30%</span>
-        <span style="flex:1;"></span>
-        <button class="btn btn-toolbar" id="ingZoomOut" title="Zoom out">&#8722;</button>
-        <button class="btn btn-toolbar" id="ingZoomFit" title="Fit all">&#8861;</button>
-        <button class="btn btn-toolbar" id="ingZoomIn" title="Zoom in">+</button>
-        <span style="flex:1;"></span>
-        <span id="ingStatus" style="color:var(--text-dim);font-size:10px;"></span>
+    <!-- Right panel: room properties (visible in room mode) -->
+    <div class="fp-sidebar" id="rvRoomSidebar" style="min-width:220px;max-width:260px;border-left:none;border-right:1px solid var(--border);display:none;">
+      <div class="section-title">Room</div>
+      <table>
+        <tr><td>Width (cm)</td><td id="rvRoomWidth">-</td></tr>
+        <tr><td>Depth (cm)</td><td id="rvRoomDepth">-</td></tr>
+        <tr><td>Area (m²)</td><td id="rvRoomArea">-</td></tr>
+      </table>
+      <div class="section-title">Room definition</div>
+      <textarea id="rvRoomDsl" readonly rows="6" class="sidebar-textarea"></textarea>
+      <div id="rvAmendApply" style="display:none;">
+        <button class="btn" id="rvBtnApplyDsl" style="width:100%;">Apply</button>
       </div>
-      <svg id="ingSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"
-        preserveAspectRatio="xMidYMid meet" class="svg-canvas" style="flex:1;"></svg>
+      <div>
+        <span id="rvDslHelpToggle" class="help-link">Syntax help</span>
+      </div>
     </div>
-  </div>
-</div><!-- /tabImport -->
 
-<!-- MAIN TAB: REVIEW -->
-<div class="tab-content" id="tabReview">
-    <div class="fp-container">
-      <div class="fp-info-col" id="rvFloorCol" style="min-width:200px;max-width:220px;border-left:none;border-right:1px solid var(--border);order:-2;">
-        <div class="section-title">Floor properties</div>
-        <table>
-          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
-          <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
-        </table>
-        <div class="section-title">Room list</div>
-        <div id="rvRoomList" style="max-height:calc(100vh - 300px);overflow-y:auto;font-size:11px;"></div>
-      </div>
-      <div class="fp-sidebar" style="min-width:220px;max-width:260px;border-left:none;border-right:1px solid var(--border);">
-        <div class="section-title">Room</div>
-        <table>
-          <tr><td>Width (cm)</td><td id="rvRoomWidth">-</td></tr>
-          <tr><td>Depth (cm)</td><td id="rvRoomDepth">-</td></tr>
-          <tr><td>Area (m²)</td><td id="rvRoomArea">-</td></tr>
-        </table>
-        <div class="section-title">Room definition</div>
-        <textarea id="rvRoomDsl" readonly rows="6" class="sidebar-textarea"></textarea>
-        <div id="rvAmendApply" style="display:none;">
-          <button class="btn" id="rvBtnApplyDsl" style="width:100%;">Apply</button>
+    <!-- Main area -->
+    <div class="fp-main">
+      <!-- Plan view (floor plan SVG) -->
+      <div id="ingPlanView" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div class="fp-nav">
+          <label><input type="checkbox" id="ing_bbox" checked> <span style="color:#ffffff;">&#9632;</span> Rooms</label>
+          <label><input type="checkbox" id="ing_window" checked> <span style="color:#50b8d0;">&#9632;</span> Windows</label>
+          <label><input type="checkbox" id="ing_door" checked> <span style="color:#e4e0d8;">&#9632;</span> Doors</label>
+          <label><input type="checkbox" id="ing_opening" checked> <span style="color:#80c060;">&#9632;</span> Openings</label>
+          <label><input type="checkbox" id="ing_vrays"> V-Rays</label>
+          <label><input type="checkbox" id="ing_hrays"> H-Rays</label>
+          <span style="flex:1;"></span>
+          <label><input type="checkbox" id="ingOverlayToggle" checked> Overlay</label>
+          <input type="range" id="ingOpacity" min="0" max="100" value="30" style="width:60px;" title="Overlay opacity">
+          <span id="ingOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">30%</span>
+          <label><input type="checkbox" id="ing_grid" checked> Grid</label>
+          <button class="btn btn-toolbar" id="ingZoomOut" title="Zoom out">&#8722;</button>
+          <button class="btn btn-toolbar" id="ingZoomFit" title="Fit all">&#8861;</button>
+          <button class="btn btn-toolbar" id="ingZoomIn" title="Zoom in">+</button>
+          <span style="flex:1;"></span>
+          <span id="ingStatus" style="color:var(--text-dim);font-size:10px;"></span>
         </div>
-        <div>
-          <span id="rvDslHelpToggle" class="help-link">Syntax help</span>
-        </div>
+        <svg id="ingSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"
+          preserveAspectRatio="xMidYMid meet" class="svg-canvas" style="flex:1;"></svg>
       </div>
-      <div class="fp-main">
+
+      <!-- Room view (individual room SVG) -->
+      <div id="ingRoomView" style="flex:1;display:none;flex-direction:column;overflow:hidden;">
         <div class="fp-nav" style="position:relative;">
-          <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:3px;">
-            <input type="checkbox" id="rvOverlayToggle"> Overlay
-          </label>
-          <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
-          <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
+          <button class="btn" id="rvBtnBack" title="Back to floor plan">&larr; Floor plan</button>
           <span style="flex:1;"></span>
           <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
           <div class="fp-room-label" id="rvRoomLabel">-</div>
@@ -407,28 +401,23 @@
           </div>
         </div>
         <div class="fp-canvas-wrap" id="rvCanvasWrap">
-          <div class="canvas-toolbar" style="justify-content:center;">
+          <div class="canvas-toolbar">
+            <span style="flex:1;"></span>
+            <label><input type="checkbox" id="rvOverlayToggle" onchange="window._rvRefresh && window._rvRefresh()"> Overlay</label>
+            <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
+            <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
+            <label><input type="checkbox" id="rvGridToggle" checked onchange="window._rvRefresh && window._rvRefresh()"> Grid</label>
             <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
             <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
             <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
+            <span style="flex:1;"></span>
           </div>
           <svg id="rvCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
         </div>
       </div>
     </div>
   </div>
-</div><!-- /tabReview -->
-
-<!-- MAIN TAB: MERGE -->
-<div class="tab-content" id="tabMerge">
-  <div style="display:flex;align-items:center;justify-content:center;flex:1;color:var(--text-dim);font-size:13px;font-family:var(--font-mono);">
-    <div style="text-align:center;">
-      <div style="font-size:32px;margin-bottom:12px;opacity:0.4;">&#9881;</div>
-      <div>Room merging &mdash; coming soon</div>
-      <div style="font-size:10px;margin-top:6px;">Merge adjacent rooms by removing shared walls</div>
-    </div>
-  </div>
-</div><!-- /tabMerge -->
+</div><!-- /tabImport -->
 
 <!-- MAIN TAB: DESIGN -->
 <div class="tab-content" id="tabDesign">
@@ -453,8 +442,8 @@
         </div>
         <div class="fp-canvas-wrap" id="fpCanvasWrap">
           <div class="canvas-toolbar" style="justify-content:center;">
-            <label><input type="checkbox" id="fpGridToggle" checked> Grid</label>
             <label><input type="checkbox" id="fpCircToggle"> Circulation</label>
+            <label><input type="checkbox" id="fpGridToggle" checked> Grid</label>
             <button class="btn btn-toolbar" id="fpZoomOut" title="Zoom out">&#8722;</button>
             <button class="btn btn-toolbar" id="fpZoomFit" title="Fit all">&#8861;</button>
             <button class="btn btn-toolbar" id="fpZoomIn" title="Zoom in">+</button>
