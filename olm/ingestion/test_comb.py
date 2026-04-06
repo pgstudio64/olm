@@ -72,6 +72,7 @@ def find_seeds_by_ocr(image):
 
         cart_words = [word]
         room_name = f"room_{seed_cx}_{seed_cy}"
+        room_surface = 0.0
 
         for other in words:
             if other is word:
@@ -82,6 +83,13 @@ def find_seeds_by_ocr(image):
                 cart_words.append(other)
                 if other["text"].isdigit() and len(other["text"]) == 3:
                     room_name = other["text"]
+                # Parse surface (decimal number like "14.28" or "9.8")
+                try:
+                    val = float(other["text"].replace(",", "."))
+                    if 1.0 < val < 200.0 and "." in other["text"].replace(",", "."):
+                        room_surface = val
+                except ValueError:
+                    pass
 
         all_x0 = min(w["x"] for w in cart_words)
         all_y0 = min(w["y"] for w in cart_words)
@@ -96,7 +104,7 @@ def find_seeds_by_ocr(image):
 
         seed_cx = (all_x0 + all_x1) // 2
         seed_cy = (all_y0 + all_y1) // 2
-        seeds[room_name] = (seed_cx, seed_cy)
+        seeds[room_name] = (seed_cx, seed_cy, room_surface)
 
     return seeds, cartouche_bboxes
 
@@ -796,8 +804,124 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None):
 # Les zones interdites sont saisies manuellement en phase Review.
 
 
-# --- SUPPRIMÉ (D-75) : extend_rooms_by_openings, _extension_from_hits,
-# _probe_extension, _rects_overlap, _find_exclusions_in_extension ---
+def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
+    """Run the full extraction pipeline on a floor plan image.
+
+    Args:
+        image_path: path to the raster floor plan image
+        scale_cm_per_px: cm per pixel (estimated if not provided)
+        threshold: binarization threshold (default BINARIZE_THRESHOLD)
+
+    Returns:
+        dict with:
+          'rooms': list of room dicts (name, bbox_px, width_cm, depth_cm,
+                   windows, openings, doors, exterior_faces, corridor_face)
+          'image_size': (width, height) in pixels
+          'scale_cm_per_px': used scale
+          'binary': binarized image as numpy array (for visualization)
+    """
+    from olm.ingestion.extract import _classify_wall_direct
+
+    thr = threshold or BINARIZE_THRESHOLD
+    img_gray = load_image(image_path)
+    seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
+    gray_arr = np.array(img_gray)
+    cleaned = erase_cartouches(gray_arr, cart_bboxes)
+    binary = cleaned < thr
+
+    all_seed_positions = [(v[0], v[1]) for v in seeds.values()]
+
+    rooms = []
+    for name, seed_data in sorted(seeds.items()):
+        cx, cy = seed_data[0], seed_data[1]
+        surface_m2 = seed_data[2] if len(seed_data) > 2 else 0.0
+        other = [(ox, oy) for ox, oy in all_seed_positions
+                 if (ox, oy) != (cx, cy)]
+        bbox, hits, doors = detect_room(binary, cx, cy, COMB_STEP_PX,
+                                        other_seeds=other)
+        x0, y0, x1, y1 = bbox
+        width_px = x1 - x0
+        height_px = y1 - y0
+
+        # Classify walls
+        wall_segs = {}
+        for face in ('north', 'south', 'east', 'west'):
+            segs, _ = _classify_wall_direct(binary, binary, bbox, face, 5)
+            wall_segs[face] = segs
+
+        # Extract windows, openings, doors from wall segments
+        windows = []
+        openings = []
+        for face, segs in wall_segs.items():
+            face_len = width_px if face in ('north', 'south') else height_px
+            for seg in segs:
+                if seg.kind == 'window':
+                    windows.append({
+                        'face': face,
+                        'offset_px': seg.start_px,
+                        'width_px': seg.end_px - seg.start_px,
+                    })
+                elif seg.kind == 'opening':
+                    openings.append({
+                        'face': face,
+                        'offset_px': seg.start_px,
+                        'width_px': seg.end_px - seg.start_px,
+                    })
+
+        # Derive exterior faces (faces with windows)
+        exterior_faces = list(set(w['face'] for w in windows))
+
+        # Corridor face (face with a door)
+        corridor_face = doors[0]['face'] if doors else ''
+
+        # Scale
+        s = scale_cm_per_px or 0.5
+        room = {
+            'name': name,
+            'seed_px': (cx, cy),
+            'bbox_px': (x0, y0, x1, y1),
+            'width_px': width_px,
+            'height_px': height_px,
+            'surface_m2': surface_m2,
+            'windows': windows,
+            'openings': openings,
+            'doors': doors,
+            'exterior_faces': exterior_faces,
+            'corridor_face': corridor_face,
+            'hits': [(int(hx), int(hy)) for hx, hy in hits],
+        }
+        rooms.append(room)
+
+    # Auto-detect scale from simple rooms (1 door, no opening, surface > 0)
+    if scale_cm_per_px is None:
+        scale_samples = []
+        for r in rooms:
+            if (r['surface_m2'] > 0
+                    and len(r['doors']) == 1
+                    and len(r['openings']) == 0
+                    and r['width_px'] > 10 and r['height_px'] > 10):
+                area_cm2 = r['surface_m2'] * 10000
+                area_px2 = r['width_px'] * r['height_px']
+                scale_samples.append((area_cm2 / area_px2) ** 0.5)
+        if scale_samples:
+            scale_samples.sort()
+            s = scale_samples[len(scale_samples) // 2]  # median
+        else:
+            s = 0.5  # fallback
+    else:
+        s = scale_cm_per_px
+
+    # Apply scale to all rooms
+    for r in rooms:
+        r['width_cm'] = round(r['width_px'] * s)
+        r['depth_cm'] = round(r['height_px'] * s)
+
+    return {
+        'rooms': rooms,
+        'image_size': (img_gray.size[0], img_gray.size[1]),
+        'scale_cm_per_px': round(s, 3),
+        'threshold': thr,
+    }
 
 
 def draw_debug_all(image, results, output_path):
@@ -880,14 +1004,14 @@ def main():
 
     step_px = COMB_STEP_PX
 
-    all_seed_positions = list(seeds.values())
+    all_seed_positions = [(v[0], v[1]) for v in seeds.values()]
 
     if target_room:
         if target_room not in seeds:
             print(f"Pièce {target_room} non trouvée. "
                   f"Disponibles: {sorted(seeds.keys())}")
             return
-        cx, cy = seeds[target_room]
+        cx, cy = seeds[target_room][0], seeds[target_room][1]
         other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
         print(f"\n=== {target_room} (seed {cx},{cy}) ===")
         bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
@@ -903,7 +1027,8 @@ def main():
                           f"/tmp/comb_{target_room}.png")
     else:
         results = []
-        for name, (cx, cy) in sorted(seeds.items()):
+        for name, seed_data in sorted(seeds.items()):
+            cx, cy = seed_data[0], seed_data[1]
             other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
             bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
             x0, y0, x1, y1 = bbox

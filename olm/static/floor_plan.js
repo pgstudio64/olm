@@ -771,4 +771,7 @@
       })
       .catch(function() {});
   });
+
+  // Expose for ingestion integration
+  window.fpLoadAndMatch = fpLoadAndMatch;
 })();
