@@ -442,8 +442,8 @@ function computePatternScoring(p) {
 
 function scoringHtml(sc) {
   if (sc.nDesks === 0) return "";
-  return '<span style="color:var(--accent2);">' + sc.m2pp.toFixed(1) + ' m\u00b2/p' +
-    ' · passage min ' + sc.minPassageCm + ' cm</span>';
+  return '<span style="color:var(--accent2);">' + sc.m2pp.toFixed(1) + ' m\u00b2/d' +
+    ' · min passage ' + sc.minPassageCm + ' cm</span>';
 }
 
 function distanceConformity(gapCm, role) {
@@ -552,7 +552,7 @@ function circColor(ratio, maxTraffic, passWidthCells) {
   return { fill: "#58c080", opacity: opacity };
 }
 
-// ========== ZOOM PAR SELECTION (Shift+drag) ==========
+// ========== ZOOM BY SELECTION (Shift+drag) ==========
 
 var zoomSel = { active: false, svg: null, viewBox: null, startPx: null, rectEl: null, applyFn: null };
 

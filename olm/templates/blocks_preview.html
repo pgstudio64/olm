@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>OLO — Blocs canoniques</title>
+<title>OLO — Canonical blocks</title>
 <style>
   body {
     margin: 0;
@@ -21,99 +21,99 @@
 </head>
 <body>
 
-<h1>Blocs canoniques — vue de dessus (AFNOR)</h1>
-<p class="sub">Echelle : 1 cm = 0.5 px — Regard initial : EST — Zones fixes : debattement 70 cm + passage selon ES-03/ES-04</p>
+<h1>Canonical blocks — top view (AFNOR)</h1>
+<p class="sub">Scale: 1 cm = 0.5 px — Initial facing: EAST — Fixed zones: chair clearance 70 cm + passage per ES-03/ES-04</p>
 
 <!--
-  Constantes (px, scale=0.5) :
-    dw=40 (80cm desk width EO)
+  Constants (px, scale=0.5):
+    dw=40 (80cm desk width EW)
     dd=90 (180cm desk depth NS)
-    chr=35 (70cm debattement)
+    chr=35 (70cm chair clearance)
     pas30=15 (30cm passage ES-03)
     pas90=45 (90cm passage ES-04)
 
-  Zone fixe = debattement (35px) | trait | passage (variable)
-  Blocs COTE et FACE : passage=90cm (45px) car on passe derriere personne assise
-  BLOCK_1 : passage=30cm (15px) car acces poste seul
+  Fixed zone = chair clearance (35px) | line | passage (variable)
+  SIDE and FACE blocks: passage=90cm (45px) because passage behind seated person
+  BLOCK_1: passage=30cm (15px) because single desk access
 -->
 
 <!-- ================================================================ -->
-<!-- BLOCK_1 — 1 poste, regard EST                                    -->
-<!-- Zone fixe W : 30 passage + 70 debattement = 100 cm (ES-03)     -->
+<!-- BLOCK_1 — 1 desk, facing EAST                                    -->
+<!-- Fixed zone W: 30 passage + 70 chair clearance = 100 cm (ES-03) -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="280" height="230" viewBox="0 0 280 230">
   <rect width="280" height="230" fill="#1e1e1e"/>
   <text x="14" y="18" font-family="sans-serif" font-size="11" font-weight="bold" fill="#fff">N</text>
   <line x1="18" y1="21" x2="18" y2="36" stroke="#fff" stroke-width="1.5"/>
 
-  <!-- Zone circulation W : 30cm, rectangle anthracite contour foncé -->
+  <!-- Circulation zone W: 30cm, dark anthracite rectangle -->
   <rect x="60" y="50" width="15" height="90" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
-  <!-- Zone fixe debattement 70cm -->
+  <!-- Fixed zone chair clearance 70cm -->
   <rect x="75" y="50" width="35" height="90" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
 
-  <!-- Fauteuil -->
+  <!-- Chair -->
   <rect x="96" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="92" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="99" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="99" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Bureau -->
+  <!-- Desk -->
   <rect x="110" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="144" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="128" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS01</text>
 
-  <!-- Cotes -->
+  <!-- Dimensions -->
   <text x="67" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">30</text>
   <text x="92" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">70</text>
   <text x="130" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">80</text>
   <text x="157" y="99" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
 
-  <text x="140" y="168" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_1 — 1 poste</text>
-  <text x="140" y="184" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Emprise fixe : 180 × 180 cm (ES-03)</text>
+  <text x="140" y="168" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_1 — 1 desk</text>
+  <text x="140" y="184" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Fixed footprint: 180 × 180 cm (ES-03)</text>
 </svg>
 
 <!-- ================================================================ -->
-<!-- BLOCK_2_FACE — 2 postes face a face                              -->
-<!-- Zone fixe E+W : 90 passage + 70 debattement = 160 cm (ES-04)   -->
+<!-- BLOCK_2_FACE — 2 desks face to face                              -->
+<!-- Fixed zone E+W: 90 passage + 70 chair clearance = 160 cm (ES-04) -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="340" height="230" viewBox="0 0 340 230">
   <rect width="400" height="230" fill="#1e1e1e"/>
   <text x="14" y="18" font-family="sans-serif" font-size="11" font-weight="bold" fill="#fff">N</text>
   <line x1="18" y1="21" x2="18" y2="36" stroke="#fff" stroke-width="1.5"/>
 
-  <!-- Zone circulation W : 30cm -->
+  <!-- Circulation zone W: 30cm -->
   <rect x="50" y="50" width="15" height="90" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
-  <!-- Zone fixe debattement W 70cm -->
+  <!-- Fixed zone chair clearance W 70cm -->
   <rect x="65" y="50" width="35" height="90" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
 
-  <!-- Zone fixe debattement E 70cm -->
+  <!-- Fixed zone chair clearance E 70cm -->
   <rect x="180" y="50" width="35" height="90" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
-  <!-- Zone circulation E : 30cm -->
+  <!-- Circulation zone E: 30cm -->
   <rect x="215" y="50" width="15" height="90" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
 
-  <!-- Fauteuil B1 (regard EST, chaise W) -->
+  <!-- Chair B1 (facing EAST, chair W) -->
   <rect x="86" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="82" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="89" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="89" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Fauteuil B2 (regard OUEST, chaise E) — 50% sous bureau B2 (x=140..180) -->
+  <!-- Chair B2 (facing WEST, chair E) — 50% under desk B2 (x=140..180) -->
   <rect x="166" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="192" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="169" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="169" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Bureau B1 (regard EST) -->
+  <!-- Desk B1 (facing EAST) -->
   <rect x="100" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="134" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="118" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS01</text>
 
-  <!-- Bureau B2 (regard OUEST) — colle -->
+  <!-- Desk B2 (facing WEST) — flush -->
   <rect x="140" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="141" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="162" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS02</text>
 
-  <!-- Cotes -->
+  <!-- Dimensions -->
   <text x="57" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">30</text>
   <text x="82" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">70</text>
   <text x="120" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">80</text>
@@ -122,105 +122,105 @@
   <text x="222" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">30</text>
   <text x="237" y="99" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
 
-  <text x="155" y="168" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_2_FACE — 2 postes face a face</text>
-  <text x="155" y="184" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Emprise fixe : 360 × 180 cm (ES-03)</text>
+  <text x="155" y="168" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_2_FACE — 2 desks face to face</text>
+  <text x="155" y="184" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Fixed footprint: 360 × 180 cm (ES-03)</text>
 </svg>
 
 <!-- ================================================================ -->
-<!-- BLOCK_2_SIDE — 2 postes cote a cote, regard EST                  -->
-<!-- Zone fixe W : 90 passage + 70 debattement = 160 cm (ES-04)     -->
+<!-- BLOCK_2_SIDE — 2 desks side by side, facing EAST                 -->
+<!-- Fixed zone W: 90 passage + 70 chair clearance = 160 cm (ES-04) -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="320" height="310" viewBox="0 0 320 310">
   <rect width="320" height="310" fill="#1e1e1e"/>
   <text x="14" y="18" font-family="sans-serif" font-size="11" font-weight="bold" fill="#fff">N</text>
   <line x1="18" y1="21" x2="18" y2="36" stroke="#fff" stroke-width="1.5"/>
 
-  <!-- Zone circulation W : 90cm -->
+  <!-- Circulation zone W: 90cm -->
   <rect x="40" y="50" width="45" height="180" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
-  <!-- Zone fixe debattement 70cm -->
+  <!-- Fixed zone chair clearance 70cm -->
   <rect x="85" y="50" width="35" height="180" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
 
-  <!-- Fauteuil B1 (N) -->
+  <!-- Chair B1 (N) -->
   <rect x="106" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="102" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="109" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="109" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Fauteuil B2 (S) -->
+  <!-- Chair B2 (S) -->
   <rect x="106" y="170" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="102" y="174" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="109" y="168" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="109" y="197" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Bureau B1 (N) -->
+  <!-- Desk B1 (N) -->
   <rect x="120" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="154" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="138" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS01</text>
 
-  <!-- Bureau B2 (S) -->
+  <!-- Desk B2 (S) -->
   <rect x="120" y="140" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="154" y="163" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="138" y="189" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS02</text>
 
-  <!-- Cotes -->
+  <!-- Dimensions -->
   <text x="62" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">90</text>
   <text x="102" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">70</text>
   <text x="140" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">80</text>
   <text x="167" y="99" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
   <text x="167" y="189" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
 
-  <text x="160" y="258" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_2_SIDE — 2 postes cote a cote</text>
-  <text x="160" y="274" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Emprise fixe : 240 × 360 cm (ES-04)</text>
+  <text x="160" y="258" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_2_SIDE — 2 desks side by side</text>
+  <text x="160" y="274" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Fixed footprint: 240 × 360 cm (ES-04)</text>
 </svg>
 
 <!-- ================================================================ -->
-<!-- BLOCK_3_SIDE — 3 postes cote a cote, regard EST                  -->
-<!-- Zone fixe W : 90 passage + 70 debattement = 160 cm (ES-04)     -->
+<!-- BLOCK_3_SIDE — 3 desks side by side, facing EAST                 -->
+<!-- Fixed zone W: 90 passage + 70 chair clearance = 160 cm (ES-04) -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="320" height="400" viewBox="0 0 320 400">
   <rect width="320" height="400" fill="#1e1e1e"/>
   <text x="14" y="18" font-family="sans-serif" font-size="11" font-weight="bold" fill="#fff">N</text>
   <line x1="18" y1="21" x2="18" y2="36" stroke="#fff" stroke-width="1.5"/>
 
-  <!-- Zone circulation W : 90cm -->
+  <!-- Circulation zone W: 90cm -->
   <rect x="40" y="50" width="45" height="270" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
-  <!-- Zone fixe debattement 70cm -->
+  <!-- Fixed zone chair clearance 70cm -->
   <rect x="85" y="50" width="35" height="270" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
 
-  <!-- Fauteuil B1 -->
+  <!-- Chair B1 -->
   <rect x="106" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="102" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="109" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="109" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Fauteuil B2 -->
+  <!-- Chair B2 -->
   <rect x="106" y="170" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="102" y="174" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="109" y="168" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="109" y="197" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Fauteuil B3 -->
+  <!-- Chair B3 -->
   <rect x="106" y="260" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="102" y="264" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="109" y="258" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="109" y="287" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Bureau B1 -->
+  <!-- Desk B1 -->
   <rect x="120" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="154" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="138" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS01</text>
 
-  <!-- Bureau B2 -->
+  <!-- Desk B2 -->
   <rect x="120" y="140" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="154" y="163" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="138" y="189" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS02</text>
 
-  <!-- Bureau B3 -->
+  <!-- Desk B3 -->
   <rect x="120" y="230" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="154" y="253" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="138" y="279" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS03</text>
 
-  <!-- Cotes -->
+  <!-- Dimensions -->
   <text x="62" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">90</text>
   <text x="102" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">70</text>
   <text x="140" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">80</text>
@@ -228,30 +228,30 @@
   <text x="167" y="189" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
   <text x="167" y="279" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
 
-  <text x="160" y="348" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_3_SIDE — 3 postes cote a cote</text>
-  <text x="160" y="364" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Emprise fixe : 240 × 540 cm (ES-04)</text>
+  <text x="160" y="348" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_3_SIDE — 3 desks side by side</text>
+  <text x="160" y="364" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Fixed footprint: 240 × 540 cm (ES-04)</text>
 </svg>
 
 <!-- ================================================================ -->
-<!-- BLOCK_4_FACE — 4 postes (2x2 face a face)                       -->
-<!-- Zone fixe E+W : 90 passage + 70 debattement = 160 cm (ES-04)   -->
+<!-- BLOCK_4_FACE — 4 desks (2x2 face to face)                       -->
+<!-- Fixed zone E+W: 90 passage + 70 chair clearance = 160 cm (ES-04) -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="320" viewBox="0 0 400 320">
   <rect width="400" height="320" fill="#1e1e1e"/>
   <text x="14" y="18" font-family="sans-serif" font-size="11" font-weight="bold" fill="#fff">N</text>
   <line x1="18" y1="21" x2="18" y2="36" stroke="#fff" stroke-width="1.5"/>
 
-  <!-- Zone circulation W : 90cm -->
+  <!-- Circulation zone W: 90cm -->
   <rect x="20" y="50" width="45" height="180" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
-  <!-- Zone fixe debattement W 70cm -->
+  <!-- Fixed zone chair clearance W 70cm -->
   <rect x="65" y="50" width="35" height="180" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
 
-  <!-- Zone fixe debattement E 70cm -->
+  <!-- Fixed zone chair clearance E 70cm -->
   <rect x="180" y="50" width="35" height="180" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
-  <!-- Zone circulation E : 90cm -->
+  <!-- Circulation zone E: 90cm -->
   <rect x="215" y="50" width="45" height="180" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
 
-  <!-- Rangee Nord — Fauteuils -->
+  <!-- North row — Chairs -->
   <rect x="86" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="82" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="89" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
@@ -262,7 +262,7 @@
   <rect x="169" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="169" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Rangee Nord — Bureaux -->
+  <!-- North row — Desks -->
   <rect x="100" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="134" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="118" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS01</text>
@@ -271,7 +271,7 @@
   <rect x="141" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="162" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS02</text>
 
-  <!-- Rangee Sud — Fauteuils -->
+  <!-- South row — Chairs -->
   <rect x="86" y="170" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="82" y="174" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="89" y="168" width="22" height="5" fill="#7a5c10" rx="2"/>
@@ -282,7 +282,7 @@
   <rect x="169" y="168" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="169" y="197" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Rangee Sud — Bureaux -->
+  <!-- South row — Desks -->
   <rect x="100" y="140" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="134" y="163" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="118" y="189" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS03</text>
@@ -291,7 +291,7 @@
   <rect x="141" y="163" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="162" y="189" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS04</text>
 
-  <!-- Cotes -->
+  <!-- Dimensions -->
   <text x="42" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">90</text>
   <text x="82" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">70</text>
   <text x="120" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">80</text>
@@ -301,30 +301,30 @@
   <text x="267" y="99" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
   <text x="267" y="189" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
 
-  <text x="170" y="258" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_4_FACE — 4 postes (2x2 face a face)</text>
-  <text x="170" y="274" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Emprise fixe : 480 × 360 cm (ES-04)</text>
+  <text x="170" y="258" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_4_FACE — 4 desks (2x2 face to face)</text>
+  <text x="170" y="274" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Fixed footprint: 480 × 360 cm (ES-04)</text>
 </svg>
 
 <!-- ================================================================ -->
-<!-- BLOCK_6_FACE — 6 postes (3x2 face a face)                       -->
-<!-- Zone fixe E+W : 90 passage + 70 debattement = 160 cm (ES-04)   -->
+<!-- BLOCK_6_FACE — 6 desks (3x2 face to face)                       -->
+<!-- Fixed zone E+W: 90 passage + 70 chair clearance = 160 cm (ES-04) -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="420" viewBox="0 0 400 420">
   <rect width="400" height="420" fill="#1e1e1e"/>
   <text x="14" y="18" font-family="sans-serif" font-size="11" font-weight="bold" fill="#fff">N</text>
   <line x1="18" y1="21" x2="18" y2="36" stroke="#fff" stroke-width="1.5"/>
 
-  <!-- Zone circulation W : 90cm -->
+  <!-- Circulation zone W: 90cm -->
   <rect x="20" y="50" width="45" height="270" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
-  <!-- Zone fixe debattement W 70cm -->
+  <!-- Fixed zone chair clearance W 70cm -->
   <rect x="65" y="50" width="35" height="270" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
 
-  <!-- Zone fixe debattement E 70cm -->
+  <!-- Fixed zone chair clearance E 70cm -->
   <rect x="180" y="50" width="35" height="270" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
-  <!-- Zone circulation E : 90cm -->
+  <!-- Circulation zone E: 90cm -->
   <rect x="215" y="50" width="45" height="270" fill="#1e1e1e" stroke="#333" stroke-width="0.8"/>
 
-  <!-- Rangee 1 — Fauteuils -->
+  <!-- Row 1 — Chairs -->
   <rect x="86" y="80" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="82" y="84" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="89" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
@@ -334,7 +334,7 @@
   <rect x="169" y="78" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="169" y="107" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Rangee 1 — Bureaux -->
+  <!-- Row 1 — Desks -->
   <rect x="100" y="50" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="134" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="118" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS01</text>
@@ -342,7 +342,7 @@
   <rect x="141" y="73" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="162" y="99" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS02</text>
 
-  <!-- Rangee 2 — Fauteuils -->
+  <!-- Row 2 — Chairs -->
   <rect x="86" y="170" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="82" y="174" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="89" y="168" width="22" height="5" fill="#7a5c10" rx="2"/>
@@ -352,7 +352,7 @@
   <rect x="169" y="168" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="169" y="197" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Rangee 2 — Bureaux -->
+  <!-- Row 2 — Desks -->
   <rect x="100" y="140" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="134" y="163" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="118" y="189" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS03</text>
@@ -360,7 +360,7 @@
   <rect x="141" y="163" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="162" y="189" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS04</text>
 
-  <!-- Rangee 3 — Fauteuils -->
+  <!-- Row 3 — Chairs -->
   <rect x="86" y="260" width="28" height="30" fill="#8B6914" rx="5"/>
   <rect x="82" y="264" width="6" height="22" fill="#6a4e0e" rx="3"/>
   <rect x="89" y="258" width="22" height="5" fill="#7a5c10" rx="2"/>
@@ -370,7 +370,7 @@
   <rect x="169" y="258" width="22" height="5" fill="#7a5c10" rx="2"/>
   <rect x="169" y="287" width="22" height="5" fill="#7a5c10" rx="2"/>
 
-  <!-- Rangee 3 — Bureaux -->
+  <!-- Row 3 — Desks -->
   <rect x="100" y="230" width="40" height="90" fill="#d0d0d0" stroke="#888" stroke-width="1" rx="1"/>
   <rect x="134" y="253" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="118" y="279" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS05</text>
@@ -378,7 +378,7 @@
   <rect x="141" y="253" width="5" height="44" fill="#1a1a1a" rx="1"/>
   <text x="162" y="279" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#555">WS06</text>
 
-  <!-- Cotes -->
+  <!-- Dimensions -->
   <text x="42" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">90</text>
   <text x="82" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">70</text>
   <text x="120" y="43" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#aaa">80</text>
@@ -389,19 +389,19 @@
   <text x="267" y="189" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
   <text x="267" y="279" font-family="sans-serif" font-size="9" fill="#aaa">180</text>
 
-  <text x="170" y="350" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_6_FACE — 6 postes (3x2 face a face)</text>
-  <text x="200" y="366" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Emprise fixe : 480 × 540 cm (ES-04)</text>
+  <text x="170" y="350" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#ccc">BLOCK_6_FACE — 6 desks (3x2 face to face)</text>
+  <text x="200" y="366" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">Fixed footprint: 480 × 540 cm (ES-04)</text>
 </svg>
 
 <!-- ================================================================ -->
-<!-- LEGENDE                                                          -->
+<!-- LEGEND                                                           -->
 <!-- ================================================================ -->
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="50" viewBox="0 0 400 50">
   <rect width="400" height="50" fill="#1e1e1e"/>
   <rect x="20" y="10" width="14" height="11" fill="#d0d0d0" stroke="#888" stroke-width="0.5"/>
-  <text x="40" y="20" font-family="sans-serif" font-size="10" fill="#999">Bureau</text>
+  <text x="40" y="20" font-family="sans-serif" font-size="10" fill="#999">Desk</text>
   <rect x="120" y="10" width="14" height="11" fill="#3b7dc9" fill-opacity="0.40" stroke="#4a90d9" stroke-width="0.5"/>
-  <text x="140" y="20" font-family="sans-serif" font-size="10" fill="#999">Zone fixe (debattement + passage)</text>
+  <text x="140" y="20" font-family="sans-serif" font-size="10" fill="#999">Fixed zone (chair clearance + passage)</text>
 </svg>
 
 </body>

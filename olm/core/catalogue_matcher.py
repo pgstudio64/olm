@@ -1,15 +1,15 @@
-"""Matching de patterns catalogue vers pièces réelles — solver_lab.
+"""Catalogue pattern matching against real rooms.
 
-Pipeline (D-39/D-40, TODO Étape 3) :
-    1. Sélection : emprise ≤ pièce + front de Pareto (largeur, profondeur)
-    2. Miroir E-O
-    3. Calage sticks + homothétie
-    4. Suppression unitaire de postes en zone interdite
-    5. Scoring (circulation + confort)
-    6. Sélection du meilleur par standard
-    7. Rectangle vide résiduel
+Pipeline (7 steps):
+    1. Selection: footprint <= room + Pareto front (width, depth)
+    2. East-West mirror
+    3. Stick clamping + homothety
+    4. Individual desk removal in forbidden zones
+    5. Scoring (circulation + comfort)
+    6. Best selection per standard
+    7. Residual free rectangle
 
-Module : croisement 3 standards × pièces cibles.
+Module: cross-matching 3 standards x target rooms.
 """
 from __future__ import annotations
 
@@ -43,15 +43,15 @@ CATALOGUE_PATH = os.path.join(_PROJECT_DIR, "catalogue", "patterns.json")
 
 @dataclass
 class PatternCandidate:
-    """Pattern candidat issu de la sélection.
+    """Pattern candidate from the selection step.
 
     Attributes:
-        pattern: Données JSON brutes du pattern.
-        name: Nom du pattern.
-        room_width_cm: Largeur de la pièce du pattern.
-        room_depth_cm: Profondeur de la pièce du pattern.
-        standard: Standard d'aménagement.
-        n_desks: Nombre total de postes.
+        pattern: Raw JSON pattern data.
+        name: Pattern name.
+        room_width_cm: Pattern room width.
+        room_depth_cm: Pattern room depth.
+        standard: Layout standard.
+        n_desks: Total number of desks.
     """
     pattern: dict
     name: str
@@ -63,12 +63,12 @@ class PatternCandidate:
 
 @dataclass
 class SelectionResult:
-    """Résultat de la sélection pour un standard donné.
+    """Selection result for a given standard.
 
     Attributes:
-        standard: Nom du standard.
-        candidates: Patterns sur le front de Pareto.
-        all_fitting: Tous les patterns dont l'emprise rentre (avant Pareto).
+        standard: Standard name.
+        candidates: Patterns on the Pareto front.
+        all_fitting: All patterns whose footprint fits (before Pareto).
     """
     standard: str
     candidates: list[PatternCandidate]
@@ -76,17 +76,17 @@ class SelectionResult:
 
 
 # ---------------------------------------------------------------------------
-# Chargement catalogue
+# Catalogue loading
 # ---------------------------------------------------------------------------
 
 def load_catalogue(path: str = CATALOGUE_PATH) -> list[dict]:
-    """Charge le catalogue de patterns depuis le fichier JSON.
+    """Load the pattern catalogue from the JSON file.
 
     Args:
-        path: Chemin vers le fichier catalogue.
+        path: Path to the catalogue file.
 
     Returns:
-        Liste des patterns (dicts JSON).
+        List of patterns (JSON dicts).
     """
     if not os.path.exists(path):
         return []
@@ -96,10 +96,10 @@ def load_catalogue(path: str = CATALOGUE_PATH) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Comptage de postes
+# Desk counting
 # ---------------------------------------------------------------------------
 
-# Dimensions canoniques (eo_cm, ns_cm) et nombre de postes par type
+# Canonical dimensions (eo_cm, ns_cm) and desk count per block type
 _BLOCK_REGISTRY = {
     "BLOCK_1":          (BLOCK_1.eo_cm, BLOCK_1.ns_cm, 1),
     "BLOCK_2_FACE":     (BLOCK_2_FACE.eo_cm, BLOCK_2_FACE.ns_cm, 2),
@@ -113,7 +113,7 @@ _BLOCK_REGISTRY = {
 
 _BLOCK_N_DESKS = {k: v[2] for k, v in _BLOCK_REGISTRY.items()}
 
-# Types de blocs ortho (miroir = swap D↔G)
+# Ortho block types (mirror = swap R↔L)
 _ORTHO_MIRROR = {
     "BLOCK_2_ORTHO_R": "BLOCK_2_ORTHO_L",
     "BLOCK_2_ORTHO_L": "BLOCK_2_ORTHO_R",
@@ -121,13 +121,13 @@ _ORTHO_MIRROR = {
 
 
 def count_desks(pattern: dict) -> int:
-    """Compte le nombre total de postes dans un pattern JSON.
+    """Count the total number of desks in a JSON pattern.
 
     Args:
-        pattern: Pattern au format catalogue JSON.
+        pattern: Pattern in catalogue JSON format.
 
     Returns:
-        Nombre de postes.
+        Number of desks.
     """
     total = 0
     for row in pattern.get("rows", []):
@@ -138,14 +138,14 @@ def count_desks(pattern: dict) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Étape 1 — Sélection + front de Pareto
+# Step 1 — Selection + Pareto front
 # ---------------------------------------------------------------------------
 
 def effective_dimensions(room: RoomSpec) -> tuple[int, int]:
-    """Calcule les dimensions effectives d'une pièce après exclusions périphériques.
+    """Compute the effective dimensions of a room after peripheral exclusions.
 
-    Une exclusion est périphérique si elle longe un mur sur toute sa largeur
-    ou profondeur. Elle réduit la dimension effective correspondante.
+    A peripheral exclusion runs along a full wall width or depth and reduces
+    the corresponding effective dimension.
 
     Returns:
         (effective_width_cm, effective_depth_cm)
@@ -173,9 +173,9 @@ def effective_dimensions(room: RoomSpec) -> tuple[int, int]:
 
 
 def _fits_in_room(pattern: dict, room: RoomSpec) -> bool:
-    """Vérifie si l'emprise du pattern rentre dans la pièce cible.
+    """Check whether the pattern footprint fits inside the target room.
 
-    Utilise les dimensions effectives (après exclusions périphériques).
+    Uses effective dimensions (after peripheral exclusions).
     """
     pw = pattern.get("room_width_cm", 0)
     pd = pattern.get("room_depth_cm", 0)
@@ -184,12 +184,12 @@ def _fits_in_room(pattern: dict, room: RoomSpec) -> bool:
 
 
 def _is_dominated(p: PatternCandidate, others: list[PatternCandidate]) -> bool:
-    """Vérifie si p est dominé par au moins un autre candidat.
+    """Check whether p is dominated by at least one other candidate.
 
-    Un pattern P1 domine P2 si :
-        P1.room_width_cm >= P2.room_width_cm ET
-        P1.room_depth_cm >= P2.room_depth_cm ET
-        au moins une inégalité stricte.
+    Pattern P1 dominates P2 if:
+        P1.room_width_cm >= P2.room_width_cm AND
+        P1.room_depth_cm >= P2.room_depth_cm AND
+        at least one inequality is strict.
     """
     for o in others:
         if o is p:
@@ -203,15 +203,15 @@ def _is_dominated(p: PatternCandidate, others: list[PatternCandidate]) -> bool:
 
 
 def pareto_front(candidates: list[PatternCandidate]) -> list[PatternCandidate]:
-    """Extrait le front de Pareto sur (largeur, profondeur).
+    """Extract the Pareto front on (width, depth).
 
-    Les patterns dominés en largeur ET profondeur par un autre sont exclus.
+    Patterns dominated in both width AND depth by another are excluded.
 
     Args:
-        candidates: Liste de candidats dont l'emprise rentre dans la pièce.
+        candidates: List of candidates whose footprint fits in the room.
 
     Returns:
-        Sous-liste des candidats non dominés.
+        Sub-list of non-dominated candidates.
     """
     if len(candidates) <= 1:
         return list(candidates)
@@ -223,19 +223,19 @@ def select_candidates(
     room: RoomSpec,
     standard: str | None = None,
 ) -> SelectionResult | list[SelectionResult]:
-    """Sélectionne les patterns candidats pour une pièce cible.
+    """Select candidate patterns for a target room.
 
-    Filtre par emprise (≤ pièce) puis extrait le front de Pareto.
-    Si standard est spécifié, retourne un seul SelectionResult.
-    Sinon, retourne une liste de 3 SelectionResult (un par standard).
+    Filters by footprint (<= room) then extracts the Pareto front.
+    If standard is specified, returns a single SelectionResult.
+    Otherwise returns a list of 3 SelectionResult (one per standard).
 
     Args:
-        catalogue: Patterns JSON du catalogue.
-        room: Pièce cible.
-        standard: Standard d'aménagement (None = tous les 3).
+        catalogue: JSON patterns from the catalogue.
+        room: Target room.
+        standard: Layout standard (None = all 3).
 
     Returns:
-        SelectionResult ou liste de SelectionResult.
+        SelectionResult or list of SelectionResult.
     """
     standards = [standard] if standard else list(ALL_CONFIGS.keys())
     results = []
@@ -258,7 +258,7 @@ def select_candidates(
             fitting.append(candidate)
 
         front = pareto_front(fitting)
-        # Tri par nombre de postes décroissant
+        # Sort by desk count descending
         front.sort(key=lambda c: c.n_desks, reverse=True)
 
         results.append(SelectionResult(
@@ -268,7 +268,7 @@ def select_candidates(
         ))
 
         logger.info(
-            "Sélection %s : %d patterns rentrent, %d sur le front Pareto",
+            "Selection %s: %d patterns fit, %d on Pareto front",
             std, len(fitting), len(front),
         )
 
@@ -278,17 +278,17 @@ def select_candidates(
 
 
 # ---------------------------------------------------------------------------
-# Étape 2 — Miroir Est-Ouest
+# Step 2 — East-West mirror
 # ---------------------------------------------------------------------------
 
 def _block_eo_extent(block: dict) -> int:
-    """Largeur EO d'un bloc à son orientation courante.
+    """EO width of a block at its current orientation.
 
     Args:
-        block: Bloc JSON avec 'type' et 'orientation'.
+        block: JSON block with 'type' and 'orientation'.
 
     Returns:
-        Largeur en cm dans l'axe EO.
+        Width in cm along the EO axis.
     """
     btype = block.get("type", "")
     orient = block.get("orientation", 0)
@@ -299,18 +299,18 @@ def _block_eo_extent(block: dict) -> int:
 
 
 def _mirror_block(block: dict) -> dict:
-    """Miroir E-O d'un bloc individuel.
+    """East-West mirror of an individual block.
 
-    - Types ortho : ORTHO_R ↔ ORTHO_L, orientation = (360 - θ) % 360
-    - Autres blocs : orientation = (180 - θ) % 360
-    - Sticks : E ↔ O
-    - offset_ns_cm inchangé
+    - Ortho types: ORTHO_R <-> ORTHO_L, orientation = (360 - theta) % 360
+    - Other blocks: orientation = (180 - theta) % 360
+    - Sticks: E <-> O
+    - offset_ns_cm unchanged
 
     Args:
-        block: Bloc JSON original.
+        block: Original JSON block.
 
     Returns:
-        Nouveau dict bloc miroir.
+        New mirrored block dict.
     """
     b = copy.deepcopy(block)
     btype = b.get("type", "")
@@ -323,7 +323,7 @@ def _mirror_block(block: dict) -> dict:
     else:
         b["orientation"] = (180 - orient) % 360
 
-    # Swap sticks E ↔ O (W est un alias de O dans certains cas)
+    # Swap sticks E <-> O (W is an alias of O in some cases)
     if "sticks" in b:
         _STICK_MIRROR = {"E": "O", "O": "E", "W": "E", "N": "N", "S": "S"}
         b["sticks"] = [_STICK_MIRROR.get(s, s) for s in b["sticks"]]
@@ -332,22 +332,22 @@ def _mirror_block(block: dict) -> dict:
 
 
 def _mirror_row(row: dict, room_width_cm: int) -> dict:
-    """Miroir E-O d'une rangée de blocs.
+    """East-West mirror of a block row.
 
-    Inverse l'ordre des blocs et recalcule les gaps.
+    Reverses block order and recalculates gaps.
 
     Args:
-        row: Rangée JSON {"blocks": [...]}.
-        room_width_cm: Largeur de la pièce.
+        row: JSON row {"blocks": [...]}.
+        room_width_cm: Room width.
 
     Returns:
-        Nouvelle rangée miroir.
+        New mirrored row.
     """
     blocks = row.get("blocks", [])
     if not blocks:
         return copy.deepcopy(row)
 
-    # Calculer les positions absolues de chaque bloc
+    # Compute absolute position of each block
     positions = []  # (x_start, width)
     x = 0
     for block in blocks:
@@ -357,17 +357,17 @@ def _mirror_row(row: dict, room_width_cm: int) -> dict:
         positions.append((x, w))
         x += w
 
-    # Espace résiduel à droite
+    # Residual space on the right
     remaining_right = room_width_cm - x
 
-    # Miroir : ordre inversé, positions reflétées
+    # Mirror: reversed order, reflected positions
     mirrored_blocks = []
     n = len(blocks)
     prev_right = 0
 
     for i in range(n - 1, -1, -1):
         orig_x, orig_w = positions[i]
-        # Position miroir du bloc
+        # Mirror position of the block
         mirror_x = room_width_cm - orig_x - orig_w
         gap = mirror_x - prev_right
         mirrored_block = _mirror_block(blocks[i])
@@ -379,7 +379,7 @@ def _mirror_row(row: dict, room_width_cm: int) -> dict:
 
 
 def _mirror_windows(windows: list[dict], room_width_cm: int) -> list[dict]:
-    """Miroir E-O des fenêtres."""
+    """East-West mirror of windows."""
     result = []
     for w in windows:
         mw = copy.deepcopy(w)
@@ -395,7 +395,7 @@ def _mirror_windows(windows: list[dict], room_width_cm: int) -> list[dict]:
 
 
 def _mirror_openings(openings: list[dict], room_width_cm: int) -> list[dict]:
-    """Miroir E-O des ouvertures (portes)."""
+    """East-West mirror of openings (doors)."""
     result = []
     for o in openings:
         mo = copy.deepcopy(o)
@@ -416,7 +416,7 @@ def _mirror_openings(openings: list[dict], room_width_cm: int) -> list[dict]:
 def _mirror_exclusions(
     exclusions: list[dict], room_width_cm: int,
 ) -> list[dict]:
-    """Miroir E-O des zones d'exclusion."""
+    """East-West mirror of exclusion zones."""
     result = []
     for z in exclusions:
         mz = copy.deepcopy(z)
@@ -426,31 +426,31 @@ def _mirror_exclusions(
 
 
 def mirror_pattern(pattern: dict) -> dict:
-    """Génère le miroir Est-Ouest d'un pattern.
+    """Generate the East-West mirror of a pattern.
 
-    Le miroir reflète le pattern autour de l'axe vertical central :
-    - Blocs : ordre inversé par rangée, gaps recalculés
-    - Types ortho : D ↔ G
-    - Orientations ajustées
-    - Sticks : E ↔ O
-    - Géométrie pièce : offsets miroir, hinge_side inversé
+    The mirror reflects the pattern around the vertical central axis:
+    - Blocks: reversed order per row, gaps recalculated
+    - Ortho types: R <-> L
+    - Orientations adjusted
+    - Sticks: E <-> O
+    - Room geometry: mirrored offsets, hinge_side reversed
 
     Args:
-        pattern: Pattern JSON original.
+        pattern: Original JSON pattern.
 
     Returns:
-        Nouveau dict pattern miroir, suffixé '_MIR'.
+        New mirrored pattern dict, suffixed '_MIR'.
     """
     room_w = pattern.get("room_width_cm", 0)
     mirrored = copy.deepcopy(pattern)
     mirrored["name"] = pattern["name"] + "_MIR"
 
-    # Miroir des rangées
+    # Mirror rows
     mirrored["rows"] = [
         _mirror_row(row, room_w) for row in pattern.get("rows", [])
     ]
 
-    # Miroir de la géométrie pièce
+    # Mirror room geometry
     if "room_windows" in pattern:
         mirrored["room_windows"] = _mirror_windows(
             pattern["room_windows"], room_w,
@@ -468,14 +468,14 @@ def mirror_pattern(pattern: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Étape 3 — Calage sticks + homothétie
+# Step 3 — Stick clamping + homothety
 # ---------------------------------------------------------------------------
 
 _STICK_O = frozenset({"O", "W"})
 
 
 def _block_ns_extent(block: dict) -> int:
-    """Hauteur NS d'un bloc à son orientation courante."""
+    """NS height of a block at its current orientation."""
     btype = block.get("type", "")
     orient = block.get("orientation", 0)
     eo, ns, _ = _BLOCK_REGISTRY.get(btype, (0, 0, 0))
@@ -487,28 +487,28 @@ def _block_ns_extent(block: dict) -> int:
 def _adapt_row_eo(
     row: dict, orig_width: int, target_width: int,
 ) -> dict:
-    """Adapte une rangée à une largeur de pièce cible.
+    """Adapt a row to a target room width.
 
-    Algorithme :
-    - Blocs stick O : position fixe (distance au mur ouest préservée)
-    - Blocs stick E : position décalée de dw (distance au mur est préservée)
-    - Blocs sans stick EO : interpolation linéaire entre les ancres voisines
-    - Sans ancre : positions inchangées (espace supplémentaire à droite)
+    Algorithm:
+    - Blocks with stick O: fixed position (distance to west wall preserved)
+    - Blocks with stick E: shifted by dw (distance to east wall preserved)
+    - Blocks without EO stick: linear interpolation between neighbouring anchors
+    - No anchor: positions unchanged (extra space on the right)
 
     Args:
-        row: Rangée JSON originale.
-        orig_width: Largeur de la pièce du pattern.
-        target_width: Largeur de la pièce cible.
+        row: Original JSON row.
+        orig_width: Pattern room width.
+        target_width: Target room width.
 
     Returns:
-        Nouvelle rangée avec gaps adaptés.
+        New row with adapted gaps.
     """
     dw = target_width - orig_width
     blocks = row.get("blocks", [])
     if not blocks or dw == 0:
         return copy.deepcopy(row)
 
-    # Positions absolues originales
+    # Original absolute positions
     positions = []  # (x_start, width)
     x = 0
     for b in blocks:
@@ -517,7 +517,7 @@ def _adapt_row_eo(
         positions.append((x, w))
         x += w
 
-    # Ancres : (index, new_x)
+    # Anchors: (index, new_x)
     anchors = []
     for i, b in enumerate(blocks):
         sticks = set(b.get("sticks", []))
@@ -526,11 +526,11 @@ def _adapt_row_eo(
         elif "E" in sticks:
             anchors.append((i, positions[i][0] + dw))
 
-    # Nouvelles positions
+    # New positions
     new_x = [positions[i][0] for i in range(len(blocks))]
 
     if not anchors:
-        pass  # Pas d'ancre → positions inchangées, espace à droite
+        pass  # No anchor -> positions unchanged, extra space on the right
     elif len(anchors) == 1:
         idx, ax = anchors[0]
         shift = ax - positions[idx][0]
@@ -541,19 +541,19 @@ def _adapt_row_eo(
         for idx, ax in anchors:
             new_x[idx] = ax
 
-        # Avant la première ancre : même décalage
+        # Before first anchor: same shift
         first_idx, first_ax = anchors[0]
         shift_left = first_ax - positions[first_idx][0]
         for i in range(first_idx):
             new_x[i] = positions[i][0] + shift_left
 
-        # Après la dernière ancre : même décalage
+        # After last anchor: same shift
         last_idx, last_ax = anchors[-1]
         shift_right = last_ax - positions[last_idx][0]
         for i in range(last_idx + 1, len(blocks)):
             new_x[i] = positions[i][0] + shift_right
 
-        # Entre ancres consécutives : interpolation linéaire
+        # Between consecutive anchors: linear interpolation
         for a in range(len(anchors) - 1):
             li, lx = anchors[a]
             ri, rx = anchors[a + 1]
@@ -566,7 +566,7 @@ def _adapt_row_eo(
                 else:
                     new_x[i] = lx
 
-    # Recalcul des gaps
+    # Recalculate gaps
     new_blocks = []
     prev_right = 0
     for i in range(len(blocks)):
@@ -582,22 +582,22 @@ def _adapt_row_eo(
 def _adapt_ns(
     pattern: dict, orig_depth: int, target_depth: int,
 ) -> dict:
-    """Adapte la dimension NS d'un pattern à la pièce cible.
+    """Adapt the NS dimension of a pattern to the target room.
 
-    Distribution de l'espace supplémentaire dd :
-    - Rangées avec au moins un bloc stick N : position NS préservée
-    - Rangées avec au moins un bloc stick S : décalées de dd
-    - Rangées sans stick NS : interpolation ou distribution proportionnelle
-    - Si une seule rangée : offset_ns_cm des blocs stick N/S ajusté, sinon
-      espace supplémentaire distribué dans row_gaps_cm
+    Distribution of extra space dd:
+    - Rows with at least one N-stick block: NS position preserved
+    - Rows with at least one S-stick block: shifted by dd
+    - Rows without NS stick: interpolation or proportional distribution
+    - Single row: offset_ns_cm of N/S-stick blocks adjusted, otherwise
+      extra space distributed across row_gaps_cm
 
     Args:
-        pattern: Pattern JSON adapté (largeur déjà ajustée).
-        orig_depth: Profondeur de la pièce du pattern.
-        target_depth: Profondeur de la pièce cible.
+        pattern: Adapted JSON pattern (width already adjusted).
+        orig_depth: Pattern room depth.
+        target_depth: Target room depth.
 
     Returns:
-        Pattern avec row_gaps_cm et offset_ns_cm ajustés.
+        Pattern with adjusted row_gaps_cm and offset_ns_cm.
     """
     dd = target_depth - orig_depth
     p = copy.deepcopy(pattern)
@@ -608,8 +608,8 @@ def _adapt_ns(
         return p
 
     if len(rows) == 1:
-        # Une seule rangée : l'espace supplémentaire va au-dessus/en-dessous
-        # Les blocs avec stick S voient leur offset_ns augmenter de dd
+        # Single row: extra space goes above/below
+        # Blocks with stick S have their offset_ns increased by dd
         for b in rows[0].get("blocks", []):
             sticks = set(b.get("sticks", []))
             if "S" in sticks:
@@ -617,8 +617,8 @@ def _adapt_ns(
         p["rows"] = rows
         return p
 
-    # Plusieurs rangées : distribuer dd dans les row_gaps
-    # Identifier si première rangée a stick N ou dernière a stick S
+    # Multiple rows: distribute dd into row_gaps
+    # Identify if first row has stick N or last row has stick S
     def _row_has_stick(row, stick_dir):
         for b in row.get("blocks", []):
             if stick_dir in set(b.get("sticks", [])):
@@ -629,17 +629,17 @@ def _adapt_ns(
     last_has_s = _row_has_stick(rows[-1], "S")
 
     if not row_gaps:
-        # Pas de gaps entre rangées → dd va en dessous
+        # No gaps between rows -> dd goes below
         p["row_gaps_cm"] = row_gaps
         return p
 
-    # Distribuer dd proportionnellement dans les row_gaps
+    # Distribute dd proportionally into row_gaps
     total_gaps = sum(row_gaps)
     if total_gaps > 0:
         for i in range(len(row_gaps)):
             row_gaps[i] += int(round(dd * row_gaps[i] / total_gaps))
     else:
-        # Gaps tous à 0 : distribution égale
+        # All gaps at 0: equal distribution
         per_gap = dd // len(row_gaps)
         for i in range(len(row_gaps)):
             row_gaps[i] += per_gap
@@ -651,24 +651,24 @@ def _adapt_ns(
 def adapt_to_room(
     pattern: dict, target_room: RoomSpec,
 ) -> dict:
-    """Adapte un pattern catalogue à une pièce cible.
+    """Adapt a catalogue pattern to a target room.
 
-    Calage : les blocs stick restent collés à leur mur.
-    Homothétie : les blocs non-stick sont redistribués proportionnellement.
+    Clamping: stick blocks stay anchored to their wall.
+    Homothety: non-stick blocks are redistributed proportionally.
 
     Args:
-        pattern: Pattern JSON du catalogue.
-        target_room: Pièce cible (dimensions ≥ pattern).
+        pattern: JSON pattern from the catalogue.
+        target_room: Target room (dimensions >= pattern).
 
     Returns:
-        Nouveau pattern avec gaps ajustés et dimensions cibles.
+        New pattern with adjusted gaps and target dimensions.
     """
     orig_w = pattern.get("room_width_cm", 0)
     orig_d = pattern.get("room_depth_cm", 0)
     target_w = target_room.width_cm
     target_d = target_room.depth_cm
 
-    # Adaptation EO (par rangée)
+    # EO adaptation (per row)
     adapted = copy.deepcopy(pattern)
     adapted["rows"] = [
         _adapt_row_eo(row, orig_w, target_w)
@@ -677,10 +677,10 @@ def adapt_to_room(
     adapted["room_width_cm"] = target_w
     adapted["room_depth_cm"] = target_d
 
-    # Adaptation NS
+    # NS adaptation
     adapted = _adapt_ns(adapted, orig_d, target_d)
 
-    # Géométrie pièce : remplacer par celle de la pièce cible
+    # Room geometry: replace with target room geometry
     adapted["room_windows"] = [
         {"face": w.face.value, "offset_cm": w.offset_cm, "width_cm": w.width_cm}
         for w in target_room.windows
@@ -701,22 +701,22 @@ def adapt_to_room(
 
 
 # ---------------------------------------------------------------------------
-# Étape 4 — Suppression unitaire de postes en zone interdite
+# Step 4 — Individual desk removal in forbidden zones
 # ---------------------------------------------------------------------------
 
 @dataclass
 class DeskPosition:
-    """Position absolue d'un poste dans le pattern.
+    """Absolute position of a desk within the pattern.
 
     Attributes:
-        row_idx: Index de la rangée.
-        block_idx: Index du bloc dans la rangée.
-        desk_idx: Index du poste dans le bloc.
-        x_cm: Coin NW du poste, axe est.
-        y_cm: Coin NW du poste, axe sud.
-        width_cm: Dimension EO du poste.
-        depth_cm: Dimension NS du poste.
-        block_type: Type du bloc parent.
+        row_idx: Row index.
+        block_idx: Block index within the row.
+        desk_idx: Desk index within the block.
+        x_cm: NW corner of the desk, east axis.
+        y_cm: NW corner of the desk, south axis.
+        width_cm: EO dimension of the desk.
+        depth_cm: NS dimension of the desk.
+        block_type: Parent block type.
     """
     row_idx: int
     block_idx: int
@@ -728,8 +728,8 @@ class DeskPosition:
     block_type: str
 
 
-# Positions relatives des desks dans chaque type de bloc à orientation 0°
-# Format: list[(dx, dy, desk_w, desk_d)] relatif au coin NW du bloc
+# Relative positions of desks within each block type at orientation 0°
+# Format: list[(dx, dy, desk_w, desk_d)] relative to the NW corner of the block
 _DESK_LAYOUTS: dict[str, list[tuple[int, int, int, int]]] = {
     "BLOCK_1": [
         (0, 0, DESK_W_CM, DESK_D_CM),
@@ -762,15 +762,15 @@ _DESK_LAYOUTS: dict[str, list[tuple[int, int, int, int]]] = {
         (DESK_W_CM, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
     ],
     "BLOCK_2_ORTHO_R": [
-        # desk1 (regard S) : barre horizontale en haut
+        # desk1 (facing S): horizontal bar at top
         (0, 0, DESK_D_CM, DESK_W_CM),
-        # desk2 (regard W) : barre verticale en bas à gauche
+        # desk2 (facing W): vertical bar at bottom-left
         (0, DESK_W_CM, DESK_W_CM, DESK_D_CM),
     ],
     "BLOCK_2_ORTHO_L": [
-        # desk1 (regard S) : barre horizontale en haut
+        # desk1 (facing S): horizontal bar at top
         (0, 0, DESK_D_CM, DESK_W_CM),
-        # desk2 (regard E) : barre verticale en bas à droite
+        # desk2 (facing E): vertical bar at bottom-right
         (DESK_D_CM - DESK_W_CM, DESK_W_CM, DESK_W_CM, DESK_D_CM),
     ],
 }
@@ -780,19 +780,19 @@ def _rotate_desk_layout(
     dx: int, dy: int, dw: int, dd: int,
     block_eo: int, block_ns: int, degrees: int,
 ) -> tuple[int, int, int, int]:
-    """Rotation horaire d'un poste dans un bloc.
+    """Clockwise rotation of a desk within a block.
 
     Args:
-        dx, dy: Position relative dans le bloc (orientation 0°).
-        dw, dd: Dimensions du poste.
-        block_eo, block_ns: Dimensions du bloc à orientation 0°.
-        degrees: 90, 180, ou 270.
+        dx, dy: Relative position within the block (orientation 0°).
+        dw, dd: Desk dimensions.
+        block_eo, block_ns: Block dimensions at orientation 0°.
+        degrees: 90, 180, or 270.
 
     Returns:
-        (new_dx, new_dy, new_dw, new_dd) dans le bloc pivoté.
+        (new_dx, new_dy, new_dw, new_dd) within the rotated block.
     """
     for _ in range((degrees // 90) % 4):
-        # Rotation 90° horaire : (x, y) → (block_ns - y - dd, x)
+        # 90° clockwise rotation: (x, y) -> (block_ns - y - dd, x)
         new_dx = block_ns - dy - dd
         new_dy = dx
         new_dw = dd
@@ -803,13 +803,13 @@ def _rotate_desk_layout(
 
 
 def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
-    """Calcule les positions absolues de tous les postes d'un pattern.
+    """Compute absolute positions of all desks in a pattern.
 
     Args:
-        pattern: Pattern JSON (adapté ou non).
+        pattern: JSON pattern (adapted or not).
 
     Returns:
-        Liste de DeskPosition avec coordonnées absolues.
+        List of DeskPosition with absolute coordinates.
     """
     desks = []
     row_y = 0
@@ -849,7 +849,7 @@ def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
             block_eo = ns if orient in (90, 270) else eo
             block_x += block_eo
 
-        # Hauteur de la rangée = max NS des blocs
+        # Row height = max NS of blocks
         max_ns = 0
         for block in row.get("blocks", []):
             max_ns = max(max_ns, _block_ns_extent(block))
@@ -862,7 +862,7 @@ def _rects_intersect(
     x1: int, y1: int, w1: int, d1: int,
     x2: int, y2: int, w2: int, d2: int,
 ) -> bool:
-    """Teste si deux rectangles se chevauchent (intersection non vide)."""
+    """Check whether two rectangles overlap (non-empty intersection)."""
     return (x1 < x2 + w2 and x1 + w1 > x2
             and y1 < y2 + d2 and y1 + d1 > y2)
 
@@ -870,17 +870,17 @@ def _rects_intersect(
 def remove_conflicting_desks(
     pattern: dict, room: RoomSpec,
 ) -> tuple[dict, list[DeskPosition]]:
-    """Supprime les postes qui intersectent les zones interdites.
+    """Remove desks that intersect forbidden zones.
 
-    Suppression unitaire : le poste est retiré, pas le bloc entier.
-    Le pattern retourné a les blocs modifiés (postes supprimés marqués).
+    Individual removal: the desk is removed, not the entire block.
+    The returned pattern has modified blocks (removed desks marked).
 
     Args:
-        pattern: Pattern JSON (adapté à la pièce cible).
-        room: Pièce cible avec exclusion_zones.
+        pattern: JSON pattern (adapted to the target room).
+        room: Target room with exclusion_zones.
 
     Returns:
-        (pattern_modifié, liste_des_postes_supprimés)
+        (modified_pattern, list_of_removed_desks)
     """
     desks = compute_desk_positions(pattern)
     removed = []
@@ -894,7 +894,7 @@ def remove_conflicting_desks(
                 removed.append(desk)
                 break
 
-    # Aussi supprimer les postes qui dépassent de la pièce
+    # Also remove desks that extend outside the room
     for desk in desks:
         if desk in removed:
             continue
@@ -903,21 +903,21 @@ def remove_conflicting_desks(
                 or desk.y_cm + desk.depth_cm > room.depth_cm):
             removed.append(desk)
 
-    # Construire le set des postes à garder
+    # Build the set of desks to keep
     removed_set = {(d.row_idx, d.block_idx, d.desk_idx) for d in removed}
     remaining_desks = [d for d in desks if
                        (d.row_idx, d.block_idx, d.desk_idx) not in removed_set]
 
-    # Mettre à jour le compteur
+    # Update counter
     result = copy.deepcopy(pattern)
     n_remaining = len(remaining_desks)
 
     logger.info(
-        "Suppression postes : %d supprimés, %d restants",
+        "Desk removal: %d removed, %d remaining",
         len(removed), n_remaining,
     )
 
-    # Stocker les infos de suppression dans le pattern
+    # Store removal info in the pattern
     result["_removed_desks"] = [
         {"row": d.row_idx, "block": d.block_idx, "desk": d.desk_idx,
          "x_cm": d.x_cm, "y_cm": d.y_cm}
@@ -931,15 +931,15 @@ def remove_conflicting_desks(
 def generate_mirrors(
     candidates: list[PatternCandidate],
 ) -> list[PatternCandidate]:
-    """Génère les miroirs E-O de tous les candidats.
+    """Generate East-West mirrors of all candidates.
 
-    Retourne la liste originale + les miroirs.
+    Returns the original list plus the mirrors.
 
     Args:
-        candidates: Candidats issus de la sélection.
+        candidates: Candidates from the selection step.
 
     Returns:
-        Liste étendue (originaux + miroirs).
+        Extended list (originals + mirrors).
     """
     result = list(candidates)
     for c in candidates:
@@ -956,24 +956,24 @@ def generate_mirrors(
 
 
 # ---------------------------------------------------------------------------
-# Étape 5 — Scoring (circulation + confort)
+# Step 5 — Scoring (circulation + comfort)
 # ---------------------------------------------------------------------------
 
 @dataclass
 class MatchScore:
-    """Scores d'un candidat après adaptation à la pièce cible.
+    """Scores of a candidate after adaptation to the target room.
 
     Attributes:
-        pattern_name: Nom du pattern source.
-        standard: Standard d'aménagement.
-        n_desks: Nombre de postes après suppression.
-        m2_per_desk: Surface par poste (m²).
-        circulation_grade: Grade de circulation (A-F).
-        connectivity_pct: Pourcentage de connexité.
-        min_passage_cm: Passage minimum trouvé (cm).
-        worst_detour: Pire ratio de détour.
-        largest_free_rect_m2: Plus grand rectangle vide (m²).
-        adapted_pattern: Pattern JSON adapté.
+        pattern_name: Source pattern name.
+        standard: Layout standard.
+        n_desks: Number of desks after removal.
+        m2_per_desk: Area per desk (m²).
+        circulation_grade: Circulation grade (A-F).
+        connectivity_pct: Connectivity percentage.
+        min_passage_cm: Minimum passage found (cm).
+        worst_detour: Worst detour ratio.
+        largest_free_rect_m2: Largest free rectangle (m²).
+        adapted_pattern: Adapted JSON pattern.
     """
     pattern_name: str
     standard: str
@@ -990,16 +990,16 @@ class MatchScore:
 def _pattern_to_circulation_format(
     pattern: dict, room: RoomSpec,
 ) -> tuple[dict, list[dict]]:
-    """Convertit un pattern catalogue + RoomSpec vers le format circulation.
+    """Convert a catalogue pattern + RoomSpec to the circulation analysis format.
 
     Args:
-        pattern: Pattern JSON adapté (avec _removed_desks éventuel).
-        room: Pièce cible.
+        pattern: Adapted JSON pattern (with optional _removed_desks).
+        room: Target room.
 
     Returns:
         (room_dict, blocks_list) au format attendu par circulation_analysis.analyse().
     """
-    # Room dict au format ancien
+    # Room dict in legacy format
     doors = []
     for o in room.openings:
         doors.append({
@@ -1013,7 +1013,7 @@ def _pattern_to_circulation_format(
         "doors": doors,
     }
 
-    # Blocs positionnés au format circulation
+    # Positioned blocks in circulation format
     blocks_out = []
     row_y = 0
     rows = pattern.get("rows", [])
@@ -1058,15 +1058,15 @@ def _pattern_to_circulation_format(
 def score_candidate(
     pattern: dict, room: RoomSpec, standard: str,
 ) -> MatchScore:
-    """Calcule le score complet d'un candidat adapté.
+    """Compute the full score of an adapted candidate.
 
     Args:
-        pattern: Pattern JSON adapté et nettoyé (postes supprimés).
-        room: Pièce cible.
-        standard: Standard d'aménagement.
+        pattern: Adapted and cleaned JSON pattern (desks removed).
+        room: Target room.
+        standard: Layout standard.
 
     Returns:
-        MatchScore avec tous les indicateurs.
+        MatchScore with all indicators.
     """
     from olm.core.circulation_analysis import analyse as circ_analyse
 
@@ -1074,17 +1074,17 @@ def score_candidate(
     area_m2 = room.width_cm * room.depth_cm / 10_000
     m2_per_desk = round(area_m2 / n_desks, 2) if n_desks > 0 else 0.0
 
-    # Circulation
+    # Circulation analysis
     from olm.core.spacing_config import get_default
     default_cfg = get_default()
     cfg = ALL_CONFIGS.get(standard, default_cfg) if default_cfg else None
     room_dict, blocks_list = _pattern_to_circulation_format(pattern, room)
     circ = circ_analyse(room_dict, blocks_list, cfg.door_exclusion_depth_cm)
 
-    # Passage minimum (via desk paths)
+    # Minimum passage (via desk paths)
     min_passage = min(circ.path_widths) if circ.path_widths else 0.0
 
-    # Rectangle vide résiduel
+    # Residual free rectangle
     free_rect_m2 = largest_free_rectangle_m2(pattern, room)
 
     return MatchScore(
@@ -1102,17 +1102,17 @@ def score_candidate(
 
 
 # ---------------------------------------------------------------------------
-# Étape 6 — Sélection du meilleur par standard
+# Step 6 — Best selection per standard
 # ---------------------------------------------------------------------------
 
 def _score_key(s: MatchScore) -> float:
-    """Score composite pour sélection du meilleur candidat.
+    """Composite score for best candidate selection.
 
-    Combine densité et confort avec les poids de config.json.
-    Score plus bas = meilleur candidat (utilisé avec min()).
+    Combines density and comfort using weights from config.json.
+    Lower score = better candidate (used with min()).
 
-    Densité (0-1) : normalisée par n_desks (plus = mieux).
-    Confort (0-1) : dérivé du grade de circulation (A=1, F=0).
+    Density (0-1): normalised by n_desks (more = better).
+    Comfort (0-1): derived from circulation grade (A=1, F=0).
     """
     from olm.core.app_config import get_matching
 
@@ -1120,26 +1120,26 @@ def _score_key(s: MatchScore) -> float:
     w_density = matching.get("w_density", 0.5)
     w_comfort = matching.get("w_comfort", 0.5)
 
-    # Normaliser densité : n_desks en [0, 1], inversé pour que min() fonctionne
-    # On utilise 1/n_desks comme proxy (plus de postes = meilleur)
+    # Normalise density: n_desks in [0, 1], inverted so min() works
+    # Use 1/n_desks as proxy (more desks = better)
     density_score = 1.0 / max(s.n_desks, 1)
 
-    # Normaliser confort : grade A=0, B=0.25, C=0.5, D=0.75, F=1.0
+    # Normalise comfort: grade A=0, B=0.25, C=0.5, D=0.75, F=1.0
     grade_to_score = {"A": 0.0, "B": 0.25, "C": 0.5, "D": 0.75, "F": 1.0}
     comfort_score = grade_to_score.get(s.circulation_grade, 1.0)
 
-    # Score composite (plus bas = meilleur)
+    # Composite score (lower = better)
     return w_density * density_score + w_comfort * comfort_score
 
 
 def select_best(scores: list[MatchScore]) -> MatchScore | None:
-    """Sélectionne le meilleur candidat parmi les scores.
+    """Select the best candidate from a list of scores.
 
     Args:
-        scores: Liste de MatchScore pour un standard donné.
+        scores: List of MatchScore for a given standard.
 
     Returns:
-        Meilleur MatchScore, ou None si liste vide.
+        Best MatchScore, or None if list is empty.
     """
     if not scores:
         return None
@@ -1147,22 +1147,22 @@ def select_best(scores: list[MatchScore]) -> MatchScore | None:
 
 
 # ---------------------------------------------------------------------------
-# Étape 7 — Plus grand rectangle vide résiduel
+# Step 7 — Largest residual free rectangle
 # ---------------------------------------------------------------------------
 
 def largest_free_rectangle_m2(
     pattern: dict, room: RoomSpec,
 ) -> float:
-    """Calcule la surface du plus grand rectangle vide après aménagement.
+    """Compute the area of the largest free rectangle after layout.
 
-    Utilise l'algorithme histogramme maximal (O(rows×cols)).
+    Uses the maximal histogram algorithm (O(rows x cols)).
 
     Args:
-        pattern: Pattern adapté avec positions de desks.
-        room: Pièce cible.
+        pattern: Adapted pattern with desk positions.
+        room: Target room.
 
     Returns:
-        Surface en m² du plus grand rectangle vide.
+        Area in m² of the largest free rectangle.
     """
     import numpy as np
     from olm.core.matching_config import GRID_CELL_CM
@@ -1172,16 +1172,16 @@ def largest_free_rectangle_m2(
     if cols <= 0 or rows <= 0:
         return 0.0
 
-    # Grille d'occupation : True = occupé
+    # Occupancy grid: True = occupied
     occupied = np.zeros((rows, cols), dtype=bool)
 
-    # Murs périphériques
+    # Peripheral walls
     occupied[0, :] = True
     occupied[-1, :] = True
     occupied[:, 0] = True
     occupied[:, -1] = True
 
-    # Desks restants (exclure les supprimés)
+    # Remaining desks (excluding removed)
     desks = compute_desk_positions(pattern)
     removed_set = set()
     for rd in pattern.get("_removed_desks", []):
@@ -1200,7 +1200,7 @@ def largest_free_rectangle_m2(
         c2 = max(0, min(c2, cols))
         occupied[r1:r2, c1:c2] = True
 
-    # Zones d'exclusion
+    # Exclusion zones
     for excl in room.exclusion_zones:
         r1 = excl.y_cm // GRID_CELL_CM
         r2 = (excl.y_cm + excl.depth_cm) // GRID_CELL_CM
@@ -1212,7 +1212,7 @@ def largest_free_rectangle_m2(
         c2 = max(0, min(c2, cols))
         occupied[r1:r2, c1:c2] = True
 
-    # Algorithme du plus grand rectangle dans un histogramme
+    # Largest rectangle in a histogram algorithm
     free = ~occupied
     heights = np.zeros(cols, dtype=int)
     max_area = 0
@@ -1236,17 +1236,17 @@ def largest_free_rectangle_m2(
 
 
 # ---------------------------------------------------------------------------
-# Pipeline complet
+# Full pipeline
 # ---------------------------------------------------------------------------
 
 @dataclass
 class MatchingResult:
-    """Résultat complet du matching pour une pièce.
+    """Complete matching result for a room.
 
     Attributes:
-        room: Pièce cible.
-        by_standard: Meilleur score par standard.
-        all_scores: Tous les scores calculés.
+        room: Target room.
+        by_standard: Best score per standard.
+        all_scores: All computed scores.
     """
     room: RoomSpec
     by_standard: dict[str, MatchScore | None]
@@ -1256,21 +1256,21 @@ class MatchingResult:
 def match_room(
     catalogue: list[dict], room: RoomSpec,
 ) -> MatchingResult:
-    """Pipeline complet de matching pour une pièce cible.
+    """Full matching pipeline for a target room.
 
-    Exécute les 7 étapes du pipeline pour les 3 standards.
+    Runs all 7 pipeline steps for all 3 standards.
 
     Args:
-        catalogue: Patterns JSON du catalogue.
-        room: Pièce cible.
+        catalogue: JSON patterns from the catalogue.
+        room: Target room.
 
     Returns:
-        MatchingResult avec le meilleur par standard et tous les scores.
+        MatchingResult with the best per standard and all scores.
     """
     all_scores: list[MatchScore] = []
     by_standard: dict[str, MatchScore | None] = {}
 
-    # Étape 1 : sélection par standard
+    # Step 1: selection by standard
     selection_results = select_candidates(catalogue, room)
 
     for sel in selection_results:
@@ -1279,23 +1279,23 @@ def match_room(
             by_standard[std] = None
             continue
 
-        # Étape 2 : miroirs
+        # Step 2: mirrors
         with_mirrors = generate_mirrors(sel.candidates)
 
         std_scores: list[MatchScore] = []
         for candidate in with_mirrors:
-            # Étape 3 : adaptation
+            # Step 3: adaptation
             adapted = adapt_to_room(candidate.pattern, room)
 
-            # Étape 4 : suppression postes en zone interdite
+            # Step 4: remove desks in forbidden zones
             cleaned, removed = remove_conflicting_desks(adapted, room)
 
-            # Étape 5 : scoring
+            # Step 5: scoring
             score = score_candidate(cleaned, room, std)
             std_scores.append(score)
             all_scores.append(score)
 
-        # Étape 6 : sélection du meilleur
+        # Step 6: select the best
         by_standard[std] = select_best(std_scores)
 
     return MatchingResult(
@@ -1306,19 +1306,19 @@ def match_room(
 
 
 # ---------------------------------------------------------------------------
-# Nommage automatique des patterns (D-50)
+# Automatic pattern naming
 # ---------------------------------------------------------------------------
 
 def _count_openings(pattern: dict) -> int:
-    """Compte le nombre d'ouvertures (portes + baies) dans un pattern."""
+    """Count the number of openings (doors + bays) in a pattern."""
     return len(pattern.get("room_openings", []))
 
 
 def _pattern_group_key(pattern: dict) -> tuple[int, int, str, int]:
-    """Clé de groupe pour le nommage : (width, depth, std_short, n_openings).
+    """Group key for naming: (width, depth, std_short, n_openings).
 
-    Deux patterns sont dans le même groupe s'ils ont la même clé.
-    Le suffixe _{k}O n'apparaît que si n_openings >= 2.
+    Two patterns belong to the same group if they share the same key.
+    The suffix _{k}O only appears when n_openings >= 2.
     """
     w = pattern.get("room_width_cm", 0)
     d = pattern.get("room_depth_cm", 0)
@@ -1331,34 +1331,34 @@ def _pattern_group_key(pattern: dict) -> tuple[int, int, str, int]:
 def generate_auto_name(
     pattern: dict, catalogue: list[dict],
 ) -> str:
-    """Génère le nom automatique d'un pattern selon D-50.
+    """Generate the automatic name for a pattern.
 
-    Format : {W}x{D}_{STANDARD}[_{k}O]_{n}
-    - {k}O présent seulement si ≥ 2 ouvertures
-    - {n} = prochain incrément disponible dans le groupe
+    Format: {W}x{D}_{STANDARD}[_{k}O]_{n}
+    - {k}O present only if >= 2 openings
+    - {n} = next available increment within the group
 
     Args:
-        pattern: Pattern à nommer.
-        catalogue: Catalogue courant (pour calculer l'incrément).
+        pattern: Pattern to name.
+        catalogue: Current catalogue (used to compute the increment).
 
     Returns:
-        Nom généré.
+        Generated name.
     """
     key = _pattern_group_key(pattern)
     w, d, std_short, n_open = key
 
-    # Compter les patterns existants dans le même groupe
+    # Count existing patterns in the same group
     existing_n = []
     for p in catalogue:
         if _pattern_group_key(p) == key:
-            # Extraire le n du nom existant
+            # Extract n from existing name
             n = _extract_increment(p.get("name", ""))
             if n is not None:
                 existing_n.append(n)
 
     next_n = max(existing_n, default=0) + 1
 
-    # Construire le nom
+    # Build the name
     base = f"{w}x{d}_{std_short}"
     if n_open >= 2:
         base += f"_{n_open}O"
@@ -1366,10 +1366,10 @@ def generate_auto_name(
 
 
 def _extract_increment(name: str) -> int | None:
-    """Extrait l'incrément final d'un nom de pattern.
+    """Extract the trailing increment from a pattern name.
 
-    Ex: '310x480_AFNOR_2O_3' → 3, '310x480_SITE_1' → 1,
-        '310x480_SITE' → None (ancien format sans incrément)
+    Examples: '310x480_AFNOR_2O_3' -> 3, '310x480_SITE_1' -> 1,
+              '310x480_SITE' -> None (legacy format without increment)
     """
     parts = name.rsplit("_", 1)
     if len(parts) == 2:
@@ -1381,16 +1381,16 @@ def _extract_increment(name: str) -> int | None:
 
 
 def compact_catalogue_names(catalogue: list[dict]) -> list[dict]:
-    """Compacte les incréments de tous les patterns par groupe.
+    """Compact increments of all patterns per group.
 
-    Pour chaque groupe (même W×D + standard + nb ouvertures),
-    renumérotation 1, 2, 3… sans trous, triée par nom original.
+    For each group (same W x D + standard + opening count),
+    renumber 1, 2, 3... with no gaps, sorted by original name.
 
     Args:
-        catalogue: Liste des patterns.
+        catalogue: List of patterns.
 
     Returns:
-        Catalogue avec noms compactés (modifié en place ET retourné).
+        Catalogue with compacted names (modified in place AND returned).
     """
     import re
     from collections import defaultdict
@@ -1403,13 +1403,13 @@ def compact_catalogue_names(catalogue: list[dict]) -> list[dict]:
     for key, patterns in groups.items():
         w, d, std_short, n_open = key
 
-        # Trier par incrément existant (ou par nom pour stabilité)
+        # Sort by existing increment (or by name for stability)
         def sort_key(p):
             n = _extract_increment(p.get("name", ""))
             return n if n is not None else 0
         patterns.sort(key=sort_key)
 
-        # Renuméroter
+        # Renumber
         base = f"{w}x{d}_{std_short}"
         if n_open >= 2:
             base += f"_{n_open}O"
@@ -1421,18 +1421,18 @@ def compact_catalogue_names(catalogue: list[dict]) -> list[dict]:
 
 
 def migrate_catalogue_names(catalogue: list[dict]) -> list[dict]:
-    """Migre les noms existants vers la convention D-50.
+    """Migrate existing names to the current naming convention.
 
-    Les anciens noms (ex: '310x480_AFNOR') deviennent '310x480_AFNOR_1'.
-    Les groupes sont compactés après migration.
+    Legacy names (e.g. '310x480_AFNOR') become '310x480_AFNOR_1'.
+    Groups are compacted after migration.
 
     Args:
-        catalogue: Catalogue avec anciens noms.
+        catalogue: Catalogue with legacy names.
 
     Returns:
-        Catalogue avec noms migrés.
+        Catalogue with migrated names.
     """
-    # D'abord, s'assurer que chaque pattern a un nom parseable
-    # Les anciens noms comme '310x480_AFNOR' n'ont pas d'incrément
-    # compact_catalogue_names les renumérotera
+    # Ensure each pattern has a parseable name.
+    # Legacy names like '310x480_AFNOR' have no increment;
+    # compact_catalogue_names will renumber them.
     return compact_catalogue_names(catalogue)

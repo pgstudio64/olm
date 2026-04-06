@@ -25,22 +25,22 @@ VALID_ORIENTATIONS = frozenset({0, 90, 180, 270})
 
 
 def parse_dsl(text: str) -> dict:
-    """Parse une ligne DSL en dict JSON (format PATTERN_DSL_SPEC.md).
+    """Parse a DSL line into a JSON dict (PATTERN_DSL_SPEC.md format).
 
     Args:
-        text: Ligne DSL, ex. "P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE"
+        text: DSL line, e.g. "P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE"
 
     Returns:
-        Dict avec clés name, rows, row_gaps_cm.
+        Dict with keys name, rows, row_gaps_cm.
 
     Raises:
-        DSLError: Syntaxe invalide ou type de bloc inconnu.
+        DSLError: Invalid syntax or unknown block type.
     """
     text = strip_comment(text)
     if not text:
         raise DSLError("Empty DSL")
 
-    # Séparer nom : contenu
+    # Split name : body
     if ":" not in text:
         raise DSLError(f"Missing ':' separator in: {text}")
 
@@ -55,7 +55,7 @@ def parse_dsl(text: str) -> dict:
     if not body:
         raise DSLError(f"Empty pattern body for: {name}")
 
-    # Séparer les rangées par ";"
+    # Split rows by ";"
     raw_parts = [p.strip() for p in body.split(";")]
 
     rows = []
@@ -63,21 +63,21 @@ def parse_dsl(text: str) -> dict:
 
     i = 0
     while i < len(raw_parts):
-        # Chaque rangée est une séquence d'éléments séparés par ","
+        # Each row is a sequence of elements separated by ","
         row_text = raw_parts[i]
         row = _parse_row(row_text)
         rows.append(row)
         i += 1
 
-        # Après une rangée, un gap inter-rangée optionnel puis la rangée suivante
+        # After a row, an optional inter-row gap followed by the next row
         if i < len(raw_parts):
-            # Vérifier si c'est un gap (nombre pur) ou une rangée
+            # Check if next part is a gap (pure integer) or a row
             next_part = raw_parts[i]
             if re.match(r"^\d+$", next_part):
                 row_gaps_cm.append(int(next_part))
                 i += 1
             else:
-                # Pas de gap explicite — erreur : un gap est requis entre rangées
+                # No explicit gap — error: a gap is required between rows
                 raise DSLError(
                     f"Missing inter-row gap between rows in: {name}"
                 )
@@ -86,10 +86,10 @@ def parse_dsl(text: str) -> dict:
 
 
 def _parse_row(text: str) -> dict:
-    """Parse une rangée (éléments séparés par virgule).
+    """Parse a row (comma-separated elements).
 
-    Un gap avant le premier bloc est autorisé — il représente la distance
-    entre le mur ouest et le premier bloc (gap_cm sur le premier bloc).
+    A gap before the first block is allowed — it represents the distance
+    between the west wall and the first block (gap_cm on the first block).
     """
     elements = [e.strip() for e in text.split(",")]
     blocks = []
@@ -99,10 +99,10 @@ def _parse_row(text: str) -> dict:
         if not elem:
             continue
         if re.match(r"^\d+$", elem):
-            # C'est un gap — le stocker pour le prochain bloc
+            # It's a gap — store it for the next block
             pending_gap = int(elem)
         else:
-            # C'est un bloc
+            # It's a block
             block = _parse_block(elem)
             if pending_gap is not None:
                 block["gap_cm"] = pending_gap
@@ -110,7 +110,7 @@ def _parse_row(text: str) -> dict:
             blocks.append(block)
 
     if not blocks:
-        raise DSLError(f"Row without block: {text}")
+        raise DSLError(f"Row with no block: {text}")
 
     return {"blocks": blocks}
 
@@ -168,13 +168,13 @@ def _parse_block(text: str) -> dict:
 
 
 def to_dsl(pattern: dict) -> str:
-    """Convertit un dict JSON (format PATTERN_DSL_SPEC.md) en ligne DSL.
+    """Serialize a JSON dict (PATTERN_DSL_SPEC.md format) to a DSL line.
 
     Args:
-        pattern: Dict avec clés name, rows, row_gaps_cm.
+        pattern: Dict with keys name, rows, row_gaps_cm.
 
     Returns:
-        Ligne DSL, ex. "P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE"
+        DSL line, e.g. "P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE"
     """
     name = pattern["name"]
     rows = pattern["rows"]
@@ -201,7 +201,7 @@ def to_dsl(pattern: dict) -> str:
             parts.append(block_str)
         row_strs.append(", ".join(parts))
 
-    # Intercaler les gaps inter-rangées
+    # Interleave inter-row gaps
     result_parts = []
     for i, row_str in enumerate(row_strs):
         result_parts.append(row_str)
@@ -212,15 +212,15 @@ def to_dsl(pattern: dict) -> str:
 
 
 def parse_catalogue_dsl(text: str) -> list[dict]:
-    """Parse un texte multi-lignes contenant plusieurs patterns DSL.
+    """Parse a multi-line text containing several DSL patterns.
 
-    Les lignes vides et les commentaires (--) sont ignorés.
+    Empty lines and comments (--) are ignored.
 
     Args:
-        text: Texte multi-lignes.
+        text: Multi-line text.
 
     Returns:
-        Liste de dicts JSON.
+        List of JSON dicts.
     """
     patterns = []
     for raw_line in text.strip().splitlines():

@@ -1,4 +1,4 @@
-"""Tests pour pattern_dsl.py."""
+"""Tests for pattern_dsl.py."""
 import pytest
 from olm.core.pattern_dsl import parse_dsl, to_dsl, parse_catalogue_dsl, DSLError
 
@@ -79,14 +79,14 @@ class TestParseDSL:
 
     def test_error_comment(self):
         with pytest.raises(DSLError):
-            parse_dsl("-- commentaire")
+            parse_dsl("-- comment")
 
-    def test_offset_sud(self):
+    def test_offset_south(self):
         result = parse_dsl("P_OFF: BLOCK_4_FACE, 180, BLOCK_2_FACE S20")
         b1 = result["rows"][0]["blocks"][1]
         assert b1["offset_ns_cm"] == 20
 
-    def test_offset_nord(self):
+    def test_offset_north(self):
         result = parse_dsl("P_OFF: BLOCK_4_FACE N30")
         b0 = result["rows"][0]["blocks"][0]
         assert b0["offset_ns_cm"] == -30
@@ -156,7 +156,7 @@ class TestToDSL:
         assert "P_X: BLOCK_1" == to_dsl(pattern)
         assert "@" not in to_dsl(pattern)
 
-    def test_offset_sud(self):
+    def test_offset_south(self):
         pattern = {
             "name": "P_OFF",
             "rows": [{"blocks": [
@@ -167,7 +167,7 @@ class TestToDSL:
         }
         assert to_dsl(pattern) == "P_OFF: BLOCK_4_FACE, 180, BLOCK_2_FACE S20"
 
-    def test_offset_nord(self):
+    def test_offset_north(self):
         pattern = {
             "name": "P_OFF",
             "rows": [{"blocks": [
@@ -212,16 +212,16 @@ class TestRoundTrip:
         dsl = "P_R: BLOCK_4_FACE@90, 200, BLOCK_1@270"
         assert to_dsl(parse_dsl(dsl)) == dsl
 
-    def test_with_offset_sud(self):
+    def test_with_offset_south(self):
         dsl = "P_OFF: BLOCK_4_FACE, 180, BLOCK_2_FACE S20"
         assert to_dsl(parse_dsl(dsl)) == dsl
 
-    def test_with_offset_nord(self):
+    def test_with_offset_north(self):
         dsl = "P_OFF: BLOCK_4_FACE@90 N30"
         assert to_dsl(parse_dsl(dsl)) == dsl
 
     def test_full_features(self):
-        """Round-trip avec toutes les caracteristiques : gaps, orientations, offsets, multi-rangees."""
+        """Round-trip with all features: gaps, orientations, offsets, multi-rows."""
         dsl = "P_FULL: BLOCK_4_FACE@90 N10, 200, BLOCK_2_FACE S20; 180; BLOCK_6_FACE, 150, BLOCK_1@270"
         assert to_dsl(parse_dsl(dsl)) == dsl
 
@@ -230,11 +230,11 @@ class TestCatalogueParse:
 
     def test_multi_line(self):
         text = """
--- Patterns simples
+-- Simple patterns
 P_B4: BLOCK_4_FACE
 P_B4_B2F: BLOCK_4_FACE, 180, BLOCK_2_FACE
 
--- Pattern double
+-- Double-row pattern
 P_B4_B4: BLOCK_4_FACE; 180; BLOCK_4_FACE
 """
         result = parse_catalogue_dsl(text)

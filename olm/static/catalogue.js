@@ -77,7 +77,7 @@ function renderCatalogue() {
       var cardClass = "catalogue-card" + (overflow ? " card-overflow" : "");
       html += '<div class="' + cardClass + '" data-pattern-name="' + (p.name || "") + '">';
       html += '<button class="card-delete" data-del-name="' + (p.name || "") + '" title="Delete">&times;</button>';
-      html += '<div class="card-title">' + (p.name || "Sans nom") + '</div>';
+      html += '<div class="card-title">' + (p.name || "Unnamed") + '</div>';
       html += '<div class="card-info">' + nDesks + ' desks · ' + nBlocks + ' blocks · ' + std + ' · ' + w + 'x' + d + '</div>';
       var sc = computePatternScoring(p);
       if (sc.nDesks > 0) html += '<div class="card-info">' + scoringHtml(sc) + '</div>';

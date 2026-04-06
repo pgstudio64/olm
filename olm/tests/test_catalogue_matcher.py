@@ -1,14 +1,9 @@
-"""Tests pour catalogue_matcher — pipeline de matching 7 étapes (D-54)."""
+"""Tests for catalogue_matcher — 7-step matching pipeline."""
 from __future__ import annotations
 
 import copy
-import sys
-import os
 
 import pytest
-
-# Ajout du chemin solver_lab pour imports directs
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from olm.core.room_model import RoomSpec, ExclusionZone, OpeningSpec, WindowSpec, Face, HingeSide
 from olm.core.catalogue_matcher import (
@@ -44,9 +39,9 @@ def _make_pattern(
     row_gaps_cm: list[int] | None = None,
     room_openings: list[dict] | None = None,
 ) -> dict:
-    """Construit un pattern JSON minimal pour les tests.
+    """Build a minimal JSON pattern for tests.
 
-    rows_spec: liste de listes de dicts bloc, ex:
+    rows_spec: list of lists of block dicts, e.g.:
         [[{"type": "BLOCK_1", "gap_cm": 0}]]
     """
     rows = []
@@ -84,7 +79,7 @@ def _make_candidate(
     standard: str = "AFNOR_ADVICE",
     n_desks: int = 4,
 ) -> PatternCandidate:
-    """Construit un PatternCandidate minimal."""
+    """Build a minimal PatternCandidate."""
     pattern = _make_pattern(
         [[{"type": "BLOCK_4_FACE"}]],
         name=name,
@@ -107,7 +102,7 @@ def _make_candidate(
 # ---------------------------------------------------------------------------
 
 class TestCountDesks:
-    """Vérifie le comptage de postes pour les types de blocs connus."""
+    """Verifies desk counting for known block types."""
 
     @pytest.mark.parametrize("block_type,expected", [
         ("BLOCK_1", 1),
@@ -144,17 +139,17 @@ class TestCountDesks:
 # ---------------------------------------------------------------------------
 
 class TestParetoFront:
-    """Vérifie le front de Pareto sur (largeur, profondeur)."""
+    """Verifies the Pareto front on (width, depth)."""
 
     def test_no_dominated(self):
-        """Deux candidats non dominés restent tous les deux."""
+        """Two non-dominated candidates both remain."""
         c1 = _make_candidate("A", room_width_cm=400, room_depth_cm=300)
         c2 = _make_candidate("B", room_width_cm=300, room_depth_cm=400)
         front = pareto_front([c1, c2])
         assert len(front) == 2
 
     def test_dominated_removed(self):
-        """Un candidat dominé par un autre est éliminé."""
+        """A candidate dominated by another is eliminated."""
         big = _make_candidate("big", room_width_cm=500, room_depth_cm=500)
         small = _make_candidate("small", room_width_cm=300, room_depth_cm=300)
         front = pareto_front([big, small])
@@ -162,7 +157,7 @@ class TestParetoFront:
         assert front[0].name == "big"
 
     def test_identical_not_dominated(self):
-        """Deux candidats de mêmes dimensions ne se dominent pas."""
+        """Two candidates with identical dimensions do not dominate each other."""
         c1 = _make_candidate("A", room_width_cm=400, room_depth_cm=400)
         c2 = _make_candidate("B", room_width_cm=400, room_depth_cm=400)
         front = pareto_front([c1, c2])
@@ -177,58 +172,58 @@ class TestParetoFront:
         assert pareto_front([]) == []
 
     def test_three_candidates_mixed(self):
-        """Un dominé, deux non dominés sur le front."""
+        """One dominated, two non-dominated on the front."""
         c1 = _make_candidate("A", room_width_cm=500, room_depth_cm=300)
         c2 = _make_candidate("B", room_width_cm=300, room_depth_cm=500)
         c3 = _make_candidate("C", room_width_cm=400, room_depth_cm=400)
-        # c3 n'est dominé ni par c1 (c1.depth=300 < c3.depth=400)
-        # ni par c2 (c2.width=300 < c3.width=400)
+        # c3 is not dominated by c1 (c1.depth=300 < c3.depth=400)
+        # nor by c2 (c2.width=300 < c3.width=400)
         front = pareto_front([c1, c2, c3])
         assert len(front) == 3
 
 
 # ---------------------------------------------------------------------------
-# 3. select_candidates (avec vrai catalogue)
+# 3. select_candidates (with real catalogue)
 # ---------------------------------------------------------------------------
 
 class TestSelectCandidates:
-    """Vérifie la sélection de candidats avec le vrai catalogue."""
+    """Verifies candidate selection with the real catalogue."""
 
     @pytest.fixture
     def catalogue(self):
         return load_catalogue()
 
     def test_small_room_no_candidates(self, catalogue):
-        """Pièce trop petite : aucun candidat ne rentre."""
+        """Room too small: no candidate fits."""
         if not catalogue:
-            pytest.skip("Catalogue vide")
+            pytest.skip("Empty catalogue")
         tiny = RoomSpec(width_cm=100, depth_cm=100)
         results = select_candidates(catalogue, tiny)
         for sel in results:
             assert len(sel.candidates) == 0
 
     def test_large_room_has_candidates(self, catalogue):
-        """Pièce assez grande : au moins un candidat rentre."""
+        """Room large enough: at least one candidate fits."""
         if not catalogue:
-            pytest.skip("Catalogue vide")
+            pytest.skip("Empty catalogue")
         large = RoomSpec(width_cm=800, depth_cm=600)
         results = select_candidates(catalogue, large)
-        # Au moins un standard devrait avoir des candidats
+        # At least one standard should have candidates
         total = sum(len(sel.candidates) for sel in results)
         assert total > 0
 
     def test_single_standard_returns_single_result(self, catalogue):
         if not catalogue:
-            pytest.skip("Catalogue vide")
+            pytest.skip("Empty catalogue")
         room = RoomSpec(width_cm=800, depth_cm=600)
         result = select_candidates(catalogue, room, standard="AFNOR_ADVICE")
         assert isinstance(result, SelectionResult)
         assert result.standard == "AFNOR_ADVICE"
 
     def test_pareto_subset_of_fitting(self, catalogue):
-        """Les candidats Pareto sont un sous-ensemble de all_fitting."""
+        """Pareto candidates are a subset of all_fitting."""
         if not catalogue:
-            pytest.skip("Catalogue vide")
+            pytest.skip("Empty catalogue")
         room = RoomSpec(width_cm=600, depth_cm=500)
         results = select_candidates(catalogue, room)
         for sel in results:
@@ -241,7 +236,7 @@ class TestSelectCandidates:
 # ---------------------------------------------------------------------------
 
 class TestMirrorPattern:
-    """Vérifie le miroir E-O des patterns."""
+    """Verifies E-W mirror of patterns."""
 
     def test_preserves_desk_count(self):
         p = _make_pattern([
@@ -256,7 +251,7 @@ class TestMirrorPattern:
         assert m["name"] == "test_pat_MIR"
 
     def test_sticks_e_o_swap(self):
-        """Sticks E deviennent O et vice versa."""
+        """E sticks become O and vice versa (O/W are west aliases)."""
         p = _make_pattern([
             [
                 {"type": "BLOCK_1", "sticks": ["O"], "gap_cm": 0},
@@ -264,24 +259,24 @@ class TestMirrorPattern:
             ],
         ], room_width_cm=400)
         m = mirror_pattern(p)
-        # L'ordre des blocs est inversé dans le miroir
+        # Block order is reversed in the mirror
         blocks = m["rows"][0]["blocks"]
-        # L'ancien bloc E (dernier) est maintenant premier avec stick O
-        # L'ancien bloc O (premier) est maintenant dernier avec stick E
+        # The former E block (last) is now first with stick O
+        # The former O block (first) is now last with stick E
         all_sticks = [b.get("sticks", []) for b in blocks]
         flat_sticks = [s for sticks in all_sticks for s in sticks]
         assert "E" in flat_sticks
         assert "O" in flat_sticks
 
-    def test_ortho_d_becomes_g(self):
-        """BLOCK_2_ORTHO_R devient BLOCK_2_ORTHO_L et inversement."""
+    def test_ortho_r_becomes_l(self):
+        """BLOCK_2_ORTHO_R becomes BLOCK_2_ORTHO_L and vice versa."""
         p = _make_pattern([
             [{"type": "BLOCK_2_ORTHO_R"}],
         ], room_width_cm=400)
         m = mirror_pattern(p)
         assert m["rows"][0]["blocks"][0]["type"] == "BLOCK_2_ORTHO_L"
 
-    def test_ortho_g_becomes_d(self):
+    def test_ortho_l_becomes_r(self):
         p = _make_pattern([
             [{"type": "BLOCK_2_ORTHO_L"}],
         ], room_width_cm=400)
@@ -289,14 +284,14 @@ class TestMirrorPattern:
         assert m["rows"][0]["blocks"][0]["type"] == "BLOCK_2_ORTHO_R"
 
     def test_double_mirror_roundtrip(self):
-        """Miroir deux fois = retour à l'original (mêmes positions de postes)."""
+        """Mirror twice = back to original (same desk positions)."""
         p = _make_pattern([
-            [{"type": "BLOCK_4_FACE", "gap_cm": 20, "sticks": ["O"]},
+            [{"type": "BLOCK_4_FACE", "gap_cm": 20, "sticks": ["W"]},
              {"type": "BLOCK_2_FACE", "gap_cm": 30, "sticks": ["E"]}],
         ], room_width_cm=500)
         m1 = mirror_pattern(p)
         m2 = mirror_pattern(m1)
-        # Les positions de postes doivent être identiques
+        # Desk positions must be identical
         desks_orig = compute_desk_positions(p)
         desks_round = compute_desk_positions(m2)
         assert len(desks_orig) == len(desks_round)
@@ -310,13 +305,13 @@ class TestMirrorPattern:
 # ---------------------------------------------------------------------------
 
 class TestAdaptToRoom:
-    """Vérifie le calage sticks + homothétie."""
+    """Verifies stick alignment + homothety."""
 
     def test_stick_e_stays_at_east_wall(self):
-        """Un bloc stick E doit rester collé au mur est dans la pièce cible."""
-        # Pattern dans pièce 400 avec bloc stick E à position gap=200
+        """A block with stick E must remain flush with the east wall in the target room."""
+        # Pattern in a 400-wide room with stick E block at gap=200
         p = _make_pattern([
-            [{"type": "BLOCK_1", "sticks": ["O"], "gap_cm": 0},
+            [{"type": "BLOCK_1", "sticks": ["W"], "gap_cm": 0},
              {"type": "BLOCK_1", "sticks": ["E"], "gap_cm": 100}],
         ], room_width_cm=400, room_depth_cm=300)
 
@@ -324,30 +319,30 @@ class TestAdaptToRoom:
         adapted = adapt_to_room(p, target)
         assert adapted["room_width_cm"] == 500
 
-        # Calculer les positions de postes adaptées
+        # Compute adapted desk positions
         desks = compute_desk_positions(adapted)
-        # Le bloc stick E : sa position + largeur doit atteindre le mur est
-        # On vérifie que le gap a été ajusté correctement (dw=100 de plus)
+        # Stick E block: its position + width must reach the east wall
+        # Verify that the gap has been adjusted correctly (100cm more)
         blocks = adapted["rows"][0]["blocks"]
         x = 0
         for b in blocks:
             x += b.get("gap_cm", 0)
             from olm.core.catalogue_matcher import _block_eo_extent
             x += _block_eo_extent(b)
-        # La dernière position ne doit pas dépasser la largeur cible
+        # The last position must not exceed the target width
         assert x <= 500
 
     def test_gaps_adjusted_with_extra_width(self):
-        """L'espace supplémentaire est distribué entre les ancres."""
+        """Extra space is distributed among anchors."""
         p = _make_pattern([
-            [{"type": "BLOCK_1", "sticks": ["O"], "gap_cm": 10},
+            [{"type": "BLOCK_1", "sticks": ["W"], "gap_cm": 10},
              {"type": "BLOCK_1", "sticks": ["E"], "gap_cm": 50}],
         ], room_width_cm=300, room_depth_cm=300)
         target = RoomSpec(width_cm=400, depth_cm=300)
         adapted = adapt_to_room(p, target)
-        # Le gap du bloc O reste fixe, le gap du bloc E augmente
+        # W block gap stays fixed, E block gap increases
         blocks = adapted["rows"][0]["blocks"]
-        assert blocks[0]["gap_cm"] == 10  # Stick O inchangé
+        assert blocks[0]["gap_cm"] == 10  # Stick W unchanged
 
     def test_room_dimensions_updated(self):
         p = _make_pattern([[{"type": "BLOCK_1"}]],
@@ -363,7 +358,7 @@ class TestAdaptToRoom:
 # ---------------------------------------------------------------------------
 
 class TestComputeDeskPositions:
-    """Vérifie les positions absolues des postes."""
+    """Verifies absolute desk positions."""
 
     def test_single_bloc_1(self):
         p = _make_pattern([
@@ -383,7 +378,7 @@ class TestComputeDeskPositions:
         ])
         desks = compute_desk_positions(p)
         assert len(desks) == 4
-        # Tous dans le rectangle du bloc
+        # All within the block rectangle
         for d in desks:
             assert d.x_cm >= 0
             assert d.y_cm >= 0
@@ -395,7 +390,7 @@ class TestComputeDeskPositions:
         ], row_gaps_cm=[50])
         desks = compute_desk_positions(p)
         assert len(desks) == 2
-        # Le second poste doit être décalé verticalement
+        # Second desk must be offset vertically
         assert desks[1].y_cm > desks[0].y_cm
 
     def test_gap_between_blocks(self):
@@ -408,14 +403,14 @@ class TestComputeDeskPositions:
         assert desks[1].x_cm == DESK_W_CM + 50
 
     def test_rotated_bloc_1(self):
-        """Un BLOCK_1 orienté à 90 a ses dimensions swappées."""
+        """A BLOCK_1 rotated 90 degrees has its dimensions swapped."""
         p = _make_pattern([
             [{"type": "BLOCK_1", "orientation": 90, "gap_cm": 0}],
         ])
         desks = compute_desk_positions(p)
         assert len(desks) == 1
         d = desks[0]
-        # Après rotation 90, w et d sont échangés
+        # After 90-degree rotation, w and d are swapped
         assert d.width_cm == DESK_D_CM
         assert d.depth_cm == DESK_W_CM
 
@@ -425,14 +420,14 @@ class TestComputeDeskPositions:
 # ---------------------------------------------------------------------------
 
 class TestRemoveConflictingDesks:
-    """Vérifie la suppression de postes en zone interdite."""
+    """Verifies removal of desks in forbidden zones."""
 
     def test_desk_in_exclusion_zone_removed(self):
-        """Un poste dans une zone d'exclusion est supprimé."""
+        """A desk inside an exclusion zone is removed."""
         p = _make_pattern([
             [{"type": "BLOCK_1", "gap_cm": 10}],
         ], room_width_cm=400, room_depth_cm=400)
-        # Zone d'exclusion couvrant la position du desk (x=10, y=0)
+        # Exclusion zone covering the desk position (x=10, y=0)
         room = RoomSpec(
             width_cm=400, depth_cm=400,
             exclusion_zones=[
@@ -444,11 +439,11 @@ class TestRemoveConflictingDesks:
         assert result["_n_desks_after_removal"] == 0
 
     def test_desk_outside_exclusion_zone_kept(self):
-        """Un poste hors zone d'exclusion est conservé."""
+        """A desk outside an exclusion zone is kept."""
         p = _make_pattern([
             [{"type": "BLOCK_1", "gap_cm": 10}],
         ], room_width_cm=400, room_depth_cm=400)
-        # Zone d'exclusion loin du desk
+        # Exclusion zone far from the desk
         room = RoomSpec(
             width_cm=400, depth_cm=400,
             exclusion_zones=[
@@ -460,8 +455,8 @@ class TestRemoveConflictingDesks:
         assert result["_n_desks_after_removal"] == 1
 
     def test_desk_outside_room_removed(self):
-        """Un poste qui dépasse de la pièce est supprimé."""
-        # Bloc placé à gap=350 dans une pièce de 400 (le desk de 160cm dépasse)
+        """A desk that extends beyond the room boundary is removed."""
+        # Block placed at gap=350 in a 400-wide room (the 160cm desk overflows)
         p = _make_pattern([
             [{"type": "BLOCK_1", "gap_cm": 350}],
         ], room_width_cm=400, room_depth_cm=400)
@@ -470,7 +465,7 @@ class TestRemoveConflictingDesks:
         assert len(removed) == 1
 
     def test_no_exclusions_no_removal(self):
-        """Sans zone d'exclusion et dans la pièce, rien n'est supprimé."""
+        """Without exclusion zones and within the room, nothing is removed."""
         p = _make_pattern([
             [{"type": "BLOCK_4_FACE", "gap_cm": 10}],
         ], room_width_cm=600, room_depth_cm=600)
@@ -485,10 +480,10 @@ class TestRemoveConflictingDesks:
 # ---------------------------------------------------------------------------
 
 class TestLargestFreeRectangle:
-    """Vérifie le calcul du plus grand rectangle vide."""
+    """Verifies the largest free rectangle calculation."""
 
     def test_room_larger_than_pattern_nonzero(self):
-        """Une pièce plus grande que le pattern a un rectangle vide > 0."""
+        """A room larger than the pattern has a free rectangle > 0."""
         p = _make_pattern([
             [{"type": "BLOCK_1", "gap_cm": 10}],
         ], room_width_cm=600, room_depth_cm=600)
@@ -497,16 +492,16 @@ class TestLargestFreeRectangle:
         assert area > 0
 
     def test_empty_pattern_large_rect(self):
-        """Un pattern vide dans une grande pièce = rectangle quasi-total."""
+        """An empty pattern in a large room = near-total rectangle."""
         p = _make_pattern([], room_width_cm=500, room_depth_cm=500)
         room = RoomSpec(width_cm=500, depth_cm=500)
         area = largest_free_rectangle_m2(p, room)
-        # La pièce fait 25 m², le rectangle libre doit en être proche
-        # (moins les murs périphériques d'1 cellule de 10cm)
+        # The room is 25 m², the free rectangle should be close
+        # (minus the peripheral 1-cell border of 10cm)
         assert area > 15.0
 
     def test_tiny_room_zero(self):
-        """Pièce trop petite pour contenir un rectangle."""
+        """Room too small to contain a rectangle."""
         p = _make_pattern([], room_width_cm=5, room_depth_cm=5)
         room = RoomSpec(width_cm=5, depth_cm=5)
         area = largest_free_rectangle_m2(p, room)
@@ -514,14 +509,14 @@ class TestLargestFreeRectangle:
 
 
 # ---------------------------------------------------------------------------
-# 9. generate_auto_name (D-50)
+# 9. generate_auto_name
 # ---------------------------------------------------------------------------
 
 class TestGenerateAutoName:
-    """Vérifie la convention de nommage D-50."""
+    """Verifies the auto-naming convention."""
 
     def test_first_pattern_in_group(self):
-        """Premier pattern dans un groupe : incrément = 1."""
+        """First pattern in a group: increment = 1."""
         p = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
@@ -533,7 +528,7 @@ class TestGenerateAutoName:
         assert name == "310x480_AFNOR_1"
 
     def test_second_pattern_increments(self):
-        """Second pattern dans un groupe : incrément = 2."""
+        """Second pattern in a group: increment = 2."""
         p1 = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="310x480_AFNOR_1",
@@ -552,7 +547,7 @@ class TestGenerateAutoName:
         assert name == "310x480_AFNOR_2"
 
     def test_two_openings_suffix(self):
-        """Pattern avec >= 2 ouvertures : suffixe _{k}O."""
+        """Pattern with >= 2 openings: suffix _{k}O."""
         p = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
@@ -568,7 +563,7 @@ class TestGenerateAutoName:
         assert name == "400x500_GROUP_2O_1"
 
     def test_one_opening_no_suffix(self):
-        """Pattern avec 1 ouverture : pas de suffixe O."""
+        """Pattern with 1 opening: no O suffix."""
         p = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
@@ -583,7 +578,7 @@ class TestGenerateAutoName:
         assert name == "300x400_SITE_1"
 
     def test_different_standards_independent(self):
-        """Des groupes de standards différents ont des incréments indépendants."""
+        """Different standard groups have independent increments."""
         p_afnor = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="310x480_AFNOR_1",
@@ -607,10 +602,10 @@ class TestGenerateAutoName:
 # ---------------------------------------------------------------------------
 
 class TestCompactCatalogueNames:
-    """Vérifie la renumérotation après suppression."""
+    """Verifies renumbering after deletion."""
 
     def test_renumber_after_gap(self):
-        """Suppression du n=2 dans [1,2,3] donne [1,2]."""
+        """Deleting n=2 from [1,2,3] yields [1,2]."""
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_1",
                           standard="AFNOR_ADVICE", room_width_cm=310,
@@ -633,7 +628,7 @@ class TestCompactCatalogueNames:
         assert patterns[0]["name"] == "310x480_AFNOR_1"
 
     def test_different_groups_independent(self):
-        """Deux groupes différents sont renumérotés indépendamment."""
+        """Two different groups are renumbered independently."""
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_3",
                           standard="AFNOR_ADVICE", room_width_cm=310,
@@ -647,7 +642,7 @@ class TestCompactCatalogueNames:
         assert patterns[1]["name"] == "400x500_SITE_1"
 
     def test_already_compact_unchanged(self):
-        """Un catalogue déjà compact ne change pas."""
+        """An already compact catalogue is unchanged."""
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_1",
                           standard="AFNOR_ADVICE", room_width_cm=310,

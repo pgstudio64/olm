@@ -72,9 +72,9 @@ function getDeskRects(type) {
     return rects;
   }
 
-  // Blocs orthogonaux : 2 desks a 90 degres
+  // Orthogonal blocks: 2 desks at 90 degrees
   if (type === "BLOCK_2_ORTHO_R") {
-    // L en bas-gauche : desk2 regarde ouest, chaise est
+    // L at bottom-left: desk2 faces west, chair east
     return [
       { x: 0, y: 0, w: DESK_W, h: DESK_D,
         label: "WS01", screenSide: "S", chairSide: "N" },
@@ -83,7 +83,7 @@ function getDeskRects(type) {
     ];
   }
   if (type === "BLOCK_2_ORTHO_L") {
-    // L en bas-droite (miroir) : desk2 regarde est, chaise ouest
+    // L at bottom-right (mirror): desk2 faces east, chair west
     return [
       { x: 0, y: 0, w: DESK_W, h: DESK_D,
         label: "WS01", screenSide: "S", chairSide: "N" },

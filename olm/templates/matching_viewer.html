@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -62,7 +62,7 @@
     min-height: 0;
   }
 
-  /* --- Panneau gauche : liste candidats --- */
+  /* --- Left panel: candidate list --- */
   .left-col {
     display: flex;
     flex-direction: column;
@@ -130,14 +130,14 @@
   .score-mid  { color: var(--warn); }
   .score-bad  { color: var(--bad); }
 
-  /* --- Panneau central --- */
+  /* --- Centre panel --- */
   .center-col {
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  /* Onglets */
+  /* Tabs */
   .tabs {
     display: flex;
     border-bottom: 1px solid var(--border);
@@ -157,7 +157,7 @@
     border-bottom-color: var(--accent);
   }
 
-  /* Zone de dessin */
+  /* Drawing area */
   .view-area {
     flex: 1;
     overflow: hidden;
@@ -172,7 +172,7 @@
   }
   .view-area svg.panning { cursor: grabbing; }
 
-  /* --- Barre de progression (bas) --- */
+  /* --- Progress bar (bottom) --- */
   .legend-bar {
     display: flex;
     align-items: center;
@@ -284,53 +284,53 @@
 
 <header>
   <h1>Matching <em>viewer</em> — OLO</h1>
-  <span class="header-info" id="roomInfo">Piece : -</span>
+  <span class="header-info" id="roomInfo">Room: -</span>
 </header>
 
 <div class="main">
 
-  <!-- PANNEAU GAUCHE -->
+  <!-- LEFT PANEL -->
   <div class="left-col">
     <div class="left-header">
       <div class="nav-btns">
-        <button id="btnPrev" title="Precedent (fleche haut)">&#9650;</button>
-        <button id="btnNext" title="Suivant (fleche bas)">&#9660;</button>
+        <button id="btnPrev" title="Previous (arrow up)">&#9650;</button>
+        <button id="btnNext" title="Next (arrow down)">&#9660;</button>
       </div>
-      <span class="count" id="candidateCount">0 candidat(s)</span>
+      <span class="count" id="candidateCount">0 candidate(s)</span>
     </div>
     <div class="candidate-list" id="candidateList"></div>
   </div>
 
-  <!-- PANNEAU CENTRAL -->
+  <!-- CENTRE PANEL -->
   <div class="center-col">
     <div class="tabs">
       <div class="tab active" data-tab="matching">Matching</div>
-      <div class="tab" data-tab="amenagement">Amenagement</div>
+      <div class="tab" data-tab="amenagement">Layout</div>
     </div>
     <div class="canvas-toolbar">
-      <label><input type="checkbox" id="gridToggle" checked> Grille</label>
-      <button id="btnZoomOut" class="btn" style="font-size:12px;padding:2px 8px;" title="Zoom arriere">&#8722;</button>
+      <label><input type="checkbox" id="gridToggle" checked> Grid</label>
+      <button id="btnZoomOut" class="btn" style="font-size:12px;padding:2px 8px;" title="Zoom out">&#8722;</button>
       <span id="zoomLevel" style="color:var(--text-dim);font-size:10px;min-width:36px;text-align:center;">100%</span>
-      <button id="btnZoomIn" class="btn" style="font-size:12px;padding:2px 8px;" title="Zoom avant">+</button>
-      <button id="btnZoomFit" class="btn" style="font-size:11px;padding:2px 8px;" title="Voir tout">&#8861;</button>
+      <button id="btnZoomIn" class="btn" style="font-size:12px;padding:2px 8px;" title="Zoom in">+</button>
+      <button id="btnZoomFit" class="btn" style="font-size:11px;padding:2px 8px;" title="Fit all">&#8861;</button>
     </div>
     <div class="view-area">
       <svg id="viewSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="none">
         <text x="400" y="300" text-anchor="middle" fill="#6e6a62" font-size="12"
-              font-family="monospace">Chargement...</text>
+              font-family="monospace">Loading...</text>
       </svg>
     </div>
   </div>
 
 </div>
 
-<!-- LEGENDE -->
+<!-- LEGEND -->
 <div class="legend-bar" id="legendBar"></div>
 
-<!-- BARRE DE PROGRESSION -->
+<!-- PROGRESS BAR -->
 <div class="pipeline-bar" id="pipelineBar"></div>
 
-<div class="status-bar" id="statusBar">Pret.</div>
+<div class="status-bar" id="statusBar">Ready.</div>
 
 <script src="/static/block_constants.js"></script>
 <script src="/static/block_geometry.js"></script>
@@ -338,7 +338,7 @@
 <script>
 "use strict";
 
-// ========== CONSTANTES VISUELLES ==========
+// ========== VISUAL CONSTANTS ==========
 const SCALE = 0.8;  // px par cm
 const MARGIN = 30;   // marge autour de la piece
 const GRID_STEP_CM = 10;
@@ -352,15 +352,15 @@ const COLOR_CELL_FOOTPRINT = "#2a1a0e";
 const COLOR_CELL_DOOR      = "#1a6850";
 const COLOR_CELL_CORRIDOR  = "#1a2018";
 
-// Couleurs chemins — definies dans pathSegmentColor()
-// Vert pastel >= 160cm, ambre pastel >= 90cm, rouge pastel < 90cm
+// Path colors — defined in pathSegmentColor()
+// Pastel green >= 160cm, pastel amber >= 90cm, pastel red < 90cm
 
 // ========== PIPELINE STEPS ==========
 const PIPELINE_STEPS = [
-  { id: "selection",    label: "Selection candidats" },
+  { id: "selection",    label: "Candidate selection" },
   { id: "circulation",  label: "Circulation" },
-  { id: "residuelles",  label: "Zones residuelles" },
-  { id: "ajustements",  label: "Ajustements" },
+  { id: "residuelles",  label: "Residual zones" },
+  { id: "ajustements",  label: "Adjustments" },
   { id: "finalisation", label: "Finalisation" },
 ];
 
@@ -380,16 +380,16 @@ let state = {
   panStart: { x: 0, y: 0 },
 };
 
-// ========== CHARGEMENT DYNAMIQUE ==========
+// ========== DYNAMIC LOADING ==========
 async function loadCandidates() {
   const resp = await fetch("/api/match");
   if (!resp.ok) {
-    throw new Error("Erreur HTTP " + resp.status);
+    throw new Error("HTTP error " + resp.status);
   }
   return await resp.json();
 }
 
-// ========== RENDU ==========
+// ========== RENDERING ==========
 function setStatus(msg) {
   document.getElementById("statusBar").textContent = msg;
 }
@@ -408,14 +408,14 @@ function renderCandidateList() {
     div.className = "candidate-item" + (i === state.selectedIndex ? " active" : "");
     div.innerHTML =
       '<span class="candidate-name">' + c.label + '</span>' +
-      '<span class="candidate-desks">' + (c.n_desks || c.desks || 0) + 'p</span>' +
+      '<span class="candidate-desks">' + (c.n_desks || c.desks || 0) + 'd</span>' +
       '<span class="candidate-score ' + scoreClass(c.score) + '">' +
       (c.score != null ? c.score : "-") + '</span>';
     div.addEventListener("click", function() { selectCandidate(i); });
     list.appendChild(div);
   });
   document.getElementById("candidateCount").textContent =
-    state.candidates.length + " candidat(s)";
+    state.candidates.length + " candidate(s)";
 }
 
 function renderPipeline() {
@@ -438,22 +438,22 @@ function renderPipeline() {
 }
 
 function renderRoom(svg, room, ox, oy) {
-  // Retourne { bg: string, fg: string }
-  // bg = fond (z bas, sous les blocs), fg = murs/fenetres/portes/labels (z haut, au-dessus)
+  // Returns { bg: string, fg: string }
+  // bg = background (low z, under blocks), fg = walls/windows/doors/labels (high z, above)
   const bg = [];
   const fg = [];
   const w = room.eo_cm * SCALE;
   const h = room.ns_cm * SCALE;
 
-  // Fond de la piece (bg)
+  // Room background (bg)
   bg.push('<rect x="' + ox + '" y="' + oy + '" width="' + w + '" height="' + h +
     '" fill="' + COLOR_ROOM_FILL + '"/>');
 
-  // Murs (fg)
+  // Walls (fg)
   fg.push('<rect x="' + ox + '" y="' + oy + '" width="' + w + '" height="' + h +
     '" class="room-wall"/>');
 
-  // Fenetres (fg)
+  // Windows (fg)
   (room.windows || []).forEach(function(win) {
     const pos = win.position_cm * SCALE;
     const ww = win.width_cm * SCALE;
@@ -472,7 +472,7 @@ function renderRoom(svg, room, ox, oy) {
     }
   });
 
-  // Portes (fg)
+  // Doors (fg)
   (room.doors || []).forEach(function(door) {
     const pos = door.position_cm * SCALE;
     const dw = door.width_cm * SCALE;
@@ -485,11 +485,11 @@ function renderRoom(svg, room, ox, oy) {
       const hingeX = (door.swing === "right") ? dx : dx + dw;
       const freeX  = (door.swing === "right") ? dx + dw : dx;
       const sweepDir = (door.swing === "right") ? 0 : 1;
-      // Arc de balayage
+      // Sweep arc
       fg.push('<path d="M ' + freeX + ' ' + dy +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + (dy - dw) +
         '" class="room-door-arc"/>');
-      // Battant (porte ouverte a 90°, decale de 2px vers l'interieur pour visibilite)
+      // Leaf (door open at 90°, offset 2px inward for visibility)
       var leafOff = (door.swing === "right") ? 2 : -2;
       fg.push('<line x1="' + (hingeX + leafOff) + '" y1="' + dy +
         '" x2="' + (hingeX + leafOff) + '" y2="' + (dy - dw) + '" class="room-door-leaf"/>');
@@ -502,24 +502,24 @@ function renderRoom(svg, room, ox, oy) {
       const hingeX = (door.swing === "right") ? dx : dx + dw;
       const freeX  = (door.swing === "right") ? dx + dw : dx;
       const sweepDir = (door.swing === "right") ? 1 : 0;
-      // Arc de balayage
+      // Sweep arc
       fg.push('<path d="M ' + freeX + ' ' + dy +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + (dy + dw) +
         '" class="room-door-arc"/>');
-      // Battant (porte ouverte a 90°, decale de 2px vers l'interieur pour visibilite)
+      // Leaf (door open at 90°, offset 2px inward for visibility)
       var leafOff = (door.swing === "right") ? 2 : -2;
       fg.push('<line x1="' + (hingeX + leafOff) + '" y1="' + dy +
         '" x2="' + (hingeX + leafOff) + '" y2="' + (dy + dw) + '" class="room-door-leaf"/>');
     }
   });
 
-  // Cotes (fg) — juste au-dessus et a gauche de la piece
+  // Dimensions (fg) — just above and left of the room
   fg.push('<text x="' + (ox + w / 2) + '" y="' + (oy - 8) +
     '" text-anchor="middle" class="room-label">' + room.eo_cm + ' cm</text>');
   fg.push('<text x="' + (ox - 8) + '" y="' + (oy + h / 2) +
     '" text-anchor="middle" class="room-label" transform="rotate(-90 ' +
     (ox - 8) + ' ' + (oy + h / 2) + ')">' + room.ns_cm + ' cm</text>');
-  // Nord (fg) — a gauche de la piece, en haut
+  // North (fg) — left of room, at top
   var leftCol = ox - 140;
   fg.push('<text x="' + leftCol + '" y="' + (oy + 10) +
     '" fill="#6e6a62" font-size="10" font-weight="bold" font-family="monospace">N &#9650;</text>');
@@ -528,10 +528,10 @@ function renderRoom(svg, room, ox, oy) {
 }
 
 function renderBlocks(candidate, ox, oy) {
-  const elements = [];  // { z, s } pour tri z-order final
+  const elements = [];  // { z, s } for final z-order sort
 
-  // Le matcher retourne des blocs avec positions absolues (x_cm, y_cm)
-  // dans le repère de la pièce. On itère directement dessus.
+  // The matcher returns blocks with absolute positions (x_cm, y_cm)
+  // in the room coordinate frame. We iterate directly over them.
   var blockList = candidate.blocks || [];
 
   blockList.forEach(function(b) {
@@ -544,9 +544,9 @@ function renderBlocks(candidate, ox, oy) {
       const bw = geom.eo * SCALE;
       const bh = geom.ns * SCALE;
 
-      // Zones fixes (debattement chaise) — bleu
-      // Zones minimales de circulation — anthracite
-      // Identique a pattern_editor.html : circulation uniquement sur les faces ayant une zone fixe
+      // Fixed zones (chair clearance) — blue
+      // Minimum circulation zones — anthracite
+      // Same as pattern_editor.html: circulation only on faces that have a fixed zone
       const f = geom.faces || {};
 
       const wNSup = ((f.west && f.west.non_superposable_cm) || 0) * SCALE;
@@ -598,14 +598,14 @@ function renderBlocks(candidate, ox, oy) {
         }
       }
 
-      // Bureaux via block_svg.js
+      // Desks via block_svg.js
       const rects0 = getDeskRects(b.type);
       const rects = transformDeskRects(rects0, geom0.eo, geom0.ns, orient);
       rects.forEach(function(d) {
         renderDesk(elements, bx, by, d, SCALE);
       });
 
-      // Bordure du bloc (pointilles) — z=2
+      // Block border (dashed) — z=2
       elements.push({ z: 2, s:
         '<rect x="' + bx + '" y="' + by +
         '" width="' + bw + '" height="' + bh +
@@ -615,7 +615,7 @@ function renderBlocks(candidate, ox, oy) {
 
   });
 
-  // Tri z-order et assemblage
+  // Z-order sort and assembly
   elements.sort(function(a, b) { return a.z - b.z; });
   return elements.map(function(e) { return e.s; }).join("\n");
 }
@@ -669,17 +669,17 @@ function renderPaths(candidate, ox, oy) {
 
     if (path.length < 2) return;
 
-    // Construire la liste de points visuels : door_center + path + chair_center
+    // Build the visual point list: door_center + path + chair_center
     var points = [];
     var pointWidths = [];
 
-    // Point de depart : centre de la porte
+    // Start point: door centre
     if (doorC) {
       points.push({ x: ox + (doorC[1]) * cellPx, y: oy + (doorC[0]) * cellPx });
       pointWidths.push(widths[0] || 90);
     }
 
-    // Points du chemin cellulaire
+    // Cell path points
     for (var i = 0; i < path.length; i++) {
       points.push({
         x: ox + (path[i][1] + 0.5) * cellPx,
@@ -688,13 +688,13 @@ function renderPaths(candidate, ox, oy) {
       pointWidths.push(widths[i] || 90);
     }
 
-    // Point d arrivee : centre du fauteuil
+    // End point: chair centre
     if (chairC) {
       points.push({ x: ox + (chairC[1]) * cellPx, y: oy + (chairC[0]) * cellPx });
       pointWidths.push(widths[widths.length - 1] || 90);
     }
 
-    // Dessiner segment par segment avec couleur et largeur variables
+    // Draw segment by segment with variable colour and width
     for (var j = 0; j < points.length - 1; j++) {
       var p0 = points[j];
       var p1 = points[j + 1];
@@ -710,7 +710,7 @@ function renderPaths(candidate, ox, oy) {
       );
     }
 
-    // Fleche au bout (pointe vers le fauteuil)
+    // Arrow at end (pointing to chair)
     var pEnd = points[points.length - 1];
     var pBefore = points[points.length - 2];
     var dx = pEnd.x - pBefore.x;
@@ -735,11 +735,11 @@ function renderPaths(candidate, ox, oy) {
       '" fill="' + pathSegmentColor(lastW) + '"/>'
     );
 
-    // Etiquette largeur min, decalee a droite du milieu du chemin
+    // Min-width label, offset to the right of the path midpoint
     var mid = Math.floor(points.length / 2);
     var labelX = points[mid].x + 12;
     var labelY = points[mid].y - 2;
-    // Decaler chaque desk pour eviter superposition
+    // Offset each desk to avoid overlap
     labelX += deskIdx * 6;
     parts.push(
       '<text x="' + labelX.toFixed(1) + '" y="' + labelY.toFixed(1) +
@@ -756,7 +756,7 @@ function renderView() {
   const svg = document.getElementById("viewSvg");
   if (!state.room || state.candidates.length === 0) {
     svg.innerHTML = '<text x="400" y="300" text-anchor="middle" fill="#6e6a62" ' +
-      'font-size="12" font-family="monospace">Aucun candidat</text>';
+      'font-size="12" font-family="monospace">No candidates</text>';
     return;
   }
 
@@ -769,7 +769,7 @@ function renderView() {
 
   const elements = [];
 
-  // Grille : points 10cm + lignes 1m + regle graduee (identique a pattern_editor.html)
+  // Grid: 10cm dots + 1m lines + graduated ruler (same as pattern_editor.html)
   if (state.gridVisible) {
     const stepPx = GRID_STEP_CM * SCALE;
     const meterPx = 100 * SCALE;
@@ -779,7 +779,7 @@ function renderView() {
     const gxEnd = vb.x + vb.w;
     const gyEnd = vb.y + vb.h;
 
-    // Points 10cm
+    // 10cm dots
     for (let gx = gxStart; gx <= gxEnd; gx += stepPx) {
       for (let gy = gyStart; gy <= gyEnd; gy += stepPx) {
         elements.push({ z: 0, s: '<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
@@ -787,7 +787,7 @@ function renderView() {
       }
     }
 
-    // Lignes 1m
+    // 1m lines
     const mxStart = Math.floor(vb.x / meterPx) * meterPx;
     const myStart = Math.floor(vb.y / meterPx) * meterPx;
     for (let mx = mxStart; mx <= gxEnd; mx += meterPx) {
@@ -801,7 +801,7 @@ function renderView() {
         '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
     }
 
-    // Regle graduee
+    // Graduated ruler
     const rulerY = vb.y + 6;
     const rulerX = vb.x + 2;
     for (let mx = mxStart; mx <= gxEnd; mx += meterPx) {
@@ -817,21 +817,21 @@ function renderView() {
     }
   }
 
-  // Piece : fond (z=1, sous les blocs) + murs/fenetres/portes (z=8, au-dessus des blocs)
+  // Room: background (z=1, under blocks) + walls/windows/doors (z=8, above blocks)
   var roomParts = renderRoom(svg, room, ox, oy);
   elements.push({ z: 1, s: roomParts.bg });
   elements.push({ z: 8, s: roomParts.fg });
 
-  // Grille de circulation (onglet amenagement uniquement, z=0.5, sous les blocs)
+  // Circulation grid (layout tab only, z=0.5, under blocks)
   if (state.activeTab === "amenagement") {
     elements.push({ z: 0.5, s: renderGrid(candidate, ox, oy) });
   }
 
-  // Blocs du pattern
+  // Pattern blocks
   const blocksStr = renderBlocks(candidate, ox, oy);
   elements.push({ z: 1.5, s: blocksStr });
 
-  // Chemins de circulation porte → fauteuil (onglet amenagement, z=7, au-dessus des blocs)
+  // Circulation paths door → chair (layout tab, z=7, above blocks)
   if (state.activeTab === "amenagement") {
     var pathsStr = renderPaths(candidate, ox, oy);
     if (pathsStr) {
@@ -839,10 +839,10 @@ function renderView() {
     }
   }
 
-  // Colonne gauche (z=9) : nord, nom pattern, legende
+  // Left column (z=9): north, pattern name, legend
   var leftCol = ox - 140;
 
-  // Nom du pattern (sous le N, +30px d'ecart)
+  // Pattern name (below N, +30px gap)
   var titleY = oy + 40;
   elements.push({ z: 9, s:
     '<text x="' + leftCol + '" y="' + titleY +
@@ -850,10 +850,10 @@ function renderView() {
     (candidate.normalized_dsl || candidate.pattern_name || "") + '</text>' +
     '<text x="' + leftCol + '" y="' + (titleY + 12) +
     '" fill="var(--text-dim)" font-size="7" font-family="monospace">' +
-    (candidate.n_desks || candidate.desks || 0) + ' postes</text>'
+    (candidate.n_desks || candidate.desks || 0) + ' desks</text>'
   });
 
-  // Info scores (onglet amenagement uniquement)
+  // Score info (layout tab only)
   if (state.activeTab === "amenagement") {
     var violations = candidate.circulation_violations || [];
     var violStr = violations.slice(0, 3).join(", ");
@@ -862,11 +862,11 @@ function renderView() {
       '" fill="var(--text-dim)" font-size="7" font-family="monospace">Grade: ' +
       (candidate.circulation_grade || "-") + '</text>' +
       '<text x="' + leftCol + '" y="' + (titleY + 40) +
-      '" fill="var(--text-dim)" font-size="7" font-family="monospace">Connectivite: ' +
+      '" fill="var(--text-dim)" font-size="7" font-family="monospace">Connectivity: ' +
       (candidate.circulation_connectivity != null ? candidate.circulation_connectivity + "%" : "-") +
       '</text>' +
       '<text x="' + leftCol + '" y="' + (titleY + 52) +
-      '" fill="var(--text-dim)" font-size="7" font-family="monospace">Detour max: ' +
+      '" fill="var(--text-dim)" font-size="7" font-family="monospace">Max detour: ' +
       (candidate.circulation_worst_detour != null ? candidate.circulation_worst_detour : "-") +
       '</text>';
     if (violStr) {
@@ -874,14 +874,14 @@ function renderView() {
         '<text x="' + leftCol + '" y="' + (titleY + 64) +
         '" fill="var(--bad)" font-size="6" font-family="monospace">' + violStr + '</text>';
     }
-    // Largeurs de chemin par desk
+    // Path widths per desk
     var deskPaths = candidate.desk_paths || [];
     var pathY = titleY + (violStr ? 76 : 64);
     deskPaths.forEach(function(dp) {
       var label = dp.desk_id + ": ";
       var color = "var(--text-dim)";
       if (!dp.path || !dp.path.length) {
-        label += "BLOQUE";
+        label += "BLOCKED";
         color = "var(--bad)";
       } else {
         label += dp.min_width_cm + "cm";
@@ -938,26 +938,26 @@ function zoomOut() {
 }
 
 function zoomFit() {
-  // Cadrer sur la piece + 5% de marge, centre dans le conteneur
+  // Fit to room + 5% margin, centred in container
   if (state.room) {
     var roomW = state.room.eo_cm * SCALE;
     var roomH = state.room.ns_cm * SCALE;
-    // Cadrer la piece dans le conteneur SVG
+    // Fit room in SVG container
     var svgEl = document.getElementById("viewSvg");
     var rect = svgEl.getBoundingClientRect();
     var containerW = rect.width || 800;
     var containerH = rect.height || 600;
     var containerRatio = containerW / containerH;
 
-    // La piece doit occuper 90% de la hauteur visible
-    // Hauteur du viewBox = roomH / 0.9
+    // Room should occupy 90% of visible height
+    // ViewBox height = roomH / 0.9
     var fitH = roomH / 0.65;
     var fitW = fitH * containerRatio;
 
-    // Origine : piece centree horizontalement, calee en haut avec petite marge
+    // Origin: room centred horizontally, pinned to top with small margin
     var pieceCx = MARGIN + roomW / 2;
     var pieceTop = MARGIN + 20;
-    var marginTop = fitH * 0.05;  // 5% de marge en haut
+    var marginTop = fitH * 0.05;  // 5% top margin
     state.viewBox = {
       x: pieceCx - fitW / 2,
       y: pieceTop - marginTop,
@@ -977,7 +977,7 @@ function selectCandidate(index) {
   state.selectedIndex = Math.max(0, Math.min(index, state.candidates.length - 1));
   renderCandidateList();
   zoomFit();
-  setStatus("Candidat " + (state.selectedIndex + 1) + "/" + state.candidates.length +
+  setStatus("Candidate " + (state.selectedIndex + 1) + "/" + state.candidates.length +
     " — " + state.candidates[state.selectedIndex].label);
 }
 
@@ -987,17 +987,17 @@ function nextCandidate() { selectCandidate(state.selectedIndex + 1); }
 function renderLegend() {
   var bar = document.getElementById("legendBar");
   var items = [
-    { type: "line",  color: "#a8a39a", width: "2px",   dash: false, label: "Mur" },
-    { type: "line",  color: "#5090c0", width: "3px",   dash: false, label: "Fenetre" },
-    { type: "line",  color: "#a8a39a", width: "1.5px", dash: true,  label: "Porte" },
-    { type: "rect",  color: COLOR_NSUP_FILL, opacity: 0.6, label: "Zone fixe (fauteuil)" },
-    { type: "rect",  color: COLOR_CAND_FILL, opacity: 1.0, label: "Circ. minimale" },
-    { type: "rect",  color: COLOR_DESK_FILL, opacity: 1.0, label: "Bureau" },
+    { type: "line",  color: "#a8a39a", width: "2px",   dash: false, label: "Wall" },
+    { type: "line",  color: "#5090c0", width: "3px",   dash: false, label: "Window" },
+    { type: "line",  color: "#a8a39a", width: "1.5px", dash: true,  label: "Door" },
+    { type: "rect",  color: COLOR_NSUP_FILL, opacity: 0.6, label: "Fixed zone (chair)" },
+    { type: "rect",  color: COLOR_CAND_FILL, opacity: 1.0, label: "Min. circulation" },
+    { type: "rect",  color: COLOR_DESK_FILL, opacity: 1.0, label: "Desk" },
   ];
   if (state.activeTab === "amenagement") {
     items.push({ type: "rect", color: COLOR_CELL_CORRIDOR, opacity: 0.5, label: "Circulation" });
-    items.push({ type: "rect", color: COLOR_CELL_WALL,     opacity: 0.5, label: "Mur/Exclusion" });
-    items.push({ type: "rect", color: COLOR_CELL_DOOR,     opacity: 0.5, label: "Porte (grille)" });
+    items.push({ type: "rect", color: COLOR_CELL_WALL,     opacity: 0.5, label: "Wall/Exclusion" });
+    items.push({ type: "rect", color: COLOR_CELL_DOOR,     opacity: 0.5, label: "Door (grid)" });
     items.push({ type: "line", color: "rgba(120, 200, 150, 0.7)", width: "4px", dash: false, label: "Passage >= 160cm" });
     items.push({ type: "line", color: "rgba(210, 190, 120, 0.7)", width: "3px", dash: false, label: "Passage >= 90cm" });
     items.push({ type: "line", color: "rgba(200, 120, 120, 0.7)", width: "2px", dash: false, label: "Passage < 90cm" });
@@ -1031,7 +1031,7 @@ function setTab(tabId) {
 
 // ========== INIT ==========
 async function init() {
-  // Charger les block defs
+  // Load block defs
   try {
     const resp = await fetch("/api/blocks");
     if (resp.ok) {
@@ -1039,24 +1039,24 @@ async function init() {
       BLOCK_DEFS = data.blocks || {};
     }
   } catch (e) {
-    setStatus("Serveur non disponible — donnees mock.");
+    setStatus("Server unavailable — mock data.");
   }
 
-  // Charger les donnees depuis le catalogue
+  // Load data from catalogue
   try {
     const loaded = await loadCandidates();
     state.room = loaded.room;
     state.candidates = loaded.candidates;
     state.pipelineStep = loaded.pipelineStep;
     if (state.candidates.length === 0) {
-      setStatus("Aucun pattern dans le catalogue.");
+      setStatus("No patterns in catalogue.");
     }
   } catch (e) {
-    setStatus("Erreur chargement catalogue : " + e.message);
+    setStatus("Error loading catalogue: " + e.message);
   }
 
   document.getElementById("roomInfo").textContent =
-    "Piece : " + state.room.eo_cm + " x " + state.room.ns_cm + " cm";
+    "Room: " + state.room.eo_cm + " x " + state.room.ns_cm + " cm";
 
   renderCandidateList();
   renderPipeline();
@@ -1067,18 +1067,18 @@ async function init() {
   document.getElementById("btnPrev").addEventListener("click", prevCandidate);
   document.getElementById("btnNext").addEventListener("click", nextCandidate);
 
-  // Onglets
+  // Tabs
   document.querySelectorAll(".tab").forEach(function(tab) {
     tab.addEventListener("click", function() { setTab(tab.dataset.tab); });
   });
 
-  // Toggle grille
+  // Grid toggle
   document.getElementById("gridToggle").addEventListener("change", function(e) {
     state.gridVisible = e.target.checked;
     renderView();
   });
 
-  // Clavier
+  // Keyboard
   document.addEventListener("keydown", function(e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     if (e.key === "ArrowUp" || e.key === "ArrowLeft") {

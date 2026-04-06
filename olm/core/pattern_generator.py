@@ -7,30 +7,29 @@ from olm.core.app_config import get as _cfg_get
 # Desk dimensions — human perspective:
 #   width  = large side (left-right when seated) = 180 cm
 #   depth  = front-to-back (towards screen)      = 80 cm
-DESK_W_CM: int = _cfg_get("desk_width_cm", 180)   # largeur bureau
-DESK_D_CM: int = _cfg_get("desk_depth_cm", 80)    # profondeur bureau
-CHAIR_CLEARANCE_CM = 70   # ES-01 débattement chaise — zone fixe non superposable
-PASSAGE_CM = 90           # ES-06 zone minimale de circulation — obligatoire, extensible
-PASSAGE_SINGLE_CM = 30    # ES-03 zone minimale de circulation accès poste seul
+DESK_W_CM: int = _cfg_get("desk_width_cm", 180)   # desk width
+DESK_D_CM: int = _cfg_get("desk_depth_cm", 80)    # desk depth
+CHAIR_CLEARANCE_CM = 70   # ES-01 chair clearance — fixed non-overlappable zone
+PASSAGE_CM = 90           # ES-06 minimum circulation zone — mandatory, extensible
+PASSAGE_SINGLE_CM = 30    # ES-03 minimum circulation zone for single desk access
 
-# Note terminologique (D-32) : le champ `candidate_cm` est conservé pour
-# compatibilité mais désigne une zone minimale de circulation (obligatoire,
-# extensible mais pas réductible). L'ancien terme "zone candidate supprimable"
-# est abandonné avec l'approche dette/slack (D-16).
+# Note: the `candidate_cm` field is kept for compatibility but designates a
+# minimum circulation zone (mandatory, extensible but not reducible). The old
+# term "suppressible candidate zone" was dropped along with the debt/slack approach.
 
 
 @dataclass
 class FaceZone:
-    """Zone de dégagement sur une face d'un bloc.
+    """Clearance zone on one face of a block.
 
-    Deux composantes :
-    - non_superposable_cm : zone fixe (débattement chaise), incompressible.
-    - candidate_cm : zone minimale de circulation, obligatoire et extensible
-      mais pas réductible. Le scoring/rééquilibrage peut l'agrandir.
+    Two components:
+    - non_superposable_cm: fixed zone (chair clearance), incompressible.
+    - candidate_cm: minimum circulation zone, mandatory and extensible
+      but not reducible. Scoring/rebalancing may increase it.
 
     Attributes:
-        non_superposable_cm: Épaisseur de la zone fixe (débattement chaise).
-        candidate_cm: Épaisseur de la zone minimale de circulation.
+        non_superposable_cm: Thickness of the fixed zone (chair clearance).
+        candidate_cm: Thickness of the minimum circulation zone.
     """
 
     non_superposable_cm: int = 0
@@ -38,28 +37,28 @@ class FaceZone:
 
     @property
     def total_cm(self) -> int:
-        """Épaisseur totale (zone fixe + zone minimale de circulation)."""
+        """Total thickness (fixed zone + minimum circulation zone)."""
         return self.non_superposable_cm + self.candidate_cm
 
     @classmethod
     def absent(cls) -> "FaceZone":
-        """Aucune zone sur cette face (côté écran ou mur)."""
+        """No zone on this face (screen side or wall)."""
         return cls(0, 0)
 
     @classmethod
     def circulation_only(cls) -> "FaceZone":
-        """Zone minimale de circulation seule — 90 cm (ES-06)."""
+        """Minimum circulation zone only — 90 cm (ES-06)."""
         return cls(0, PASSAGE_CM)
 
     @classmethod
     def chair_and_circulation(cls) -> "FaceZone":
-        """Zone fixe (70 cm) + zone minimale de circulation (90 cm)."""
+        """Fixed zone (70 cm) + minimum circulation zone (90 cm)."""
         return cls(CHAIR_CLEARANCE_CM, PASSAGE_CM)
 
 
 @dataclass
 class FaceCandidates:
-    """Zones de dégagement sur les quatre faces d'un bloc."""
+    """Clearance zones on the four faces of a block."""
 
     north: FaceZone
     south: FaceZone
@@ -70,11 +69,11 @@ class FaceCandidates:
 @dataclass
 class Block:
     name: str
-    eo_cm: int          # dimension EO (largeur)
-    ns_cm: int          # dimension NS (profondeur) = DESK_D_CM toujours
+    eo_cm: int          # EO dimension (width)
+    ns_cm: int          # NS dimension (depth) = DESK_D_CM always
     n_desks: int
     faces: FaceCandidates
-    symmetric_180: bool = False  # True si le bloc est identique après rotation 180°
+    symmetric_180: bool = False  # True if block is identical after 180° rotation
     derogatory: bool = False
 
 
@@ -83,17 +82,17 @@ class Pattern:
     name: str
     blocks: list[Block]
     n_desks: int
-    physical_eo_cm: int   # bureaux seuls
+    physical_eo_cm: int   # desks only
     physical_ns_cm: int
-    total_eo_cm: int      # avec toutes zones candidates
+    total_eo_cm: int      # including all candidate zones
     total_ns_cm: int
     orientation: int = 0  # 0, 90, 180 ou 270
 
 
-# Faces de bloc — zone fixe (fauteuil) + zone minimale de circulation :
-# - N/S (devant/derrière les bureaux) : pas de fauteuil → absent
-# - E/W blocs face-à-face : ES-04 = 70 + 90 = 160 cm (passage derrière poste occupé)
-# - E/W blocs seul/côte à côte : ES-03 = 70 + 30 = 100 cm (accès poste seul)
+# Block faces — fixed zone (chair clearance) + minimum circulation zone:
+# - N/S (front/back of desks): no chair -> absent
+# - E/W face-to-face blocks: ES-04 = 70 + 90 = 160 cm (passage behind occupied desk)
+# - E/W single/side-by-side blocks: ES-03 = 70 + 30 = 100 cm (single desk access)
 _FACE_CHAIR_PASSAGE = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_CM)         # 70 + 90 = 160 cm
 _FACE_CHAIR_ACCESS = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_SINGLE_CM)   # 70 + 30 = 100 cm
 
@@ -179,17 +178,17 @@ BLOCK_6_FACE = Block(
     derogatory=True,
 )
 
-# Blocs orthogonaux : 2 desks à 90° l'un de l'autre, collés
-# BLOCK_2_ORTHO_R : L en bas-gauche (desk1 regarde sud, desk2 regarde ouest)
+# Orthogonal blocks: 2 desks at 90° to each other, adjacent
+# BLOCK_2_ORTHO_R: L at bottom-left (desk1 faces south, desk2 faces west)
 #   +--------180cm---------+
-#   |   Desk1 (regard S)    | 80cm
+#   |   Desk1 (facing S)    | 80cm
 #   +------+----------------+
 #   |Desk2 |
-#   |(reg.W| 180cm
+#   |(fac.W| 180cm
 #   |      |
 #   +------+
 #    80cm
-# Chaises : desk1=nord, desk2=est
+# Chairs: desk1=north, desk2=east
 BLOCK_2_ORTHO_R = Block(
     name="BLOCK_2_ORTHO_R",
     eo_cm=DESK_W_CM,          # 180 cm (width of desk1)
@@ -203,16 +202,16 @@ BLOCK_2_ORTHO_R = Block(
     ),
 )
 
-# BLOCK_2_ORTHO_L : miroir — L en bas-droite (desk1 regarde sud, desk2 regarde est)
+# BLOCK_2_ORTHO_L: mirror — L at bottom-right (desk1 faces south, desk2 faces east)
 #   +--------180cm---------+
-#   |   Desk1 (regard S)    | 80cm
+#   |   Desk1 (facing S)    | 80cm
 #   +----------------+------+
 #                    |Desk2 |
-#                    |(reg.E| 180cm
+#                    |(fac.E| 180cm
 #                    |      |
 #                    +------+
 #                     80cm
-# Chaises : desk1=nord, desk2=ouest
+# Chairs: desk1=north, desk2=west
 BLOCK_2_ORTHO_L = Block(
     name="BLOCK_2_ORTHO_L",
     eo_cm=DESK_W_CM,          # 180 cm (width)
@@ -234,29 +233,28 @@ class DoubleRowPattern:
     south_row: Pattern
     n_desks: int
     physical_eo_cm: int    # max(north_row.physical_eo_cm, south_row.physical_eo_cm)
-    physical_ns_cm: int    # 2 × DESK_D_CM
+    physical_ns_cm: int    # 2 x DESK_D_CM
     total_eo_cm: int
-    total_ns_cm: int       # voir décomposition ci-dessous
-    central_corridor_cm: int  # toujours CHAIR_CLEARANCE_CM × 2 + PASSAGE_CM
+    total_ns_cm: int       # see decomposition below
+    central_corridor_cm: int  # always CHAIR_CLEARANCE_CM x 2 + PASSAGE_CM
     orientation: int = 0  # 0, 90, 180 ou 270
 
 
 def compose_row(blocks: list[Block], name: str) -> Pattern:
-    """Compose une rangée de blocs alignés EO.
+    """Compose a row of EO-aligned blocks.
 
-    Les zones candidates E/O entre blocs adjacents sont fusionnées :
-    un seul passage de 90 cm est compté, pas deux.
-    Les extrémités ouest et est de la rangée héritent des faces
-    du premier et dernier bloc.
+    Candidate zones between adjacent blocks are merged: only one 90 cm
+    passage is counted, not two. The west and east ends of the row inherit
+    the faces of the first and last block.
 
     Args:
-        blocks: Liste ordonnée de blocs de l'ouest vers l'est.
-        name: Identifiant du pattern.
+        blocks: Ordered list of blocks from west to east.
+        name: Pattern identifier.
 
     Returns:
-        Pattern composé avec emprises calculées.
+        Composed pattern with computed footprints.
     """
-    assert blocks, "La liste de blocs ne peut pas être vide"
+    assert blocks, "Block list cannot be empty"
 
     physical_eo = sum(b.eo_cm for b in blocks)
     ns = max(b.ns_cm for b in blocks)
@@ -286,27 +284,27 @@ def compose_double_row(
     south_blocks: list[Block],
     name: str,
 ) -> DoubleRowPattern:
-    """Compose un pattern double rangée (nord + sud) — orientation Option B.
+    """Compose a double-row pattern (north + south) — orientation Option B.
 
-    Les bureaux sont orientés NS (180 cm), utilisateurs regardent E/W.
-    Les débattements chaise (70 cm) sont dans l'axe EO — internes aux blocs.
+    Desks are oriented NS (180 cm), users face E/W.
+    Chair clearances (70 cm) are along the EO axis — internal to blocks.
 
-    Décomposition NS (Option B) :
-        90 cm  — passage N candidat (supprimable si rangée contre mur nord)
-       180 cm  — bureaux rangée nord
-        90 cm  — passage inter-rangées ES-06 (passage entre deux blocs distincts)
-       180 cm  — bureaux rangée sud
-        90 cm  — passage S candidat
+    NS decomposition (Option B):
+        90 cm  — north candidate passage (removable if row is against north wall)
+       180 cm  — north row desks
+        90 cm  — inter-row passage ES-06 (passage between two distinct blocks)
+       180 cm  — south row desks
+        90 cm  — south candidate passage
        ------
-       630 cm  total NS avec toutes zones candidates
+       630 cm  total NS with all candidate zones
 
     Args:
-        north_blocks: Blocs de la rangée nord.
-        south_blocks: Blocs de la rangée sud.
-        name: Identifiant du pattern double rangée.
+        north_blocks: North row blocks.
+        south_blocks: South row blocks.
+        name: Double-row pattern identifier.
 
     Returns:
-        DoubleRowPattern avec emprises calculées.
+        DoubleRowPattern with computed footprints.
     """
     north = compose_row(north_blocks, name + "_N")
     south = compose_row(south_blocks, name + "_S")
@@ -314,11 +312,11 @@ def compose_double_row(
     inter_row_passage = PASSAGE_CM  # ES-06 = 90 cm
 
     total_ns = (
-        PASSAGE_CM          # zone N candidate
-        + DESK_D_CM         # bureaux nord
-        + inter_row_passage # passage inter-rangées
-        + DESK_D_CM         # bureaux sud
-        + PASSAGE_CM        # zone S candidate
+        PASSAGE_CM          # north candidate zone
+        + DESK_D_CM         # north row desks
+        + inter_row_passage # inter-row passage
+        + DESK_D_CM         # south row desks
+        + PASSAGE_CM        # south candidate zone
     )
 
     return DoubleRowPattern(
@@ -335,17 +333,17 @@ def compose_double_row(
 
 
 def rotate_face_candidates(faces: FaceCandidates, degrees: int) -> FaceCandidates:
-    """Rotation horaire des faces d'un bloc.
+    """Clockwise rotation of block faces.
 
-    90° horaire : N→E, E→S, S→W, W→N
-    (ce qui était nord devient est, etc.)
+    90° clockwise: N->E, E->S, S->W, W->N
+    (what was north becomes east, etc.)
 
     Args:
-        faces: FaceCandidates d'origine.
-        degrees: 90, 180 ou 270.
+        faces: Original FaceCandidates.
+        degrees: 90, 180 or 270.
 
     Returns:
-        Nouveau FaceCandidates pivoté.
+        New rotated FaceCandidates.
     """
     steps = (degrees // 90) % 4
     n, e, s, w = faces.north, faces.east, faces.south, faces.west
@@ -355,16 +353,16 @@ def rotate_face_candidates(faces: FaceCandidates, degrees: int) -> FaceCandidate
 
 
 def rotate_pattern_90(pattern: Pattern) -> Pattern:
-    """Rotation 90° horaire d'un pattern simple rangée.
+    """Clockwise 90° rotation of a single-row pattern.
 
-    Échange EO ↔ NS. Pivote les faces de chaque bloc.
-    Suffixe __R90 ajouté au nom.
+    Swaps EO <-> NS. Rotates the faces of each block.
+    Suffix __R90 appended to the name.
 
     Args:
-        pattern: Pattern d'orientation 0°.
+        pattern: Pattern at orientation 0°.
 
     Returns:
-        Nouveau Pattern à 90°.
+        New Pattern at 90°.
     """
     rotated_blocks = [
         Block(
@@ -401,16 +399,16 @@ def rotate_pattern_90(pattern: Pattern) -> Pattern:
 
 
 def rotate_double_row_90(pattern: DoubleRowPattern) -> DoubleRowPattern:
-    """Rotation 90° horaire d'un pattern double rangée.
+    """Clockwise 90° rotation of a double-row pattern.
 
-    Pivote les deux rangées via rotate_pattern_90.
-    Suffixe __R90 ajouté au nom.
+    Rotates both rows via rotate_pattern_90.
+    Suffix __R90 appended to the name.
 
     Args:
-        pattern: DoubleRowPattern d'orientation 0°.
+        pattern: DoubleRowPattern at orientation 0°.
 
     Returns:
-        Nouveau DoubleRowPattern à 90°.
+        New DoubleRowPattern at 90°.
     """
     north_r = rotate_pattern_90(pattern.north_row)
     south_r = rotate_pattern_90(pattern.south_row)
@@ -429,16 +427,16 @@ def rotate_double_row_90(pattern: DoubleRowPattern) -> DoubleRowPattern:
 
 
 def mirror_double_row(pattern: DoubleRowPattern) -> "DoubleRowPattern | None":
-    """Miroir EO d'un pattern double rangée asymétrique.
+    """EO mirror of an asymmetric double-row pattern.
 
-    Retourne None si north_row == south_row (miroir redondant).
-    Suffixe __MIRROR ajouté au nom.
+    Returns None if north_row == south_row (redundant mirror).
+    Suffix __MIRROR appended to the name.
 
     Args:
-        pattern: DoubleRowPattern d'orientation 0°.
+        pattern: DoubleRowPattern at orientation 0°.
 
     Returns:
-        DoubleRowPattern miroir ou None.
+        Mirrored DoubleRowPattern or None.
     """
     north_names = [b.name for b in pattern.north_row.blocks]
     south_names = [b.name for b in pattern.south_row.blocks]
@@ -483,18 +481,18 @@ DOUBLE_ROW_PATTERNS_ALL = (
 
 
 def compute_sqm_per_desk(pattern: "Pattern | DoubleRowPattern") -> float:
-    """Surface effective par poste (m²), incluant les débattements non superposables.
+    """Effective area per desk (m²), including non-overlappable clearances.
 
-    Formule :
+    Formula:
         effective_eo = west.non_superposable_cm + physical_eo + east.non_superposable_cm
-        area_cm2     = effective_eo × physical_ns_cm
-        sqm          = area_cm2 / (10 000 × n_desks)
+        area_cm2     = effective_eo x physical_ns_cm
+        sqm          = area_cm2 / (10 000 x n_desks)
 
     Args:
-        pattern: Pattern simple rangée ou double rangée.
+        pattern: Single-row or double-row pattern.
 
     Returns:
-        Surface arrondie à 2 décimales, en m²/poste.
+        Area rounded to 2 decimal places, in m²/desk.
     """
     if hasattr(pattern, "north_row"):           # DoubleRowPattern
         west_ns = pattern.north_row.blocks[0].faces.west.non_superposable_cm
@@ -508,16 +506,16 @@ def compute_sqm_per_desk(pattern: "Pattern | DoubleRowPattern") -> float:
 
 
 def compute_circulation_grade_cm(pattern: "Pattern | DoubleRowPattern") -> int:
-    """Grade de circulation intrinsèque du pattern, en cm.
+    """Intrinsic circulation grade of the pattern, in cm.
 
-    Pour un DoubleRowPattern : largeur du couloir inter-rangées (central_corridor_cm).
-    Pour un Pattern simple rangée : zone candidate nord (passage ES-06).
+    For a DoubleRowPattern: width of the inter-row corridor (central_corridor_cm).
+    For a single-row Pattern: north candidate zone (ES-06 passage).
 
     Args:
-        pattern: Pattern simple rangée ou double rangée.
+        pattern: Single-row or double-row pattern.
 
     Returns:
-        Largeur de passage en cm.
+        Passage width in cm.
     """
     if hasattr(pattern, "central_corridor_cm"):
         return pattern.central_corridor_cm
@@ -529,12 +527,12 @@ def export_catalogue(
     double_patterns: list[DoubleRowPattern],
     path: str,
 ) -> None:
-    """Exporte le catalogue complet en JSON (single + double rangée).
+    """Export the complete catalogue to JSON (single + double row).
 
     Args:
-        patterns: Patterns simple rangée.
-        double_patterns: Patterns double rangée.
-        path: Chemin du fichier JSON de sortie.
+        patterns: Single-row patterns.
+        double_patterns: Double-row patterns.
+        path: Output JSON file path.
     """
     data = {
         "single_row": [
@@ -583,25 +581,25 @@ def export_catalogue(
 
 
 def pareto_front(patterns: list) -> list:
-    """Retourne les patterns non dominés au sens de Pareto.
+    """Return Pareto-optimal patterns.
 
-    Critères :
-      - sqm_per_desk  → minimiser
-      - circulation_grade_cm → maximiser
+    Criteria:
+      - sqm_per_desk  -> minimise
+      - circulation_grade_cm -> maximise
 
-    Un pattern A domine B si :
+    Pattern A dominates B if:
       A.sqm_per_desk  <= B.sqm_per_desk
       A.circulation_grade_cm >= B.circulation_grade_cm
-      et au moins une inégalité est stricte.
+      and at least one inequality is strict.
 
-    La comparaison ne s'effectue qu'entre patterns ayant
-    le même n_desks.
+    Comparison is only performed between patterns with
+    the same n_desks.
 
     Args:
-        patterns: Liste mixte de Pattern et DoubleRowPattern.
+        patterns: Mixed list of Pattern and DoubleRowPattern.
 
     Returns:
-        Sous-liste des patterns non dominés.
+        Sublist of non-dominated patterns.
     """
     non_dominated = []
     for candidate in patterns:
@@ -626,10 +624,10 @@ def pareto_front(patterns: list) -> list:
 
 
 def export_pareto_catalogue() -> list[dict]:
-    """Retourne uniquement les entrées Pareto-optimales du catalogue.
+    """Return only the Pareto-optimal catalogue entries.
 
     Returns:
-        Liste de dicts (format catalogue JSON) des patterns non dominés.
+        List of dicts (catalogue JSON format) of non-dominated patterns.
     """
     all_patterns = PATTERNS_ALL + DOUBLE_ROW_PATTERNS_ALL
     front = pareto_front(all_patterns)
@@ -647,28 +645,28 @@ def export_pareto_catalogue() -> list[dict]:
 
 
 def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
-    """Génère un SVG vue de dessus d'un pattern double rangée — standard visuel OLO.
+    """Generate a top-view SVG of a double-row pattern.
 
-    Échelle : 1 px = 2 cm (scale = 0.5). Fond sombre #1e1e1e.
-    Zones candidates (90 cm) : bleu #4a90c4 fill-opacity 0.35, dasharray "5 3".
-    Débattements (70 cm)     : orange #c8922a fill-opacity 0.55.
-    Bureaux : gris #d0d0d0 fond, #888888 contour.
-    Écrans  : rect #1a1a1a rx=1.
-    Fauteuils : rect #8B6914 rx=5, dossier #6a4e0e rx=3, accoudoirs #7a5c10 rx=2.
-                60 % masqué sous le bureau (z-order).
+    Scale: 1 px = 2 cm (scale = 0.5). Dark background #1e1e1e.
+    Candidate zones (90 cm): blue #4a90c4 fill-opacity 0.35, dasharray "5 3".
+    Chair clearances (70 cm): orange #c8922a fill-opacity 0.55.
+    Desks: grey #d0d0d0 fill, #888888 stroke.
+    Screens: rect #1a1a1a rx=1.
+    Chairs: rect #8B6914 rx=5, back #6a4e0e rx=3, armrests #7a5c10 rx=2.
+            60% hidden under the desk (z-order).
 
-    Rendu par type de bloc :
-      BLOCK_4 / BLOCK_6 : fauteuils NS (regard N ou S), orange horizontal aux bords
-                        extérieurs des rangées, écran horizontal bord intérieur.
-      BLOCK_2_FACE     : fauteuils EW (regard E ou W), orange vertical sur les
-                        faces EW du bloc, écran vertical bord intérieur.
+    Rendering by block type:
+      BLOCK_4 / BLOCK_6: NS chairs (facing N or S), horizontal orange at
+                         outer row edges, horizontal screen at inner edge.
+      BLOCK_2_FACE:      EW chairs (facing E or W), vertical orange on EW
+                         faces of the block, vertical screen at inner edge.
 
-    Géométrie NS (de haut en bas) :
+    NS geometry (top to bottom):
       [blue N 90] [desks N 180] [corr 90] [desks S 180] [blue S 90]
 
     Args:
-        pattern: Pattern double rangée à dessiner.
-        path: Chemin du fichier SVG de sortie.
+        pattern: Double-row pattern to draw.
+        path: Output SVG file path.
     """
     BG          = "#1e1e1e"
     BLUE_FILL   = "#4a90c4"
@@ -692,7 +690,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     annot_top = 16
 
     def cm(v: int | float) -> float:
-        """Convertit des centimètres en pixels SVG."""
+        """Convert centimetres to SVG pixels."""
         return v * scale
 
     dw      = cm(DESK_W_CM)             # 40 px  (80 cm)
@@ -700,12 +698,12 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     deb_px  = cm(CHAIR_CLEARANCE_CM)    # 35 px  (70 cm)
     cand_px = cm(PASSAGE_CM)            # 45 px  (90 cm)
 
-    # Emprise EO des desks (rangée la plus large)
+    # EO footprint of desks (widest row)
     eo_n = cm(sum(b.eo_cm for b in pattern.north_row.blocks))
     eo_s = cm(sum(b.eo_cm for b in pattern.south_row.blocks))
     eo_w = max(eo_n, eo_s)
 
-    # Coordonnées EO
+    # EO coordinates
     x_bl_w = 20.0
     x_or_w = x_bl_w + cand_px
     x_dsk  = x_or_w + deb_px
@@ -714,7 +712,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     x_end  = x_bl_e + cand_px
     full_w = x_end - x_bl_w
 
-    # Coordonnées NS
+    # NS coordinates
     y0       = margin_t + annot_top
     y_blue_n = y0
     y_desk_n = y_blue_n + cand_px
@@ -724,7 +722,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     y_bottom = y_blue_s + cand_px
 
     svg_w = int(x_end + annot_r)
-    svg_h = int(y_bottom + 130)      # espace pour légende verticale (3 × 17 px + marges)
+    svg_h = int(y_bottom + 130)      # space for vertical legend (3 x 17 px + margins)
 
     L: list[str] = []
 
@@ -732,14 +730,14 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
         L.append(s)
 
     def _is_facing_ns(block: Block) -> bool:
-        """Vrai pour BLOCK_4_FACE et BLOCK_6_FACE (regard N/S) ; faux pour BLOCK_2_FACE (regard E/W)."""
+        """True for BLOCK_4_FACE and BLOCK_6_FACE (facing N/S); False for BLOCK_2_FACE (facing E/W)."""
         return block.name in ("BLOCK_4_FACE", "BLOCK_6_FACE")
 
     # --- primitives ---
 
     def draw_zone_candidate(x: float, y: float, w: float, h: float,
                             label: str) -> None:
-        """Rectangle bleu hachuré semi-transparent + label optionnel centré."""
+        """Semi-transparent blue hatched rectangle + optional centred label."""
         out(f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
             f'fill="{BLUE_FILL}" fill-opacity="{BLUE_OP}" '
             f'stroke="{BLUE_FILL}" stroke-width="0.8" stroke-dasharray="5 3"/>')
@@ -750,7 +748,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
 
     def draw_zone_orange(x: float, y: float, w: float, h: float,
                          label: str = "") -> None:
-        """Rectangle orange semi-transparent + label optionnel centré."""
+        """Semi-transparent orange rectangle + optional centred label."""
         out(f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
             f'fill="{ORANGE_FILL}" fill-opacity="{ORANGE_OP}" '
             f'stroke="{ORANGE_FILL}" stroke-width="0.5"/>')
@@ -761,10 +759,10 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
 
     def draw_desk(x: float, y: float, w: float, h: float,
                   screen_side: str) -> None:
-        """Plan de travail gris + écran sur le bord indiqué.
+        """Grey desk surface + screen on the specified edge.
 
-        screen_side W/E : écran vertical 5 px × 55% h, centré NS.
-        screen_side N/S : écran horizontal 55% w × 5 px, centré EO.
+        screen_side W/E: vertical screen 5 px x 55% h, centred NS.
+        screen_side N/S: horizontal screen 55% w x 5 px, centred EO.
         """
         out(f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
             f'fill="{DESK_FILL}" stroke="{DESK_STR}" stroke-width="1"/>')
@@ -782,9 +780,9 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                 f'width="{scr_w:.1f}" height="5" fill="{SCREEN_COL}" rx="1"/>')
 
     def draw_chair_ew(bx: float, y_desk: float, screen_side: str) -> None:
-        """Fauteuil EW (BLOCK_2_FACE, regard E ou W) — 60% sous le bureau.
+        """EW chair (BLOCK_2_FACE, facing E or W) — 60% under the desk.
 
-        Corps 40×22 px, dossier 7×16 px côté extérieur, accoudoirs 22×5 px N et S.
+        Body 40x22 px, back 7x16 px on outer side, armrests 22x5 px N and S.
         """
         ch_w, ch_h = 40.0, 22.0
         overlap = ch_w * 0.6        # 24 px sous le bureau
@@ -807,22 +805,22 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
             f'width="22" height="5" fill="{CHAIR_ARM}" rx="2"/>')
 
     def draw_chair_ns(bx: float, y_desk: float, side: str) -> None:
-        """Fauteuil NS (BLOCK_4/6, regard N ou S) — 60% sous le bureau.
+        """NS chair (BLOCK_4/6, facing N or S) — 60% under the desk.
 
-        Corps (dw×0.8)×22 px, dossier côté extérieur (N pour rangée nord, S pour sud).
-        Accoudoirs verticaux gauche et droit.
-        side='N' : dossier nord, user regarde sud ; 60% overlap par le dessus du bureau.
-        side='S' : dossier sud, user regarde nord ; 60% overlap par le dessous.
+        Body (dw x 0.8) x 22 px, back on outer side (N for north row, S for south).
+        Vertical armrests left and right.
+        side='N': back north, user faces south; 60% overlap above the desk.
+        side='S': back south, user faces north; 60% overlap below the desk.
         """
         ch_w = dw * 0.8
         ch_h = 22.0
         overlap = ch_h * 0.6
         ch_x = bx + (dw - ch_w) / 2
         if side == 'N':
-            ch_y  = y_desk - (ch_h - overlap)  # 40 % visible au-dessus du bureau
+            ch_y  = y_desk - (ch_h - overlap)  # 40% visible above the desk
             dos_y = ch_y - 2
         else:
-            ch_y  = y_desk + dh - overlap       # 60 % sous le bureau, 40 % visible en bas
+            ch_y  = y_desk + dh - overlap       # 60% under the desk, 40% visible below
             dos_y = ch_y + ch_h - 4
         arm_h = ch_h * 0.5
         out(f'<rect x="{ch_x:.1f}" y="{ch_y:.1f}" '
@@ -836,7 +834,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
 
     def dim_arrow(x1: float, y1: float, x2: float, y2: float,
                   label: str, horiz: bool = False) -> None:
-        """Flèche double blanche avec valeur de cotation."""
+        """Double white arrow with dimension value."""
         out(f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
             f'stroke="{TEXT_W}" stroke-width="0.8" '
             f'marker-start="url(#aw)" marker-end="url(#aw)"/>')
@@ -851,7 +849,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                 f'font-family="sans-serif" font-size="8" fill="{TEXT_DIM}">'
                 f'{label}</text>')
 
-    # === en-tête SVG ===
+    # === SVG header ===
     out(f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{svg_w}" height="{svg_h}" '
         f'viewBox="0 0 {svg_w} {svg_h}">')
@@ -863,55 +861,55 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
         '</defs>')
     out(f'<rect width="{svg_w}" height="{svg_h}" fill="{BG}"/>')
 
-    # rose des vents
+    # compass rose
     out(f'<text x="12" y="24" font-family="sans-serif" font-size="11" '
         f'font-weight="bold" fill="{TEXT_W}">N</text>')
     out(f'<line x1="16" y1="26" x2="16" y2="44" '
         f'stroke="{TEXT_W}" stroke-width="1.5"/>')
 
-    # titre + sous-titre
+    # title + subtitle
     cx_title = x_bl_w + full_w / 2
     out(f'<text x="{cx_title:.0f}" y="22" text-anchor="middle" '
         f'font-family="sans-serif" font-size="12" font-weight="bold" '
-        f'fill="{TEXT_W}">{pattern.name} — {pattern.n_desks} postes</text>')
+        f'fill="{TEXT_W}">{pattern.name} — {pattern.n_desks} desks</text>')
     out(f'<text x="{cx_title:.0f}" y="37" text-anchor="middle" '
         f'font-family="sans-serif" font-size="9" fill="{TEXT_DIM}">'
         f'EO {pattern.total_eo_cm} cm × NS {pattern.total_ns_cm} cm'
         f' · couloir {pattern.central_corridor_cm} cm (ES-06)</text>')
 
-    # === zones de fond ===
+    # === background zones ===
 
-    # Bleu N (candidat nord), bleu corridor inter-rangées, bleu S (candidat sud)
+    # Blue N (north candidate), blue inter-row corridor, blue S (south candidate)
     for yy, lbl in [
-        (y_blue_n, f"candidat circ. nord — {PASSAGE_CM} cm"),
-        (y_corr,   f"couloir inter-rangées ES-06 — {PASSAGE_CM} cm"),
-        (y_blue_s, f"candidat circ. sud — {PASSAGE_CM} cm"),
+        (y_blue_n, f"north circ. candidate — {PASSAGE_CM} cm"),
+        (y_corr,   f"inter-row corridor ES-06 — {PASSAGE_CM} cm"),
+        (y_blue_s, f"south circ. candidate — {PASSAGE_CM} cm"),
     ]:
         draw_zone_candidate(x_bl_w, yy, full_w, cand_px, "")
         out(f'<text x="{x_dsk + eo_w/2:.1f}" y="{yy + cand_px/2 + 4:.1f}" '
             f'text-anchor="middle" font-family="sans-serif" '
             f'font-size="9" fill="{TEXT_BLUE}">{lbl}</text>')
 
-    # Bleu W et E latéraux — pleine hauteur NS
+    # Blue W and E lateral zones — full NS height
     h_lateral = y_bottom - y_blue_n
     draw_zone_candidate(x_bl_w, y_blue_n, cand_px, h_lateral, "")
     draw_zone_candidate(x_bl_e, y_blue_n, cand_px, h_lateral, "")
 
-    # === zones orange par type de bloc ===
+    # === orange zones per block type ===
 
     def draw_row_oranges(blocks: list[Block], y_desk: float, row_side: str) -> None:
-        """Zones orange d'une rangée selon le type de chaque bloc.
+        """Orange zones of a row by block type.
 
-        BLOCK_4/6 : bande orange horizontale au bord extérieur de la rangée
-                   (dans la zone candidate bleue), sur toute la largeur du bloc.
-        BLOCK_2_FACE : bandes orange verticales sur les faces EW du bloc,
-                      hauteur = celle des bureaux.
+        BLOCK_4/6: horizontal orange band at the outer edge of the row
+                   (within the blue candidate zone), spanning the full block width.
+        BLOCK_2_FACE: vertical orange bands on EW faces of the block,
+                      height = desk height.
 
         Args:
-            blocks: Blocs de la rangée (ouest → est).
-            y_desk: Y du bord nord de la zone bureaux.
-            row_side: 'N' (rangée nord, bord extérieur = nord)
-                      ou 'S' (rangée sud, bord extérieur = sud).
+            blocks: Row blocks (west -> east).
+            y_desk: Y of the north edge of the desk zone.
+            row_side: 'N' (north row, outer edge = north)
+                      or 'S' (south row, outer edge = south).
         """
         x_cur = x_dsk
         for block in blocks:
@@ -931,21 +929,21 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     draw_row_oranges(pattern.north_row.blocks, y_desk_n, 'N')
     draw_row_oranges(pattern.south_row.blocks, y_desk_s, 'S')
 
-    # === fauteuils puis bureaux (z-order : fauteuil en premier, bureau par-dessus) ===
+    # === chairs then desks (z-order: chair first, desk on top) ===
 
     def draw_row_desks(blocks: list[Block], y_desk: float,
                        ws_offset: int, row_side: str) -> None:
-        """Dessine fauteuils PUIS bureaux d'une rangée (z-order correct).
+        """Draw chairs THEN desks for a row (correct z-order).
 
-        Rendu par type de bloc :
-          BLOCK_4/6    → fauteuil NS (draw_chair_ns), écran horizontal bord intérieur.
-          BLOCK_2_FACE → fauteuil EW (draw_chair_ew), écran vertical bord utilisateur.
+        Rendering by block type:
+          BLOCK_4/6    -> NS chair (draw_chair_ns), horizontal screen at inner edge.
+          BLOCK_2_FACE -> EW chair (draw_chair_ew), vertical screen at user side.
 
         Args:
-            blocks: Blocs de la rangée (ouest → est).
-            y_desk: Y du bord nord de la zone bureaux.
-            ws_offset: Indice de départ pour les labels WS.
-            row_side: 'N' (rangée nord) ou 'S' (rangée sud).
+            blocks: Row blocks (west -> east).
+            y_desk: Y of the north edge of the desk zone.
+            ws_offset: Starting index for WS labels.
+            row_side: 'N' (north row) or 'S' (south row).
         """
         # (bx, y, chair_type, side_or_orient, ws_idx)
         desks_info: list[tuple[float, float, str, str, int]] = []
@@ -968,14 +966,14 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
                     ws_idx += 1
             x_cur += bw_px
 
-        # Fauteuils en premier (60% sous le bureau à venir)
+        # Chairs first (60% under the upcoming desk)
         for bx, by, ch_type, side, _ in desks_info:
             if ch_type == 'NS':
                 draw_chair_ns(bx, by, side)
             else:
                 draw_chair_ew(bx, by, side)
 
-        # Bureaux par-dessus (masquent les 60%)
+        # Desks on top (masking the 60%)
         for bx, by, ch_type, side, idx in desks_info:
             if ch_type == 'NS':
                 screen_side = 'S' if row_side == 'N' else 'N'
@@ -990,7 +988,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     draw_row_desks(pattern.south_row.blocks, y_desk_s,
                    pattern.north_row.n_desks, 'S')
 
-    # === cotations EO en haut ===
+    # === EO dimensions at top ===
     ay = y0 - 4
 
     dim_arrow(x_bl_w, ay, x_or_w, ay, f"{PASSAGE_CM}", horiz=True)
@@ -1006,7 +1004,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     dim_arrow(x_or_e, ay, x_bl_e, ay, f"{CHAIR_CLEARANCE_CM}", horiz=True)
     dim_arrow(x_bl_e, ay, x_end,  ay, f"{PASSAGE_CM}", horiz=True)
 
-    # === cotations NS à droite ===
+    # === NS dimensions on the right ===
     ax = x_end + 14
     dim_arrow(ax, y_blue_n, ax, y_desk_n, f"{PASSAGE_CM} cm")
     dim_arrow(ax, y_desk_n, ax, y_corr,   f"{DESK_D_CM} cm")
@@ -1014,23 +1012,23 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     dim_arrow(ax, y_desk_s, ax, y_blue_s, f"{DESK_D_CM} cm")
     dim_arrow(ax, y_blue_s, ax, y_bottom, f"{PASSAGE_CM} cm")
 
-    # === label porte + note dérogatoire ===
+    # === door label + derogatory note ===
     cx_content = x_dsk + eo_w / 2
     out(f'<text x="{cx_content:.1f}" y="{y_bottom + 14:.1f}" '
         f'text-anchor="middle" font-family="sans-serif" '
-        f'font-size="9" fill="{TEXT_DIM}">(porte → sud)</text>')
+        f'font-size="9" fill="{TEXT_DIM}">(door -> south)</text>')
     all_blocks = pattern.north_row.blocks + pattern.south_row.blocks
     if any(b.derogatory for b in all_blocks):
         out(f'<text x="{cx_content:.1f}" y="{y_bottom + 28:.1f}" '
             f'text-anchor="middle" font-family="sans-serif" font-size="9" '
-            f'fill="#e8a020">⚠ AFNOR ES-10 : usage dérogatoire</text>')
+            f'fill="#e8a020">⚠ AFNOR ES-10: derogatory use</text>')
 
-    # === légende verticale ===
+    # === vertical legend ===
     ly = y_bottom + 46
     legend_items = [
-        (DESK_FILL,   DESK_STR,    "1",      "Bureau (80 × 180 cm)"),
-        (ORANGE_FILL, ORANGE_FILL, ORANGE_OP, "Non superposable — débattement 70 cm"),
-        (BLUE_FILL,   BLUE_FILL,   BLUE_OP,  "Zone candidate circulation — supprimable (90 cm)"),
+        (DESK_FILL,   DESK_STR,    "1",      "Desk (80 x 180 cm)"),
+        (ORANGE_FILL, ORANGE_FILL, ORANGE_OP, "Non-overlappable — chair clearance 70 cm"),
+        (BLUE_FILL,   BLUE_FILL,   BLUE_OP,  "Candidate circulation zone — removable (90 cm)"),
     ]
     for fill, stroke, op, label_text in legend_items:
         out(f'<rect x="30" y="{ly:.0f}" width="12" height="10" '
@@ -1048,16 +1046,16 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
 
 
 def render_block_svg(block: Block, path: str) -> None:
-    """Génère un SVG vue de dessus pour un bloc canonique individuel.
+    """Generate a top-view SVG for an individual canonical block.
 
-    Même standard visuel que render_pattern_svg (fond sombre, orange, bleu).
-    Géométrie EO : [orange 70] [desks eo_w] [orange 70]
-    Géométrie NS : [blue 90] [desks 180] [blue 90]
-    Les faces E/W étant ABSENT pour tous les blocs canoniques, pas de blue latéral.
+    Same visual style as render_pattern_svg (dark background, orange, blue).
+    EO geometry: [orange 70] [desks eo_w] [orange 70]
+    NS geometry: [blue 90] [desks 180] [blue 90]
+    E/W faces being ABSENT for all canonical blocks, no lateral blue zones.
 
     Args:
-        block: Bloc canonique à dessiner.
-        path: Chemin du fichier SVG de sortie.
+        block: Canonical block to draw.
+        path: Output SVG file path.
     """
     BG          = "#1e1e1e"
     BLUE_FILL   = "#4a90c4"
@@ -1087,14 +1085,14 @@ def render_block_svg(block: Block, path: str) -> None:
     dh      = cm(DESK_D_CM)             # 90 px
     eo_w    = cm(block.eo_cm)
 
-    # Coordonnées EO : orange W | desks | orange E  (pas de bleu latéral = ABSENT)
+    # EO coordinates: orange W | desks | orange E  (no lateral blue = ABSENT)
     x_or_w = 20.0
     x_dsk  = x_or_w + deb_px
     x_or_e = x_dsk  + eo_w
     x_end  = x_or_e + deb_px
     full_w = x_end - x_or_w
 
-    # Coordonnées NS
+    # NS coordinates
     y0       = margin_t + annot_top
     y_pass_n = y0
     y_desk   = y_pass_n + cand_px
@@ -1160,7 +1158,7 @@ def render_block_svg(block: Block, path: str) -> None:
                 f'font-family="sans-serif" font-size="9" fill="{TEXT_DIM}">'
                 f'{label}</text>')
 
-    # === en-tête SVG ===
+    # === SVG header ===
     out(f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{svg_w}" height="{svg_h}" '
         f'viewBox="0 0 {svg_w} {svg_h}">')
@@ -1172,41 +1170,41 @@ def render_block_svg(block: Block, path: str) -> None:
         '</defs>')
     out(f'<rect width="{svg_w}" height="{svg_h}" fill="{BG}"/>')
 
-    # rose des vents
+    # compass rose
     out(f'<text x="10" y="24" font-family="sans-serif" font-size="11" '
         f'font-weight="bold" fill="{TEXT_W}">N</text>')
     out(f'<line x1="14" y1="26" x2="14" y2="44" '
         f'stroke="{TEXT_W}" stroke-width="1.5"/>')
 
-    # titre
+    # title
     cx_title = x_or_w + full_w / 2
-    derog_note = " ⚠ dérogatoire" if block.derogatory else ""
+    derog_note = " ⚠ derogatory" if block.derogatory else ""
     out(f'<text x="{cx_title:.0f}" y="22" text-anchor="middle" '
         f'font-family="sans-serif" font-size="13" font-weight="bold" '
-        f'fill="{TEXT_W}">{block.name} — {block.n_desks} postes{derog_note}</text>')
+        f'fill="{TEXT_W}">{block.name} — {block.n_desks} desks{derog_note}</text>')
     out(f'<text x="{cx_title:.0f}" y="38" text-anchor="middle" '
         f'font-family="sans-serif" font-size="10" fill="{TEXT_DIM}">'
-        f'EO {block.eo_cm} cm × NS {block.ns_cm} cm'
-        f' · débat. {CHAIR_CLEARANCE_CM} cm · passage {PASSAGE_CM} cm</text>')
+        f'EO {block.eo_cm} cm x NS {block.ns_cm} cm'
+        f' · clearance {CHAIR_CLEARANCE_CM} cm · passage {PASSAGE_CM} cm</text>')
 
-    # === zones de fond ===
-    # Bleu NS nord et sud — sur toute la largeur (orange inclus)
+    # === background zones ===
+    # Blue NS north and south — full width (including orange)
     draw_zone_candidate(x_or_w, y_pass_n, full_w, cand_px,
-                        f"candidat circ. nord — {PASSAGE_CM} cm")
+                        f"north circ. candidate — {PASSAGE_CM} cm")
     draw_zone_candidate(x_or_w, y_pass_s, full_w, cand_px,
-                        f"candidat circ. sud — {PASSAGE_CM} cm")
+                        f"south circ. candidate — {PASSAGE_CM} cm")
 
-    # Orange EO — hauteur totale NS physique uniquement (y_desk → y_pass_s)
+    # Orange EO — physical NS height only (y_desk -> y_pass_s)
     draw_zone_orange(x_or_w, y_desk, deb_px, dh,
-                     f"débat.\n{CHAIR_CLEARANCE_CM} cm")
+                     f"clear.\n{CHAIR_CLEARANCE_CM} cm")
     draw_zone_orange(x_or_e, y_desk, deb_px, dh,
-                     f"débat.\n{CHAIR_CLEARANCE_CM} cm")
+                     f"clear.\n{CHAIR_CLEARANCE_CM} cm")
 
-    # === fauteuils puis bureaux (z-order) ===
+    # === chairs then desks (z-order) ===
     ch_rx = deb_px * 0.5
     ch_ry = dh * 0.20
 
-    # Collecte desk positions
+    # Collect desk positions
     n_pairs = block.n_desks // 2
     desks_info: list[tuple[float, str, int]] = []
     x_cur = x_dsk
@@ -1216,7 +1214,7 @@ def render_block_svg(block: Block, path: str) -> None:
         desks_info.append((x_cur + dw, 'E', ws_idx)); ws_idx += 1
         x_cur += dw * 2
 
-    # Fauteuils
+    # Chairs
     cy_desk = y_desk + dh / 2
     for bx, side, idx in desks_info:
         if side == 'W':
@@ -1230,7 +1228,7 @@ def render_block_svg(block: Block, path: str) -> None:
             else:
                 draw_chair(bx + dw + ch_rx * 0.6, cy_desk, ch_rx * 0.7, ch_ry)
 
-    # Bureaux
+    # Desks
     for bx, side, idx in desks_info:
         draw_desk(bx, y_desk, dw, dh, side)
         lbl = f"{block.name[0]}{idx:02d}"
@@ -1238,7 +1236,7 @@ def render_block_svg(block: Block, path: str) -> None:
             f'text-anchor="middle" font-family="sans-serif" '
             f'font-size="8" fill="#555">{lbl}</text>')
 
-    # === cotations EO ===
+    # === EO dimensions ===
     ay = y0 - 4
     dim_arrow(x_or_w, ay, x_dsk,  ay, f"{CHAIR_CLEARANCE_CM}", horiz=True)
     dim_arrow(x_dsk,  ay, x_or_e, ay, f"{block.eo_cm} cm", horiz=True)
@@ -1247,28 +1245,28 @@ def render_block_svg(block: Block, path: str) -> None:
         f'font-size="8" fill="{TEXT_DIM}">{block.name}</text>')
     dim_arrow(x_or_e, ay, x_end,  ay, f"{CHAIR_CLEARANCE_CM}", horiz=True)
 
-    # === cotations NS à droite ===
+    # === NS dimensions on the right ===
     ax = x_end + 14
     dim_arrow(ax, y_pass_n, ax, y_desk,   f"{PASSAGE_CM} cm")
     dim_arrow(ax, y_desk,   ax, y_pass_s, f"{block.ns_cm} cm")
     dim_arrow(ax, y_pass_s, ax, y_bottom, f"{PASSAGE_CM} cm")
 
-    # label porte
+    # door label
     out(f'<text x="{cx_title:.1f}" y="{y_bottom + 14:.1f}" '
         f'text-anchor="middle" font-family="sans-serif" '
-        f'font-size="9" fill="{TEXT_DIM}">(porte → sud)</text>')
+        f'font-size="9" fill="{TEXT_DIM}">(door -> south)</text>')
 
     if block.derogatory:
         out(f'<text x="{cx_title:.1f}" y="{y_bottom + 28:.1f}" '
             f'text-anchor="middle" font-family="sans-serif" font-size="9" '
-            f'fill="#e8a020">⚠ AFNOR ES-10 : usage dérogatoire</text>')
+            f'fill="#e8a020">⚠ AFNOR ES-10: derogatory use</text>')
 
-    # === légende ===
+    # === legend ===
     ly = svg_h - 36
     legend_items = [
-        (DESK_FILL,   DESK_STR,    "1",       "Bureau (80 × 180 cm)"),
-        (ORANGE_FILL, ORANGE_FILL, ORANGE_OP, "Non superposable — 70 cm"),
-        (BLUE_FILL,   BLUE_FILL,   BLUE_OP,   "Zone candidate — supprimable (90 cm)"),
+        (DESK_FILL,   DESK_STR,    "1",       "Desk (80 x 180 cm)"),
+        (ORANGE_FILL, ORANGE_FILL, ORANGE_OP, "Non-overlappable — 70 cm"),
+        (BLUE_FILL,   BLUE_FILL,   BLUE_OP,   "Candidate zone — removable (90 cm)"),
     ]
     item_w = max(150, (svg_w - 20) // len(legend_items))
     lx = 10.0
@@ -1308,9 +1306,9 @@ if __name__ == "__main__":
         render_block_svg(block, svg_path)
         print(f"✓ {svg_path}")
 
-    print("Export terminé.")
+    print("Export complete.")
 
-    # ── Vérification Pareto n=4 ──────────────────────────────────────────────
+    # ── Pareto verification n=4 ──────────────────────────────────────────────
     all_patterns = PATTERNS_ALL + DOUBLE_ROW_PATTERNS_ALL
     pareto = set(id(p) for p in pareto_front(all_patterns))
     n4 = [p for p in all_patterns if p.n_desks == 4]

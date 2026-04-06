@@ -1,18 +1,18 @@
 """
-Test du peigne adaptatif sur test_floorplan2.png.
+Test of the adaptive comb on test_floorplan2.png.
 
-Pipeline complet :
-  1. OCR (pytesseract --psm 11, upscale x2) → trouver tous les "14"
-  2. Parsing syntaxique des cartouches → seed = centre géométrique, nom = numéro pièce
-  3. Binarisation seuil 80
-  4. Effacement des cartouches → blanc
-  5. Peigne adaptatif (condition d'arrêt dynamique) → grille de points
-  6. Plus grand rectangle contenant le seed
-  7. Visualisation debug
+Full pipeline:
+  1. OCR (pytesseract --psm 11, upscale x2) → find all "14" codes
+  2. Syntactic parsing of label boxes → seed = geometric center, name = room number
+  3. Binarize at threshold 80
+  4. Erase label boxes → white
+  5. Adaptive comb (dynamic stop condition) → grid of hit points
+  6. Largest rectangle containing the seed
+  7. Debug visualization
 
 Usage:
-  python /tmp/test_comb.py              # toutes les pièces
-  python /tmp/test_comb.py 916          # pièce 916 seule
+  python /tmp/test_comb.py              # all rooms
+  python /tmp/test_comb.py 916          # room 916 only
 """
 
 import os
@@ -25,13 +25,13 @@ from collections import deque
 
 _TMP = tempfile.gettempdir()
 
-# --- Paramètres ---
+# --- Parameters ---
 PLAN_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "project", "plans", "test_floorplan3.png"
 )
 BINARIZE_THRESHOLD = 110
-COMB_STEP_PX = 5   # pas du peigne en pixels
+COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
 
@@ -44,7 +44,7 @@ def find_seeds_by_ocr(image):
     try:
         import pytesseract
     except ImportError:
-        print("pytesseract non disponible")
+        print("pytesseract not available")
         return {}, []
 
     ocr_image = image.resize((image.width * 2, image.height * 2), Image.LANCZOS)
@@ -132,10 +132,10 @@ def binarize(gray_arr, threshold=BINARIZE_THRESHOLD):
 
 
 def remove_non_ortho(binary):
-    """Supprime les éléments non-orthogonaux (arcs de porte, cotations).
+    """Remove non-orthogonal elements (door arcs, dimension lines).
 
-    Analyse chaque composante connexe par minAreaRect. Si l'orientation
-    dominante n'est ni ~0° ni ~90° (tolérance 5°), la composante est supprimée.
+    Analyses each connected component via minAreaRect. If the dominant
+    orientation is neither ~0° nor ~90° (tolerance 5°), the component is removed.
     """
     binary_u8 = binary.astype(np.uint8) * 255
     num, labels = cv2.connectedComponents(binary_u8)
@@ -153,7 +153,7 @@ def remove_non_ortho(binary):
 
 
 def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX):
-    """Retourne la distance au dernier pixel blanc avant le mur.
+    """Return the distance to the last white pixel before the wall.
 
     Returns:
         Distance to last white pixel (= wall distance - 1), or
@@ -178,20 +178,20 @@ RAY_MARGIN_PX = 10   # margin beyond coarse distance for fine rays
 
 
 def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
-    """Peigne adaptatif en 2 passes.
+    """Adaptive two-pass comb.
 
-    Phase 1 (grossière) : rays à pas large (COARSE_STEP_PX) depuis le seed
-    pour détecter les 4 murs immédiats → distances par direction.
+    Phase 1 (coarse): rays at wide step (COARSE_STEP_PX) from the seed
+    to detect the 4 immediate walls → distances by direction.
 
-    Phase 2 (fine) : rays à pas step_px, limités en position (bbox phase 1)
-    ET en portée (distance phase 1 + marge). Aucun ray ne dépasse les murs
-    détectés en phase 1.
+    Phase 2 (fine): rays at step_px, bounded in position (phase 1 bbox)
+    AND in range (phase 1 distance + margin). No ray goes past the walls
+    detected in phase 1.
 
-    Retourne (all_hits, dir_hits) :
-      all_hits = liste plate [(px, py), ...]
+    Returns (all_hits, dir_hits):
+      all_hits = flat list [(px, py), ...]
       dir_hits = {'north': [...], 'south': [...], 'east': [...], 'west': [...]}
     """
-    # === Phase 1 : distances grossières par direction (mode, pas max) ===
+    # === Phase 1: coarse distances by direction (mode, not max) ===
     coarse_dists = {'north': [], 'south': [], 'west': [], 'east': []}
 
     # Rays initiaux
@@ -204,7 +204,7 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
     max_ns = max((coarse_dists['north'] + coarse_dists['south']) or [0])
     max_ew = max((coarse_dists['west'] + coarse_dists['east']) or [0])
 
-    # Peigne grossier vertical → collect north/south distances
+    # Coarse vertical comb → collect north/south distances
     step = 1
     while True:
         offset = step * COARSE_STEP_PX
@@ -221,7 +221,7 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
                 max_ns = max(max_ns, d)
         step += 1
 
-    # Peigne grossier horizontal → collect west/east distances
+    # Coarse horizontal comb → collect west/east distances
     step = 1
     while True:
         offset = step * COARSE_STEP_PX
@@ -251,21 +251,21 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
     coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
     coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
 
-    # Bbox (positions de départ) = basée sur le mode (mur dominant)
+    # Bbox (start positions) = based on mode (dominant wall)
     bbox_x0 = cx - coarse_ew
     bbox_x1 = cx + coarse_ew
     bbox_y0 = cy - coarse_ns
     bbox_y1 = cy + coarse_ns
-    # Portée des rays = basée sur le max (pour traverser les portes)
+    # Ray range = based on max (to traverse doors)
     max_north = coarse_max['north'] + RAY_MARGIN_PX
     max_south = coarse_max['south'] + RAY_MARGIN_PX
     max_west = coarse_max['west'] + RAY_MARGIN_PX
     max_east = coarse_max['east'] + RAY_MARGIN_PX
 
-    # === Phase 2 : peigne fin, limité en position ET en portée ===
+    # === Phase 2: fine comb, bounded in position AND range ===
     dir_hits = {'north': [], 'south': [], 'east': [], 'west': []}
 
-    # Rays verticaux (N et S)
+    # Vertical rays (N and S)
     rx = cx
     while rx >= bbox_x0:
         d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
@@ -285,7 +285,7 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
             dir_hits['south'].append((rx, cy + d))
         rx += step_px
 
-    # Rays horizontaux (E et W)
+    # Horizontal rays (E and W)
     ry = cy
     while ry >= bbox_y0:
         d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
@@ -404,12 +404,12 @@ def rect_from_directional_hits(dir_hits, cx, cy):
 
 
 def largest_rect_no_hits(hits, cx, cy, return_all=False):
-    """Plus grand rectangle contenant (cx,cy) sans aucun hit à l'intérieur.
+    """Largest rectangle containing (cx,cy) with no hits strictly inside.
 
-    Les hits peuvent être sur les bords du rectangle.
-    Approche : pour chaque paire de bornes y (top, bottom) définies par
-    les hits, trouver les bornes x les plus larges telles qu'aucun hit
-    ne soit strictement à l'intérieur.
+    Hits may lie on the rectangle edges.
+    Approach: for each pair of y bounds (top, bottom) defined by
+    the hits, find the widest x bounds such that no hit is strictly
+    inside.
 
     Args:
         return_all: if True, return (best_rect, all_candidates) where
@@ -419,14 +419,14 @@ def largest_rect_no_hits(hits, cx, cy, return_all=False):
         r = (cx - 1, cy - 1, cx + 1, cy + 1)
         return (r, [(r, 4)]) if return_all else r
 
-    # Collecter toutes les coordonnées y uniques des hits
+    # Collect all unique y coordinates of hits
     ys = sorted(set(h[1] for h in hits))
 
     best_area = 0
     best_rect = None
     all_candidates = [] if return_all else None
 
-    # Pour chaque paire (y_top, y_bottom) qui contient cy
+    # For each pair (y_top, y_bottom) containing cy
     for i, y_top in enumerate(ys):
         if y_top > cy:
             break
@@ -438,14 +438,14 @@ def largest_rect_no_hits(hits, cx, cy, return_all=False):
             if h <= 0:
                 continue
 
-            # Trouver les bornes x : les hits dans la bande
-            # y_top <= hit_y <= y_bot contraignent x
+            # Find x bounds: hits within the band
+            # y_top <= hit_y <= y_bot constrain x
             x_left = -999999
             x_right = 999999
 
             for hx, hy in hits:
                 if y_top <= hy <= y_bot:
-                    # Ce hit est dans la bande (bords inclus)
+                    # This hit is in the band (edges included)
                     if hx <= cx:
                         x_left = max(x_left, hx)
                     if hx >= cx:
@@ -660,13 +660,13 @@ def snap_through_white(binary, rect, max_advance=8):
     return (x0, y0, x1, y1)
 
 
-DOOR_PROBE_PX = 4   # ~2cm, décalage pour sonder la position de la porte
-DOOR_GROUP_GAP_PX = 25  # gap max entre pixels d'un même arc (~largeur porte)
-WALL_MARGIN_PX = 3   # exclure les pixels proches des murs perpendiculaires
+DOOR_PROBE_PX = 4   # ~2cm, offset for probing door position
+DOOR_GROUP_GAP_PX = 25  # max gap between pixels of the same arc (~door width)
+WALL_MARGIN_PX = 3   # exclude pixels close to perpendicular walls
 
 
 def _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX):
-    """Regroupe des pixels contigus (avec gap max)."""
+    """Group contiguous pixels (with max gap)."""
     if not pixels:
         return []
     pixels = sorted(pixels)
@@ -683,10 +683,10 @@ def _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX):
 
 
 def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
-    """Détecte les arcs de porte sur une face du rectangle.
+    """Detect door swings on one face of the rectangle.
 
     Returns:
-        (new_edge, door_infos) ou (None, []).
+        (new_edge, door_infos) or (None, []).
     """
     from collections import Counter
     x0, y0, x1, y1 = rect
@@ -743,7 +743,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         offset = min(g) - origin
         width = max(g) - min(g) + 1
         hinge_side = "left" if (offset < size / 2) else "right"
-        # Jamb positions (absolute px on the wall)
+        # Hinge/free jamb positions (absolute px on the wall)
         jamb_hinge = min(g)
         jamb_free = max(g)
         # Door opens inward: the arc is inside the room (between seed
@@ -765,10 +765,10 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
 
 def expand_door_arcs(binary, rect, hits, cx, cy,
                      door_width_px=23, tolerance=0.35):
-    """Phase 3 : détecte les arcs de porte et agrandit le rectangle.
+    """Phase 3: detect door swings and expand the rectangle.
 
     Returns:
-        (expanded_rect, doors) où doors = liste de door_info dicts.
+        (expanded_rect, doors) where doors = list of door_info dicts.
     """
     x0, y0, x1, y1 = rect
     doors = []
@@ -788,7 +788,7 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
 
 
 def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None):
-    """Détecte le rectangle d'une pièce : peigne → hits → plus grand rectangle → expansion arcs."""
+    """Detect a room rectangle: comb → hits → largest rectangle → door arc expansion."""
     all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
                                            other_seeds=other_seeds)
 
@@ -800,15 +800,15 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None):
     # Expand each edge outward through fully white lines
     rect = snap_through_white(binary, rect)
 
-    # Phase 3 : expansion arcs de porte
+    # Phase 3: door arc expansion
     rect, doors = expand_door_arcs(binary, rect, all_hits, cx, cy,
                                    door_width_px=door_width_px)
 
     return rect, all_hits, doors
 
 
-# Extension automatique des zones interdites supprimée (D-75).
-# Les zones interdites sont saisies manuellement en phase Review.
+# Automatic exclusion zone extension removed.
+# Exclusion zones are entered manually in the Review phase.
 
 
 def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
@@ -958,13 +958,13 @@ def draw_debug_single(image, binary, name, bbox, hits, cx, cy, output_path):
     img = image.convert("RGB").copy()
     draw = ImageDraw.Draw(img)
 
-    # Hits en rouge
+    # Hits in red
     for hx, hy in hits:
         draw.ellipse([hx - 2, hy - 2, hx + 2, hy + 2], fill=(255, 0, 0))
 
-    # Rectangle bleu
+    # Rectangle in blue
     draw.rectangle([x0, y0, x1, y1], outline=(0, 0, 255), width=2)
-    # Seed vert
+    # Seed in green
     draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=(0, 255, 0))
 
     crop_x0 = max(0, x0 - margin)
@@ -982,31 +982,31 @@ def main():
     img_gray = load_image(PLAN_PATH)
     print(f"Image: {img_gray.size}")
 
-    print("Étape 1+2 : OCR → seeds + cartouches...")
+    print("Step 1+2: OCR → seeds + label boxes...")
     seeds, cartouche_bboxes = find_seeds_by_ocr(img_gray)
 
     if not seeds:
-        print("Aucun seed trouvé !")
+        print("No seeds found!")
         return
 
-    print(f"Seeds trouvés: {len(seeds)}")
+    print(f"Seeds found: {len(seeds)}")
 
-    print("Étape 4 : effacement des cartouches...")
+    print("Step 4: erasing label boxes...")
     gray_arr = np.array(img_gray)
     cleaned_arr = erase_cartouches(gray_arr, cartouche_bboxes)
     Image.fromarray(cleaned_arr).save(os.path.join(_TMP, "cleaned_plan.png"))
 
-    print("Étape 3 : binarisation seuil 80...")
+    print("Step 3: binarizing at threshold 80...")
     binary = binarize(cleaned_arr)
-    print(f"  Pixels mur: {np.sum(binary)}")
+    print(f"  Wall pixels: {np.sum(binary)}")
 
-    print("Étape 3b : suppression éléments non-orthogonaux...")
+    print("Step 3b: removing non-orthogonal elements...")
     # remove_non_ortho disabled — door detection works on raw geometry
     # (hits + contact pattern), non-ortho elements don't interfere
     # binary = remove_non_ortho(binary)
-    print(f"  Pixels mur après: {np.sum(binary)}")
+    print(f"  Wall pixels after: {np.sum(binary)}")
 
-    # Sauvegarder pour debug
+    # Save for debug
     Image.fromarray((~binary * 255).astype(np.uint8)).save(os.path.join(_TMP, "ortho_plan.png"))
 
     step_px = COMB_STEP_PX
@@ -1015,8 +1015,8 @@ def main():
 
     if target_room:
         if target_room not in seeds:
-            print(f"Pièce {target_room} non trouvée. "
-                  f"Disponibles: {sorted(seeds.keys())}")
+            print(f"Room {target_room} not found. "
+                  f"Available: {sorted(seeds.keys())}")
             return
         cx, cy = seeds[target_room][0], seeds[target_room][1]
         other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
@@ -1024,11 +1024,11 @@ def main():
         bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
         x0, y0, x1, y1 = bbox
         print(f"Rectangle: ({x0},{y0}) → ({x1},{y1})")
-        print(f"Taille: {x1 - x0} x {y1 - y0} px")
+        print(f"Size: {x1 - x0} x {y1 - y0} px")
         print(f"Hits: {len(hits)}")
         for d in doors:
-            print(f"Porte: face={d['face']}, offset={d['offset_px']}px, "
-                  f"largeur={d['width_px']}px, charnière={d['hinge_side']}")
+            print(f"Door: face={d['face']}, offset={d['offset_px']}px, "
+                  f"width={d['width_px']}px, hinge={d['hinge_side']}")
         draw_debug_single(Image.fromarray(cleaned_arr), binary,
                           target_room, bbox, hits, cx, cy,
                           os.path.join(_TMP, f"comb_{target_room}.png"))
@@ -1039,7 +1039,7 @@ def main():
             other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
             bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
             x0, y0, x1, y1 = bbox
-            door_str = f" | {len(doors)} porte(s)" if doors else ""
+            door_str = f" | {len(doors)} door(s)" if doors else ""
             print(f"  {name}: ({x0},{y0}) → ({x1},{y1}) = "
                   f"{x1 - x0}x{y1 - y0}px{door_str}")
             results.append((name, bbox, cx, cy, hits, doors))

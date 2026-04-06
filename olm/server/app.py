@@ -1,7 +1,7 @@
-"""Serveur Flask pour l'outil de gestion et création de patterns — solver_lab.
+"""Flask server for the pattern management and creation tool.
 
-Point d'entrée : python pattern_server.py → http://localhost:5051
-Stockage : catalogue/patterns.json
+Entry point: python pattern_server.py → http://localhost:5051
+Storage: catalogue/patterns.json
 """
 from __future__ import annotations
 
@@ -30,12 +30,12 @@ CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
 
 @app.route("/static/<path:filename>")
 def serve_static(filename: str):
-    """Sert les fichiers statiques depuis le dossier static/."""
+    """Serve static files from the static/ folder."""
     return send_from_directory(os.path.join(BASE_DIR, "static"), filename)
 
 
 def _load_catalogue() -> list[dict]:
-    """Charge le catalogue depuis le fichier JSON."""
+    """Load the catalogue from the JSON file."""
     if not os.path.exists(CATALOGUE_PATH):
         return []
     with open(CATALOGUE_PATH, encoding="utf-8") as f:
@@ -44,14 +44,14 @@ def _load_catalogue() -> list[dict]:
 
 
 def _save_catalogue(patterns: list[dict]) -> None:
-    """Sauvegarde le catalogue dans le fichier JSON."""
+    """Save the catalogue to the JSON file."""
     os.makedirs(CATALOGUE_DIR, exist_ok=True)
     with open(CATALOGUE_PATH, "w", encoding="utf-8") as f:
         json.dump({"patterns": patterns}, f, indent=2, ensure_ascii=False)
 
 
 def _find_pattern(patterns: list[dict], name: str) -> int:
-    """Retourne l'index du pattern par nom, ou -1."""
+    """Return the pattern index by name, or -1 if not found."""
     for i, p in enumerate(patterns):
         if p["name"] == name:
             return i
@@ -61,13 +61,13 @@ def _find_pattern(patterns: list[dict], name: str) -> int:
 _BASE_BLOCKS = [BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
                 BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R]
 
-# Blocs face-à-face : E/W zones = chair + passage (ES-06)
+# Face-to-face blocks: E/W zones = chair + passage (ES-06)
 _FACE_TO_FACE_BLOCKS = {"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"}
 
-# Blocs orthogonaux : zones chair + passage_single sur les faces chaise
+# Orthogonal blocks: chair + passage_single zones on the chair faces
 _ORTHO_BLOCKS = {
-    "BLOCK_2_ORTHO_R": {"north", "east"},   # chaises desk1=N, desk2=E (L bas-gauche)
-    "BLOCK_2_ORTHO_L": {"north", "west"},   # chaises desk1=N, desk2=W (L bas-droite)
+    "BLOCK_2_ORTHO_R": {"north", "east"},   # chairs desk1=N, desk2=E (L bottom-left)
+    "BLOCK_2_ORTHO_L": {"north", "west"},   # chairs desk1=N, desk2=W (L bottom-right)
 }
 
 
@@ -87,7 +87,7 @@ _BLOCK_DESK_FACTORS = {
 
 
 def _block_def_to_json(block) -> dict:
-    """Convertit un Block en dict JSON, recalculant les dimensions depuis la config."""
+    """Convert a Block to a JSON dict, recomputing dimensions from config."""
     from olm.core.pattern_generator import DESK_W_CM, DESK_D_CM
     factors = _BLOCK_DESK_FACTORS.get(block.name)
     if factors:
@@ -117,10 +117,10 @@ def _block_def_to_json(block) -> dict:
 
 
 def _build_block_defs(cfg) -> dict:
-    """Construit les définitions de blocs pour un standard donné.
+    """Build block definitions for a given standard.
 
-    Les zones fixes (débattement chaise) et de circulation varient
-    selon le standard d'aménagement.
+    Fixed zones (chair clearance) and circulation zones vary
+    according to the layout standard.
     """
     chair = cfg.chair_clearance_cm      # ES-01
     passage = cfg.passage_cm            # ES-06
@@ -130,14 +130,14 @@ def _build_block_defs(cfg) -> dict:
     for block in _BASE_BLOCKS:
         d = _block_def_to_json(block)
         if block.name in _FACE_TO_FACE_BLOCKS:
-            # Face-à-face : E/W = chair + passage
+            # Face-to-face: E/W = chair + passage
             for face in ("east", "west"):
                 d["faces"][face] = {
                     "non_superposable_cm": chair,
                     "candidate_cm": passage,
                 }
         elif block.name in _ORTHO_BLOCKS:
-            # Ortho : chair + passage_single sur les faces chaise
+            # Ortho: chair + passage_single on the chair faces
             chair_faces = _ORTHO_BLOCKS[block.name]
             for face in ("north", "south", "east", "west"):
                 if face in chair_faces:
@@ -151,7 +151,7 @@ def _build_block_defs(cfg) -> dict:
                         "candidate_cm": 0,
                     }
         else:
-            # Seul/côte : W = chair + passage_single
+            # Single/side: W = chair + passage_single
             d["faces"]["west"] = {
                 "non_superposable_cm": chair,
                 "candidate_cm": passage_single,
@@ -160,12 +160,12 @@ def _build_block_defs(cfg) -> dict:
     return defs
 
 
-# Cache par standard
+# Cache by standard
 _BLOCK_DEFS_CACHE: dict[str, dict] = {}
 
 
 def _get_block_defs(standard_name: str) -> dict:
-    """Retourne les block defs pour un standard (avec cache)."""
+    """Return block defs for a standard (with cache)."""
     if standard_name not in _BLOCK_DEFS_CACHE:
         cfg = ALL_CONFIGS.get(standard_name)
         if cfg is None:
@@ -177,7 +177,7 @@ def _get_block_defs(standard_name: str) -> dict:
 
 @app.route("/")
 def index():
-    """Sert la page de l'éditeur de patterns."""
+    """Serve the pattern editor page."""
     return send_from_directory(os.path.join(BASE_DIR, "templates"), "pattern_editor.html")
 
 
@@ -317,19 +317,19 @@ def api_ingestion_binarize():
 
 @app.route("/specs/<path:filename>")
 def serve_specs(filename: str):
-    """Sert les fichiers de specs."""
+    """Serve spec files."""
     return send_from_directory(os.path.join(os.path.dirname(BASE_DIR), "docs", "specs"), filename)
 
 
 @app.route("/matching")
 def matching_viewer():
-    """Sert la page du matching viewer."""
+    """Serve the matching viewer page."""
     return send_from_directory(os.path.join(BASE_DIR, "templates"), "matching_viewer.html")
 
 
 @app.route("/api/blocks", methods=["GET"])
 def api_blocks():
-    """Retourne les définitions des blocs pour le standard demandé.
+    """Return block definitions for the requested standard.
 
     Query param: ?standard=<name> (defaults to first available standard).
     """
@@ -354,8 +354,8 @@ def api_blocks():
 
 @app.route("/api/spacing", methods=["GET", "POST"])
 def api_spacing():
-    """GET : retourne les 3 configurations d'espacement.
-    POST : met à jour un standard. Body: {"standard": "SITE", "values": {...}}.
+    """GET: return the 3 spacing configurations.
+    POST: update a standard. Body: {"standard": "SITE", "values": {...}}.
     """
     if request.method == "POST":
         from olm.core.spacing_config import update_config
@@ -364,7 +364,7 @@ def api_spacing():
         name = data.get("standard")
         values = data.get("values", {})
         if not name:
-            return jsonify({"error": "Champ requis : standard"}), 400
+            return jsonify({"error": "Required field: standard"}), 400
         try:
             if data.get("reset"):
                 updated = reset_config(name)
@@ -416,14 +416,14 @@ def api_config_post():
 
 @app.route("/api/patterns", methods=["GET"])
 def api_patterns_list():
-    """Liste tous les patterns du catalogue."""
+    """List all patterns in the catalogue."""
     patterns = _load_catalogue()
     return jsonify({"patterns": patterns, "count": len(patterns)})
 
 
 @app.route("/api/catalogue/export", methods=["GET"])
 def api_catalogue_export():
-    """Exporte le catalogue complet en JSON (téléchargement)."""
+    """Export the full catalogue as JSON (download)."""
     patterns = _load_catalogue()
     response = jsonify({"patterns": patterns})
     response.headers["Content-Disposition"] = "attachment; filename=patterns.json"
@@ -433,38 +433,38 @@ def api_catalogue_export():
 
 @app.route("/api/catalogue/import", methods=["POST"])
 def api_catalogue_import():
-    """Importe des patterns dans le catalogue (merge, D-53).
+    """Import patterns into the catalogue (merge).
 
-    Body JSON : {"patterns": [...]} au format catalogue.
-    Les patterns importés sont ajoutés. En cas de conflit de nom,
-    le nommage auto D-50 renumérotation s'applique.
+    JSON body: {"patterns": [...]} in catalogue format.
+    Imported patterns are appended. Name conflicts are resolved by
+    automatic renumbering (compact names).
     """
     try:
         data = request.json
         if not data or "patterns" not in data:
-            return jsonify({"error": "Champ requis : patterns"}), 400
+            return jsonify({"error": "Required field: patterns"}), 400
 
         imported = data["patterns"]
         if not isinstance(imported, list):
-            return jsonify({"error": "patterns doit être une liste"}), 400
+            return jsonify({"error": "patterns must be a list"}), 400
 
-        # Validation minimale du schéma
+        # Minimal schema validation
         required_fields = {"rows", "room_width_cm", "room_depth_cm", "standard"}
         for i, p in enumerate(imported):
             missing = required_fields - set(p.keys())
             if missing:
                 return jsonify({
-                    "error": f"Pattern #{i} : champs manquants : {missing}",
+                    "error": f"Pattern #{i}: missing fields: {missing}",
                 }), 400
 
         catalogue = _load_catalogue()
         n_before = len(catalogue)
 
-        # Merge : ajouter les patterns importés
+        # Merge: append imported patterns
         for p in imported:
             catalogue.append(p)
 
-        # Compactage (renumérotation D-50) — résout les conflits de noms
+        # Compact names (renumber) — resolves name conflicts
         compact_catalogue_names(catalogue)
         _save_catalogue(catalogue)
 
@@ -480,21 +480,21 @@ def api_catalogue_import():
 
 @app.route("/api/patterns", methods=["POST"])
 def api_patterns_create():
-    """Crée ou met à jour un pattern.
+    """Create or update a pattern.
 
-    Body JSON : un pattern au format PATTERN_DSL_SPEC.md.
-    Si un pattern du même nom existe, il est remplacé.
-    Si auto_name=true dans le body, le nom est généré automatiquement (D-50).
-    Après chaque sauvegarde, les incréments sont compactés par groupe.
+    JSON body: a pattern in PATTERN_DSL_SPEC.md format.
+    If a pattern with the same name exists, it is replaced.
+    If auto_name=true in the body, the name is auto-generated.
+    After each save, name increments are compacted by group.
     """
     try:
         data = request.json
         if not data or "rows" not in data:
-            return jsonify({"error": "Champ requis : rows"}), 400
+            return jsonify({"error": "Required field: rows"}), 400
 
         patterns = _load_catalogue()
 
-        # Nommage automatique si demandé ou si pas de nom fourni
+        # Auto-name if requested or if no name provided
         auto_name = data.pop("auto_name", False)
         if auto_name or "name" not in data:
             data["name"] = generate_auto_name(data, patterns)
@@ -505,7 +505,7 @@ def api_patterns_create():
         else:
             patterns.append(data)
 
-        # Compactage des incréments par groupe (D-50)
+        # Compact name increments by group
         compact_catalogue_names(patterns)
 
         _save_catalogue(patterns)
@@ -516,21 +516,21 @@ def api_patterns_create():
 
 @app.route("/api/patterns/<name>", methods=["GET"])
 def api_pattern_get(name: str):
-    """Retourne un pattern par nom."""
+    """Return a pattern by name."""
     patterns = _load_catalogue()
     idx = _find_pattern(patterns, name)
     if idx < 0:
-        return jsonify({"error": f"Pattern non trouvé : {name}"}), 404
+        return jsonify({"error": f"Pattern not found: {name}"}), 404
     return jsonify(patterns[idx])
 
 
 @app.route("/api/patterns/<name>", methods=["DELETE"])
 def api_pattern_delete(name: str):
-    """Supprime un pattern par nom et compacte les incréments (D-50)."""
+    """Delete a pattern by name and compact name increments."""
     patterns = _load_catalogue()
     idx = _find_pattern(patterns, name)
     if idx < 0:
-        return jsonify({"error": f"Pattern non trouvé : {name}"}), 404
+        return jsonify({"error": f"Pattern not found: {name}"}), 404
     patterns.pop(idx)
     compact_catalogue_names(patterns)
     _save_catalogue(patterns)
@@ -539,21 +539,21 @@ def api_pattern_delete(name: str):
 
 @app.route("/api/patterns/<name>/duplicate", methods=["POST"])
 def api_pattern_duplicate(name: str):
-    """Duplique un pattern avec un nouveau nom.
+    """Duplicate a pattern with a new name.
 
-    Body JSON optionnel : {"new_name": "P_COPY"}.
-    Si absent, suffixe _copy ajouté.
+    Optional JSON body: {"new_name": "P_COPY"}.
+    If absent, _copy suffix is added.
     """
     try:
         patterns = _load_catalogue()
         idx = _find_pattern(patterns, name)
         if idx < 0:
-            return jsonify({"error": f"Pattern non trouvé : {name}"}), 404
+            return jsonify({"error": f"Pattern not found: {name}"}), 404
 
         data = request.json or {}
         new_name = data.get("new_name", name + "_copy")
         if _find_pattern(patterns, new_name) >= 0:
-            return jsonify({"error": f"Nom déjà utilisé : {new_name}"}), 409
+            return jsonify({"error": f"Name already in use: {new_name}"}), 409
 
         import copy
         new_pattern = copy.deepcopy(patterns[idx])
@@ -567,14 +567,14 @@ def api_pattern_duplicate(name: str):
 
 @app.route("/api/dsl/parse", methods=["POST"])
 def api_dsl_parse():
-    """Parse du DSL texte en JSON.
+    """Parse DSL text to JSON.
 
-    Body JSON : {"dsl": "P_B4: BLOCK_4_FACE, 180, BLOCK_2_FACE"}
+    JSON body: {"dsl": "P_B4: BLOCK_4_FACE, 180, BLOCK_2_FACE"}
     """
     try:
         data = request.json
         if not data or "dsl" not in data:
-            return jsonify({"error": "Champ requis : dsl"}), 400
+            return jsonify({"error": "Required field: dsl"}), 400
         result = parse_dsl(data["dsl"])
         return jsonify(result)
     except DSLError as e:
@@ -585,14 +585,14 @@ def api_dsl_parse():
 
 @app.route("/api/dsl/export", methods=["POST"])
 def api_dsl_export():
-    """Exporte un pattern JSON en DSL texte.
+    """Export a JSON pattern to DSL text.
 
-    Body JSON : un pattern au format PATTERN_DSL_SPEC.md.
+    JSON body: a pattern in PATTERN_DSL_SPEC.md format.
     """
     try:
         data = request.json
         if not data or "name" not in data:
-            return jsonify({"error": "Champ requis : name"}), 400
+            return jsonify({"error": "Required field: name"}), 400
         dsl_text = to_dsl(data)
         return jsonify({"dsl": dsl_text})
     except Exception as e:
@@ -601,15 +601,15 @@ def api_dsl_export():
 
 @app.route("/api/room-dsl/parse", methods=["POST"])
 def api_room_dsl_parse():
-    """Parse du DSL pièce en JSON.
+    """Parse room DSL text to JSON.
 
-    Body JSON : {"dsl": "ROOM 300x480\\nWINDOW N 0 300\\nDOOR S 0 90 INT L"}
-    Retourne les champs parsés pour mise à jour de l'éditeur.
+    JSON body: {"dsl": "ROOM 300x480\\nWINDOW N 0 300\\nDOOR S 0 90 INT L"}
+    Returns parsed fields for updating the editor.
     """
     try:
         data = request.json
         if not data or "dsl" not in data:
-            return jsonify({"error": "Champ requis : dsl"}), 400
+            return jsonify({"error": "Required field: dsl"}), 400
         room = parse_room_dsl(data["dsl"])
         return jsonify({
             "width_cm": room.width_cm,
@@ -648,7 +648,7 @@ MOCK_ROOM = {
 
 
 def _pattern_emprise_eo(pattern: dict) -> float:
-    """Calcule l'emprise EO (largeur) de la premiere rangee d'un pattern."""
+    """Compute the EO footprint (width) of the first row of a pattern."""
     rows = pattern.get("rows", [])
     if not rows:
         return 0.0
@@ -668,7 +668,7 @@ def _pattern_emprise_eo(pattern: dict) -> float:
 
 
 def _pattern_total_desks(pattern: dict) -> int:
-    """Compte le nombre total de postes dans un pattern."""
+    """Count the total number of desks in a pattern."""
     total = 0
     for row in pattern.get("rows", []):
         for block in row.get("blocks", []):
@@ -679,7 +679,7 @@ def _pattern_total_desks(pattern: dict) -> int:
 
 @app.route("/api/mock-candidates", methods=["GET"])
 def api_mock_candidates():
-    """Genere des solutions candidates fictives pour la piece de reference."""
+    """Generate mock candidate solutions for the reference room."""
     patterns = _load_catalogue()
     candidates = []
     cid = 1
@@ -718,16 +718,16 @@ def api_mock_candidates():
 
 @app.route("/api/match", methods=["GET"])
 def api_match():
-    """Ancien endpoint de matching (abandonné D-35). Redirige vers /api/floor-plan/match."""
+    """Deprecated matching endpoint. Redirects to /api/floor-plan/match."""
     return jsonify({"error": "Deprecated. Use POST /api/floor-plan/match instead."}), 410
 
 
 @app.route("/api/floor-plan/match", methods=["POST"])
 def api_floor_plan_match():
-    """Lance le matching catalogue sur un jeu de pièces pour le floor plan viewer.
+    """Run catalogue matching on a set of rooms for the floor plan viewer.
 
-    Body JSON : {"rooms": [...]} au format load_rooms_json.
-    Retourne les résultats de matching par pièce avec tous les candidats scorés.
+    JSON body: {"rooms": [...]} in load_rooms_json format.
+    Returns matching results per room with all scored candidates.
     """
     try:
         from olm.core.catalogue_matcher import (
@@ -741,7 +741,7 @@ def api_floor_plan_match():
 
         data = request.json
         if not data or "rooms" not in data:
-            return jsonify({"error": "Champ requis : rooms"}), 400
+            return jsonify({"error": "Required field: rooms"}), 400
 
         catalogue = _load_catalogue()
         results = []
@@ -775,7 +775,7 @@ def api_floor_plan_match():
 
             match_result = match_room(catalogue, room)
 
-            # Construire la réponse pour cette pièce
+            # Build the response for this room
             room_result = {
                 "name": room.name,
                 "width_cm": room.width_cm,
@@ -802,7 +802,7 @@ def api_floor_plan_match():
             }
 
             for score in match_result.all_scores:
-                # Calculer les positions des desks pour le rendu
+                # Compute desk positions for rendering
                 desks = compute_desk_positions(score.adapted_pattern)
                 removed_set = set()
                 for rd in score.adapted_pattern.get("_removed_desks", []):
@@ -849,10 +849,10 @@ def api_floor_plan_match():
 
 @app.route("/api/coverage", methods=["POST"])
 def api_coverage():
-    """Analyse de couverture du catalogue sur un jeu de pièces.
+    """Catalogue coverage analysis on a set of rooms.
 
-    Body JSON : {"rooms": [...]} au format load_rooms_json.
-    Retourne le rapport de couverture avec backlog.
+    JSON body: {"rooms": [...]} in load_rooms_json format.
+    Returns the coverage report with backlog.
     """
     try:
         from olm.core.coverage_analysis import (
@@ -864,9 +864,9 @@ def api_coverage():
 
         data = request.json
         if not data or "rooms" not in data:
-            return jsonify({"error": "Champ requis : rooms"}), 400
+            return jsonify({"error": "Required field: rooms"}), 400
 
-        # Construire les RoomSpec depuis le JSON
+        # Build RoomSpec objects from JSON
         rooms = []
         for r in data["rooms"]:
             windows = [
@@ -913,6 +913,6 @@ def api_coverage():
 
 
 if __name__ == "__main__":
-    print("Éditeur de patterns — http://localhost:5051")
-    print(f"Catalogue : {CATALOGUE_PATH}")
+    print("Pattern editor — http://localhost:5051")
+    print(f"Catalogue: {CATALOGUE_PATH}")
     app.run(debug=True, port=5051)

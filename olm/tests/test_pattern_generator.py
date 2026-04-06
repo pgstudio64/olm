@@ -13,26 +13,26 @@ from olm.core.pattern_generator import (
 
 
 def test_bloc_1_passage_30cm():
-    """BLOCK_1 : passage accès poste seul = 30 cm (ES-03), pas 90 cm."""
+    """BLOCK_1: single-desk access passage = 30 cm (ES-03), not 90 cm."""
     assert BLOCK_1.eo_cm == DESK_W_CM
     assert BLOCK_1.ns_cm == DESK_D_CM
     assert BLOCK_1.n_desks == 1
-    # W : débattement 70 cm + passage 30 cm = 100 cm
+    # W: chair clearance 70 cm + passage 30 cm = 100 cm
     assert BLOCK_1.faces.west.non_superposable_cm == CHAIR_CLEARANCE_CM
     assert BLOCK_1.faces.west.candidate_cm == PASSAGE_SINGLE_CM
     assert BLOCK_1.faces.west.total_cm == 100
-    # E : absent (côté écran)
+    # E: absent (screen side)
     assert BLOCK_1.faces.east == FaceZone.absent()
 
 
 def test_bloc_2_face_dimensions():
     assert BLOCK_2_FACE.eo_cm == 160
     assert BLOCK_2_FACE.ns_cm == 180
-    # E/W : zone fixe (70 cm) + zone min. circulation (90 cm) = 160 cm (ES-04)
+    # E/W: fixed zone (70 cm) + min. circulation zone (90 cm) = 160 cm (ES-04)
     assert BLOCK_2_FACE.faces.east.non_superposable_cm == CHAIR_CLEARANCE_CM
     assert BLOCK_2_FACE.faces.east.candidate_cm == PASSAGE_CM
     assert BLOCK_2_FACE.faces.west.total_cm == CHAIR_CLEARANCE_CM + PASSAGE_CM
-    # N/S : absent (pas de fauteuil)
+    # N/S: absent (no chair)
     assert BLOCK_2_FACE.faces.north == FaceZone.absent()
     assert BLOCK_2_FACE.faces.south == FaceZone.absent()
 
@@ -43,7 +43,7 @@ def test_single_bloc4_pattern():
     assert p.physical_ns_cm == DESK_D_CM * 2
     # EO total = west(70+90) + 160 + east(70+90) = 480
     assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_W_CM * 2
-    # NS total = north(0) + 360 + south(0) = 360 (N/S absents)
+    # NS total = north(0) + 360 + south(0) = 360 (N/S absent)
     assert p.total_ns_cm == DESK_D_CM * 2
 
 
@@ -53,6 +53,7 @@ def test_b6_b2f_pattern():
     assert p.n_desks == 8
     # EO total = west_B6(70+90) + 320 + east_B2F(70+90) = 640
     assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_W_CM * 4
+
 
 
 def test_bloc6_derogatory():
@@ -68,7 +69,7 @@ def test_double_row_ns_total():
 
 def test_double_row_central_corridor():
     p = compose_double_row([BLOCK_4_FACE], [BLOCK_4_FACE], "test")
-    # ES-06 passage inter-blocs = 90 cm
+    # ES-06 inter-block passage = 90 cm
     assert p.central_corridor_cm == 90
 
 
@@ -78,7 +79,7 @@ def test_double_row_desks():
 
 
 def test_double_row_eo_asymmetric():
-    # rangée nord plus large que sud → total_eo = max
+    # north row wider than south → total_eo = max
     p = compose_double_row([BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE], "test")
     assert p.total_eo_cm == compose_double_row(
         [BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE, BLOCK_2_FACE], "ref"
@@ -104,8 +105,8 @@ def test_render_svg_creates_file():
     render_pattern_svg(p, path)
     content = open(path, encoding="utf-8").read()
     assert "<svg" in content
-    assert "4a90c4" in content   # zone candidate présente
-    assert "d0d0d0" in content   # bureau présent
+    assert "4a90c4" in content   # candidate zone present
+    assert "d0d0d0" in content   # desk present
     os.unlink(path)
 
 
@@ -116,7 +117,7 @@ def test_rotate_pattern_90_dimensions():
     assert r.orientation == 90
     assert r.physical_eo_cm == p.physical_ns_cm   # DESK_D_CM * 2 = 360
     assert r.physical_ns_cm == p.physical_eo_cm   # DESK_W_CM * 2 = 160
-    # Après rotation 90° CW : W←N(absent), E←S(absent), N←W(70+90), S←E(70+90)
+    # After 90° CW rotation: W←N(absent), E←S(absent), N←W(70+90), S←E(70+90)
     # total_eo = west(0) + 360 + east(0) = 360
     assert r.total_eo_cm == DESK_D_CM * 2
     # total_ns = north.candidate_cm(90) + 160 + south.candidate_cm(90) = 340
@@ -139,12 +140,12 @@ def test_mirror_double_row_symmetric():
 
 def test_patterns_all_count():
     assert len(PATTERNS_ALL) == len(PATTERNS) * 2
-    # P_B4_B4 symétrique → pas de miroir
-    # P_B4_B4B2F asymétrique → 1 miroir
-    # P_B4B2F_B4B2F symétrique → pas de miroir
-    # P_B2F_B2F symétrique → pas de miroir
-    # P_B2F_B4 asymétrique → 1 miroir
-    # P_B4B2F_B4 asymétrique → 1 miroir
+    # P_B4_B4 symmetric → no mirror
+    # P_B4_B4B2F asymmetric → 1 mirror
+    # P_B4B2F_B4B2F symmetric → no mirror
+    # P_B2F_B2F symmetric → no mirror
+    # P_B2F_B4 asymmetric → 1 mirror
+    # P_B4B2F_B4 asymmetric → 1 mirror
     assert len(DOUBLE_ROW_PATTERNS_ALL) == len(DOUBLE_ROW_PATTERNS) * 2 + 3
 
 
@@ -154,9 +155,9 @@ def test_render_svg_dark_background():
         path = f.name
     render_pattern_svg(p, path)
     content = open(path, encoding="utf-8").read()
-    assert "1e1e1e" in content      # fond sombre
-    assert "4a90c4" in content      # zone bleue
-    assert "8B6914" in content      # fauteuil
-    assert "1a1a1a" in content      # écran (standard visuel OLO)
-    assert "porte" in content       # label porte sud
+    assert "1e1e1e" in content      # dark background
+    assert "4a90c4" in content      # blue zone
+    assert "8B6914" in content      # chair
+    assert "1a1a1a" in content      # screen (OLO visual standard)
+    assert "door" in content         # south door label
     os.unlink(path)
