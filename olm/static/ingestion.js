@@ -62,8 +62,7 @@
     status.textContent = 'Extracting...';
 
     var formData = new FormData();
-    formData.append('plan_path',
-      '/Users/patrickguehl/AI-OLM/project/plans/' + planPath);
+    formData.append('plan_path', planPath);
     if (ingState.scale) formData.append('scale', ingState.scale);
     formData.append('threshold', ingState.threshold);
 

@@ -169,7 +169,8 @@ def _get_block_defs(standard_name: str) -> dict:
     if standard_name not in _BLOCK_DEFS_CACHE:
         cfg = ALL_CONFIGS.get(standard_name)
         if cfg is None:
-            cfg = ALL_CONFIGS["AFNOR_ADVICE"]
+            from olm.core.spacing_config import get_default
+            cfg = get_default()
         _BLOCK_DEFS_CACHE[standard_name] = _build_block_defs(cfg)
     return _BLOCK_DEFS_CACHE[standard_name]
 
@@ -182,16 +183,23 @@ def index():
 
 @app.route("/test_rooms.json")
 def serve_test_rooms():
-    """DEV: sert test_rooms.json pour auto-chargement."""
-    return send_from_directory(os.path.join(os.path.dirname(BASE_DIR), "project"), "test_rooms.json")
+    """DEV: serve test_rooms.json from project/ for auto-load."""
+    project_dir = os.path.join(os.path.dirname(BASE_DIR), "project")
+    path = os.path.join(project_dir, "test_rooms.json")
+    if not os.path.exists(path):
+        return jsonify({"rooms": []})
+    return send_from_directory(project_dir, "test_rooms.json")
 
 
 @app.route("/test_floor_plan.png")
 def serve_test_floor_plan():
-    """DEV: sert le raster de test."""
-    return send_from_directory(
-        os.path.join(os.path.dirname(BASE_DIR), "project", "plans"),
-        "test_floorplan.png")
+    """DEV: serve test floor plan from project/plans/."""
+    plans_dir = os.path.join(os.path.dirname(BASE_DIR), "project", "plans")
+    # Try available test plans in order of preference
+    for name in ("test_floorplan3.png", "test_floorplan.png", "test_floor_plan.png"):
+        if os.path.exists(os.path.join(plans_dir, name)):
+            return send_from_directory(plans_dir, name)
+    return "", 404
 
 
 @app.route("/api/ingestion/extract", methods=["POST"])
@@ -219,8 +227,13 @@ def api_ingestion_extract():
             f.save(tmp.name)
             plan_path = tmp.name
         elif plan_path:
-            # Use provided path (dev mode)
-            pass
+            # Resolve relative plan names to project/plans/ directory
+            if not os.path.isabs(plan_path):
+                plans_dir = os.path.join(
+                    os.path.dirname(BASE_DIR), "project", "plans")
+                plan_path = os.path.join(plans_dir, plan_path)
+            if not os.path.exists(plan_path):
+                return jsonify({"error": f"Plan not found: {plan_path}"}), 404
         else:
             return jsonify({"error": "No image provided"}), 400
 
@@ -318,10 +331,12 @@ def matching_viewer():
 def api_blocks():
     """Retourne les définitions des blocs pour le standard demandé.
 
-    Query param optionnel : ?standard=GROUP (défaut AFNOR_ADVICE)
+    Query param: ?standard=<name> (defaults to first available standard).
     """
-    standard = request.args.get("standard", "AFNOR_ADVICE")
-    cfg = ALL_CONFIGS.get(standard, ALL_CONFIGS["AFNOR_ADVICE"])
+    from olm.core.spacing_config import get_default_name, get_default
+    default_name = get_default_name() or ""
+    standard = request.args.get("standard", default_name)
+    cfg = ALL_CONFIGS.get(standard, get_default())
     block_defs = _get_block_defs(standard)
     import olm.core.pattern_generator as pg
     return jsonify({

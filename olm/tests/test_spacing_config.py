@@ -1,37 +1,47 @@
-"""Tests pour spacing_config.py."""
-from olm.core.spacing_config import SpacingConfig, AFNOR_ADVICE, GROUP, SITE, ALL_CONFIGS
+"""Tests for spacing_config.py — generic (no business standard names)."""
+from olm.core.spacing_config import SpacingConfig, ALL_CONFIGS, get_default, get_default_name
 
 
-def test_afnor_primitives():
-    assert AFNOR_ADVICE.chair_clearance_cm == 70
-    assert AFNOR_ADVICE.passage_cm == 90
-    assert AFNOR_ADVICE.door_exclusion_depth_cm == 180
-    assert AFNOR_ADVICE.main_corridor_cm == 140
-    assert AFNOR_ADVICE.front_access_cm == 60
-    assert AFNOR_ADVICE.desk_to_wall_cm == 20
-    assert AFNOR_ADVICE.max_island_size == 4
+def test_all_configs_loaded():
+    """At least one standard is loaded from project/config.json."""
+    assert len(ALL_CONFIGS) >= 1
 
 
-def test_afnor_derived():
-    assert AFNOR_ADVICE.passage_behind_one_row_cm == 160
-    assert AFNOR_ADVICE.passage_between_back_to_back_cm == 230
+def test_get_default():
+    """get_default returns a SpacingConfig."""
+    cfg = get_default()
+    assert cfg is not None
+    assert isinstance(cfg, SpacingConfig)
 
 
-def test_group_door_exclusion():
-    assert GROUP.door_exclusion_depth_cm == 180
+def test_get_default_name():
+    """get_default_name returns a non-empty string."""
+    name = get_default_name()
+    assert name is not None
+    assert name in ALL_CONFIGS
 
 
-def test_site_door_exclusion():
-    assert SITE.door_exclusion_depth_cm == 120
+def test_spacing_fields():
+    """Every loaded config has all required fields."""
+    for name, cfg in ALL_CONFIGS.items():
+        assert cfg.name == name
+        assert cfg.chair_clearance_cm > 0
+        assert cfg.passage_cm > 0
+        assert cfg.door_exclusion_depth_cm > 0
+        assert cfg.main_corridor_cm > 0
 
 
-def test_all_configs_keys():
-    assert set(ALL_CONFIGS.keys()) == {"AFNOR_ADVICE", "GROUP", "SITE"}
+def test_from_dict_roundtrip():
+    """from_dict(to_dict()) is identity."""
+    cfg = get_default()
+    d = cfg.to_dict()
+    restored = SpacingConfig.from_dict(d)
+    assert restored == cfg
 
 
-def test_frozen():
-    try:
-        AFNOR_ADVICE.passage_cm = 100
-        assert False, "Should raise FrozenInstanceError"
-    except AttributeError:
-        pass
+def test_from_dict_ignores_extra_keys():
+    """from_dict ignores keys not in the dataclass."""
+    d = get_default().to_dict()
+    d["unknown_field"] = 999
+    restored = SpacingConfig.from_dict(d)
+    assert not hasattr(restored, "unknown_field")

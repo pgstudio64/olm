@@ -32,7 +32,9 @@ from olm.core.pattern_generator import (
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CATALOGUE_PATH = os.path.join(BASE_DIR, "catalogue", "patterns.json")
+# Catalogue lives in project/catalogue/ (business data, not in generic core)
+_PROJECT_DIR = os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "project")
+CATALOGUE_PATH = os.path.join(_PROJECT_DIR, "catalogue", "patterns.json")
 
 
 # ---------------------------------------------------------------------------
@@ -1073,7 +1075,9 @@ def score_candidate(
     m2_per_desk = round(area_m2 / n_desks, 2) if n_desks > 0 else 0.0
 
     # Circulation
-    cfg = ALL_CONFIGS.get(standard, ALL_CONFIGS["AFNOR_ADVICE"])
+    from olm.core.spacing_config import get_default
+    default_cfg = get_default()
+    cfg = ALL_CONFIGS.get(standard, default_cfg) if default_cfg else None
     room_dict, blocks_list = _pattern_to_circulation_format(pattern, room)
     circ = circ_analyse(room_dict, blocks_list, cfg.door_exclusion_depth_cm)
 

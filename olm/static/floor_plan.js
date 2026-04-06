@@ -349,7 +349,7 @@
     state.row_gaps_cm = pat.row_gaps_cm || [];
     state.room_width_cm = pat.room_width_cm;
     state.room_depth_cm = pat.room_depth_cm;
-    state.standard = pat.standard || candidate.standard || "AFNOR_ADVICE";
+    state.standard = pat.standard || candidate.standard || getStandards()[0] || "";
     state.room_windows = pat.room_windows || [];
     state.room_openings = pat.room_openings || [];
     state.room_exclusions = pat.room_exclusions || [];

@@ -15,6 +15,7 @@ Usage:
   python /tmp/test_comb.py 916          # pièce 916 seule
 """
 
+import os
 import sys
 import numpy as np
 import cv2
@@ -22,7 +23,10 @@ from PIL import Image, ImageDraw
 from collections import deque
 
 # --- Paramètres ---
-PLAN_PATH = "/Users/patrickguehl/AI-OLM/project/plans/test_floorplan3.png"
+PLAN_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "project", "plans", "test_floorplan3.png"
+)
 BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # pas du peigne en pixels
 MAX_RAY_PX = 1500
