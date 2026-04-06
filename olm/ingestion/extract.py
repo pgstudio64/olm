@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 BINARIZE_THRESHOLD = 180     # grayscale threshold (< = wall)
 MORPH_DILATE_PX = 1          # morphological dilation for closing micro-gaps
 RAY_FAN_STEP = 3             # sample every N pixels along the fan (3 = 3x faster)
-WALL_DEPTH_PX = 30           # how far to probe into the wall for texture
+WALL_DEPTH_PX = 8            # how far to probe into the wall for texture (~30cm)
 MIN_OPENING_PX = 15          # minimum width of a detected opening in px
 MIN_OBSTACLE_PX = 10         # minimum width of a detected obstacle
 DOOR_ARC_R2_THRESHOLD = 0.7  # R² threshold for arc detection
 MODE_TOLERANCE_PX = 5        # distance from mode to count as "wall"
-EXTERIOR_PROBE_PX = 200      # how far beyond wall to probe for exterior
+SNAP_SEARCH_PX = 6           # search ±6px around current edge for wall snap
 ORTHO_ANGLE_TOLERANCE = 5    # degrees tolerance for orthogonal filter
 
 
@@ -726,12 +726,15 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
         h, w = binary.shape
 
         # Check if there's a wall at this position (look for black pixels
-        # in a small neighborhood around the wall coordinate)
+        # in a small neighborhood around the wall coordinate).
+        # Use binary_raw (not dilated) to preserve the gap between window
+        # lines and the wall — dilation closes this gap and prevents
+        # multi-line window detection.
         has_wall = False
         for delta in range(-3, 4):  # search ±3 px around wall position
             px = wx + probe_dx * delta
             py = wy + probe_dy * delta
-            if 0 <= px < w and 0 <= py < h and binary[py, px]:
+            if 0 <= px < w and 0 <= py < h and binary_raw[py, px]:
                 has_wall = True
                 # Snap to actual wall position for texture probe
                 wx, wy = px, py
@@ -801,6 +804,59 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
     # Merge adjacent segments
     segments = _merge_adjacent_segments(segments)
 
+    # Filter small openings and windows (min 30cm ≈ 8px at ~4cm/px)
+    MIN_OPENING_WIDTH_PX = 8
+    MIN_OPENING_DEPTH_PX = 8
+    MIN_WINDOW_WIDTH_PX = 8
+    filtered = []
+    for seg in segments:
+        if seg.kind == "window":
+            if seg.end_px - seg.start_px < MIN_WINDOW_WIDTH_PX:
+                seg.kind = "wall"
+        elif seg.kind == "opening":
+            width_px = seg.end_px - seg.start_px
+            if width_px < MIN_OPENING_WIDTH_PX:
+                seg.kind = "wall"
+            else:
+                # Check depth: probe beyond the wall to see if there's space
+                has_depth = False
+                mid = (seg.start_px + seg.end_px) // 2
+                if direction == "north":
+                    wx, wy = x0 + mid, y0
+                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
+                        if wy - d < 0 or binary[wy - d, wx]:
+                            break
+                    else:
+                        has_depth = True
+                elif direction == "south":
+                    wx, wy = x0 + mid, y1
+                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
+                        if wy + d >= binary.shape[0] or binary[wy + d, wx]:
+                            break
+                    else:
+                        has_depth = True
+                elif direction == "west":
+                    wx, wy = x0, y0 + mid
+                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
+                        if wx - d < 0 or binary[wy, wx - d]:
+                            break
+                    else:
+                        has_depth = True
+                elif direction == "east":
+                    wx, wy = x1, y0 + mid
+                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
+                        if wx + d >= binary.shape[1] or binary[wy, wx + d]:
+                            break
+                    else:
+                        has_depth = True
+                if not has_depth:
+                    seg.kind = "wall"
+        filtered.append(seg)
+    segments = filtered
+
+    # Re-merge after reclassification
+    segments = _merge_adjacent_segments(segments)
+
     return segments, 0
 
 
@@ -858,7 +914,8 @@ def _merge_adjacent_segments(segments: list[WallSegment],
         while i < len(absorbed):
             if (i + 2 < len(absorbed)
                     and absorbed[i].kind == absorbed[i + 2].kind
-                    and absorbed[i].kind in ("window", "wall", "opening", "door")
+                    and absorbed[i].kind == "wall"
+                    and absorbed[i + 1].kind == "opening"
                     and (absorbed[i + 1].end_px - absorbed[i + 1].start_px)
                     <= max_absorb_px):
                 # Absorb middle segment
@@ -933,87 +990,23 @@ def _detect_arc_profile(distances: np.ndarray, start: int, end: int,
 
 
 # ---------------------------------------------------------------------------
-# Step 6 — Detect exterior faces
+# Step 6 — Derive exterior faces from wall classification
 # ---------------------------------------------------------------------------
 
-def detect_exterior_faces(binary: np.ndarray, gray_image: np.ndarray,
-                          bbox: tuple) -> list[str]:
-    """Probe beyond each wall to detect exterior faces.
+def _derive_exterior_faces(walls: dict) -> list[str]:
+    """Derive exterior faces from wall classification.
 
-    A face is exterior if most probes beyond the wall reach the background
-    (gray, value ~200) without encountering another room interior (white,
-    value ~255) first. We use the original grayscale image (not binarized)
-    to distinguish background from room interior.
+    A face is exterior if it contains at least one window segment.
+    Windows are detected by texture (multi-line pattern) during wall
+    classification — no need to probe beyond the wall.
     """
-    x0, y0, x1, y1 = bbox
-    h, w = binary.shape
     exterior = []
-    BG_THRESHOLD = 210    # pixels darker than this = background or wall
-    ROOM_THRESHOLD = 240  # pixels brighter than this = room interior
-
-    for face, probe_points in _exterior_probe_points(bbox).items():
-        exterior_count = 0
-        total = len(probe_points)
-        for px, py, ddx, ddy in probe_points:
-            # Skip past the wall itself (binary=True zone)
-            x, y = px, py
-            reached_bg = False
-            hit_room = False
-            for step in range(1, EXTERIOR_PROBE_PX):
-                nx, ny = x + ddx * step, y + ddy * step
-                if nx < 0 or nx >= w or ny < 0 or ny >= h:
-                    reached_bg = True  # edge of image = exterior
-                    break
-                if not binary[ny, nx]:
-                    # Past the wall — check grayscale value
-                    val = gray_image[ny, nx]
-                    if val < BG_THRESHOLD:
-                        reached_bg = True
-                        break
-                    elif val > ROOM_THRESHOLD:
-                        # Another room or corridor
-                        hit_room = True
-                        break
-            if reached_bg and not hit_room:
-                exterior_count += 1
-        if total > 0 and exterior_count / total > 0.5:
-            exterior.append(face)
-
+    for face, segments in walls.items():
+        for seg in segments:
+            if seg.kind == "window":
+                exterior.append(face)
+                break
     return exterior
-
-
-def _exterior_probe_points(bbox: tuple) -> dict:
-    """Generate probe start points just outside each wall."""
-    x0, y0, x1, y1 = bbox
-    margin = 8  # start just outside the wall
-    step = 5
-    points = {}
-
-    # North wall: probe upward
-    pts = []
-    for x in range(x0, x1, step):
-        pts.append((x, y0 - margin, 0, -1))
-    points["north"] = pts
-
-    # South wall: probe downward
-    pts = []
-    for x in range(x0, x1, step):
-        pts.append((x, y1 + margin, 0, 1))
-    points["south"] = pts
-
-    # West wall: probe leftward
-    pts = []
-    for y in range(y0, y1, step):
-        pts.append((x0 - margin, y, -1, 0))
-    points["west"] = pts
-
-    # East wall: probe rightward
-    pts = []
-    for y in range(y0, y1, step):
-        pts.append((x1 + margin, y, 1, 0))
-    points["east"] = pts
-
-    return points
 
 
 # ---------------------------------------------------------------------------
@@ -1049,9 +1042,6 @@ def extract_rooms(image: Image.Image,
 
     # Step 2: Clean image
     cleaned = clean_text_from_image(image, texts)
-
-    # Keep grayscale version for exterior detection
-    gray_np = np.array(cleaned.convert("L"))
 
     # Step 3: Binarize (two versions)
     binary, binary_raw = binarize(cleaned)
@@ -1090,8 +1080,8 @@ def extract_rooms(image: Image.Image,
             seg_summary = [(s.kind, s.end_px - s.start_px) for s in segs]
             logger.info("  %s wall: %s", direction, seg_summary)
 
-        # Detect exterior faces
-        exterior = detect_exterior_faces(binary, gray_np, bbox)
+        # Derive exterior faces from window detection
+        exterior = _derive_exterior_faces(walls)
         logger.info("  exterior faces: %s", exterior)
 
         # Determine corridor face (face with a door opening)
