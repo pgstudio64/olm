@@ -22,8 +22,8 @@ from PIL import Image, ImageDraw
 from collections import deque
 
 # --- Paramètres ---
-PLAN_PATH = "/Users/patrickguehl/AI-OLM/project/plans/test_floorplan2.png"
-BINARIZE_THRESHOLD = 80
+PLAN_PATH = "/Users/patrickguehl/AI-OLM/project/plans/test_floorplan3.png"
+BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # pas du peigne en pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
@@ -138,7 +138,12 @@ def remove_non_ortho(binary):
 
 
 def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX):
-    """Retourne la distance au premier mur, ou -1 si le point de départ est sur un mur."""
+    """Retourne la distance au dernier pixel blanc avant le mur.
+
+    Returns:
+        Distance to last white pixel (= wall distance - 1), or
+        -1 if the start point is on a wall.
+    """
     h, w = binary.shape
     if 0 <= x < w and 0 <= y < h and binary[y, x]:
         return -1
@@ -147,88 +152,264 @@ def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX):
         px += dx
         py += dy
         if px < 0 or px >= w or py < 0 or py >= h:
-            return d
+            return d - 1
         if binary[py, px]:
-            return d
+            return d - 1
     return max_dist
 
 
-def comb_collect_hits(binary, cx, cy, step_px):
-    """Peigne adaptatif avec condition d'arrêt dynamique.
+COARSE_STEP_PX = 30  # phase 1: coarse scan to find room walls
+RAY_MARGIN_PX = 10   # margin beyond coarse distance for fine rays
 
-    Lance des rays depuis le seed dans les 4 directions, en s'écartant
-    par pas de step_px. S'arrête dans une direction quand on a dépassé
-    le max de distance trouvé dans la direction perpendiculaire.
 
-    Retourne la liste des hits (px, py) = points d'impact sur les murs.
+def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
+    """Peigne adaptatif en 2 passes.
+
+    Phase 1 (grossière) : rays à pas large (COARSE_STEP_PX) depuis le seed
+    pour détecter les 4 murs immédiats → distances par direction.
+
+    Phase 2 (fine) : rays à pas step_px, limités en position (bbox phase 1)
+    ET en portée (distance phase 1 + marge). Aucun ray ne dépasse les murs
+    détectés en phase 1.
+
+    Retourne (all_hits, dir_hits) :
+      all_hits = liste plate [(px, py), ...]
+      dir_hits = {'north': [...], 'south': [...], 'east': [...], 'west': [...]}
     """
-    max_ns = 0
-    max_ew = 0
-    hits = []
+    # === Phase 1 : distances grossières par direction (mode, pas max) ===
+    coarse_dists = {'north': [], 'south': [], 'west': [], 'east': []}
 
     # Rays initiaux
-    for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+    for name, dx, dy in [('north', 0, -1), ('south', 0, 1),
+                          ('west', -1, 0), ('east', 1, 0)]:
         d = ray_single(binary, cx, cy, dx, dy)
         if d > 0:
-            hits.append((cx + dx * d, cy + dy * d))
-            if dy != 0:
-                max_ns = max(max_ns, d)
-            else:
-                max_ew = max(max_ew, d)
+            coarse_dists[name].append(d)
 
-    # Peigne vertical (rays N et S) — s'arrête quand offset > max_ew
+    max_ns = max((coarse_dists['north'] + coarse_dists['south']) or [0])
+    max_ew = max((coarse_dists['west'] + coarse_dists['east']) or [0])
+
+    # Peigne grossier vertical → collect north/south distances
     step = 1
     while True:
-        offset = step * step_px
+        offset = step * COARSE_STEP_PX
         if offset > max_ew:
             break
         for rx in (cx - offset, cx + offset):
             d = ray_single(binary, rx, cy, 0, -1)
             if d > 0:
-                hits.append((rx, cy - d))
+                coarse_dists['north'].append(d)
                 max_ns = max(max_ns, d)
             d = ray_single(binary, rx, cy, 0, 1)
             if d > 0:
-                hits.append((rx, cy + d))
+                coarse_dists['south'].append(d)
                 max_ns = max(max_ns, d)
         step += 1
 
-    # Peigne horizontal (rays E et O) — s'arrête quand offset > max_ns
+    # Peigne grossier horizontal → collect west/east distances
     step = 1
     while True:
-        offset = step * step_px
+        offset = step * COARSE_STEP_PX
         if offset > max_ns:
             break
         for ry in (cy - offset, cy + offset):
             d = ray_single(binary, cx, ry, -1, 0)
             if d > 0:
-                hits.append((cx - d, ry))
+                coarse_dists['west'].append(d)
                 max_ew = max(max_ew, d)
             d = ray_single(binary, cx, ry, 1, 0)
             if d > 0:
-                hits.append((cx + d, ry))
+                coarse_dists['east'].append(d)
                 max_ew = max(max_ew, d)
         step += 1
 
-    return hits
+    # Mode per direction = dominant wall distance (outliers = door traversals)
+    def _mode_dist(dists):
+        if not dists:
+            return 0
+        vals, counts = np.unique(dists, return_counts=True)
+        return int(vals[np.argmax(counts)])
+
+    coarse_mode = {d: _mode_dist(coarse_dists[d]) for d in coarse_dists}
+    coarse_max = {d: max(coarse_dists[d]) if coarse_dists[d] else 0
+                  for d in coarse_dists}
+    coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
+    coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
+
+    # Bbox (positions de départ) = basée sur le mode (mur dominant)
+    bbox_x0 = cx - coarse_ew
+    bbox_x1 = cx + coarse_ew
+    bbox_y0 = cy - coarse_ns
+    bbox_y1 = cy + coarse_ns
+    # Portée des rays = basée sur le max (pour traverser les portes)
+    max_north = coarse_max['north'] + RAY_MARGIN_PX
+    max_south = coarse_max['south'] + RAY_MARGIN_PX
+    max_west = coarse_max['west'] + RAY_MARGIN_PX
+    max_east = coarse_max['east'] + RAY_MARGIN_PX
+
+    # === Phase 2 : peigne fin, limité en position ET en portée ===
+    dir_hits = {'north': [], 'south': [], 'east': [], 'west': []}
+
+    # Rays verticaux (N et S)
+    rx = cx
+    while rx >= bbox_x0:
+        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
+        if d > 0:
+            dir_hits['north'].append((rx, cy - d))
+        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
+        if d > 0:
+            dir_hits['south'].append((rx, cy + d))
+        rx -= step_px
+    rx = cx + step_px
+    while rx <= bbox_x1:
+        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
+        if d > 0:
+            dir_hits['north'].append((rx, cy - d))
+        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
+        if d > 0:
+            dir_hits['south'].append((rx, cy + d))
+        rx += step_px
+
+    # Rays horizontaux (E et W)
+    ry = cy
+    while ry >= bbox_y0:
+        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
+        if d > 0:
+            dir_hits['west'].append((cx - d, ry))
+        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
+        if d > 0:
+            dir_hits['east'].append((cx + d, ry))
+        ry -= step_px
+    ry = cy + step_px
+    while ry <= bbox_y1:
+        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
+        if d > 0:
+            dir_hits['west'].append((cx - d, ry))
+        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
+        if d > 0:
+            dir_hits['east'].append((cx + d, ry))
+        ry += step_px
+
+    # Filter hits that go beyond a neighboring seed.
+    # A hit is invalid if it passes a neighbor's seed in the ray direction:
+    #   - east hit at hx: invalid if there's a seed with ox < hx (hit went past it)
+    #   - west hit at hx: invalid if there's a seed with ox > hx
+    #   - south hit at hy: invalid if there's a seed with oy < hy
+    #   - north hit at hy: invalid if there's a seed with oy > hy
+    # Only consider seeds that are roughly aligned with the ray (within bbox).
+    if other_seeds:
+        def _not_past_seed(hx, hy, direction):
+            for ox, oy in other_seeds:
+                if direction == 'east' and ox > cx and hx > ox:
+                    # Hit went east past a seed that's east of us
+                    if abs(hy - oy) < abs(hy - cy) * 2:  # roughly aligned
+                        return False
+                elif direction == 'west' and ox < cx and hx < ox:
+                    if abs(hy - oy) < abs(hy - cy) * 2:
+                        return False
+                elif direction == 'south' and oy > cy and hy > oy:
+                    if abs(hx - ox) < abs(hx - cx) * 2:
+                        return False
+                elif direction == 'north' and oy < cy and hy < oy:
+                    if abs(hx - ox) < abs(hx - cx) * 2:
+                        return False
+            return True
+
+        for direction in dir_hits:
+            dir_hits[direction] = [(hx, hy) for hx, hy in dir_hits[direction]
+                                   if _not_past_seed(hx, hy, direction)]
+
+    all_hits = [h for hits in dir_hits.values() for h in hits]
+    return all_hits, dir_hits
 
 
-def largest_rect_no_hits(hits, cx, cy):
+def _innermost_with_support(coords, direction, min_support=3, tolerance=2):
+    """Find the innermost coordinate with sufficient ray support.
+
+    Scans from the room interior outward. Returns the first coordinate
+    where at least min_support rays hit within ±tolerance pixels.
+
+    Args:
+        coords: list of wall coordinates (y for N/S, x for E/W)
+        direction: 'max' for N/W faces (innermost = largest value),
+                   'min' for S/E faces (innermost = smallest value)
+        min_support: minimum number of rays for a valid wall
+        tolerance: max distance in px for hits to be grouped
+
+    Returns:
+        Wall coordinate, or None if no supported value found.
+    """
+    if not coords:
+        return None
+    if direction == 'max':
+        sorted_c = sorted(coords, reverse=True)
+    else:
+        sorted_c = sorted(coords)
+
+    for c in sorted_c:
+        support = sum(1 for other in coords if abs(other - c) <= tolerance)
+        if support >= min_support:
+            return c
+
+    # Fallback: mode
+    vals, counts = np.unique(coords, return_counts=True)
+    return int(vals[np.argmax(counts)])
+
+
+def rect_from_directional_hits(dir_hits, cx, cy):
+    """Compute rectangle from directional hits.
+
+    For each face, find the innermost wall position with sufficient
+    support. This aligns the rectangle with window lines (innermost
+    feature) and is robust to outlier hits.
+
+    The innermost wall for each face is:
+      north: largest hy (closest to seed from above)
+      south: smallest hy (closest to seed from below)
+      west:  largest hx (closest to seed from left)
+      east:  smallest hx (closest to seed from right)
+    """
+    north_ys = [hy for _, hy in dir_hits['north']]
+    south_ys = [hy for _, hy in dir_hits['south']]
+    west_xs = [hx for hx, _ in dir_hits['west']]
+    east_xs = [hx for hx, _ in dir_hits['east']]
+
+    y0 = _innermost_with_support(north_ys, 'max')
+    y1 = _innermost_with_support(south_ys, 'min')
+    x0 = _innermost_with_support(west_xs, 'max')
+    x1 = _innermost_with_support(east_xs, 'min')
+
+    # Fallbacks
+    if y0 is None: y0 = cy - 1
+    if y1 is None: y1 = cy + 1
+    if x0 is None: x0 = cx - 1
+    if x1 is None: x1 = cx + 1
+
+    return (x0, y0, x1, y1)
+
+
+def largest_rect_no_hits(hits, cx, cy, return_all=False):
     """Plus grand rectangle contenant (cx,cy) sans aucun hit à l'intérieur.
 
     Les hits peuvent être sur les bords du rectangle.
     Approche : pour chaque paire de bornes y (top, bottom) définies par
     les hits, trouver les bornes x les plus larges telles qu'aucun hit
     ne soit strictement à l'intérieur.
+
+    Args:
+        return_all: if True, return (best_rect, all_candidates) where
+            all_candidates is a list of (rect, area) sorted by area desc.
     """
     if not hits:
-        return (cx - 1, cy - 1, cx + 1, cy + 1)
+        r = (cx - 1, cy - 1, cx + 1, cy + 1)
+        return (r, [(r, 4)]) if return_all else r
 
     # Collecter toutes les coordonnées y uniques des hits
     ys = sorted(set(h[1] for h in hits))
 
     best_area = 0
     best_rect = None
+    all_candidates = [] if return_all else None
 
     # Pour chaque paire (y_top, y_bottom) qui contient cy
     for i, y_top in enumerate(ys):
@@ -255,16 +436,213 @@ def largest_rect_no_hits(hits, cx, cy):
                     if hx >= cx:
                         x_right = min(x_right, hx)
 
+            if x_left == -999999 or x_right == 999999:
+                continue
             w = x_right - x_left
             if w <= 0:
                 continue
 
             area = w * h
+            rect = (x_left, y_top, x_right, y_bot)
+            if return_all:
+                all_candidates.append((rect, area))
             if area > best_area:
                 best_area = area
-                best_rect = (x_left, y_top, x_right, y_bot)
+                best_rect = rect
 
+    if return_all:
+        all_candidates.sort(key=lambda c: c[1], reverse=True)
+        return best_rect, all_candidates
     return best_rect
+
+
+SNAP_SEARCH_PX = 6  # search ±6px around current edge for wall snap
+
+
+def snap_rect_to_walls(binary, rect, search_px=SNAP_SEARCH_PX):
+    """Snap rectangle edges to the modal wall position on each face.
+
+    After largest_rect_no_hits, edges may be off by ±2-3px because the
+    comb rays (spaced at COMB_STEP_PX) hit different wall features
+    (window panes, wall segments) depending on seed position.
+
+    Fix: for each face, densely scan along the edge and find the first
+    wall pixel searching from the room interior outward. The mode across
+    all samples = true inner wall position. This ensures we stop at the
+    innermost wall feature (window line) rather than overshooting to the
+    outer wall.
+    """
+    x0, y0, x1, y1 = rect
+    margin = 3  # skip corners where perpendicular walls interfere
+
+    # North face: search from interior (increasing y) toward exterior (decreasing y)
+    y0 = _snap_edge(binary, list(range(x0 + margin, x1 - margin)),
+                    y0, axis='y', direction=-1, search_px=search_px)
+    # South face: search from interior (decreasing y) toward exterior (increasing y)
+    y1 = _snap_edge(binary, list(range(x0 + margin, x1 - margin)),
+                    y1, axis='y', direction=+1, search_px=search_px)
+    # West face: search from interior (increasing x) toward exterior (decreasing x)
+    x0 = _snap_edge(binary, list(range(y0 + margin, y1 - margin)),
+                    x0, axis='x', direction=-1, search_px=search_px)
+    # East face: search from interior (decreasing x) toward exterior (increasing x)
+    x1 = _snap_edge(binary, list(range(y0 + margin, y1 - margin)),
+                    x1, axis='x', direction=+1, search_px=search_px)
+
+    return (x0, y0, x1, y1)
+
+
+def _snap_edge(binary, scan_positions, edge_val, axis, direction,
+               search_px):
+    """Find modal wall position along one edge by searching from interior.
+
+    For each position along the edge, search from the room interior
+    outward and record the first wall pixel found. The mode of these
+    positions = true inner wall surface.
+
+    Args:
+        binary: wall mask (True = wall)
+        scan_positions: coordinates along the edge (x for N/S, y for E/W)
+        edge_val: current edge coordinate (y for N/S, x for E/W)
+        axis: 'y' for N/S faces, 'x' for E/W faces
+        direction: +1 or -1 — outward direction from the room interior
+        search_px: search range in pixels
+
+    Returns:
+        Snapped edge coordinate (mode of first wall hits from interior).
+    """
+    h, w = binary.shape
+    wall_hits = []
+
+    # Search from interior toward exterior:
+    # Start at edge_val - direction*search_px (deep inside room)
+    # End at edge_val + direction*search_px (past the wall)
+    for pos in scan_positions:
+        for step in range(-search_px, search_px + 1):
+            coord = edge_val + direction * step
+            if axis == 'y':
+                px, py = pos, coord
+            else:
+                px, py = coord, pos
+            if 0 <= px < w and 0 <= py < h and binary[py, px]:
+                wall_hits.append(coord)
+                break
+
+    if not wall_hits:
+        return edge_val
+
+    vals, counts = np.unique(wall_hits, return_counts=True)
+    return int(vals[np.argmax(counts)])
+
+
+def contract_to_interior(binary, rect, max_contract=10):
+    """Contract each edge inward until no black pixel on the edge line.
+
+    The rectangle from largest_rect_no_hits has edges ON the walls
+    (first hit pixel = wall surface). Walls are 2-5px thick. This
+    function moves each edge inward past the wall thickness until
+    the edge line is fully white.
+
+    To avoid false stops from perpendicular walls at the corners,
+    only the middle 60% of each line/column is checked.
+    """
+    x0, y0, x1, y1 = rect
+    h, w = binary.shape
+    x_margin = max(3, (x1 - x0) // 5)
+    y_margin = max(3, (y1 - y0) // 5)
+
+    # North: contract y0 southward
+    for _ in range(max_contract):
+        if y0 >= y1:
+            break
+        if np.any(binary[y0, x0 + x_margin:x1 - x_margin]):
+            y0 += 1
+        else:
+            break
+
+    # South: contract y1 northward
+    for _ in range(max_contract):
+        if y1 <= y0:
+            break
+        if np.any(binary[y1, x0 + x_margin:x1 - x_margin]):
+            y1 -= 1
+        else:
+            break
+
+    # West: contract x0 eastward
+    for _ in range(max_contract):
+        if x0 >= x1:
+            break
+        if np.any(binary[y0 + y_margin:y1 - y_margin, x0]):
+            x0 += 1
+        else:
+            break
+
+    # East: contract x1 westward
+    for _ in range(max_contract):
+        if x1 <= x0:
+            break
+        if np.any(binary[y0 + y_margin:y1 - y_margin, x1]):
+            x1 -= 1
+        else:
+            break
+
+    return (x0, y0, x1, y1)
+
+
+def snap_through_white(binary, rect, max_advance=8):
+    """Expand each edge outward through fully white lines.
+
+    For each side, check the 1px line just outside the current edge.
+    If entirely white (no black pixel), advance the edge 1px outward.
+    Repeat until hitting a line with at least one black pixel, or
+    max_advance reached.
+
+    Prerequisite: the rectangle must be inset from the walls (edges
+    on white pixels, not on wall pixels). See largest_rect_no_hits.
+
+    This aligns edges with the nearest wall/window feature, fixing
+    ±2-3px offsets caused by comb discretization.
+    """
+    x0, y0, x1, y1 = rect
+    h, w = binary.shape
+
+    # North: advance y0 upward
+    for _ in range(max_advance):
+        if y0 <= 0:
+            break
+        if not np.any(binary[y0 - 1, x0:x1]):
+            y0 -= 1
+        else:
+            break
+
+    # South: advance y1 downward
+    for _ in range(max_advance):
+        if y1 >= h - 1:
+            break
+        if not np.any(binary[y1 + 1, x0:x1]):
+            y1 += 1
+        else:
+            break
+
+    # West: advance x0 leftward
+    for _ in range(max_advance):
+        if x0 <= 0:
+            break
+        if not np.any(binary[y0:y1, x0 - 1]):
+            x0 -= 1
+        else:
+            break
+
+    # East: advance x1 rightward
+    for _ in range(max_advance):
+        if x1 >= w - 1:
+            break
+        if not np.any(binary[y0:y1, x1 + 1]):
+            x1 += 1
+        else:
+            break
+
+    return (x0, y0, x1, y1)
 
 
 DOOR_PROBE_PX = 4   # ~2cm, décalage pour sonder la position de la porte
@@ -300,37 +678,43 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
     min_dist = door_width_px * (1 - tolerance)
     max_dist = door_width_px * (1 + tolerance)
     m = WALL_MARGIN_PX
+    face_len = (x1 - x0) if face in ("south", "north") else (y1 - y0)
 
     if face == "south":
         far = [h for h in hits if h[1] > y1 and min_dist <= h[1] - y1 <= max_dist]
         if not far: return None, []
         wall, n = Counter(h[1] for h in far).most_common(1)[0]
-        contact = sum(1 for x in range(x0, x1+1) if 0<=y1<binary.shape[0] and binary[y1,x])
-        if n < 5 or contact > 10: return None, []
+        # Contact on the wall itself (1px beyond the rectangle edge)
+        wy = y1 + 1
+        contact = sum(1 for x in range(x0, x1+1) if 0<=wy<binary.shape[0] and binary[wy,x])
+        if n < 3 or contact > face_len * 0.20: return None, []
         probe = wall - DOOR_PROBE_PX
         pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
     elif face == "north":
         far = [h for h in hits if h[1] < y0 and min_dist <= y0 - h[1] <= max_dist]
         if not far: return None, []
         wall, n = Counter(h[1] for h in far).most_common(1)[0]
-        contact = sum(1 for x in range(x0, x1+1) if 0<=y0<binary.shape[0] and binary[y0,x])
-        if n < 5 or contact > 10: return None, []
+        wy = y0 - 1
+        contact = sum(1 for x in range(x0, x1+1) if 0<=wy<binary.shape[0] and binary[wy,x])
+        if n < 3 or contact > face_len * 0.20: return None, []
         probe = wall + DOOR_PROBE_PX
         pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
     elif face == "east":
         far = [h for h in hits if h[0] > x1 and min_dist <= h[0] - x1 <= max_dist]
         if not far: return None, []
         wall, n = Counter(h[0] for h in far).most_common(1)[0]
-        contact = sum(1 for y in range(y0, y1+1) if 0<=x1<binary.shape[1] and binary[y,x1])
-        if n < 5 or contact > 10: return None, []
+        wx = x1 + 1
+        contact = sum(1 for y in range(y0, y1+1) if 0<=wx<binary.shape[1] and binary[y,wx])
+        if n < 3 or contact > face_len * 0.20: return None, []
         probe = wall - DOOR_PROBE_PX
         pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
     elif face == "west":
         far = [h for h in hits if h[0] < x0 and min_dist <= x0 - h[0] <= max_dist]
         if not far: return None, []
         wall, n = Counter(h[0] for h in far).most_common(1)[0]
-        contact = sum(1 for y in range(y0, y1+1) if 0<=x0<binary.shape[1] and binary[y,x0])
-        if n < 5 or contact > 10: return None, []
+        wx = x0 - 1
+        contact = sum(1 for y in range(y0, y1+1) if 0<=wx<binary.shape[1] and binary[y,wx])
+        if n < 3 or contact > face_len * 0.20: return None, []
         probe = wall + DOOR_PROBE_PX
         pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
     else:
@@ -344,8 +728,22 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         offset = min(g) - origin
         width = max(g) - min(g) + 1
         hinge_side = "left" if (offset < size / 2) else "right"
-        doors.append({"face": face, "offset_px": offset,
-                      "width_px": width, "hinge_side": hinge_side})
+        # Jamb positions (absolute px on the wall)
+        jamb_hinge = min(g)
+        jamb_free = max(g)
+        # Door opens inward: the arc is inside the room (between seed
+        # and the wall), so the rectangle had to expand outward to
+        # reach the real wall behind the arc.
+        doors.append({
+            "face": face,
+            "offset_px": offset,
+            "width_px": width,
+            "hinge_side": hinge_side,
+            "opens_inward": True,
+            "jamb_hinge_px": jamb_hinge,
+            "jamb_free_px": jamb_free,
+            "wall_px": wall,
+        })
 
     return wall, doors
 
@@ -374,20 +772,32 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
     return (x0, y0, x1, y1), doors
 
 
-def detect_room(binary, cx, cy, step_px, door_width_px=23):
+def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None):
     """Détecte le rectangle d'une pièce : peigne → hits → plus grand rectangle → expansion arcs."""
-    hits = comb_collect_hits(binary, cx, cy, step_px)
+    all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
+                                           other_seeds=other_seeds)
 
-    rect = largest_rect_no_hits(hits, cx, cy)
+    rect = largest_rect_no_hits(all_hits, cx, cy)
 
     if rect is None:
-        return (cx - 1, cy - 1, cx + 1, cy + 1), hits, []
+        return (cx - 1, cy - 1, cx + 1, cy + 1), all_hits, []
+
+    # Expand each edge outward through fully white lines
+    rect = snap_through_white(binary, rect)
 
     # Phase 3 : expansion arcs de porte
-    rect, doors = expand_door_arcs(binary, rect, hits, cx, cy,
+    rect, doors = expand_door_arcs(binary, rect, all_hits, cx, cy,
                                    door_width_px=door_width_px)
 
-    return rect, hits, doors
+    return rect, all_hits, doors
+
+
+# Extension automatique des zones interdites supprimée (D-75).
+# Les zones interdites sont saisies manuellement en phase Review.
+
+
+# --- SUPPRIMÉ (D-75) : extend_rooms_by_openings, _extension_from_hits,
+# _probe_extension, _rects_overlap, _find_exclusions_in_extension ---
 
 
 def draw_debug_all(image, results, output_path):
@@ -460,7 +870,9 @@ def main():
     print(f"  Pixels mur: {np.sum(binary)}")
 
     print("Étape 3b : suppression éléments non-orthogonaux...")
-    binary = remove_non_ortho(binary)
+    # remove_non_ortho disabled — door detection works on raw geometry
+    # (hits + contact pattern), non-ortho elements don't interfere
+    # binary = remove_non_ortho(binary)
     print(f"  Pixels mur après: {np.sum(binary)}")
 
     # Sauvegarder pour debug
@@ -468,14 +880,17 @@ def main():
 
     step_px = COMB_STEP_PX
 
+    all_seed_positions = list(seeds.values())
+
     if target_room:
         if target_room not in seeds:
             print(f"Pièce {target_room} non trouvée. "
                   f"Disponibles: {sorted(seeds.keys())}")
             return
         cx, cy = seeds[target_room]
+        other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
         print(f"\n=== {target_room} (seed {cx},{cy}) ===")
-        bbox, hits, doors = detect_room(binary, cx, cy, step_px)
+        bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
         x0, y0, x1, y1 = bbox
         print(f"Rectangle: ({x0},{y0}) → ({x1},{y1})")
         print(f"Taille: {x1 - x0} x {y1 - y0} px")
@@ -489,7 +904,8 @@ def main():
     else:
         results = []
         for name, (cx, cy) in sorted(seeds.items()):
-            bbox, hits, doors = detect_room(binary, cx, cy, step_px)
+            other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
+            bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
             x0, y0, x1, y1 = bbox
             door_str = f" | {len(doors)} porte(s)" if doors else ""
             print(f"  {name}: ({x0},{y0}) → ({x1},{y1}) = "

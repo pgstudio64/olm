@@ -15,6 +15,7 @@ IMAGES = {
     "comb909": ("/tmp/comb_909_debug.png", "Peigne 909"),
     "comb919": ("/tmp/comb_919_debug.png", "Peigne 919"),
     "ortho": ("/tmp/ortho_plan.png", "Sans arcs (ortho)"),
+    "walls": ("/tmp/wall_classification.png", "Classification murale"),
 }
 HTML = """<!DOCTYPE html>
 <html><head><title>OLM Ingestion</title>
