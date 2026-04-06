@@ -1,13 +1,10 @@
-"""Configurations d'espacement par standard d'aménagement — solver_lab.
+"""Spacing configuration registry.
 
-Trois standards d'aménagement (cf. glossaire GLOSSARY.md) :
-- AFNOR ADVICE : normes NF X35-102, caractère consultatif
-- GROUP : standard interne du groupe
-- SITE : standard spécifique au site client
+Spacing standards are loaded dynamically from project/config.json via
+app_config. The generic core defines no built-in standards — they are
+business data provided by the project layer.
 
-Les valeurs dérivées (ES-04, ES-05) sont calculées à partir des primitives.
-
-Persistence : les valeurs sont lues depuis project/config.json via app_config.
+Derived values (ES-04, ES-05) are computed from primitives.
 """
 from __future__ import annotations
 
@@ -23,24 +20,25 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SpacingConfig:
-    """Paramètres d'espacement pour un standard d'aménagement donné.
+    """Spacing parameters for a given standard.
 
-    Toutes les dimensions en centimètres.
+    All dimensions in centimetres.
 
     Attributes:
-        name: Identifiant du standard d'aménagement.
-        chair_clearance_cm: ES-01 — Débattement chaise.
-        front_access_cm: ES-02 — Accès frontal (s'asseoir).
-        access_single_desk_cm: ES-03 — Accès poste seul dos à un mur.
-        passage_behind_one_row_cm: ES-04 — Distance totale desk→extrémité zone
-            (inclut recul fauteuil 70cm + passage libre).
-        passage_between_back_to_back_cm: ES-05 — Passage entre 2 rangées dos à dos.
-        passage_cm: ES-06 — Passage entre deux blocs distincts.
-        door_exclusion_depth_cm: ES-08 — Zone libre devant porte.
-        desk_to_wall_cm: ES-09 — Distance latérale table-mur.
-        max_island_size: ES-10 — Taille max d'un bloc.
-        min_block_separation_cm: ES-11 — Séparation minimale entre blocs.
-        main_corridor_cm: PS-04 — Largeur couloir principal.
+        name: Standard identifier.
+        chair_clearance_cm: ES-01 — Chair clearance zone.
+        front_access_cm: ES-02 — Front access (sit/stand).
+        access_single_desk_cm: ES-03 — Access for a single desk against a wall.
+        passage_behind_one_row_cm: ES-04 — Total depth desk→zone edge
+            (chair clearance + free passage).
+        passage_between_back_to_back_cm: ES-05 — Passage between two
+            back-to-back rows.
+        passage_cm: ES-06 — Passage between distinct blocks.
+        door_exclusion_depth_cm: ES-08 — Clear zone in front of a door.
+        desk_to_wall_cm: ES-09 — Lateral desk-to-wall distance.
+        max_island_size: ES-10 — Maximum block size (desks).
+        min_block_separation_cm: ES-11 — Minimum separation between blocks.
+        main_corridor_cm: PS-04 — Main corridor width.
     """
     name: str
     chair_clearance_cm: int          # ES-01
@@ -79,10 +77,19 @@ def _build_configs() -> dict[str, SpacingConfig]:
 
 ALL_CONFIGS: dict[str, SpacingConfig] = _build_configs()
 
-# Named references for backward compatibility
-AFNOR_ADVICE = ALL_CONFIGS["AFNOR_ADVICE"]
-GROUP = ALL_CONFIGS["GROUP"]
-SITE = ALL_CONFIGS["SITE"]
+
+def get_default() -> SpacingConfig | None:
+    """Return the first available standard, or None if none loaded."""
+    if ALL_CONFIGS:
+        return next(iter(ALL_CONFIGS.values()))
+    return None
+
+
+def get_default_name() -> str | None:
+    """Return the name of the first available standard, or None."""
+    if ALL_CONFIGS:
+        return next(iter(ALL_CONFIGS.keys()))
+    return None
 
 
 def reset_config(name: str) -> SpacingConfig:
@@ -104,8 +111,8 @@ def update_config(name: str, values: dict) -> SpacingConfig:
     """Update a spacing config and persist to disk.
 
     Args:
-        name: Standard name (AFNOR_ADVICE, GROUP, SITE).
-        values: Dict of field names → new values.
+        name: Standard name.
+        values: Dict of field names -> new values.
 
     Returns:
         The updated SpacingConfig.

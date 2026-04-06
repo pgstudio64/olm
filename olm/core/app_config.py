@@ -3,6 +3,9 @@
 Loads project/config.json once at import time. Provides typed getters
 and writers. Falls back to embedded defaults if config.json is absent.
 
+Spacing standards (e.g. AFNOR, GROUP, SITE) are business data defined
+in project/config.json — the generic core has no built-in standards.
+
 IMPORTANT: This module must NOT import anything from olm.core to
 avoid circular imports. Only stdlib imports (json, os, pathlib, logging).
 """
@@ -17,14 +20,12 @@ logger = logging.getLogger(__name__)
 # Resolve config.json path: olm/core/app_config.py -> olm/ -> AI-OLM/ -> project/
 _CONFIG_PATH = Path(__file__).resolve().parents[2] / "project" / "config.json"
 
-# Embedded defaults (used when config.json is absent)
+# Embedded defaults (used when config.json is absent).
+# Spacing standards are intentionally empty — they are business data
+# provided by the project/ layer, not by the generic core.
 _EMBEDDED_DEFAULTS = {
     "room_code": "14",
-    "standard_labels": {
-        "AFNOR_ADVICE": "AFNOR",
-        "GROUP": "GROUP",
-        "SITE": "SITE",
-    },
+    "standard_labels": {},
     "default_door_width_cm": 90,
     "desk_width_cm": 180,
     "desk_depth_cm": 80,
@@ -34,47 +35,7 @@ _EMBEDDED_DEFAULTS = {
         "w_comfort": 0.5,
         "min_desks_drop_ratio": 0.30,
     },
-    "spacing": {
-        "AFNOR_ADVICE": {
-            "chair_clearance_cm": 70,
-            "front_access_cm": 60,
-            "access_single_desk_cm": 100,
-            "passage_behind_one_row_cm": 160,
-            "passage_between_back_to_back_cm": 230,
-            "passage_cm": 90,
-            "door_exclusion_depth_cm": 180,
-            "desk_to_wall_cm": 20,
-            "max_island_size": 4,
-            "min_block_separation_cm": 90,
-            "main_corridor_cm": 140,
-        },
-        "GROUP": {
-            "chair_clearance_cm": 70,
-            "front_access_cm": 60,
-            "access_single_desk_cm": 90,
-            "passage_behind_one_row_cm": 120,
-            "passage_between_back_to_back_cm": 180,
-            "passage_cm": 90,
-            "door_exclusion_depth_cm": 180,
-            "desk_to_wall_cm": 10,
-            "max_island_size": 6,
-            "min_block_separation_cm": 90,
-            "main_corridor_cm": 140,
-        },
-        "SITE": {
-            "chair_clearance_cm": 70,
-            "front_access_cm": 60,
-            "access_single_desk_cm": 90,
-            "passage_behind_one_row_cm": 140,
-            "passage_between_back_to_back_cm": 160,
-            "passage_cm": 90,
-            "door_exclusion_depth_cm": 120,
-            "desk_to_wall_cm": 0,
-            "max_island_size": 6,
-            "min_block_separation_cm": 90,
-            "main_corridor_cm": 140,
-        },
-    },
+    "spacing": {},
 }
 
 

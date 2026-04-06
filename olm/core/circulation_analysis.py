@@ -20,11 +20,13 @@ import numpy as np
 
 from olm.core.matching_config import GRID_CELL_CM
 from olm.core.types import CellType
-from olm.core.spacing_config import AFNOR_ADVICE
+from olm.core.spacing_config import ALL_CONFIGS, get_default
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DOOR_DEPTH = AFNOR_ADVICE.door_exclusion_depth_cm
+# Default door exclusion depth: use first available standard, fallback 180 cm
+_default_cfg = get_default()
+_DEFAULT_DOOR_DEPTH = _default_cfg.door_exclusion_depth_cm if _default_cfg else 180
 
 
 # ---------------------------------------------------------------------------

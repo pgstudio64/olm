@@ -16,7 +16,7 @@ let state = {
   row_gaps_cm: [],
   room_width_cm: 300,
   room_depth_cm: 480,
-  standard: "AFNOR_ADVICE",
+  standard: "",  // set dynamically from loaded config
   room_windows: [],      // [{face, offset_cm, width_cm}]
   room_openings: [],     // [{face, offset_cm, width_cm, has_door, opens_inward, hinge_side}]
   room_exclusions: [],   // [{x_cm, y_cm, width_cm, depth_cm}]
@@ -1325,7 +1325,7 @@ async function loadPattern(name) {
     state.row_gaps_cm = data.row_gaps_cm || [];
     state.room_width_cm = data.room_width_cm || 300;
     state.room_depth_cm = data.room_depth_cm || 480;
-    state.standard = data.standard || "AFNOR_ADVICE";
+    state.standard = data.standard || getStandards()[0] || "";
     state.room_windows = data.room_windows || [];
     state.room_openings = data.room_openings || [];
     state.room_exclusions = data.room_exclusions || [];
@@ -1356,7 +1356,7 @@ function loadPatternFromData(data) {
   state.row_gaps_cm = data.row_gaps_cm || [];
   state.room_width_cm = data.room_width_cm || 300;
   state.room_depth_cm = data.room_depth_cm || 480;
-  state.standard = data.standard || "AFNOR_ADVICE";
+  state.standard = data.standard || getStandards()[0] || "";
   state.room_windows = data.room_windows || [];
   state.room_openings = data.room_openings || [];
   state.room_exclusions = data.room_exclusions || [];

@@ -24,7 +24,7 @@ async function loadAppConfig() {
 
 function getStandards() {
   if (APP_CONFIG.spacing) return Object.keys(APP_CONFIG.spacing);
-  return ["AFNOR_ADVICE", "GROUP", "SITE"];
+  return [];
 }
 
 function getStdLabel(key) {

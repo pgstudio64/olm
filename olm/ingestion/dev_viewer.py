@@ -1,6 +1,8 @@
 import os, sys, io, time
-sys.path.insert(0, os.path.expanduser('~/AI-OLM'))
-sys.path.insert(0, os.path.expanduser('~/AI-OLM/olm/ingestion'))
+
+_BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _BASE)
+sys.path.insert(0, os.path.join(_BASE, 'olm', 'ingestion'))
 
 from flask import Flask, send_file, render_template_string, request
 
@@ -93,7 +95,7 @@ def img():
                            snap_through_white, expand_door_arcs,
                            COMB_STEP_PX)
 
-    plan_path = os.path.expanduser('~/AI-OLM/project/plans/test_floorplan3.png')
+    plan_path = os.path.join(_BASE, 'project', 'plans', 'test_floorplan3.png')
     img_gray = load_image(plan_path)
     seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
     gray_arr = np.array(img_gray)
