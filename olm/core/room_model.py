@@ -1,8 +1,8 @@
-"""Modèle canonique de pièce — solver_lab.
+"""Canonical room model.
 
-Source de vérité pour la description des pièces dans le pipeline statique.
-Aligné sur le glossaire (specs/GLOSSARY.md) et le repère D-26 (NW origin, x EST, y SUD).
-Toutes les dimensions en centimètres.
+Source of truth for room descriptions in the static pipeline.
+Aligned with the glossary (specs/GLOSSARY.md) and the NW-origin coordinate
+convention (x EAST, y SOUTH). All dimensions in centimetres.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from enum import Enum
 
 
 class Face(str, Enum):
-    """Face d'une pièce (mur porteur de fenêtre, porte ou ouverture)."""
+    """Face of a room (wall carrying a window, door or opening)."""
     NORTH = "north"
     SOUTH = "south"
     EAST = "east"
@@ -19,19 +19,19 @@ class Face(str, Enum):
 
 
 class HingeSide(str, Enum):
-    """Côté du gond vu depuis l'intérieur de la pièce."""
+    """Hinge side as seen from inside the room."""
     LEFT = "left"
     RIGHT = "right"
 
 
 @dataclass
 class WindowSpec:
-    """Fenêtre sur une face de la pièce.
+    """Window on a room face.
 
     Attributes:
-        face: Mur portant la fenêtre.
-        offset_cm: Distance depuis l'extrémité ouest (faces N/S) ou nord (faces E/W).
-        width_cm: Largeur de la fenêtre.
+        face: Wall carrying the window.
+        offset_cm: Distance from the west end (N/S faces) or north end (E/W faces).
+        width_cm: Window width.
     """
     face: Face
     offset_cm: int
@@ -40,15 +40,15 @@ class WindowSpec:
 
 @dataclass
 class OpeningSpec:
-    """Ouverture dans un mur (porte battante ou baie libre).
+    """Opening in a wall (hinged door or free passage).
 
     Attributes:
-        face: Mur portant l'ouverture.
-        offset_cm: Distance depuis l'extrémité ouest (faces N/S) ou nord (faces E/W).
-        width_cm: Largeur de l'ouverture (défaut 90 cm).
-        has_door: True si porte battante, False si baie libre.
-        opens_inward: Sens d'ouverture (True = intérieur). Ignoré si has_door=False.
-        hinge_side: Côté du gond vu de l'intérieur. Ignoré si has_door=False.
+        face: Wall carrying the opening.
+        offset_cm: Distance from the west end (N/S faces) or north end (E/W faces).
+        width_cm: Opening width (default 90 cm).
+        has_door: True if hinged door, False if free passage.
+        opens_inward: Opening direction (True = inward). Ignored if has_door=False.
+        hinge_side: Hinge side as seen from inside. Ignored if has_door=False.
     """
     face: Face
     offset_cm: int
@@ -60,19 +60,19 @@ class OpeningSpec:
 
 @dataclass
 class ExclusionZone:
-    """Zone interdite au placement et à la circulation.
+    """Zone forbidden for desk placement and circulation.
 
-    Trois origines possibles (cf. glossaire) :
-    - Obstacle physique (poteau, gaine technique)
-    - Zone fictive géométrique (pièce en L/T/U inscrite dans son rectangle englobant)
-    - Zone de débattement de porte (générée automatiquement par le pipeline)
+    Three possible origins:
+    - Physical obstacle (column, technical shaft)
+    - Geometric virtual zone (L/T/U-shaped room inscribed in its bounding rectangle)
+    - Door swing zone (generated automatically by the pipeline)
 
     Attributes:
-        x_cm: Coin nord-ouest, axe est.
-        y_cm: Coin nord-ouest, axe sud.
-        width_cm: Dimension ouest vers est.
-        depth_cm: Dimension nord vers sud.
-        physical: True = obstacle physique ; False = zone fictive géométrique.
+        x_cm: North-west corner, east axis.
+        y_cm: North-west corner, south axis.
+        width_cm: Dimension west to east.
+        depth_cm: Dimension north to south.
+        physical: True = physical obstacle; False = geometric virtual zone.
     """
     x_cm: int
     y_cm: int
@@ -83,22 +83,22 @@ class ExclusionZone:
 
 @dataclass
 class RoomSpec:
-    """Spécification complète d'une pièce en centimètres.
+    """Complete room specification in centimetres.
 
-    Repère local D-26 : origine = coin nord-ouest, x vers est, y vers sud.
-    Convention : fenêtres principales au nord, couloir/porte au sud.
+    Local coordinate system: origin = north-west corner, x east, y south.
+    Convention: main windows face north, corridor/door faces south.
 
     Attributes:
-        width_cm: Dimension ouest vers est.
-        depth_cm: Dimension nord vers sud.
-        windows: Fenêtres de la pièce.
-        openings: Ouvertures (portes battantes ou baies libres).
-        exclusion_zones: Zones exclues du placement.
-        name: Nom libre (ex. "B.4.12").
-        code: Code réglementaire ("14" = open space candidat).
-        direction: Orientation des fenêtres principales dans le plan bâtiment.
-        raster_nw_x_px: Coin nord-ouest dans le repère raster global, axe est (pixels).
-        raster_nw_y_px: Coin nord-ouest dans le repère raster global, axe sud (pixels).
+        width_cm: Dimension west to east.
+        depth_cm: Dimension north to south.
+        windows: Windows of the room.
+        openings: Openings (hinged doors or free passages).
+        exclusion_zones: Zones excluded from desk placement.
+        name: Free-form name (e.g. "B.4.12").
+        code: Regulatory code ("14" = open-space candidate).
+        direction: Orientation of main windows in the building plan.
+        raster_nw_x_px: North-west corner in the global raster frame, east axis (pixels).
+        raster_nw_y_px: North-west corner in the global raster frame, south axis (pixels).
     """
     width_cm: int
     depth_cm: int
@@ -113,24 +113,24 @@ class RoomSpec:
 
     @property
     def area_m2(self) -> float:
-        """Surface brute en m²."""
+        """Gross area in m²."""
         return (self.width_cm * self.depth_cm) / 10_000
 
     @property
     def net_area_m2(self) -> float:
-        """Surface nette (brute moins zones interdites) en m²."""
+        """Net area (gross minus exclusion zones) in m²."""
         excluded = sum(z.width_cm * z.depth_cm for z in self.exclusion_zones)
         return (self.width_cm * self.depth_cm - excluded) / 10_000
 
 
 @dataclass
 class FloorPlan:
-    """Ensemble des pièces d'un étage.
+    """Set of rooms on a floor.
 
     Attributes:
-        rooms: Pièces de l'étage.
-        building_angle_deg: Angle bâtiment vers nord polaire (degrés).
-        scale_cm_per_px: Échelle du plan raster.
+        rooms: Rooms on the floor.
+        building_angle_deg: Building angle relative to true north (degrees).
+        scale_cm_per_px: Scale of the raster plan.
     """
     rooms: list[RoomSpec] = field(default_factory=list)
     building_angle_deg: float = 0.0

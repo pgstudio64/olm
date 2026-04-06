@@ -1,4 +1,4 @@
-"""Tests pour room_model.py."""
+"""Tests for room_model.py."""
 from olm.core.room_model import (
     Face, HingeSide, WindowSpec, OpeningSpec, ExclusionZone, RoomSpec, FloorPlan,
 )
@@ -36,7 +36,7 @@ def test_opening_defaults():
     assert op.hinge_side == HingeSide.LEFT
 
 
-def test_opening_libre():
+def test_opening_free():
     op = OpeningSpec(face=Face.SOUTH, offset_cm=100, width_cm=150, has_door=False)
     assert op.has_door is False
 
@@ -77,7 +77,7 @@ def test_room_raster_position():
 
 
 def test_complete_room():
-    """Pièce réaliste avec fenêtres, porte, zone interdite."""
+    """Realistic room with windows, door, and exclusion zone."""
     room = RoomSpec(
         width_cm=550,
         depth_cm=500,

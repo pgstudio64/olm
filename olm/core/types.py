@@ -1,10 +1,10 @@
-"""Types partagés du core OLM."""
+"""Shared core types for OLM."""
 from enum import Enum
 
 
 class CellType(int, Enum):
-    FREE      = 0   # Cellule praticable — passage piéton possible
-    WALL      = 1   # Mur ou obstacle fixe — jamais praticable
-    FOOTPRINT = 2   # Emprise d'un bloc placé — non praticable (hors chaise)
-    DOOR      = 3   # Porte — praticable, source pour connectivité
-    CORRIDOR  = 4   # Emprise d'un corridor actif — praticable
+    FREE      = 0   # Walkable cell — pedestrian passage allowed
+    WALL      = 1   # Wall or fixed obstacle — never walkable
+    FOOTPRINT = 2   # Footprint of a placed block — not walkable (except chair area)
+    DOOR      = 3   # Door — walkable, source for connectivity
+    CORRIDOR  = 4   # Footprint of an active corridor — walkable

@@ -2,10 +2,10 @@
 
 const COLOR_DESK_FILL    = "#d0d0d0";
 const COLOR_DESK_STROKE  = "#888888";
-const COLOR_NSUP_FILL    = "#3b7dc9";      // zones fixes débattement chaise (non-superposable) — bleu
+const COLOR_NSUP_FILL    = "#3b7dc9";      // fixed chair clearance zones (non-superposable) — blue
 const COLOR_NSUP_STROKE  = "#4a90d9";
 const COLOR_NSUP_OPACITY = 0.40;
-const COLOR_CAND_FILL    = "#2e2e2e";      // zones minimales de circulation (obligatoires, extensibles) — anthracite
+const COLOR_CAND_FILL    = "#2e2e2e";      // minimum circulation zones (mandatory, extensible) — anthracite
 const COLOR_CAND_STROKE  = "#333333";
 const COLOR_CAND_OPACITY = 1.0;
 const COLOR_BLOCK_BORDER = "#333333";
@@ -21,8 +21,8 @@ const COLOR_CHAIR_ARM    = "#7a5c10";
 
 var DESK_W = 180;  // cm, desk width (wide side, left-right) — updated from APP_CONFIG
 var DESK_D = 80;   // cm, desk depth (front-to-back) — updated from APP_CONFIG
-const CHAIR_W_CM = 65;   // cm, largeur assise fauteuil
-const CHAIR_D_CM = 60;   // cm, profondeur assise fauteuil
+const CHAIR_W_CM = 65;   // cm, chair seat width
+const CHAIR_D_CM = 60;   // cm, chair seat depth
 
 const FACE_ROTATE_MAP = {
   90:  { north: "west", east: "north", south: "east", west: "south" },

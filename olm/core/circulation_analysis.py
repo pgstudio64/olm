@@ -1,10 +1,9 @@
-"""Analyse de circulation à partir d'un candidat du matching statique — solver_lab.
+"""Circulation quality analysis for a matched layout candidate.
 
-Construit une grille discrète depuis un candidat (room + blocks positionnés)
-et analyse la qualité de la circulation en réutilisant les algorithmes de
-solver/circulation.py (fonctions copiées pour autonomie).
+Builds a discrete grid from a candidate (room + positioned blocks) and
+analyses circulation quality using internal graph algorithms.
 
-Repère D-26 : origine NW, x EST, y SUD. Dimensions en centimètres.
+Coordinate convention: NW origin, x EAST, y SOUTH. Dimensions in centimetres.
 """
 from __future__ import annotations
 
@@ -30,23 +29,23 @@ _DEFAULT_DOOR_DEPTH = _default_cfg.door_exclusion_depth_cm if _default_cfg else 
 
 
 # ---------------------------------------------------------------------------
-# Dataclass résultat
+# Result dataclass
 # ---------------------------------------------------------------------------
 
 @dataclass
 class CirculationResult:
-    """Résultat de l'analyse de circulation pour un candidat du matching.
+    """Circulation analysis result for a matched candidate.
 
     Attributes:
-        grade: Grade de qualité (A à F).
-        connectivity_pct: Pourcentage de rectangles de circulation atteignables.
-        isolated_area_pct: Pourcentage de surface inaccessible.
-        avg_detour_ratio: Ratio moyen distance graphe / distance euclidienne.
-        worst_detour_ratio: Pire ratio de détour.
-        violations: Messages de violation AFNOR.
-        paths: Chemin cellulaire [(row, col)] par bloc (vide pour l'instant).
-        path_widths: Largeur minimale en cm par chemin (vide pour l'instant).
-        analysis_time_ms: Durée de l'analyse en millisecondes.
+        grade: Quality grade (A to F).
+        connectivity_pct: Percentage of reachable circulation rectangles.
+        isolated_area_pct: Percentage of inaccessible area.
+        avg_detour_ratio: Average ratio of graph distance to Euclidean distance.
+        worst_detour_ratio: Worst detour ratio.
+        violations: AFNOR violation messages.
+        paths: Cell path [(row, col)] per block (empty for now).
+        path_widths: Minimum width in cm per path (empty for now).
+        analysis_time_ms: Analysis duration in milliseconds.
     """
     grade: str
     connectivity_pct: float
@@ -62,7 +61,7 @@ class CirculationResult:
 
 
 # ---------------------------------------------------------------------------
-# Construction de la grille
+# Grid construction
 # ---------------------------------------------------------------------------
 
 def build_grid(
@@ -70,17 +69,17 @@ def build_grid(
     blocks: list[dict],
     door_depth_cm: int = _DEFAULT_DOOR_DEPTH,
 ) -> np.ndarray:
-    """Construit une grille numpy (ROWS × COLS) de CellType.
+    """Build a numpy grid (ROWS x COLS) of CellType values.
 
     Args:
-        room: Dict avec eo_cm, ns_cm, doors (liste wall/position_cm/width_cm).
-        blocks: Liste de dicts type/orientation/x_cm/y_cm/eo_cm/ns_cm.
-        door_depth_cm: Profondeur de la zone d'exclusion porte en cm.
+        room: Dict with eo_cm, ns_cm, doors (list of wall/position_cm/width_cm).
+        blocks: List of dicts with type/orientation/x_cm/y_cm/eo_cm/ns_cm.
+        door_depth_cm: Door exclusion zone depth in cm.
 
     Returns:
-        Grille numpy int de shape (ROWS, COLS) initialisée avec les valeurs CellType.
+        Integer numpy grid of shape (ROWS, COLS) initialised with CellType values.
     """
-    # Imports locaux pour éviter la circularité au niveau module
+    # Local imports to avoid module-level circular dependency
     from olm.core.pattern_generator import (
         rotate_face_candidates,
         BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
@@ -98,13 +97,13 @@ def build_grid(
 
     grid = np.full((ROWS, COLS), int(CellType.CORRIDOR), dtype=np.int32)
 
-    # Étape 3 — Murs périphériques
+    # Step 3 — Peripheral walls
     grid[0, :] = int(CellType.WALL)
     grid[ROWS - 1, :] = int(CellType.WALL)
     grid[:, 0] = int(CellType.WALL)
     grid[:, COLS - 1] = int(CellType.WALL)
 
-    # Étape 4 — Portes (écrasent les murs)
+    # Step 4 — Doors (overwrite walls)
     for door in room.get("doors", []):
         wall = door["wall"]
         pos = door.get("position_cm", 0)
@@ -121,12 +120,12 @@ def build_grid(
         elif wall == "east":
             grid[c1:c2, COLS - 1] = int(CellType.DOOR)
 
-    # Étape 5 — Zone d'exclusion porte : reste CORRIDOR (praticable à pied).
-    # L'interdiction de placement de mobilier est gérée par le matcher
-    # (static_matcher.compute_door_exclusion_zones), pas par la grille de
-    # circulation. Marquer cette zone en WALL coupait la porte de l'intérieur.
+    # Step 5 — Door exclusion zone: remains CORRIDOR (walkable).
+    # Furniture placement prohibition is handled by the matcher
+    # (static_matcher.compute_door_exclusion_zones), not by the circulation grid.
+    # Marking this zone as WALL cut the door off from the inside.
 
-    # Étape 6 — Empreintes des blocs (physique + zones fixes non superposables)
+    # Step 6 — Block footprints (physical + fixed non-overlappable zones)
     for b in blocks:
         block_type = b["type"]
         orientation = b.get("orientation", 0)
@@ -135,14 +134,14 @@ def build_grid(
         eo_cm = b["eo_cm"]
         ns_cm = b["ns_cm"]
 
-        # Emprise physique
+        # Physical footprint
         col1 = x_cm // GRID_CELL_CM
         col2 = (x_cm + eo_cm) // GRID_CELL_CM
         row1 = y_cm // GRID_CELL_CM
         row2 = (y_cm + ns_cm) // GRID_CELL_CM
         grid[row1:row2, col1:col2] = int(CellType.FOOTPRINT)
 
-        # Zones fixes (fauteuil, non_superposable_cm)
+        # Fixed zones (chair clearance, non_superposable_cm)
         if block_type not in _BLOCKS:
             continue
         block_def = _BLOCKS[block_type]
@@ -150,48 +149,47 @@ def build_grid(
         if orientation != 0:
             faces = rotate_face_candidates(faces, orientation)
 
-        # North : bande au-dessus du bloc
+        # North: strip above the block
         if faces.north.non_superposable_cm > 0:
             t = faces.north.non_superposable_cm // GRID_CELL_CM
             r1 = max(0, row1 - t)
             grid[r1:row1, col1:col2] = int(CellType.FOOTPRINT)
 
-        # South : bande en-dessous du bloc
+        # South: strip below the block
         if faces.south.non_superposable_cm > 0:
             t = faces.south.non_superposable_cm // GRID_CELL_CM
             r2 = min(ROWS, row2 + t)
             grid[row2:r2, col1:col2] = int(CellType.FOOTPRINT)
 
-        # East : bande à droite du bloc
+        # East: strip to the right of the block
         if faces.east.non_superposable_cm > 0:
             t = faces.east.non_superposable_cm // GRID_CELL_CM
             c2 = min(COLS, col2 + t)
             grid[row1:row2, col2:c2] = int(CellType.FOOTPRINT)
 
-        # West : bande à gauche du bloc
+        # West: strip to the left of the block
         if faces.west.non_superposable_cm > 0:
             t = faces.west.non_superposable_cm // GRID_CELL_CM
             c1 = max(0, col1 - t)
             grid[row1:row2, c1:col1] = int(CellType.FOOTPRINT)
 
-    # Corridors intérieurs : toutes les cellules CORRIDOR sont confirmées
-    # (les murs et empreintes ont été marqués, le reste reste CORRIDOR)
+    # Interior corridors: all CORRIDOR cells are confirmed
+    # (walls and footprints have been marked, the rest stays CORRIDOR)
     return grid
 
 
 # ---------------------------------------------------------------------------
-# Fonctions privées copiées depuis solver/circulation.py
-# (Origine : solver/circulation.py — noms préfixés _ conservés)
+# Internal graph algorithms for circulation analysis
 # ---------------------------------------------------------------------------
 
 def _rectangulate(circ_mask: np.ndarray) -> list[tuple[int, int, int, int]]:
-    """Découpe le masque de circulation en rectangles maximaux (scan greedy).
+    """Partition the circulation mask into maximal rectangles (greedy scan).
 
     Args:
-        circ_mask: Masque booléen de shape (ROWS, COLS).
+        circ_mask: Boolean mask of shape (ROWS, COLS).
 
     Returns:
-        Liste de (col, row, w, h) en cellules.
+        List of (col, row, w, h) in cells.
     """
     ROWS, COLS = circ_mask.shape
     covered = np.zeros((ROWS, COLS), dtype=bool)
@@ -224,14 +222,14 @@ def _shared_border_length(
     rect_a: tuple[int, int, int, int],
     rect_b: tuple[int, int, int, int],
 ) -> int:
-    """Longueur du bord partagé entre deux rectangles (0 si non adjacents).
+    """Length of the shared border between two rectangles (0 if non-adjacent).
 
     Args:
-        rect_a: (col, row, w, h) du premier rectangle.
-        rect_b: (col, row, w, h) du second rectangle.
+        rect_a: (col, row, w, h) of the first rectangle.
+        rect_b: (col, row, w, h) of the second rectangle.
 
     Returns:
-        Longueur du bord commun en cellules.
+        Length of the common border in cells.
     """
     col_a, row_a, w_a, h_a = rect_a
     col_b, row_b, w_b, h_b = rect_b
@@ -251,14 +249,14 @@ def _build_adjacency(
     rects: list[tuple[int, int, int, int]],
     min_passage: int,
 ) -> dict[int, list[int]]:
-    """Construit le graphe d'adjacence entre rectangles.
+    """Build the adjacency graph between rectangles.
 
     Args:
-        rects: Liste de (col, row, w, h).
-        min_passage: Longueur minimale de bord partagé en cellules.
+        rects: List of (col, row, w, h).
+        min_passage: Minimum shared border length in cells.
 
     Returns:
-        Dictionnaire d'adjacence {index: [voisins]}.
+        Adjacency dict {index: [neighbours]}.
     """
     n = len(rects)
     adj: dict[int, list[int]] = {i: [] for i in range(n)}
@@ -274,14 +272,14 @@ def _find_entry_rect(
     rects: list[tuple[int, int, int, int]],
     grid: np.ndarray,
 ) -> Optional[int]:
-    """Retourne l'index du rectangle contenant une cellule DOOR.
+    """Return the index of the rectangle that contains a DOOR cell.
 
     Args:
-        rects: Liste de (col, row, w, h).
-        grid: Grille numpy de CellType.
+        rects: List of (col, row, w, h).
+        grid: Numpy grid of CellType.
 
     Returns:
-        Index du rectangle d'entrée, ou None si aucune porte.
+        Index of the entry rectangle, or None if no door is found.
     """
     door_positions = list(zip(*np.where(grid == int(CellType.DOOR))))
     if not door_positions:
@@ -292,7 +290,7 @@ def _find_entry_rect(
             if row <= door_row < row + h and col <= door_col < col + w:
                 return i
 
-    # Fallback : rectangle le plus proche du centre moyen des portes
+    # Fallback: rectangle closest to the mean centre of all door cells
     avg_row = sum(int(r) for r, _ in door_positions) / len(door_positions)
     avg_col = sum(int(c) for _, c in door_positions) / len(door_positions)
 
@@ -310,14 +308,14 @@ def _find_entry_rect(
 
 
 def _bfs(adj_graph: dict[int, list[int]], start: int) -> set[int]:
-    """BFS dans le graphe d'adjacence depuis le nœud start.
+    """BFS through the adjacency graph from node start.
 
     Args:
-        adj_graph: Graphe d'adjacence {index: [voisins]}.
-        start: Index de départ.
+        adj_graph: Adjacency graph {index: [neighbours]}.
+        start: Starting index.
 
     Returns:
-        Ensemble des indices atteignables (start inclus).
+        Set of reachable indices (including start).
     """
     visited: set[int] = {start}
     queue: deque[int] = deque([start])
@@ -334,14 +332,14 @@ def _rect_center_m(
     rect: tuple[int, int, int, int],
     cell_size_m: float,
 ) -> tuple[float, float]:
-    """Centre d'un rectangle en mètres.
+    """Centre of a rectangle in metres.
 
     Args:
-        rect: (col, row, w, h) en cellules.
-        cell_size_m: Taille d'une cellule en mètres.
+        rect: (col, row, w, h) in cells.
+        cell_size_m: Cell size in metres.
 
     Returns:
-        (cx_m, cy_m) coordonnées du centre.
+        (cx_m, cy_m) centre coordinates.
     """
     col, row, w, h = rect
     return (col + w / 2) * cell_size_m, (row + h / 2) * cell_size_m
@@ -352,15 +350,15 @@ def _build_weighted_adjacency(
     adj_graph: dict[int, list[int]],
     cell_size_m: float,
 ) -> dict[int, list[tuple[int, float]]]:
-    """Construit le graphe pondéré pour Dijkstra.
+    """Build the weighted graph for Dijkstra.
 
     Args:
-        rects: Liste de (col, row, w, h).
-        adj_graph: Graphe d'adjacence non pondéré.
-        cell_size_m: Taille d'une cellule en mètres.
+        rects: List of (col, row, w, h).
+        adj_graph: Unweighted adjacency graph.
+        cell_size_m: Cell size in metres.
 
     Returns:
-        Graphe pondéré {index: [(voisin, poids_m), ...]}.
+        Weighted graph {index: [(neighbour, weight_m), ...]}.
     """
     weighted: dict[int, list[tuple[int, float]]] = {i: [] for i in range(len(rects))}
     for i, neighbors in adj_graph.items():
@@ -376,14 +374,14 @@ def _dijkstra(
     weighted_graph: dict[int, list[tuple[int, float]]],
     start: int,
 ) -> dict[int, float]:
-    """Dijkstra depuis start dans un graphe pondéré.
+    """Dijkstra from start in a weighted graph.
 
     Args:
-        weighted_graph: {index: [(voisin, poids), ...]}.
-        start: Nœud source.
+        weighted_graph: {index: [(neighbour, weight), ...]}.
+        start: Source node.
 
     Returns:
-        Dictionnaire {index: distance_minimale_en_mètres}.
+        Dict {index: minimum_distance_in_metres}.
     """
     dist: dict[int, float] = {start: 0.0}
     heap: list[tuple[float, int]] = [(0.0, start)]
@@ -400,15 +398,15 @@ def _dijkstra(
 
 
 # ---------------------------------------------------------------------------
-# Chemins BFS porte → fauteuil de chaque desk
+# BFS paths from door to each desk chair
 # ---------------------------------------------------------------------------
 
 @dataclass
 class DeskAccess:
-    """Résultat d'accès pour un desk d'un bloc."""
-    target_row: int       # cellule BFS cible (walkable adjacente au fauteuil)
+    """Access result for a desk in a block."""
+    target_row: int       # BFS target cell (walkable adjacent to chair)
     target_col: int
-    chair_row: float      # centre visuel du fauteuil (en cellules, peut être .5)
+    chair_row: float      # visual chair centre (in cells, may be .5)
     chair_col: float
     desk_id: str
 
@@ -417,18 +415,18 @@ def _desk_access_cells(
     block: dict,
     grid: np.ndarray,
 ) -> list[DeskAccess]:
-    """Cellules d'accès (côté fauteuil) de chaque desk d'un bloc.
+    """Access cells (chair side) for each desk in a block.
 
-    Pour les blocs standard (BLOCK_1, BLOCK_2_FACE, BLOCK_4_FACE, etc.),
-    le fauteuil est du côté de la face avec non_superposable_cm > 0.
-    Un seul point d'accès par face active.
+    For standard blocks (BLOCK_1, BLOCK_2_FACE, BLOCK_4_FACE, etc.),
+    the chair is on the face with non_superposable_cm > 0.
+    One access point per active face.
 
-    Pour les blocs ortho (BLOCK_2_ORTHO_R/G), chaque poste a sa propre
-    face chaise — un point d'accès par poste avec la zone de chaise
-    restreinte à la sous-zone du poste dans le bloc.
+    For ortho blocks (BLOCK_2_ORTHO_R/L), each desk has its own chair face —
+    one access point per desk with the chair zone restricted to the desk
+    sub-zone within the block.
 
-    Retourne le point BFS cible (cellule walkable) et le centre visuel
-    du fauteuil pour le rendu des flèches.
+    Returns the BFS target cell (walkable) and the visual chair centre
+    for arrow rendering.
     """
     from olm.core.pattern_generator import (
         DESK_W_CM, DESK_D_CM, rotate_face_candidates,
@@ -470,7 +468,7 @@ def _desk_access_cells(
         face: str, zone_x: int, zone_y: int, zone_eo: int, zone_ns: int,
         nsup_cm: int, desk_id: str,
     ) -> Optional[DeskAccess]:
-        """Calcule le point d'accès pour une zone de poste sur une face."""
+        """Compute the access point for a desk zone on a given face."""
         c1 = zone_x // GRID_CELL_CM
         c2 = (zone_x + zone_eo) // GRID_CELL_CM
         r1 = zone_y // GRID_CELL_CM
@@ -515,16 +513,16 @@ def _desk_access_cells(
 
     results: list[DeskAccess] = []
 
-    # ── Blocs ortho : accès par poste individuel ──────────────────────────
+    # ── Ortho blocks: access per individual desk ──────────────────────────
     if block_type in ("BLOCK_2_ORTHO_R", "BLOCK_2_ORTHO_L"):
-        # Déterminer les sous-zones de chaque poste selon l'orientation
-        # ORTHO_R@0 : desk1 (regard S, chaise N) en haut, desk2 (regard W, chaise E) en bas-gauche
-        # ORTHO_L@0 : desk1 (regard S, chaise N) en haut, desk2 (regard E, chaise W) en bas-droite
-        # Après rotation, les faces chaise tournent avec rotate_face_candidates
+        # Determine sub-zones of each desk by orientation:
+        # ORTHO_R@0: desk1 (facing S, chair N) at top, desk2 (facing W, chair E) bottom-left
+        # ORTHO_L@0: desk1 (facing S, chair N) at top, desk2 (facing E, chair W) bottom-right
+        # After rotation, chair faces rotate with rotate_face_candidates.
         #
-        # Stratégie : on connaît les faces chaise après rotation. Pour ORTHO,
-        # les 2 faces non-nulles correspondent aux 2 postes distincts.
-        # On découpe le bloc en 2 sous-zones selon la face.
+        # Strategy: known chair faces after rotation. For ORTHO,
+        # the 2 non-zero faces correspond to the 2 distinct desks.
+        # Split the block into 2 sub-zones by face.
         desk_faces = []
         for f_name in ("north", "south", "east", "west"):
             fz = getattr(faces, f_name)
@@ -532,19 +530,19 @@ def _desk_access_cells(
                 desk_faces.append((f_name, fz.non_superposable_cm))
 
         if len(desk_faces) == 2:
-            # Face 1 : zone restreinte au poste correspondant
-            # Heuristique : la face N/S couvre la moitié NS du bloc,
-            # la face E/W couvre la moitié EO du bloc
+            # Face 1: zone restricted to the corresponding desk
+            # Heuristic: N/S face covers the NS half of the block,
+            # E/W face covers the EO half of the block
             for idx, (f_name, nsup_cm) in enumerate(desk_faces):
                 desk_id = f"{block_type}@{orientation}_d{idx}"
                 if f_name in ("north", "south"):
-                    # Poste horizontal : partie haute ou basse
+                    # Horizontal desk: top or bottom portion
                     if f_name == "north":
                         zone = (x_cm, y_cm, eo, min(ns, DESK_W_CM))
                     else:
                         zone = (x_cm, y_cm + ns - DESK_W_CM, eo, min(ns, DESK_W_CM))
                 else:
-                    # Poste vertical : partie gauche ou droite
+                    # Vertical desk: left or right portion
                     if f_name == "west":
                         zone = (x_cm, y_cm, min(eo, DESK_W_CM), ns)
                     else:
@@ -555,7 +553,7 @@ def _desk_access_cells(
                     results.append(acc)
         return results
 
-    # ── Blocs standard : accès par face ───────────────────────────────────
+    # ── Standard blocks: access by face ──────────────────────────────────
     access_faces = []
     if faces.west.non_superposable_cm > 0:
         access_faces.append("west")
@@ -577,17 +575,17 @@ def _desk_access_cells(
 
 
 def _distance_transform(grid: np.ndarray) -> np.ndarray:
-    """Calcule la distance de chaque cellule au plus proche obstacle.
+    """Compute the distance of each cell to the nearest obstacle.
 
-    Obstacle = WALL ou FOOTPRINT. Résultat en cellules (BFS Manhattan).
-    Les cellules obstacle ont une distance de 0.
+    Obstacle = WALL or FOOTPRINT. Result in cells (BFS Manhattan).
+    Obstacle cells have distance 0.
     """
     ROWS, COLS = grid.shape
     walkable = {int(CellType.CORRIDOR), int(CellType.DOOR)}
     dist_map = np.zeros((ROWS, COLS), dtype=np.int32)
     queue: deque[tuple[int, int]] = deque()
 
-    # Initialiser : obstacles à distance 0, walkable à -1 (non visité)
+    # Initialise: obstacles at distance 0, walkable at -1 (unvisited)
     for r in range(ROWS):
         for c in range(COLS):
             if int(grid[r, c]) not in walkable:
@@ -596,7 +594,7 @@ def _distance_transform(grid: np.ndarray) -> np.ndarray:
             else:
                 dist_map[r, c] = -1
 
-    # BFS multi-source depuis les obstacles
+    # Multi-source BFS from obstacles
     while queue:
         r, c = queue.popleft()
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -605,7 +603,7 @@ def _distance_transform(grid: np.ndarray) -> np.ndarray:
                 dist_map[nr, nc] = dist_map[r, c] + 1
                 queue.append((nr, nc))
 
-    # Les cellules non atteintes restent à 0
+    # Unreached cells remain at 0
     dist_map[dist_map == -1] = 0
     return dist_map
 
@@ -615,22 +613,22 @@ def _cell_bfs_path(
     start_cells: list[tuple[int, int]],
     target: tuple[int, int],
 ) -> Optional[list[tuple[int, int]]]:
-    """Dijkstra cellulaire depuis start_cells vers target.
+    """Cell-level Dijkstra from start_cells to target.
 
-    Le coût par cellule favorise le centre des passages : une cellule
-    à distance d des obstacles coûte 1/d (plus on est au centre, moins
-    ça coûte). Le chemin passe naturellement au milieu des corridors.
+    Per-cell cost favours the corridor centre: a cell at distance d from
+    obstacles costs 1/d (closer to centre = cheaper). The path naturally
+    runs through the middle of corridors.
 
     Returns:
-        Chemin [(row, col), ...] du start le plus proche à target, ou None.
+        Path [(row, col), ...] from the nearest start to target, or None.
     """
     ROWS, COLS = grid.shape
     walkable = {int(CellType.CORRIDOR), int(CellType.DOOR)}
 
-    # Carte de coût : inversement proportionnel à la distance aux obstacles
+    # Cost map: inversely proportional to distance from obstacles
     dist_map = _distance_transform(grid)
-    # cost(r, c) = 1.0 + K / max(dist, 1) — K contrôle la force d'attraction
-    # vers le centre. K=3 donne un bon équilibre.
+    # cost(r, c) = 1.0 + K / max(dist, 1) — K controls attraction strength
+    # towards the centre. K=3 gives a good balance.
     K_CENTER = 3.0
 
     dist: dict[tuple[int, int], float] = {}
@@ -673,10 +671,10 @@ def _path_widths_per_cell_cm(
     path: list[tuple[int, int]],
     grid: np.ndarray,
 ) -> list[int]:
-    """Largeur de passage perpendiculaire en cm pour chaque cellule du chemin.
+    """Perpendicular passage width in cm for each cell of the path.
 
-    Pour chaque cellule, mesure le nombre de cellules CORRIDOR/DOOR contiguës
-    dans la direction perpendiculaire au sens de déplacement.
+    For each cell, measures the number of contiguous CORRIDOR/DOOR cells
+    in the direction perpendicular to the direction of travel.
     """
     if len(path) < 2:
         return [GRID_CELL_CM] * len(path)
@@ -694,14 +692,14 @@ def _path_widths_per_cell_cm(
             dr = r - path[i - 1][0]
             dc = c - path[i - 1][1]
 
-        if dr != 0:  # vertical → mesurer largeur horizontale
+        if dr != 0:  # vertical -> measure horizontal width
             w = 1
             for sign in (-1, 1):
                 nc = c + sign
                 while 0 <= nc < COLS and int(grid[r, nc]) in walkable:
                     w += 1
                     nc += sign
-        else:  # horizontal → mesurer largeur verticale
+        else:  # horizontal -> measure vertical width
             w = 1
             for sign in (-1, 1):
                 nr = r + sign
@@ -718,7 +716,7 @@ def _path_min_width_cm(
     path: list[tuple[int, int]],
     grid: np.ndarray,
 ) -> float:
-    """Largeur minimale de passage le long d'un chemin, en cm."""
+    """Minimum passage width along a path, in cm."""
     if not path:
         return 0.0
     widths = _path_widths_per_cell_cm(path, grid)
@@ -727,27 +725,27 @@ def _path_min_width_cm(
 
 @dataclass
 class DeskPathResult:
-    """Résultat complet d'un chemin porte→fauteuil."""
+    """Complete result of a door-to-chair path."""
     desk_id: str
-    path: list[tuple[int, int]]       # chemin cellulaire BFS
+    path: list[tuple[int, int]]       # BFS cell path
     min_width_cm: float
-    widths_cm: list[int]              # largeur par cellule
-    door_center: tuple[float, float]  # (row, col) centre de la porte (fractionnaire)
-    chair_center: tuple[float, float] # (row, col) centre du fauteuil (fractionnaire)
+    widths_cm: list[int]              # width per cell
+    door_center: tuple[float, float]  # (row, col) door centre (fractional)
+    chair_center: tuple[float, float] # (row, col) chair centre (fractional)
 
 
 def _cluster_door_cells(
     grid: np.ndarray,
 ) -> list[list[tuple[int, int]]]:
-    """Regroupe les cellules DOOR en clusters connexes (une porte = un cluster).
+    """Group DOOR cells into connected clusters (one door = one cluster).
 
-    Utilise un BFS 4-connexe sur les cellules DOOR.
+    Uses 4-connected BFS over DOOR cells.
 
     Args:
-        grid: Grille avec cellules CellType.DOOR.
+        grid: Grid with CellType.DOOR cells.
 
     Returns:
-        Liste de clusters, chaque cluster = liste de (row, col).
+        List of clusters, each cluster = list of (row, col).
     """
     door_type = int(CellType.DOOR)
     all_doors = set(
@@ -784,16 +782,16 @@ def _compute_desk_paths(
     blocks: list[dict],
     room: dict,
 ) -> list[DeskPathResult]:
-    """Calcule chemin porte→fauteuil et largeurs pour chaque desk.
+    """Compute door-to-chair paths and widths for each desk.
 
-    Multi-portes : un BFS par cluster de cellules DOOR, le meilleur
-    chemin (plus court) est retenu pour chaque poste.
+    Multi-door: one BFS per DOOR cell cluster; the best (shortest)
+    path is kept for each desk.
     """
     door_clusters = _cluster_door_cells(grid)
     if not door_clusters:
         return []
 
-    # Tous les accès desks
+    # All desk access points
     all_access: list[DeskAccess] = []
     for block in blocks:
         all_access.extend(_desk_access_cells(block, grid))
@@ -808,7 +806,7 @@ def _compute_desk_paths(
         best_len = float("inf")
         best_door_center = (0.0, 0.0)
 
-        # Tester chaque porte (cluster)
+        # Test each door cluster
         for cluster in door_clusters:
             path = _cell_bfs_path(
                 grid, cluster, (access.target_row, access.target_col),
@@ -816,7 +814,7 @@ def _compute_desk_paths(
             if path is not None and len(path) < best_len:
                 best_path = path
                 best_len = len(path)
-                # Centre de cette porte
+                # Centre of this door cluster
                 best_door_center = (
                     sum(r for r, _ in cluster) / len(cluster) + 0.5,
                     sum(c for _, c in cluster) / len(cluster) + 0.5,
@@ -846,14 +844,14 @@ def _compute_desk_paths(
 
 
 def _compute_grade(connectivity_pct: float, worst_detour: float) -> str:
-    """Calcule le grade de qualité de la circulation.
+    """Compute the circulation quality grade.
 
     Args:
-        connectivity_pct: Pourcentage de rectangles atteignables.
-        worst_detour: Pire ratio distance_graphe / distance_euclidienne.
+        connectivity_pct: Percentage of reachable rectangles.
+        worst_detour: Worst ratio of graph distance to Euclidean distance.
 
     Returns:
-        Grade "A" à "F".
+        Grade "A" to "F".
     """
     if connectivity_pct >= 100.0 and worst_detour < 1.30:
         return "A"
@@ -873,17 +871,17 @@ def _compute_violations(
     worst_detour: float,
     cell_size_m: float,
 ) -> list[str]:
-    """Génère les messages de violation pour feedback.
+    """Generate violation messages for feedback.
 
     Args:
-        connectivity_pct: Pourcentage de connexité.
-        isolated_area_pct: Pourcentage de surface inaccessible.
-        isolated_zones: Rectangles inaccessibles [(col, row, w, h), ...].
-        worst_detour: Pire ratio de détour.
-        cell_size_m: Taille d'une cellule en mètres.
+        connectivity_pct: Connectivity percentage.
+        isolated_area_pct: Percentage of inaccessible area.
+        isolated_zones: Inaccessible rectangles [(col, row, w, h), ...].
+        worst_detour: Worst detour ratio.
+        cell_size_m: Cell size in metres.
 
     Returns:
-        Liste de messages de violation.
+        List of violation messages.
     """
     violations: list[str] = []
     MIN_ISOLATED_AREA_M2 = 0.50
@@ -894,8 +892,8 @@ def _compute_violations(
     ]
     if significant:
         violations.append(
-            f"ISOLATED_ZONE: {len(significant)} zones inaccessibles "
-            f"({isolated_area_pct:.0f}% surface)"
+            f"ISOLATED_ZONE: {len(significant)} inaccessible zones "
+            f"({isolated_area_pct:.0f}% area)"
         )
 
     if worst_detour > 2.0:
@@ -911,7 +909,7 @@ def _compute_violations(
 
 
 # ---------------------------------------------------------------------------
-# Point d'entrée principal
+# Main entry point
 # ---------------------------------------------------------------------------
 
 def analyse(
@@ -919,20 +917,20 @@ def analyse(
     blocks: list[dict],
     door_depth_cm: int = _DEFAULT_DOOR_DEPTH,
 ) -> CirculationResult:
-    """Analyse la qualité de la circulation pour un candidat du matching.
+    """Analyse circulation quality for a matched layout candidate.
 
     Args:
-        room: Dict avec eo_cm, ns_cm, doors.
-        blocks: Liste de blocs positionnés (format candidat static_matcher).
-        door_depth_cm: Profondeur de la zone d'exclusion porte en cm.
+        room: Dict with eo_cm, ns_cm, doors.
+        blocks: List of positioned blocks (static matcher candidate format).
+        door_depth_cm: Door exclusion zone depth in cm.
 
     Returns:
-        CirculationResult avec grade, métriques et violations.
+        CirculationResult with grade, metrics, and violations.
     """
     t0 = time.perf_counter()
     cell_size_m = GRID_CELL_CM / 100.0
 
-    # Étape 1 — Construction de la grille
+    # Step 1 — Build the grid
     grid = build_grid(room, blocks, door_depth_cm)
     if grid is None or grid.size == 0:
         return CirculationResult(
@@ -941,14 +939,14 @@ def analyse(
             isolated_area_pct=100.0,
             avg_detour_ratio=0.0,
             worst_detour_ratio=0.0,
-            violations=["Grille indisponible"],
+            violations=["Grid unavailable"],
             analysis_time_ms=round((time.perf_counter() - t0) * 1000, 2),
         )
 
-    # Étape 2 — Masque de circulation
+    # Step 2 — Circulation mask
     circ_mask = (grid == int(CellType.CORRIDOR)) | (grid == int(CellType.DOOR))
 
-    # Étape 3 — Rectangulation greedy
+    # Step 3 — Greedy rectangulation
     rects = _rectangulate(circ_mask)
     if not rects:
         return CirculationResult(
@@ -957,18 +955,18 @@ def analyse(
             isolated_area_pct=100.0,
             avg_detour_ratio=0.0,
             worst_detour_ratio=0.0,
-            violations=["Aucune zone de circulation détectée"],
+            violations=["No circulation zone detected"],
             analysis_time_ms=round((time.perf_counter() - t0) * 1000, 2),
         )
 
-    # Étape 4 — Graphe d'adjacence
-    # Largeur minimale de passage AFNOR NF X35-102 = 80 cm
+    # Step 4 — Adjacency graph
+    # Minimum passage width AFNOR NF X35-102 = 80 cm
     MIN_PASSAGE_CM = 80
     min_passage_cells = MIN_PASSAGE_CM // GRID_CELL_CM
     adj_graph = _build_adjacency(rects, min_passage=min_passage_cells)
     n_rects = len(rects)
 
-    # Étape 5 — Rectangle d'entrée
+    # Step 5 — Entry rectangle
     entry_idx = _find_entry_rect(rects, grid)
     if entry_idx is None:
         return CirculationResult(
@@ -977,11 +975,11 @@ def analyse(
             isolated_area_pct=100.0,
             avg_detour_ratio=0.0,
             worst_detour_ratio=0.0,
-            violations=["Aucune porte trouvée dans la zone de circulation"],
+            violations=["No door found in the circulation zone"],
             analysis_time_ms=round((time.perf_counter() - t0) * 1000, 2),
         )
 
-    # Étape 6 — Connexité BFS
+    # Step 6 — BFS connectivity
     reachable: set[int] = _bfs(adj_graph, entry_idx)
     connectivity_pct = len(reachable) / n_rects * 100.0
 
@@ -994,7 +992,7 @@ def analyse(
     )
     isolated_zones = [rects[i] for i in range(n_rects) if i not in reachable]
 
-    # Étape 7 — Dijkstra (détours)
+    # Step 7 — Dijkstra (detour ratios)
     weighted_graph = _build_weighted_adjacency(rects, adj_graph, cell_size_m)
     dist_m = _dijkstra(weighted_graph, entry_idx)
 
@@ -1012,13 +1010,13 @@ def analyse(
     avg_detour = sum(ratios) / len(ratios) if ratios else 1.0
     worst_detour = max(ratios) if ratios else 1.0
 
-    # Étape 8 — Grade et violations
+    # Step 8 — Grade and violations
     grade = _compute_grade(connectivity_pct, worst_detour)
     violations = _compute_violations(
         connectivity_pct, isolated_area_pct, isolated_zones, worst_detour, cell_size_m
     )
 
-    # Étape 9 — Chemins BFS porte → fauteuil de chaque desk
+    # Step 9 — BFS paths from door to each desk chair
     desk_path_results = _compute_desk_paths(grid, blocks, room)
     paths = [r.path for r in desk_path_results]
     path_widths = [r.min_width_cm for r in desk_path_results]

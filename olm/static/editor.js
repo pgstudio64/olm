@@ -1255,8 +1255,7 @@ async function save() {
     // Update existing pattern: send the saved name
     payload.name = state._savedName;
   } else {
-    // New pattern: let the server generate the name (D-50)
-    payload.auto_name = true;
+    // New pattern: let the server generate the name    payload.auto_name = true;
     delete payload.name;
   }
   try {
@@ -1267,7 +1266,7 @@ async function save() {
     });
     if (!resp.ok) throw new Error(await resp.text());
     var result = await resp.json();
-    // Server may rename (D-50 compaction) — store the actual name
+    // Server may rename (auto-compaction) — store the actual name
     if (result.name) {
       state.name = result.name;
       state._savedName = result.name;
@@ -1335,7 +1334,7 @@ async function loadPattern(name) {
     document.getElementById("roomDepth").value = state.room_depth_cm;
     var radios = document.querySelectorAll('input[name="standard"]');
     radios.forEach(function(r) { r.checked = (r.value === state.standard); });
-    // Use the actual catalogue name (with D-50 suffix)
+    // Use the actual catalogue name (with auto-generated suffix)
     state.name = data.name || computeAutoName();
     state._savedName = state.name;
     document.getElementById("autoName").textContent = state.name;

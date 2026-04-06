@@ -1,10 +1,10 @@
-"""Analyse de couverture du catalogue — solver_lab.
+"""Catalogue coverage analysis.
 
-Lance le matching sur un jeu de pièces cibles et produit un rapport
-de couverture qualifié (D-42, D-51).
+Runs matching on a set of target rooms and produces a qualified coverage
+report.
 
-Entrée : liste de RoomSpec (ou fichier JSON rooms_*.json)
-Sortie : CoverageReport avec qualification par pièce et backlog
+Input: list of RoomSpec (or JSON file rooms_*.json)
+Output: CoverageReport with per-room qualification and backlog
 """
 from __future__ import annotations
 
@@ -31,30 +31,30 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 
 class CoverageStatus(str, Enum):
-    """Statut de couverture d'une pièce pour un standard."""
-    COVERED = "COVERED"                 # Pattern trouvé, scores acceptables
-    PARTIAL = "PARTIAL"                 # Pattern trouvé mais scores faibles
-    NO_FIT = "NO_FIT"                   # Aucun pattern ne rentre
-    LOW_DENSITY = "LOW_DENSITY"         # m²/poste trop élevé (sous-exploité)
-    LOW_SCORE = "LOW_SCORE"             # Circulation dégradée
+    """Coverage status of a room for a given standard."""
+    COVERED = "COVERED"                 # Pattern found, scores acceptable
+    PARTIAL = "PARTIAL"                 # Pattern found but scores low
+    NO_FIT = "NO_FIT"                   # No pattern fits
+    LOW_DENSITY = "LOW_DENSITY"         # m²/desk too high (under-utilised)
+    LOW_SCORE = "LOW_SCORE"             # Degraded circulation
 
-# Seuils de qualification
-M2_PER_DESK_MAX = 15.0      # Au-delà → LOW_DENSITY (pièce sous-exploitée)
-CIRCULATION_MIN_GRADE = "C"  # En-dessous → LOW_SCORE
+# Qualification thresholds
+M2_PER_DESK_MAX = 15.0      # Above this -> LOW_DENSITY (under-utilised room)
+CIRCULATION_MIN_GRADE = "C"  # Below this -> LOW_SCORE
 
 _GRADE_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3, "F": 4}
 
 
 @dataclass
 class RoomCoverage:
-    """Couverture d'une pièce pour un standard.
+    """Coverage of a room for a given standard.
 
     Attributes:
-        room: Pièce cible.
-        standard: Standard d'aménagement.
-        status: Statut de couverture.
-        best_score: Meilleur score trouvé (None si NO_FIT).
-        reason: Explication du statut.
+        room: Target room.
+        standard: Layout standard.
+        status: Coverage status.
+        best_score: Best score found (None if NO_FIT).
+        reason: Status explanation.
     """
     room: RoomSpec
     standard: str
@@ -65,15 +65,15 @@ class RoomCoverage:
 
 @dataclass
 class BacklogItem:
-    """Suggestion de pattern à créer.
+    """Suggested pattern to create.
 
     Attributes:
-        width_cm: Largeur cible.
-        depth_cm: Profondeur cible.
-        standard: Standard d'aménagement.
-        reason: Pourquoi ce pattern est nécessaire.
-        n_openings: Nombre d'ouvertures de la pièce.
-        room_name: Nom de la pièce source.
+        width_cm: Target width.
+        depth_cm: Target depth.
+        standard: Layout standard.
+        reason: Why this pattern is needed.
+        n_openings: Number of room openings.
+        room_name: Source room name.
     """
     width_cm: int
     depth_cm: int
@@ -85,13 +85,13 @@ class BacklogItem:
 
 @dataclass
 class CoverageReport:
-    """Rapport de couverture complet.
+    """Complete coverage report.
 
     Attributes:
-        rooms: Liste des pièces analysées.
-        coverages: Couverture par pièce × standard.
-        backlog: Patterns suggérés à créer.
-        summary: Résumé statistique.
+        rooms: List of analysed rooms.
+        coverages: Coverage per room x standard.
+        backlog: Suggested patterns to create.
+        summary: Statistical summary.
     """
     rooms: list[RoomSpec]
     coverages: list[RoomCoverage]
@@ -100,13 +100,13 @@ class CoverageReport:
 
 
 # ---------------------------------------------------------------------------
-# Chargement de pièces depuis JSON
+# Loading rooms from JSON
 # ---------------------------------------------------------------------------
 
 def load_rooms_json(path: str) -> list[RoomSpec]:
-    """Charge un jeu de pièces depuis un fichier JSON.
+    """Load a set of rooms from a JSON file.
 
-    Format attendu :
+    Expected format:
     {
       "rooms": [
         {
@@ -123,10 +123,10 @@ def load_rooms_json(path: str) -> list[RoomSpec]:
     }
 
     Args:
-        path: Chemin vers le fichier JSON.
+        path: Path to the JSON file.
 
     Returns:
-        Liste de RoomSpec.
+        List of RoomSpec.
     """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
@@ -172,63 +172,63 @@ def load_rooms_json(path: str) -> list[RoomSpec]:
 
 
 # ---------------------------------------------------------------------------
-# Qualification d'une pièce
+# Room qualification
 # ---------------------------------------------------------------------------
 
 def _qualify(
     best: MatchScore | None, room: RoomSpec, standard: str,
 ) -> RoomCoverage:
-    """Qualifie la couverture d'une pièce pour un standard."""
+    """Qualify the coverage of a room for a given standard."""
     if best is None:
         return RoomCoverage(
             room=room, standard=standard,
             status=CoverageStatus.NO_FIT, best_score=None,
-            reason="Aucun pattern du catalogue ne rentre dans cette pièce",
+            reason="No catalogue pattern fits this room",
         )
 
-    # LOW_DENSITY : m²/poste trop élevé
+    # LOW_DENSITY: m²/desk too high
     if best.m2_per_desk > M2_PER_DESK_MAX:
         return RoomCoverage(
             room=room, standard=standard,
             status=CoverageStatus.LOW_DENSITY, best_score=best,
-            reason=(f"m²/poste={best.m2_per_desk:.1f} > seuil {M2_PER_DESK_MAX} "
-                    f"— pièce sous-exploitée ({best.n_desks} postes)"),
+            reason=(f"m2_per_desk={best.m2_per_desk:.1f} > threshold {M2_PER_DESK_MAX} "
+                    f"— under-utilised room ({best.n_desks} desks)"),
         )
 
-    # LOW_SCORE : circulation dégradée
+    # LOW_SCORE: degraded circulation
     grade_ok = _GRADE_ORDER.get(best.circulation_grade, 5) <= _GRADE_ORDER[CIRCULATION_MIN_GRADE]
     if not grade_ok:
         return RoomCoverage(
             room=room, standard=standard,
             status=CoverageStatus.LOW_SCORE, best_score=best,
-            reason=(f"Grade circulation={best.circulation_grade} "
-                    f"(minimum attendu={CIRCULATION_MIN_GRADE})"),
+            reason=(f"circulation grade={best.circulation_grade} "
+                    f"(minimum expected={CIRCULATION_MIN_GRADE})"),
         )
 
     return RoomCoverage(
         room=room, standard=standard,
         status=CoverageStatus.COVERED, best_score=best,
-        reason=f"{best.n_desks} postes, {best.m2_per_desk:.1f} m²/p, "
+        reason=f"{best.n_desks} desks, {best.m2_per_desk:.1f} m2/desk, "
                f"circ={best.circulation_grade}",
     )
 
 
 # ---------------------------------------------------------------------------
-# Analyse de couverture
+# Coverage analysis
 # ---------------------------------------------------------------------------
 
 def analyse_coverage(
     rooms: list[RoomSpec],
     catalogue: list[dict] | None = None,
 ) -> CoverageReport:
-    """Analyse la couverture du catalogue sur un jeu de pièces.
+    """Analyse catalogue coverage over a set of rooms.
 
     Args:
-        rooms: Pièces cibles.
-        catalogue: Catalogue de patterns (défaut : chargé depuis le fichier).
+        rooms: Target rooms.
+        catalogue: Pattern catalogue (default: loaded from file).
 
     Returns:
-        CoverageReport avec qualification et backlog.
+        CoverageReport with qualification and backlog.
     """
     if catalogue is None:
         catalogue = load_catalogue()
@@ -243,7 +243,7 @@ def analyse_coverage(
             cov = _qualify(best, room, std)
             coverages.append(cov)
 
-            # Générer un backlog item si mal couvert
+            # Generate a backlog item if poorly covered
             if cov.status != CoverageStatus.COVERED:
                 backlog.append(BacklogItem(
                     width_cm=room.width_cm,
@@ -254,7 +254,7 @@ def analyse_coverage(
                     room_name=room.name,
                 ))
 
-    # Résumé
+    # Summary
     total = len(coverages)
     by_status = {}
     for s in CoverageStatus:
@@ -271,7 +271,7 @@ def analyse_coverage(
     }
 
     logger.info(
-        "Couverture : %d pièces, %d évaluations, %.1f%% couvertes",
+        "Coverage: %d rooms, %d evaluations, %.1f%% covered",
         len(rooms), total, summary["coverage_pct"],
     )
 
@@ -284,11 +284,11 @@ def analyse_coverage(
 
 
 # ---------------------------------------------------------------------------
-# Export rapport
+# Report export
 # ---------------------------------------------------------------------------
 
 def report_to_dict(report: CoverageReport) -> dict:
-    """Convertit le rapport en dict sérialisable JSON."""
+    """Convert the report to a JSON-serialisable dict."""
     return {
         "summary": report.summary,
         "coverages": [
@@ -320,17 +320,17 @@ def report_to_dict(report: CoverageReport) -> dict:
 
 
 def print_report(report: CoverageReport) -> None:
-    """Affiche le rapport de couverture sur stdout."""
+    """Print the coverage report to stdout."""
     print(f"\n{'='*70}")
-    print(f"RAPPORT DE COUVERTURE — {report.summary['total_rooms']} pièces")
+    print(f"COVERAGE REPORT — {report.summary['total_rooms']} rooms")
     print(f"{'='*70}")
-    print(f"Couverture globale : {report.summary['coverage_pct']}%")
+    print(f"Overall coverage: {report.summary['coverage_pct']}%")
     for status, count in report.summary["by_status"].items():
         print(f"  {status:15s} : {count}")
 
     print(f"\n{'─'*70}")
-    print(f"{'Pièce':12s} {'Taille':10s} {'Standard':15s} {'Statut':12s} "
-          f"{'Postes':>6s} {'m²/p':>5s} {'Circ':>4s} {'Pattern'}")
+    print(f"{'Room':12s} {'Size':10s} {'Standard':15s} {'Status':12s} "
+          f"{'Desks':>6s} {'m2/d':>5s} {'Circ':>4s} {'Pattern'}")
     print(f"{'─'*70}")
 
     for c in report.coverages:
@@ -344,7 +344,7 @@ def print_report(report: CoverageReport) -> None:
 
     if report.backlog:
         print(f"\n{'─'*70}")
-        print("BACKLOG — Patterns à créer :")
+        print("BACKLOG — Patterns to create:")
         print(f"{'─'*70}")
         for b in report.backlog:
             o_str = f" ({b.n_openings}O)" if b.n_openings >= 2 else ""
