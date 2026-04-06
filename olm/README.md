@@ -26,7 +26,7 @@ OLM takes a floor plan (raster image or room definitions) and a catalogue of des
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/olm.git
+git clone https://github.com/pgstudio64/olm.git
 cd olm
 
 # Create virtual environment and install dependencies

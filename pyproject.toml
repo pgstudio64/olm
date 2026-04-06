@@ -10,7 +10,7 @@ readme = "olm/README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "Patrick Guehl" },
+    { name = "pgstudio64" },
 ]
 keywords = ["office", "layout", "floor-plan", "pattern-matching", "desk"]
 classifiers = [
@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/patrickguehl/olm"
+Repository = "https://github.com/pgstudio64/olm"
 
 [tool.setuptools.packages.find]
 where = ["."]
