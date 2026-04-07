@@ -66,11 +66,18 @@
     if (ingState.scale) formData.append('scale', ingState.scale);
     formData.append('threshold', ingState.threshold);
 
-    fetch('/api/ingestion/extract', { method: 'POST', body: formData })
+    fetch('/api/ingestion/debug', { method: 'POST', body: formData })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        // Display debug logs
+        var debugLog = document.getElementById('ingDebugLog');
+        if (data.logs && data.logs.length > 0) {
+          debugLog.textContent = data.logs.join('\n');
+        }
+
         if (data.error) {
           status.textContent = 'Error: ' + data.error;
+          if (debugLog) debugLog.textContent = '[ERROR] ' + data.error;
           return;
         }
         ingState.rooms = data.rooms || [];
@@ -104,7 +111,11 @@
         document.getElementById("fpOverlayToggle").checked = true;
         document.getElementById("rvOverlayToggle").checked = true;
       })
-      .catch(function (e) { status.textContent = 'Error: ' + e; });
+      .catch(function (e) {
+        status.textContent = 'Error: ' + e;
+        var debugLog = document.getElementById('ingDebugLog');
+        if (debugLog) debugLog.textContent = '[ERROR] ' + e;
+      });
   }
 
   // --- Room list (clickable, same style as Review) ---

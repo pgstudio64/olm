@@ -18,12 +18,22 @@ Usage:
 import os
 import sys
 import tempfile
+import logging
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw
 from collections import deque
 
+logger = logging.getLogger(__name__)
+
 _TMP = tempfile.gettempdir()
+
+# Import config to get parameterizable room code
+try:
+    from olm.core.app_config import get_room_code
+except ImportError:
+    def get_room_code():
+        return "14"  # fallback default
 
 # --- Parameters ---
 PLAN_PATH = os.path.join(
@@ -44,8 +54,11 @@ def find_seeds_by_ocr(image):
     try:
         import pytesseract
     except ImportError:
-        print("pytesseract not available")
+        logger.warning("pytesseract not available")
         return {}, []
+
+    room_code = get_room_code()
+    logger.debug(f"OCR: searching for room code '{room_code}'")
 
     ocr_image = image.resize((image.width * 2, image.height * 2), Image.LANCZOS)
     data = pytesseract.image_to_data(ocr_image, config='--psm 11',
@@ -66,12 +79,13 @@ def find_seeds_by_ocr(image):
         })
 
     words.sort(key=lambda w: (w["cy"], w["cx"]))
+    logger.debug(f"OCR: detected {len(words)} text elements")
 
     seeds = {}
     cartouche_bboxes = []
 
     for word in words:
-        if word["text"] != "14":
+        if word["text"] != room_code:
             continue
 
         seed_cx = word["cx"]
@@ -112,6 +126,12 @@ def find_seeds_by_ocr(image):
         seed_cx = (all_x0 + all_x1) // 2
         seed_cy = (all_y0 + all_y1) // 2
         seeds[room_name] = (seed_cx, seed_cy, room_surface)
+        logger.debug(f"  seed '{room_name}' at ({seed_cx}, {seed_cy}), surface={room_surface:.2f} m²")
+
+    if not seeds:
+        logger.warning(f"No seeds found. Did you search for the correct room code '{room_code}'?")
+    else:
+        logger.info(f"OCR: found {len(seeds)} room(s): {', '.join(seeds.keys())}")
 
     return seeds, cartouche_bboxes
 
@@ -830,11 +850,26 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
     from olm.ingestion.extract import _classify_wall_direct
 
     thr = threshold or BINARIZE_THRESHOLD
+    logger.info(f"Ingestion: loading {image_path}")
     img_gray = load_image(image_path)
+    logger.debug(f"  image size: {img_gray.width} × {img_gray.height} px")
+
     seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
+
+    if not seeds:
+        logger.error(f"ERROR: No seeds found! Check the room_code setting and cartouche text in the floor plan.")
+        return {
+            'rooms': [],
+            'image_size': (img_gray.size[0], img_gray.size[1]),
+            'scale_cm_per_px': scale_cm_per_px or 0.5,
+            'threshold': thr,
+        }
+
+    logger.info(f"Ingestion: processing {len(seeds)} room(s)")
     gray_arr = np.array(img_gray)
     cleaned = erase_cartouches(gray_arr, cart_bboxes)
     binary = cleaned < thr
+    logger.debug(f"  binarization: {np.sum(binary)} wall pixels (threshold={thr})")
 
     all_seed_positions = [(v[0], v[1]) for v in seeds.values()]
 
@@ -897,6 +932,8 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
             'corridor_face': corridor_face,
             'hits': [(int(hx), int(hy)) for hx, hy in hits],
         }
+        logger.debug(f"  room '{name}': bbox=({x0},{y0},{x1},{y1}) {width_px}×{height_px}px, "
+                     f"win={len(windows)} open={len(openings)} door={len(doors)}")
         rooms.append(room)
 
     # Auto-detect scale from simple rooms (1 door, no opening, surface > 0)
@@ -922,6 +959,10 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
     for r in rooms:
         r['width_cm'] = round(r['width_px'] * s)
         r['depth_cm'] = round(r['height_px'] * s)
+
+    logger.info(f"Ingestion: SUCCESS — {len(rooms)} room(s), scale={s:.3f} cm/px")
+    for r in rooms:
+        logger.debug(f"  {r['name']}: {r['width_cm']}×{r['depth_cm']}cm")
 
     return {
         'rooms': rooms,
