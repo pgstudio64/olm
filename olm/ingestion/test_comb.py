@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 _TMP = tempfile.gettempdir()
 
+# Debug flag — set to True to save intermediate images to /tmp/
+DEBUG_IMAGES = False
+
 # Import config to get parameterizable room code
 try:
     from olm.core.app_config import get_room_code
@@ -149,6 +152,41 @@ def erase_cartouches(gray_arr, cartouche_bboxes):
 
 def binarize(gray_arr, threshold=BINARIZE_THRESHOLD):
     return gray_arr < threshold
+
+
+def save_debug_image(binary, all_hits, rect, room_name, title):
+    """Save debug visualization: binary image + hits (red) + rect (green).
+
+    Args:
+        binary: binarized image as numpy array (h×w, bool)
+        all_hits: list of (hx, hy) hit points from comb
+        rect: (x0, y0, x1, y1) detected rectangle
+        room_name: room identifier for filename
+        title: image title
+    """
+    if not DEBUG_IMAGES:
+        return
+
+    # Create RGB image from binary
+    binary_u8 = (binary.astype(np.uint8) * 255)[:,:,np.newaxis]
+    debug_img = np.concatenate([binary_u8, binary_u8, binary_u8], axis=2)
+    debug_img = Image.fromarray(debug_img.astype(np.uint8), mode='RGB')
+    draw = ImageDraw.Draw(debug_img)
+
+    # Draw hits in red
+    for hx, hy in all_hits:
+        r = 3
+        draw.ellipse([hx-r, hy-r, hx+r, hy+r], fill=(255, 0, 0), outline=(255, 0, 0))
+
+    # Draw rect in green
+    if rect:
+        x0, y0, x1, y1 = rect
+        draw.rectangle([x0, y0, x1, y1], outline=(0, 255, 0), width=2)
+
+    # Save
+    filepath = os.path.join(_TMP, f"debug_{room_name}_{title}.png")
+    debug_img.save(filepath)
+    logger.debug(f"  DEBUG image: {filepath}")
 
 
 def remove_non_ortho(binary):
@@ -881,9 +919,13 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
                  if (ox, oy) != (cx, cy)]
         bbox, hits, doors = detect_room(binary, cx, cy, COMB_STEP_PX,
                                         other_seeds=other)
+
         x0, y0, x1, y1 = bbox
         width_px = x1 - x0
         height_px = y1 - y0
+
+        # Debug: save intermediate image
+        save_debug_image(binary, hits, bbox, name, f"comb_{width_px}x{height_px}")
 
         # Classify walls
         wall_segs = {}
