@@ -6,8 +6,10 @@ Storage: catalogue/patterns.json
 from __future__ import annotations
 
 import json
+import logging
 import os
 import traceback
+from io import StringIO
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -249,6 +251,82 @@ def api_ingestion_extract():
             os.unlink(plan_path)
 
         return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ingestion/debug", methods=["POST"])
+def api_ingestion_debug():
+    """Extract rooms with detailed debug logs.
+
+    Same parameters as /api/ingestion/extract, but returns:
+    {
+      'rooms': [...],
+      'image_size': [w, h],
+      'scale_cm_per_px': float,
+      'threshold': int,
+      'logs': ['[INFO] message', '[DEBUG] message', ...]
+    }
+    """
+    import tempfile
+    try:
+        # Capture logging to a StringIO
+        log_capture = StringIO()
+        handler = logging.StreamHandler(log_capture)
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        handler.setFormatter(formatter)
+
+        # Add handler to all relevant loggers
+        ingestion_logger = logging.getLogger('olm.ingestion.test_comb')
+        ingestion_logger.addHandler(handler)
+        ingestion_logger.setLevel(logging.DEBUG)
+
+        try:
+            # Get image from upload or from a plan path
+            plan_path = request.form.get('plan_path', '')
+            scale_str = request.form.get('scale', '')
+            scale = float(scale_str) if scale_str else None
+            threshold = int(request.form.get('threshold', 110))
+
+            if 'image' in request.files:
+                f = request.files['image']
+                fd, plan_path = tempfile.mkstemp(suffix='.png')
+                os.close(fd)
+                f.save(plan_path)
+            elif plan_path:
+                # Resolve relative plan names to project/plans/ directory
+                if not os.path.isabs(plan_path):
+                    plans_dir = os.path.join(
+                        os.path.dirname(BASE_DIR), "project", "plans")
+                    plan_path = os.path.join(plans_dir, plan_path)
+                if not os.path.exists(plan_path):
+                    return jsonify({"error": f"Plan not found: {plan_path}"}), 404
+            else:
+                return jsonify({"error": "No image provided"}), 400
+
+            import sys
+            sys.path.insert(0, os.path.join(BASE_DIR, 'ingestion'))
+            from test_comb import extract_all_rooms
+
+            result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
+                                       threshold=threshold)
+
+            # Clean up temp file if created
+            if 'image' in request.files:
+                os.unlink(plan_path)
+
+            # Capture logs and add to result
+            log_text = log_capture.getvalue()
+            logs = [line.strip() for line in log_text.split('\n') if line.strip()]
+            result['logs'] = logs
+
+            return jsonify(result)
+        finally:
+            ingestion_logger.removeHandler(handler)
+            handler.close()
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
