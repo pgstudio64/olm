@@ -139,6 +139,14 @@ def find_seeds_by_ocr(image):
     logger.debug(f"OCR: detected {len(words)} text elements")
     if words:
         logger.debug(f"Words found: {[w['text'] for w in words[:10]]}...")  # show first 10
+        # Check for room numbers
+        room_numbers = [w['text'] for w in words if w['text'].isdigit() and len(w['text']) == 3]
+        logger.debug(f"OCR: found {len(room_numbers)} 3-digit room numbers: {room_numbers}")
+        # Show coordinates of room code "14" and room number "330"
+        code_14 = [w for w in words if w["text"] == "14"]
+        code_330 = [w for w in words if w["text"] == "330"]
+        if code_14 and code_330:
+            logger.debug(f"  '14' at ({code_14[0]['cx']}, {code_14[0]['cy']}), '330' at ({code_330[0]['cx']}, {code_330[0]['cy']}), dist=({abs(code_330[0]['cx']-code_14[0]['cx'])}, {abs(code_330[0]['cy']-code_14[0]['cy'])})")
 
     # Count room codes
     room_code_count = sum(1 for w in words if w["text"] == room_code)
@@ -162,10 +170,11 @@ def find_seeds_by_ocr(image):
             if other is word:
                 continue
             # Search for cartouche texts before AND after the room code "14"
-            # Vertical window: ±100px (covers both above and below)
-            # Horizontal window: ±30px (centered on code position)
-            if (abs(other["cy"] - seed_cy) < 100 and
-                abs(other["cx"] - seed_cx) < 30):
+            # Vertical window: ±120px (room numbers can be up to 102px away)
+            # Horizontal window: ±80px (to handle wider cartouche layouts)
+            dx = abs(other["cx"] - seed_cx)
+            dy = abs(other["cy"] - seed_cy)
+            if (dy < 120 and dx < 80):
                 cart_words.append(other)
                 if other["text"].isdigit() and len(other["text"]) == 3:
                     room_name = other["text"]
