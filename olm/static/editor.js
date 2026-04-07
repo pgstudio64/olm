@@ -199,7 +199,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       var arcEndY = o.opens_inward ? dy - dw : dy + dw;
       elements.push({ z: 6, s: '<path d="M ' + freeX + ' ' + dy +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-        '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
       var leafOff = (swing === "left") ? 1.5 : -1.5;
       elements.push({ z: 6, s: '<line x1="' + (hingeX + leafOff) + '" y1="' + dy +
         '" x2="' + (hingeX + leafOff) + '" y2="' + arcEndY +
@@ -214,7 +214,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       var arcEndY = o.opens_inward ? dy + dw : dy - dw;
       elements.push({ z: 6, s: '<path d="M ' + freeX + ' ' + dy +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-        '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
       var leafOff = (swing === "left") ? 1.5 : -1.5;
       elements.push({ z: 6, s: '<line x1="' + (hingeX + leafOff) + '" y1="' + dy +
         '" x2="' + (hingeX + leafOff) + '" y2="' + arcEndY +
@@ -229,7 +229,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       var arcEndX = o.opens_inward ? dx + dw : dx - dw;
       elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + freeY +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-        '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
       var leafOff = (swing === "left") ? -1.5 : 1.5;
       elements.push({ z: 6, s: '<line x1="' + dx + '" y1="' + (hingeY + leafOff) +
         '" x2="' + arcEndX + '" y2="' + (hingeY + leafOff) +
@@ -244,7 +244,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       var arcEndX = o.opens_inward ? dx - dw : dx + dw;
       elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + freeY +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-        '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
       var leafOff = (swing === "left") ? 1.5 : -1.5;
       elements.push({ z: 6, s: '<line x1="' + dx + '" y1="' + (hingeY + leafOff) +
         '" x2="' + arcEndX + '" y2="' + (hingeY + leafOff) +
@@ -361,6 +361,7 @@ function render(targetSvg) {
 }
 function _renderImpl(targetSvg) {
   const svg = targetSvg || document.getElementById("canvas");
+  const isReview = svg && svg.id === "rvCanvas";
   normalizeRowGaps();
 
   const MARGIN = 0;

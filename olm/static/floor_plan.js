@@ -725,10 +725,13 @@
     });
     document.getElementById("fpBtnExport").addEventListener("click", fpExport);
 
-    document.getElementById("fpBtnLoadJson").addEventListener("click", function() {
-      var json = document.getElementById("fpRoomsJson").value.trim();
-      if (json) fpLoadAndMatch(json);
-    });
+    var btnLoadJson = document.getElementById("fpBtnLoadJson");
+    if (btnLoadJson) {
+      btnLoadJson.addEventListener("click", function() {
+        var json = document.getElementById("fpRoomsJson").value.trim();
+        if (json) fpLoadAndMatch(json);
+      });
+    }
 
     document.getElementById("fpBtnLoadFile").addEventListener("click", function() {
       document.getElementById("fpFileInput").click();
