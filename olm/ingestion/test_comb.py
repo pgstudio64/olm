@@ -202,7 +202,9 @@ def find_seeds_by_ocr(image):
         if closest_room_name:
             room_name = closest_room_name
             used_words.add(closest_room_idx)
-            cart_words.append(words[closest_room_idx])
+            # NOTE: Do NOT add room number to cart_words for bbox calculation
+            # Room number may be far from "14", which would expand bbox incorrectly
+            # Use it only for identification, not for geometry
             logger.debug(f"  Matched '14' at ({seed_cx},{seed_cy}) → room '{room_name}' at distance {closest_room_dist:.0f}px")
         else:
             # No room number found in vertical tolerance
