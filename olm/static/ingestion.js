@@ -527,6 +527,49 @@
     renderIngestion();
   }
 
+  function focusRoom(roomId) {
+    // Find room by ID or name
+    var room = ingState.rooms.find(function (r) {
+      return r.name === roomId || r.name === 'room_' + roomId;
+    });
+
+    var infoEl = document.getElementById('ingFocusInfo');
+    if (!room) {
+      infoEl.textContent = '❌ Room ' + roomId + ' not found';
+      return;
+    }
+
+    // Show seeds and rays for this room
+    ingState.show.vrays = true;
+    ingState.show.hrays = true;
+    ingState.show.bbox = true;
+    ingState.show.candidates = true;
+
+    // Update checkboxes
+    ['vrays', 'hrays', 'bbox', 'candidates'].forEach(function(prop) {
+      var cb = document.getElementById('ing_' + prop);
+      if (cb) cb.checked = true;
+    });
+
+    // Zoom to room
+    var m = 30;
+    ingState.vb = {
+      x: room.bbox_px[0] - m,
+      y: room.bbox_px[1] - m,
+      w: room.bbox_px[2] - room.bbox_px[0] + 2 * m,
+      h: room.bbox_px[3] - room.bbox_px[1] + 2 * m
+    };
+
+    // Show diagnostic info
+    var hasSeed = room.seed !== undefined && room.seed !== null;
+    var seedInfo = hasSeed
+      ? 'Seed: (' + Math.round(room.seed[0]) + ', ' + Math.round(room.seed[1]) + ') ✓'
+      : 'No seed found: OCR did not detect room code';
+    infoEl.textContent = '✓ ' + room.name + ' | ' + seedInfo;
+
+    renderIngestion();
+  }
+
   function setupZoomPan() {
     var svg = document.getElementById('ingSvg');
     if (!svg) return;
@@ -701,6 +744,24 @@
     setupToggles();
     setupZoomPan();
 
+    // Focus room feature
+    var focusBtn = document.getElementById('ingFocusRoomBtn');
+    var focusInput = document.getElementById('ingFocusRoomInput');
+    if (focusBtn && focusInput) {
+      function doFocus() {
+        var roomId = focusInput.value.trim();
+        if (!roomId) {
+          document.getElementById('ingFocusInfo').textContent = 'Enter room ID';
+          return;
+        }
+        focusRoom(roomId);
+      }
+      focusBtn.addEventListener('click', doFocus);
+      focusInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') doFocus();
+      });
+    }
+
     var btn = document.getElementById('ingBtnExtract');
     if (btn) btn.addEventListener('click', extractRooms);
   });
@@ -708,5 +769,6 @@
   // Expose for external use
   window.ingestionState = ingState;
   window.renderIngestion = renderIngestion;
+  window.focusRoom = focusRoom;
 
 })();

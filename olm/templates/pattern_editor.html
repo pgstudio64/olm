@@ -337,6 +337,12 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="section-title">Room list</div>
       <div id="ingRoomList" style="max-height:300px;overflow-y:auto;font-size:11px;"></div>
 
+      <div class="section-title">Focus room</div>
+      <input type="text" id="ingFocusRoomInput" placeholder="Enter room ID (e.g., 903)"
+        style="width:100%;padding:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:var(--fs-sm);margin-bottom:6px;">
+      <button class="btn btn-ok" id="ingFocusRoomBtn" style="width:100%;padding:4px;font-size:var(--fs-sm);">Focus</button>
+      <div id="ingFocusInfo" style="margin-top:4px;font-size:11px;color:var(--text-dim);"></div>
+
       <div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
       <textarea id="fpRoomsJson" placeholder='{"rooms": [...]}'
         class="sidebar-textarea" rows="8" style="display:none;"></textarea>
