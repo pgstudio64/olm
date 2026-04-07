@@ -279,6 +279,8 @@
 
     ingState.rooms.forEach(function (room) {
       if (zoomRoom && room.name !== zoomRoom) return;
+      // When focused on a room, hide all others
+      if (ingState.focusedRoom && room.name !== ingState.focusedRoom) return;
 
       var x0 = room.bbox_px[0], y0 = room.bbox_px[1];
       var x1 = room.bbox_px[2], y1 = room.bbox_px[3];
@@ -539,6 +541,9 @@
       return;
     }
 
+    // SET FOCUSED ROOM — this filters renderIngestion() to show only this room
+    ingState.focusedRoom = room.name;
+
     // Show seeds and rays for this room
     ingState.show.vrays = true;
     ingState.show.hrays = true;
@@ -566,6 +571,26 @@
       ? 'Seed: (' + Math.round(room.seed[0]) + ', ' + Math.round(room.seed[1]) + ') ✓'
       : 'No seed found: OCR did not detect room code';
     infoEl.textContent = '✓ ' + room.name + ' | ' + seedInfo;
+
+    renderIngestion();
+  }
+
+  function unfocusRoom() {
+    // Clear focused room filter
+    ingState.focusedRoom = null;
+
+    // Reset view to full plan
+    var W = ingState.planW || 1920;
+    var H = ingState.planH || 1080;
+    ingState.vb = { x: 0, y: 0, w: W, h: H };
+
+    // Clear focus info
+    var infoEl = document.getElementById('ingFocusInfo');
+    if (infoEl) infoEl.textContent = '';
+
+    // Clear focus input
+    var focusInput = document.getElementById('ingFocusRoomInput');
+    if (focusInput) focusInput.value = '';
 
     renderIngestion();
   }
@@ -747,6 +772,7 @@
     // Focus room feature
     var focusBtn = document.getElementById('ingFocusRoomBtn');
     var focusInput = document.getElementById('ingFocusRoomInput');
+    var unfocusBtn = document.getElementById('ingUnfocusRoomBtn');
     if (focusBtn && focusInput) {
       function doFocus() {
         var roomId = focusInput.value.trim();
@@ -761,6 +787,16 @@
         if (e.key === 'Enter') doFocus();
       });
     }
+    if (unfocusBtn) {
+      unfocusBtn.addEventListener('click', unfocusRoom);
+    }
+
+    // Escape key to unfocus
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && ingState.focusedRoom) {
+        unfocusRoom();
+      }
+    });
 
     var btn = document.getElementById('ingBtnExtract');
     if (btn) btn.addEventListener('click', extractRooms);
@@ -770,5 +806,6 @@
   window.ingestionState = ingState;
   window.renderIngestion = renderIngestion;
   window.focusRoom = focusRoom;
+  window.unfocusRoom = unfocusRoom;
 
 })();
