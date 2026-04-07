@@ -39,10 +39,14 @@ except ImportError:
         return "14"  # fallback default
 
 # --- Parameters ---
-PLAN_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "project", "plans", "test_floorplan3.png"
-)
+# Allow PLAN_PATH to be overridden via environment variable
+if "PLAN_PATH" in os.environ:
+    PLAN_PATH = os.environ["PLAN_PATH"]
+else:
+    PLAN_PATH = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "project", "plans", "test_floorplan3.png"
+    )
 BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
