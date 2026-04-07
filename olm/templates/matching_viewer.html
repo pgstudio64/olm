@@ -275,7 +275,7 @@
 
   .room-wall { fill: none; stroke: #a8a39a; stroke-width: 2; }
   .room-window { fill: none; stroke: var(--accent2); stroke-width: 3; }
-  .room-door-arc { fill: none; stroke: var(--text-dim); stroke-width: 1; stroke-dasharray: 4 2; }
+  .room-door-arc { fill: none; stroke: var(--text-dim); stroke-width: 1.5; stroke-dasharray: 6 3; }
   .room-door-leaf { fill: none; stroke: var(--text); stroke-width: 2; }
   .room-label { fill: var(--text-dim); font-size: 7; font-family: monospace; }
 </style>
@@ -546,8 +546,16 @@ function renderBlocks(candidate, ox, oy) {
 
       // Fixed zones (chair clearance) — blue
       // Minimum circulation zones — anthracite
-      // Same as pattern_editor.html: circulation only on faces that have a fixed zone
       const f = geom.faces || {};
+
+      // Opaque background covering block + all zones (masks grid underneath)
+      const wNSup0 = ((f.west && f.west.non_superposable_cm) || 0) + ((f.west && f.west.candidate_cm) || 0);
+      const eNSup0 = ((f.east && f.east.non_superposable_cm) || 0) + ((f.east && f.east.candidate_cm) || 0);
+      const nNSup0 = ((f.north && f.north.non_superposable_cm) || 0) + ((f.north && f.north.candidate_cm) || 0);
+      const sNSup0 = ((f.south && f.south.non_superposable_cm) || 0) + ((f.south && f.south.candidate_cm) || 0);
+      elements.push({ z: 0.5, s: '<rect x="' + (bx - wNSup0 * SCALE) + '" y="' + (by - nNSup0 * SCALE) +
+        '" width="' + ((geom.eo + wNSup0 + eNSup0) * SCALE) + '" height="' + ((geom.ns + nNSup0 + sNSup0) * SCALE) +
+        '" fill="#1e1e1e"/>' });
 
       const wNSup = ((f.west && f.west.non_superposable_cm) || 0) * SCALE;
       if (wNSup > 0) {
@@ -610,7 +618,7 @@ function renderBlocks(candidate, ox, oy) {
         '<rect x="' + bx + '" y="' + by +
         '" width="' + bw + '" height="' + bh +
         '" fill="none" stroke="' + COLOR_BLOCK_BORDER +
-        '" stroke-width="0.8" stroke-dasharray="4 3"/>'
+        '" stroke-width="1.5" stroke-dasharray="6 3"/>'
       });
 
   });

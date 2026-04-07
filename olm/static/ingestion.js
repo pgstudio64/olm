@@ -349,7 +349,7 @@
             var arcEndY = inward ? y1 - dw : y1 + dw;
             els.push('<path d="M ' + freeX + ' ' + y1 +
               ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-              '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>');
+              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
             els.push('<line x1="' + hingeX + '" y1="' + y1 +
               '" x2="' + hingeX + '" y2="' + arcEndY +
               '" stroke="#e4e0d8" stroke-width="1.5"/>');
@@ -361,7 +361,7 @@
             var arcEndY = inward ? y0 + dw : y0 - dw;
             els.push('<path d="M ' + freeX + ' ' + y0 +
               ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-              '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>');
+              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
             els.push('<line x1="' + hingeX + '" y1="' + y0 +
               '" x2="' + hingeX + '" y2="' + arcEndY +
               '" stroke="#e4e0d8" stroke-width="1.5"/>');
@@ -373,7 +373,7 @@
             var arcEndX = inward ? x0 + dw : x0 - dw;
             els.push('<path d="M ' + x0 + ' ' + freeY +
               ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-              '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>');
+              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
             els.push('<line x1="' + x0 + '" y1="' + hingeY +
               '" x2="' + arcEndX + '" y2="' + hingeY +
               '" stroke="#e4e0d8" stroke-width="1.5"/>');
@@ -385,7 +385,7 @@
             var arcEndX = inward ? x1 - dw : x1 + dw;
             els.push('<path d="M ' + x1 + ' ' + freeY +
               ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-              '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>');
+              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
             els.push('<line x1="' + x1 + '" y1="' + hingeY +
               '" x2="' + arcEndX + '" y2="' + hingeY +
               '" stroke="#e4e0d8" stroke-width="1.5"/>');

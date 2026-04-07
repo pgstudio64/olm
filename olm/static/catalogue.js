@@ -283,7 +283,7 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         var ey = o.opens_inward ? dy - dw : dy + dw;
         elements.push({ z: 6, s: '<path d="M ' + fx + ' ' + dy +
           ' A ' + dw + ' ' + dw + ' 0 0 ' + sw + ' ' + hx + ' ' + ey +
-          '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+          '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
         elements.push({ z: 6, s: '<line x1="' + hx + '" y1="' + dy +
           '" x2="' + hx + '" y2="' + ey +
           '" stroke="#e4e0d8" stroke-width="1.5"/>' });
@@ -297,7 +297,7 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         var ey = o.opens_inward ? dy + dw : dy - dw;
         elements.push({ z: 6, s: '<path d="M ' + fx + ' ' + dy +
           ' A ' + dw + ' ' + dw + ' 0 0 ' + sw + ' ' + hx + ' ' + ey +
-          '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+          '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
         elements.push({ z: 6, s: '<line x1="' + hx + '" y1="' + dy +
           '" x2="' + hx + '" y2="' + ey +
           '" stroke="#e4e0d8" stroke-width="1.5"/>' });
@@ -311,7 +311,7 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         var ex = o.opens_inward ? dx + dw : dx - dw;
         elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + fy +
           ' A ' + dw + ' ' + dw + ' 0 0 ' + sw + ' ' + ex + ' ' + hy +
-          '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+          '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
         elements.push({ z: 6, s: '<line x1="' + dx + '" y1="' + hy +
           '" x2="' + ex + '" y2="' + hy +
           '" stroke="#e4e0d8" stroke-width="1.5"/>' });
@@ -325,7 +325,7 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         var ex = o.opens_inward ? dx - dw : dx + dw;
         elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + fy +
           ' A ' + dw + ' ' + dw + ' 0 0 ' + sw + ' ' + ex + ' ' + hy +
-          '" fill="none" stroke="#6e6a62" stroke-width="0.8" stroke-dasharray="3 2"/>' });
+          '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
         elements.push({ z: 6, s: '<line x1="' + dx + '" y1="' + hy +
           '" x2="' + ex + '" y2="' + hy +
           '" stroke="#e4e0d8" stroke-width="1.5"/>' });
