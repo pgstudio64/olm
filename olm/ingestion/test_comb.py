@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 _TMP = tempfile.gettempdir()
 
 # Debug flag — set to True to save intermediate images to /tmp/
-DEBUG_IMAGES = False
+DEBUG_IMAGES = True
 
 # Import config to get parameterizable room code
 try:
@@ -41,7 +41,7 @@ except ImportError:
 # --- Parameters ---
 PLAN_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "project", "plans", "test_floorplan3.png"
+    "project", "plans", "test_plan_realistic.png"
 )
 BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # comb step in pixels
@@ -54,35 +54,95 @@ def load_image(path):
 
 
 def find_seeds_by_ocr(image):
-    try:
-        import pytesseract
-    except ImportError:
-        logger.warning("pytesseract not available")
-        return {}, []
+    import subprocess
+    import json as json_lib
 
     room_code = get_room_code()
     logger.debug(f"OCR: searching for room code '{room_code}'")
 
-    ocr_image = image.resize((image.width * 2, image.height * 2), Image.LANCZOS)
-    data = pytesseract.image_to_data(ocr_image, config='--psm 11',
-                                     output_type=pytesseract.Output.DICT)
-    words = []
-    for i in range(len(data["text"])):
-        text = data["text"][i].strip()
-        if not text:
-            continue
-        x = data["left"][i] // 2
-        y = data["top"][i] // 2
-        w = data["width"][i] // 2
-        h = data["height"][i] // 2
-        words.append({
-            "text": text,
-            "cx": x + w // 2, "cy": y + h // 2,
-            "x": x, "y": y, "w": w, "h": h,
-        })
+    # Save image to temp file for tesseract
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        image.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        # Run tesseract with PSM 11 (sparse text - better for cartouches)
+        # --psm 11: Sparse text. Find as much text as possible in no particular order
+        result = subprocess.run(
+            ['tesseract', tmp_path, 'stdout', '--psm', '11', 'tsv'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"tesseract failed: {result.stderr}")
+            return {}, []
+
+        words = []
+        # Parse TSV output (tab-separated values)
+        lines = result.stdout.split('\n')
+        logger.debug(f"Tesseract output: {len(lines)} lines")
+        skipped_lines = 0
+        low_conf = 0
+        for i, line in enumerate(lines):
+            if not line.strip() or line.startswith('level') or 'Estimating' in line:
+                continue
+            parts = line.split('\t')
+            if len(parts) < 12:
+                skipped_lines += 1
+                continue
+            try:
+                text = parts[11].strip()
+                conf = float(parts[10]) if parts[10] else -1  # convert to float, handle empty
+                x = int(parts[6])
+                y = int(parts[7])
+                w = int(parts[8])
+                h = int(parts[9])
+
+                if not text:
+                    low_conf += 1
+                    continue
+                # Accept texts with any confidence >= 0 (tesseract confidence range is 0-100, -1 = undefined)
+                if conf < 0:
+                    low_conf += 1
+                    continue
+
+                words.append({
+                    "text": text,
+                    "cx": x + w // 2,
+                    "cy": y + h // 2,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                })
+            except (ValueError, IndexError) as e:
+                low_conf += 1
+                logger.debug(f"    Parse error on line {i}: {e}")
+                continue
+
+    except FileNotFoundError:
+        logger.warning("tesseract not installed: brew install tesseract (macOS) or apt-get install tesseract-ocr (Linux)")
+        return {}, []
+    except subprocess.TimeoutExpired:
+        logger.warning("tesseract timeout")
+        return {}, []
+    finally:
+        # Clean up temp file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+        logger.debug(f"  Skipped {skipped_lines} lines (< 12 parts), {low_conf} low-conf items")
 
     words.sort(key=lambda w: (w["cy"], w["cx"]))
     logger.debug(f"OCR: detected {len(words)} text elements")
+    if words:
+        logger.debug(f"Words found: {[w['text'] for w in words[:10]]}...")  # show first 10
+
+    # Count room codes
+    room_code_count = sum(1 for w in words if w["text"] == room_code)
+    logger.debug(f"OCR: found {room_code_count} instances of room code '{room_code}'")
 
     seeds = {}
     cartouche_bboxes = []
@@ -1061,6 +1121,12 @@ def draw_debug_single(image, binary, name, bbox, hits, cx, cy, output_path):
 
 
 def main():
+    # Configure logging to see debug messages
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='[%(levelname)s] %(message)s'
+    )
+
     target_room = sys.argv[1] if len(sys.argv) > 1 else None
 
     print(f"Loading plan: {PLAN_PATH}")
