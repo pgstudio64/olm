@@ -41,7 +41,7 @@ except ImportError:
 # --- Parameters ---
 PLAN_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "project", "plans", "test_plan_realistic.png"
+    "project", "plans", "test_floorplan3.png"
 )
 BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # comb step in pixels
@@ -152,6 +152,22 @@ def find_seeds_by_ocr(image):
     room_code_count = sum(1 for w in words if w["text"] == room_code)
     logger.debug(f"OCR: found {room_code_count} instances of room code '{room_code}'")
 
+    # Calculate average text height for adaptive windowing (DPI-invariant)
+    text_heights = [w["h"] for w in words if w["h"] > 0]
+    if text_heights:
+        avg_text_height = sum(text_heights) / len(text_heights)
+        # Adaptive windows: multiples of text height
+        # These scale automatically with DPI/resolution
+        # Larger multipliers to accommodate various cartouche layouts
+        window_v = int(avg_text_height * 8)    # ±8× text height vertically
+        window_h = int(avg_text_height * 5)    # ±5× text height horizontally
+    else:
+        # Fallback if no text heights (shouldn't happen)
+        window_v = 120
+        window_h = 80
+
+    logger.debug(f"OCR: text height={avg_text_height:.0f}px, adaptive windows: ±{window_v}px(v) ±{window_h}px(h)")
+
     seeds = {}
     cartouche_bboxes = []
 
@@ -170,11 +186,10 @@ def find_seeds_by_ocr(image):
             if other is word:
                 continue
             # Search for cartouche texts before AND after the room code "14"
-            # Vertical window: ±120px (room numbers can be up to 102px away)
-            # Horizontal window: ±80px (to handle wider cartouche layouts)
+            # Windows are adaptive: based on text height, DPI-invariant
             dx = abs(other["cx"] - seed_cx)
             dy = abs(other["cy"] - seed_cy)
-            if (dy < 120 and dx < 80):
+            if (dy < window_v and dx < window_h):
                 cart_words.append(other)
                 if other["text"].isdigit() and len(other["text"]) == 3:
                     room_name = other["text"]
