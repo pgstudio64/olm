@@ -101,8 +101,10 @@ def find_seeds_by_ocr(image):
         for other in words:
             if other is word:
                 continue
-            if (other["cy"] > seed_cy and
-                other["cy"] < seed_cy + 80 and
+            # Search for cartouche texts before AND after the room code "14"
+            # Vertical window: ±100px (covers both above and below)
+            # Horizontal window: ±30px (centered on code position)
+            if (abs(other["cy"] - seed_cy) < 100 and
                 abs(other["cx"] - seed_cx) < 30):
                 cart_words.append(other)
                 if other["text"].isdigit() and len(other["text"]) == 3:
