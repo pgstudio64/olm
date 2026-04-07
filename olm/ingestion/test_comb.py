@@ -152,24 +152,9 @@ def find_seeds_by_ocr(image):
     room_code_count = sum(1 for w in words if w["text"] == room_code)
     logger.debug(f"OCR: found {room_code_count} instances of room code '{room_code}'")
 
-    # Calculate average text height for adaptive windowing (DPI-invariant)
-    text_heights = [w["h"] for w in words if w["h"] > 0]
-    if text_heights:
-        avg_text_height = sum(text_heights) / len(text_heights)
-        # Adaptive windows: multiples of text height
-        # These scale automatically with DPI/resolution
-        # Larger multipliers to accommodate various cartouche layouts
-        window_v = int(avg_text_height * 8)    # ±8× text height vertically
-        window_h = int(avg_text_height * 5)    # ±5× text height horizontally
-    else:
-        # Fallback if no text heights (shouldn't happen)
-        window_v = 120
-        window_h = 80
-
-    logger.debug(f"OCR: text height={avg_text_height:.0f}px, adaptive windows: ±{window_v}px(v) ±{window_h}px(h)")
-
     seeds = {}
     cartouche_bboxes = []
+    used_words = set()  # Track which words are already assigned to a cartouche
 
     for word in words:
         if word["text"] != room_code:
@@ -177,22 +162,77 @@ def find_seeds_by_ocr(image):
 
         seed_cx = word["cx"]
         seed_cy = word["cy"]
+        word_idx = words.index(word)
 
         cart_words = [word]
         room_name = f"room_{seed_cx}_{seed_cy}"
         room_surface = 0.0
 
-        for other in words:
-            if other is word:
+        # Strategy #2: Find closest match + validation (no distance limit)
+        # Instead of a fixed window, find the most relevant texts for this cartouche
+
+        # Find closest 3-digit room number (anywhere in the image)
+        closest_room_name = None
+        closest_room_dist = float('inf')
+        closest_room_idx = None
+
+        for other_idx, other in enumerate(words):
+            if other is word or other_idx in used_words:
                 continue
-            # Search for cartouche texts before AND after the room code "14"
-            # Windows are adaptive: based on text height, DPI-invariant
+
+            if other["text"].isdigit() and len(other["text"]) == 3:
+                dx = abs(other["cx"] - seed_cx)
+                dy = abs(other["cy"] - seed_cy)
+                dist = (dx*dx + dy*dy) ** 0.5
+
+                # Strategy: Find closest room number in reasonable range
+                # Allow wide vertical range (±150px) to accommodate both dense and sparse layouts
+                # Constraint: must be in same approximate horizontal band (avoid matching across floors)
+                VERTICAL_TOLERANCE = 150  # pixels - covers both compact (57-61px) and spaced (102px) layouts
+
+                if dy < VERTICAL_TOLERANCE and dist < closest_room_dist:
+                    closest_room_dist = dist
+                    closest_room_name = other["text"]
+                    closest_room_idx = other_idx
+
+        if closest_room_name:
+            room_name = closest_room_name
+            used_words.add(closest_room_idx)
+            cart_words.append(words[closest_room_idx])
+            logger.debug(f"  Matched '14' at ({seed_cx},{seed_cy}) → room '{room_name}' at distance {closest_room_dist:.0f}px")
+        else:
+            # No room number found in vertical tolerance
+            # List candidates for debugging
+            candidates = []
+            for other_idx, other in enumerate(words):
+                if other["text"].isdigit() and len(other["text"]) == 3:
+                    dx = abs(other["cx"] - seed_cx)
+                    dy = abs(other["cy"] - seed_cy)
+                    dist = (dx*dx + dy*dy) ** 0.5
+                    candidates.append((other["text"], dx, dy, dist, other_idx in used_words))
+
+            if candidates:
+                candidates.sort(key=lambda x: x[3])
+                logger.debug(f"  No match for '14' at ({seed_cx},{seed_cy}). Closest candidates: {candidates[:3]}")
+
+        # Find cartouche texts (surface, etc) within adaptive window
+        text_heights = [w["h"] for w in words if w["h"] > 0]
+        if text_heights:
+            avg_text_height = sum(text_heights) / len(text_heights)
+            window_v = int(avg_text_height * 6)   # ±6× text height for surfaces and labels
+            window_h = int(avg_text_height * 3)
+        else:
+            window_v = 100
+            window_h = 60
+
+        for other in words:
+            if other is word or other in cart_words:
+                continue
+
             dx = abs(other["cx"] - seed_cx)
             dy = abs(other["cy"] - seed_cy)
             if (dy < window_v and dx < window_h):
                 cart_words.append(other)
-                if other["text"].isdigit() and len(other["text"]) == 3:
-                    room_name = other["text"]
                 # Parse surface (decimal number like "14.28" or "9.8")
                 try:
                     val = float(other["text"].replace(",", "."))
