@@ -41,7 +41,7 @@ except ImportError:
 # --- Parameters ---
 PLAN_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "project", "plans", "test_plan_realistic.png"
+    "project", "plans", "test_floorplan3.png"
 )
 BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # comb step in pixels
@@ -163,9 +163,9 @@ def find_seeds_by_ocr(image):
                 continue
             # Search for cartouche texts before AND after the room code "14"
             # Vertical window: ±100px (covers both above and below)
-            # Horizontal window: ±30px (centered on code position)
+            # Horizontal window: ±50px (widened to capture all layouts)
             if (abs(other["cy"] - seed_cy) < 100 and
-                abs(other["cx"] - seed_cx) < 30):
+                abs(other["cx"] - seed_cx) < 50):
                 cart_words.append(other)
                 if other["text"].isdigit() and len(other["text"]) == 3:
                     room_name = other["text"]
