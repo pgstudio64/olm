@@ -279,9 +279,11 @@ def api_ingestion_debug():
         handler.setFormatter(formatter)
 
         # Add handler to all relevant loggers
-        ingestion_logger = logging.getLogger('olm.ingestion.test_comb')
+        # Note: test_comb is imported as 'from test_comb import', so __name__ = 'test_comb'
+        ingestion_logger = logging.getLogger('test_comb')
         ingestion_logger.addHandler(handler)
         ingestion_logger.setLevel(logging.DEBUG)
+        ingestion_logger.propagate = True  # Ensure logs propagate
 
         try:
             # Get image from upload or from a plan path
