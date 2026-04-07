@@ -340,7 +340,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="section-title">Focus room</div>
       <input type="text" id="ingFocusRoomInput" placeholder="Enter room ID (e.g., 903)"
         style="width:100%;padding:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:var(--fs-sm);margin-bottom:6px;">
-      <button class="btn btn-ok" id="ingFocusRoomBtn" style="width:100%;padding:4px;font-size:var(--fs-sm);">Focus</button>
+      <div style="display:flex;gap:4px;">
+        <button class="btn btn-ok" id="ingFocusRoomBtn" style="flex:1;padding:4px;font-size:var(--fs-sm);">Focus</button>
+        <button class="btn" id="ingUnfocusRoomBtn" style="flex:1;padding:4px;font-size:var(--fs-sm);" title="Press Esc to unfocus">Back</button>
+      </div>
       <div id="ingFocusInfo" style="margin-top:4px;font-size:11px;color:var(--text-dim);"></div>
 
       <div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
