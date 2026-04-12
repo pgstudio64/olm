@@ -16,6 +16,7 @@ Usage:
 """
 
 import os
+import re
 import sys
 import tempfile
 import logging
@@ -52,6 +53,29 @@ COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
 
+# --- Tesseract OCR parameters ---
+# Upscale factor applied before OCR — small cartouche text (10-20 px) needs enlargement
+TESSERACT_UPSCALE = 2
+# Whitelist: characters expected in floor plan cartouches.
+# Covers all three token types:
+#   - room code   : 2 digits + optional letter     → "14", "14c", "12d"
+#   - surface     : decimal number + " m2"         → "14.28 m2", "9.8 m2"
+#   - room number : 1-3 digits, or 2d+letter,
+#                   or 1d+2letters                 → "916", "12a", "1AB"
+# Dictionaries are disabled explicitly via load_system_dawg/load_freq_dawg
+# (whitelist alone is insufficient when letters are present).
+TESSERACT_CHAR_WHITELIST = "0123456789.,abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ "
+
+# Regex patterns for the three token types found in floor plan cartouches.
+# Used to filter OCR output and classify detected words.
+_RE_ROOM_CODE = re.compile(r"^\d{2}[a-zA-Z]?$")          # "14", "14c", "12d"
+_RE_ROOM_NUMBER = re.compile(
+    r"^\d{1,3}$"           # 1, 2 or 3 digits:      "5", "12", "916"
+    r"|^\d{2}[a-zA-Z]$"   # 2 digits + 1 letter:   "12a"
+    r"|^\d[a-zA-Z]{2}$"   # 1 digit  + 2 letters:  "1AB"
+)
+_RE_SURFACE = re.compile(r"^\d+\.\d+$")                   # "14.28", "9.8" (the "m2" is a separate token)
+
 
 def load_image(path):
     return Image.open(path).convert("L")
@@ -64,19 +88,48 @@ def find_seeds_by_ocr(image):
     room_code = get_room_code()
     logger.debug(f"OCR: searching for room code '{room_code}'")
 
+    # Upscale the image before OCR: cartouche text is typically 10-20 px tall,
+    # Tesseract performs significantly better at 20-40 px (≥ 300 DPI equivalent).
+    w_orig, h_orig = image.size
+    if TESSERACT_UPSCALE > 1:
+        upscaled = image.resize(
+            (w_orig * TESSERACT_UPSCALE, h_orig * TESSERACT_UPSCALE),
+            Image.LANCZOS,
+        )
+        logger.debug(f"OCR: upscaled {w_orig}×{h_orig} → {upscaled.width}×{upscaled.height}")
+    else:
+        upscaled = image
+
     # Save image to temp file for tesseract
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-        image.save(tmp.name)
+        upscaled.save(tmp.name)
         tmp_path = tmp.name
 
     try:
-        # Run tesseract with PSM 11 (sparse text - better for cartouches)
-        # --psm 11: Sparse text. Find as much text as possible in no particular order
+        # Tesseract configuration:
+        #   --psm 11  Sparse text — find text anywhere, no assumed layout
+        #   --oem 3   Default engine (LSTM + legacy fallback)
+        #   tessedit_char_whitelist  Restricts output to the characters expected
+        #             in floor plan cartouches (digits, decimal separator, letters,
+        #             space).  Note: whitelist alone is not sufficient to disable
+        #             dictionaries when letters are included.
+        #   load_system_dawg=0 / load_freq_dawg=0  Explicitly disable English word
+        #             and frequency dictionaries.  Without these, Tesseract may
+        #             "spell-correct" partial matches toward dictionary words even
+        #             when the whitelist limits the output character set.
         result = subprocess.run(
-            ['tesseract', tmp_path, 'stdout', '--psm', '11', 'tsv'],
+            [
+                'tesseract', tmp_path, 'stdout',
+                '--psm', '11',
+                '--oem', '3',
+                '-c', f'tessedit_char_whitelist={TESSERACT_CHAR_WHITELIST}',
+                '-c', 'load_system_dawg=0',
+                '-c', 'load_freq_dawg=0',
+                'tsv',
+            ],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30,
         )
 
         if result.returncode != 0:
@@ -112,14 +165,16 @@ def find_seeds_by_ocr(image):
                     low_conf += 1
                     continue
 
+                # Divide coordinates back to original image space (undo upscale)
+                scale = TESSERACT_UPSCALE
                 words.append({
                     "text": text,
-                    "cx": x + w // 2,
-                    "cy": y + h // 2,
-                    "x": x,
-                    "y": y,
-                    "w": w,
-                    "h": h,
+                    "cx": (x + w // 2) // scale,
+                    "cy": (y + h // 2) // scale,
+                    "x": x // scale,
+                    "y": y // scale,
+                    "w": w // scale,
+                    "h": h // scale,
                 })
             except (ValueError, IndexError) as e:
                 low_conf += 1
@@ -143,14 +198,11 @@ def find_seeds_by_ocr(image):
     logger.debug(f"OCR: detected {len(words)} text elements")
     if words:
         logger.debug(f"Words found: {[w['text'] for w in words[:10]]}...")  # show first 10
-        # Check for room numbers
-        room_numbers = [w['text'] for w in words if w['text'].isdigit() and len(w['text']) == 3]
-        logger.debug(f"OCR: found {len(room_numbers)} 3-digit room numbers: {room_numbers}")
-        # Show coordinates of room code "14" and room number "330"
-        code_14 = [w for w in words if w["text"] == "14"]
-        code_330 = [w for w in words if w["text"] == "330"]
-        if code_14 and code_330:
-            logger.debug(f"  '14' at ({code_14[0]['cx']}, {code_14[0]['cy']}), '330' at ({code_330[0]['cx']}, {code_330[0]['cy']}), dist=({abs(code_330[0]['cx']-code_14[0]['cx'])}, {abs(code_330[0]['cy']-code_14[0]['cy'])})")
+        # Report detected token types using the canonical regex patterns
+        room_numbers = [w['text'] for w in words if _RE_ROOM_NUMBER.match(w['text'])]
+        surfaces = [w['text'] for w in words if _RE_SURFACE.match(w['text'])]
+        logger.debug(f"OCR: {len(room_numbers)} room number candidates: {room_numbers}")
+        logger.debug(f"OCR: {len(surfaces)} surface candidates: {surfaces}")
 
     # Count room codes
     room_code_count = sum(1 for w in words if w["text"] == room_code)
@@ -175,51 +227,54 @@ def find_seeds_by_ocr(image):
         # Strategy #2: Find closest match + validation (no distance limit)
         # Instead of a fixed window, find the most relevant texts for this cartouche
 
-        # Find closest 3-digit room number (anywhere in the image)
-        closest_room_name = None
-        closest_room_dist = float('inf')
-        closest_room_idx = None
+        # Find the best room number token in the vertical neighbourhood.
+        # Ranking: longer tokens first (3 digits > 2 > 1) then closer distance.
+        # This prevents short noise tokens like "2" (from "m2") from beating
+        # real 3-digit room numbers that are slightly further away.
+        VERTICAL_TOLERANCE = 150  # px — covers compact (57 px) and spaced (102 px) layouts
 
+        room_candidates = []
         for other_idx, other in enumerate(words):
             if other is word or other_idx in used_words:
                 continue
+            if not _RE_ROOM_NUMBER.match(other["text"]):
+                continue
+            dx = abs(other["cx"] - seed_cx)
+            dy = abs(other["cy"] - seed_cy)
+            if dy >= VERTICAL_TOLERANCE:
+                continue
+            dist = (dx * dx + dy * dy) ** 0.5
+            room_candidates.append((other_idx, other, dist))
 
-            if other["text"].isdigit() and len(other["text"]) == 3:
-                dx = abs(other["cx"] - seed_cx)
-                dy = abs(other["cy"] - seed_cy)
-                dist = (dx*dx + dy*dy) ** 0.5
+        # Sort: longest text first, then closest — "-len" makes longer tokens sort first
+        room_candidates.sort(key=lambda t: (-len(t[1]["text"]), t[2]))
 
-                # Strategy: Find closest room number in reasonable range
-                # Allow wide vertical range (±150px) to accommodate both dense and sparse layouts
-                # Constraint: must be in same approximate horizontal band (avoid matching across floors)
-                VERTICAL_TOLERANCE = 150  # pixels - covers both compact (57-61px) and spaced (102px) layouts
-
-                if dy < VERTICAL_TOLERANCE and dist < closest_room_dist:
-                    closest_room_dist = dist
-                    closest_room_name = other["text"]
-                    closest_room_idx = other_idx
-
-        if closest_room_name:
+        if room_candidates:
+            closest_room_idx, closest_match, closest_room_dist = room_candidates[0]
+            closest_room_name = closest_match["text"]
             room_name = closest_room_name
             used_words.add(closest_room_idx)
-            # NOTE: Do NOT add room number to cart_words for bbox calculation
-            # Room number may be far from "14", which would expand bbox incorrectly
-            # Use it only for identification, not for geometry
-            logger.debug(f"  Matched '14' at ({seed_cx},{seed_cy}) → room '{room_name}' at distance {closest_room_dist:.0f}px")
+            # NOTE: Do NOT add the room number to cart_words for bbox calculation:
+            # it may be far from the room code and would incorrectly expand the bbox.
+            logger.debug(
+                f"  Matched '{room_code}' at ({seed_cx},{seed_cy}) → room '{room_name}'"
+                f" at distance {closest_room_dist:.0f}px"
+                f" (len={len(closest_room_name)}, {len(room_candidates)} candidate(s))"
+            )
         else:
-            # No room number found in vertical tolerance
-            # List candidates for debugging
-            candidates = []
+            # No room number found in vertical tolerance — log all candidates for diagnosis
+            all_rn = []
             for other_idx, other in enumerate(words):
-                if other["text"].isdigit() and len(other["text"]) == 3:
+                if _RE_ROOM_NUMBER.match(other["text"]):
                     dx = abs(other["cx"] - seed_cx)
                     dy = abs(other["cy"] - seed_cy)
-                    dist = (dx*dx + dy*dy) ** 0.5
-                    candidates.append((other["text"], dx, dy, dist, other_idx in used_words))
-
-            if candidates:
-                candidates.sort(key=lambda x: x[3])
-                logger.debug(f"  No match for '14' at ({seed_cx},{seed_cy}). Closest candidates: {candidates[:3]}")
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    all_rn.append((other["text"], dx, dy, dist, other_idx in used_words))
+            all_rn.sort(key=lambda x: x[3])
+            logger.debug(
+                f"  No match for '{room_code}' at ({seed_cx},{seed_cy})."
+                f" Closest room-number candidates: {all_rn[:3]}"
+            )
 
         # Find cartouche texts (surface, etc) within adaptive window
         text_heights = [w["h"] for w in words if w["h"] > 0]
