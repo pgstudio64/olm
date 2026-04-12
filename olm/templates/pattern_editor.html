@@ -312,13 +312,42 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div class="fp-container">
     <!-- Left panel: extraction settings + room list -->
     <div class="fp-info-col" style="min-width:220px;max-width:240px;border-left:none;border-right:1px solid var(--border);order:-2;">
-      <div class="section-title">Floor plan</div>
-      <table>
-        <tr><td>Plan</td><td><select id="ingPlanSelect" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:2px;font-size:var(--fs-sm);"></select></td></tr>
-        <tr><td>Scale (cm/px)</td><td><input type="number" id="ingScale" value="" placeholder="auto" min="0.1" step="0.1" style="width:60px;"></td></tr>
-        <tr><td>Threshold</td><td><input type="number" id="ingThreshold" value="110" min="1" max="255" style="width:60px;"></td></tr>
-      </table>
-      <button class="btn btn-ok" id="ingBtnExtract" style="width:100%;padding:6px;margin-top:var(--sp-sm);">Extract rooms</button>
+      <div class="section-title">Input Mode</div>
+      <select id="ingModeSelect" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px;font-size:var(--fs-sm);margin-bottom:var(--sp-sm);">
+        <option value="ocr">OCR (analyse d'image)</option>
+        <option value="preprocessed">Préprocessé (données structurées)</option>
+      </select>
+
+      <!-- Formulaire OCR (mode par défaut) -->
+      <div id="ingFormOcr">
+        <div class="section-title">Floor plan</div>
+        <table>
+          <tr><td>Plan</td><td><select id="ingPlanSelect" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:2px;font-size:var(--fs-sm);"></select></td></tr>
+          <tr><td>Scale (cm/px)</td><td><input type="number" id="ingScale" value="" placeholder="auto" min="0.1" step="0.1" style="width:60px;"></td></tr>
+          <tr><td>Threshold</td><td><input type="number" id="ingThreshold" value="110" min="1" max="255" style="width:60px;"></td></tr>
+        </table>
+        <button class="btn btn-ok" id="ingBtnExtract" style="width:100%;padding:6px;margin-top:var(--sp-sm);">Extract rooms</button>
+      </div>
+
+      <!-- Formulaire Préprocessé (masqué par défaut) -->
+      <div id="ingFormPreprocessed" style="display:none;">
+        <div class="section-title">Données préprocessées</div>
+        <table>
+          <tr><td colspan="2" style="font-size:10px;color:var(--text-dim);padding-bottom:4px;">JSON pièces</td></tr>
+          <tr><td colspan="2">
+            <input type="file" id="ingJsonFile" accept=".json" style="width:100%;font-size:10px;">
+          </td></tr>
+          <tr><td colspan="2" style="font-size:10px;color:var(--text-dim);padding-top:6px;">PNG enhanced</td></tr>
+          <tr><td colspan="2">
+            <input type="file" id="ingEnhancedFile" accept=".png,.jpg,.jpeg" style="width:100%;font-size:10px;">
+          </td></tr>
+          <tr><td colspan="2" style="font-size:10px;color:var(--text-dim);padding-top:6px;">PNG overlay</td></tr>
+          <tr><td colspan="2">
+            <input type="file" id="ingOverlayFile" accept=".png,.jpg,.jpeg" style="width:100%;font-size:10px;">
+          </td></tr>
+        </table>
+        <button class="btn btn-ok" id="ingBtnImportPreprocessed" style="width:100%;padding:6px;margin-top:var(--sp-sm);">Import rooms</button>
+      </div>
 
       <!-- Debug log panel -->
       <details id="ingDebugPanel" style="margin-top:var(--sp-sm);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px;">

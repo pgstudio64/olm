@@ -10,6 +10,7 @@
 
   // --- State ---
   var ingState = {
+    ingestionMode: 'ocr',  // 'ocr' | 'preprocessed'
     planPath: '',
     planUrl: '',
     planW: 0,
@@ -800,11 +801,93 @@
 
     var btn = document.getElementById('ingBtnExtract');
     if (btn) btn.addEventListener('click', extractRooms);
+
+    var modeSelect = document.getElementById('ingModeSelect');
+    if (modeSelect) {
+      modeSelect.addEventListener('change', function (e) {
+        ingState.ingestionMode = e.target.value;
+        renderImportPanel();
+      });
+    }
+
+    var btnPreproc = document.getElementById('ingBtnImportPreprocessed');
+    if (btnPreproc) btnPreproc.addEventListener('click', extractRoomsPreprocessed);
   });
+
+  // --- Affichage conditionnel selon le mode d'ingestion ---
+  function renderImportPanel() {
+    var ocrForm = document.getElementById('ingFormOcr');
+    var preprocForm = document.getElementById('ingFormPreprocessed');
+    if (!ocrForm || !preprocForm) return;
+    if (ingState.ingestionMode === 'preprocessed') {
+      ocrForm.style.display = 'none';
+      preprocForm.style.display = '';
+    } else {
+      ocrForm.style.display = '';
+      preprocForm.style.display = 'none';
+    }
+  }
+
+  // --- Import préprocessé (JSON + enhanced PNG + overlay PNG) ---
+  function extractRoomsPreprocessed() {
+    var jsonFile = document.getElementById('ingJsonFile');
+    var enhancedFile = document.getElementById('ingEnhancedFile');
+    var overlayFile = document.getElementById('ingOverlayFile');
+    var status = document.getElementById('ingStatus');
+
+    if (!jsonFile || !jsonFile.files.length) {
+      if (status) status.textContent = 'Erreur : fichier JSON manquant';
+      return;
+    }
+    if (!enhancedFile || !enhancedFile.files.length) {
+      if (status) status.textContent = 'Erreur : PNG enhanced manquant';
+      return;
+    }
+    if (!overlayFile || !overlayFile.files.length) {
+      if (status) status.textContent = 'Erreur : PNG overlay manquant';
+      return;
+    }
+
+    if (status) status.textContent = 'Import...';
+
+    var formData = new FormData();
+    formData.append('rooms_json', jsonFile.files[0]);
+    formData.append('enhanced_png', enhancedFile.files[0]);
+    formData.append('overlay_png', overlayFile.files[0]);
+
+    fetch('/api/import/preprocessed', { method: 'POST', body: formData })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          if (status) status.textContent = 'Erreur : ' + data.error;
+          return;
+        }
+        ingState.rooms = data.rooms || [];
+        if (status) status.textContent = ingState.rooms.length + ' pièce(s) importée(s)';
+
+        // Overlay = enhanced PNG servi depuis le chemin temporaire
+        if (data.enhanced_path) {
+          ingState.planUrl = '/api/import/preprocessed/image?path=' +
+            encodeURIComponent(data.enhanced_path);
+        }
+
+        populateRoomsJson();
+        updateIngRoomList();
+
+        var json = document.getElementById('fpRoomsJson').value;
+        if (json && typeof window.fpLoadAndMatch === 'function') {
+          window.fpLoadAndMatch(json);
+        }
+      })
+      .catch(function (e) {
+        if (status) status.textContent = 'Erreur : ' + e;
+      });
+  }
 
   // Expose for external use
   window.ingestionState = ingState;
   window.renderIngestion = renderIngestion;
+  window.renderImportPanel = renderImportPanel;
   window.focusRoom = focusRoom;
   window.unfocusRoom = unfocusRoom;
 
