@@ -16,6 +16,7 @@ Optional: easyocr (for real OCR — falls back to ground truth positions).
 
 import logging
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -1250,18 +1251,85 @@ def rooms_to_olo_json(rooms: list[DetectedRoom],
 # Mode Préprocessé — extraction depuis JSON + PNG
 # ---------------------------------------------------------------------------
 
+# Regex pour parser la surface dans line2.text (ex: "14.28 m2", "14,28 m²")
+_RE_SURFACE_M2 = re.compile(r"(\d+[.,]?\d*)\s*m[²2]", re.IGNORECASE)
+# Regex pour parser plan_scale (ex: "1:100", "1 : 50")
+_RE_PLAN_SCALE = re.compile(r"1\s*:\s*(\d+)")
+# Constante de conversion inch → cm
+_INCH_TO_CM = 2.54
+
+
+def _parse_surface_m2(text: str) -> float:
+    """Extrait la surface en m² depuis un texte OCR (ex: '14.28 m2' → 14.28)."""
+    if not text:
+        return 0.0
+    m = _RE_SURFACE_M2.search(text)
+    if not m:
+        return 0.0
+    return float(m.group(1).replace(",", "."))
+
+
+def _parse_plan_scale_ratio(plan_scale: str) -> float:
+    """Parse 'plan_scale' (ex: '1:100') → ratio N (100.0). Retourne 0 si invalide."""
+    if not plan_scale:
+        return 0.0
+    m = _RE_PLAN_SCALE.search(str(plan_scale))
+    return float(m.group(1)) if m else 0.0
+
+
+def _cm_per_px_from_metadata(dpi: int, plan_scale_ratio: float) -> float:
+    """Calcule le facteur cm réel / pixel depuis dpi + ratio plan_scale.
+
+    Formule : cm_per_px = (2.54 / dpi) * plan_scale_ratio
+      - 2.54 / dpi : cm de plan imprimé par pixel
+      - * plan_scale_ratio : conversion cm plan → cm réel (ex: 1:100 → ×100)
+    """
+    if dpi <= 0 or plan_scale_ratio <= 0:
+        return 0.0
+    return (_INCH_TO_CM / float(dpi)) * plan_scale_ratio
+
+
 def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
     overlay_png_path: str,
 ) -> list:
-    """Parse les pièces depuis un JSON préprocessé + PNG enhanced/overlay.
+    """Parse les pièces depuis un JSON cartouches + PNG enhanced/overlay.
+
+    Format JSON attendu (structure cartouche, voir
+    `docs/specs/PREPROCESSED_JSON_SPEC.md`) :
+
+        {
+          "file": str, "building_id": str, "floor_id": str,
+          "plan_scale": str (ex: "1:100"),
+          "dpi": int,                // résolution image (défaut 300)
+          "scale": float,            // facteur dpi/72 (interne PDF→raster)
+          "rotation_angle": int,     // 0/90/180/270
+          "page_width_pts": int, "page_height_pts": int,
+          "page_width_px": int, "page_height_px": int,
+          "total_cartouches": int,
+          "cartouches": [
+            {
+              "number": str,
+              "center": {
+                "number": str,
+                "line1": {"text": "14", "pixels_x": float, "pixels_y": float, ...},
+                "line2": {"text": "14.28 m2", "pixels_x": float, "pixels_y": float, ...},
+                "line3": {"text": "916", "pixels_x": float, "pixels_y": float, ...},
+                "pixels_x": float, "pixels_y": float,
+                "width_px": float, "height_px": float, "font_size": float
+              },
+              "components": [...]
+            },
+            ...
+          ]
+        }
+
+    Le facteur cm réel / pixel est calculé via `dpi` + `plan_scale` :
+        cm_per_px = (2.54 / dpi) * N  où plan_scale = "1:N"
 
     Args:
-        json_data: dict contenant une clé "rooms" = liste de dicts avec les
-            champs : room_id (str), area_cm2 (float), seed_x (float, px),
-            seed_y (float, px), width_cm (float, optionnel),
-            depth_cm (float, optionnel).
+        json_data: dict au format cartouche décrit ci-dessus.
         enhanced_png_path: chemin fichier PNG avec cartouches supprimés,
             extérieur bleu RGB(135,206,235), couloirs vert RGB(193,247,179).
         overlay_png_path: chemin fichier PNG overlay (plan officiel).
@@ -1273,51 +1341,110 @@ def extract_rooms_from_preprocessed(
     Raises:
         ValueError: si JSON mal formé ou fichiers PNG manquants.
     """
-    import math
     import os as _os
 
-    if "rooms" not in json_data:
-        raise ValueError("JSON mal formé : clé 'rooms' manquante")
-    rooms_data = json_data["rooms"]
-    if not isinstance(rooms_data, list):
-        raise ValueError("JSON mal formé : 'rooms' doit être une liste")
+    if "cartouches" not in json_data:
+        raise ValueError("JSON mal formé : clé 'cartouches' manquante")
+    cartouches = json_data["cartouches"]
+    if not isinstance(cartouches, list):
+        raise ValueError("JSON mal formé : 'cartouches' doit être une liste")
     if not _os.path.isfile(enhanced_png_path):
         raise ValueError(f"Fichier PNG enhanced introuvable : {enhanced_png_path}")
     if not _os.path.isfile(overlay_png_path):
         raise ValueError(f"Fichier PNG overlay introuvable : {overlay_png_path}")
 
+    # Calcul du facteur cm réel / pixel depuis dpi + plan_scale
+    # DPI par défaut = 300 (convention des PNG fournis en Mode Préprocessé)
+    dpi = int(json_data.get("dpi", 300) or 300)
+    plan_scale_raw = json_data.get("plan_scale", "")
+    plan_scale_ratio = _parse_plan_scale_ratio(plan_scale_raw)
+    scale_cm_per_px = _cm_per_px_from_metadata(dpi, plan_scale_ratio)
+    if scale_cm_per_px <= 0:
+        logger.warning(
+            "JSON cartouches : impossible de calculer cm/px "
+            "(dpi=%r, plan_scale=%r) — bbox sera dégénérée",
+            dpi, plan_scale_raw,
+        )
+    else:
+        logger.info(
+            "JSON cartouches : dpi=%d, plan_scale=%s, cm_per_px=%.4f",
+            dpi, plan_scale_raw, scale_cm_per_px,
+        )
+
+    rotation_angle = int(json_data.get("rotation_angle", 0) or 0)
+    if rotation_angle not in (0, 90, 180, 270):
+        logger.warning(
+            "JSON cartouches : rotation_angle=%r inattendu (ignoré)", rotation_angle,
+        )
+
+    total_declared = json_data.get("total_cartouches")
+    if total_declared is not None and int(total_declared) != len(cartouches):
+        logger.warning(
+            "JSON cartouches : total_cartouches=%s ≠ len(cartouches)=%d",
+            total_declared, len(cartouches),
+        )
+
     result = []
-    for i, r in enumerate(rooms_data):
-        required = {"room_id", "area_cm2", "seed_x", "seed_y"}
-        missing = required - set(r.keys())
-        if missing:
-            raise ValueError(f"Pièce index {i} : champs obligatoires manquants {missing}")
+    for i, c in enumerate(cartouches):
+        if not isinstance(c, dict):
+            raise ValueError(f"Cartouche index {i} : doit être un dict")
+        center = c.get("center")
+        if not isinstance(center, dict):
+            raise ValueError(f"Cartouche index {i} : champ 'center' manquant ou invalide")
 
-        room_id = str(r["room_id"])
-        area_cm2 = float(r["area_cm2"])
-        seed_x = float(r["seed_x"])
-        seed_y = float(r["seed_y"])
+        # room_id : priorité cartouche.number, fallback center.number / line3.text
+        room_id = (
+            c.get("number")
+            or center.get("number")
+            or (center.get("line3") or {}).get("text")
+            or f"room_{i}"
+        )
+        room_id = str(room_id)
 
-        if "width_cm" in r and "depth_cm" in r:
-            width_cm = int(round(float(r["width_cm"])))
-            depth_cm = int(round(float(r["depth_cm"])))
+        # Seed = centre du cartouche en px (page_*_px)
+        if "pixels_x" not in center or "pixels_y" not in center:
+            raise ValueError(
+                f"Cartouche index {i} : center.pixels_x/pixels_y manquants"
+            )
+        seed_x = float(center["pixels_x"])
+        seed_y = float(center["pixels_y"])
+
+        # Surface : parse depuis line2.text ("14.28 m2")
+        line2 = center.get("line2") or {}
+        surface_m2 = _parse_surface_m2(line2.get("text", ""))
+        if surface_m2 <= 0:
+            logger.warning(
+                "Cartouche %s : surface introuvable dans line2.text=%r — defaut 0",
+                room_id, line2.get("text"),
+            )
+        area_cm2 = surface_m2 * 10_000.0
+
+        # Dimensions estimées : pièce carrée de surface = area_cm2
+        side_cm = math.sqrt(max(area_cm2, 1.0))
+        width_cm = int(round(side_cm))
+        depth_cm = int(round(side_cm))
+
+        # Bbox en pixels : si scale disponible → carré centré sur seed
+        # Sinon → bbox dégénérée (seed unique)
+        if scale_cm_per_px > 0 and side_cm > 0:
+            half_px = (side_cm / scale_cm_per_px) / 2.0
+            bbox_px = (
+                int(seed_x - half_px),
+                int(seed_y - half_px),
+                int(seed_x + half_px),
+                int(seed_y + half_px),
+            )
         else:
-            # Estimation carrée à partir de la surface
-            side = math.sqrt(max(area_cm2, 1.0))
-            width_cm = int(round(side))
-            depth_cm = int(round(side))
-
-        # seed_x/y = centre en px → approximation du coin NW (v1 : seed = NW)
-        nw_x = int(seed_x)
-        nw_y = int(seed_y)
+            sx, sy = int(seed_x), int(seed_y)
+            bbox_px = (sx, sy, sx, sy)
 
         room_dict = {
             "name": room_id,
-            "seed_px": (nw_x, nw_y),
-            "bbox_px": (nw_x, nw_y, nw_x, nw_y),  # dégénéré v1 : pas de scale
+            "seed_px": (int(seed_x), int(seed_y)),
+            "bbox_px": bbox_px,
             "width_cm": width_cm,
             "depth_cm": depth_cm,
-            "surface_m2": area_cm2 / 10_000.0,
+            "surface_m2": surface_m2,
             "windows": [],
             "openings": [],
             "doors": [],
@@ -1326,5 +1453,9 @@ def extract_rooms_from_preprocessed(
         }
         result.append(room_dict)
 
-    logger.info("extract_rooms_from_preprocessed : %d pièce(s) chargée(s)", len(result))
+    logger.info(
+        "extract_rooms_from_preprocessed : %d cartouche(s) chargée(s) "
+        "(cm_per_px=%.4f)",
+        len(result), scale_cm_per_px,
+    )
     return result
