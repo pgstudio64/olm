@@ -395,6 +395,136 @@ def api_ingestion_binarize():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/import/ocr", methods=["POST"])
+def api_import_ocr():
+    """Mode OCR : upload image + échelle.
+
+    Accepte multipart form avec :
+      - floorplan_image : fichier image du plan de sol
+      - scale_cm_per_px (optionnel) : cm par pixel
+      - threshold (optionnel) : seuil de binarisation (défaut 110)
+
+    Retourne :
+      {
+        "rooms": [...],
+        "mode": "ocr",
+        "image_size": [w, h],
+        "scale_cm_per_px": float,
+        "image_path": "chemin PNG temporaire"
+      }
+    """
+    import tempfile
+    try:
+        scale_str = request.form.get("scale_cm_per_px", "")
+        scale = float(scale_str) if scale_str else None
+        threshold = int(request.form.get("threshold", 110))
+        plan_path = ""
+
+        if "floorplan_image" in request.files:
+            f = request.files["floorplan_image"]
+            fd, plan_path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            f.save(plan_path)
+        else:
+            return jsonify({"error": "Champ 'floorplan_image' manquant"}), 400
+
+        import sys
+        sys.path.insert(0, os.path.join(BASE_DIR, "ingestion"))
+        from test_comb import extract_all_rooms
+
+        result = extract_all_rooms(plan_path, scale_cm_per_px=scale, threshold=threshold)
+        os.unlink(plan_path)
+
+        result["mode"] = "ocr"
+        result["image_path"] = ""
+        return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/import/preprocessed", methods=["POST"])
+def api_import_preprocessed():
+    """Mode Préprocessé : upload JSON + PNG enhanced + PNG overlay.
+
+    Accepte multipart form avec :
+      - rooms_json : fichier JSON ou champ texte JSON brut
+      - enhanced_png : fichier PNG "_enhanced" (cartouches supprimés)
+      - overlay_png : fichier PNG overlay (plan officiel)
+
+    Retourne :
+      {
+        "rooms": [...],
+        "mode": "preprocessed",
+        "overlay_path": "chemin PNG overlay temporaire",
+        "enhanced_path": "chemin PNG enhanced temporaire"
+      }
+    """
+    import tempfile
+    enhanced_path = ""
+    overlay_path = ""
+    try:
+        # --- Récupérer le JSON ---
+        json_data = None
+        if "rooms_json" in request.files:
+            f = request.files["rooms_json"]
+            raw = f.read().decode("utf-8")
+            json_data = json.loads(raw)
+        elif "rooms_json" in request.form:
+            json_data = json.loads(request.form["rooms_json"])
+        else:
+            return jsonify({"error": "Champ 'rooms_json' manquant (fichier ou texte)"}), 400
+
+        # --- Sauvegarder les PNG ---
+        if "enhanced_png" not in request.files:
+            return jsonify({"error": "Champ 'enhanced_png' manquant"}), 400
+        if "overlay_png" not in request.files:
+            return jsonify({"error": "Champ 'overlay_png' manquant"}), 400
+
+        fd, enhanced_path = tempfile.mkstemp(suffix="_enhanced.png")
+        os.close(fd)
+        request.files["enhanced_png"].save(enhanced_path)
+
+        fd, overlay_path = tempfile.mkstemp(suffix="_overlay.png")
+        os.close(fd)
+        request.files["overlay_png"].save(overlay_path)
+
+        # --- Extraction ---
+        from olm.ingestion.extract import extract_rooms_from_preprocessed
+        rooms = extract_rooms_from_preprocessed(json_data, enhanced_path, overlay_path)
+
+        return jsonify({
+            "rooms": rooms,
+            "mode": "preprocessed",
+            "overlay_path": overlay_path,
+            "enhanced_path": enhanced_path,
+        })
+    except (json.JSONDecodeError, ValueError) as e:
+        for p in (enhanced_path, overlay_path):
+            if p and os.path.exists(p):
+                os.unlink(p)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        for p in (enhanced_path, overlay_path):
+            if p and os.path.exists(p):
+                os.unlink(p)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/import/preprocessed/image")
+def api_import_preprocessed_image():
+    """Serve a preprocessed PNG (enhanced or overlay) from a temp path.
+
+    Query param: ?path=<absolute_path>
+    """
+    from flask import send_file
+    path = request.args.get("path", "")
+    if not path or not os.path.isfile(path):
+        return jsonify({"error": "Fichier introuvable"}), 404
+    return send_file(path, mimetype="image/png")
+
+
 @app.route("/specs/<path:filename>")
 def serve_specs(filename: str):
     """Serve spec files."""

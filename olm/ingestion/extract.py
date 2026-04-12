@@ -1244,3 +1244,87 @@ def rooms_to_olo_json(rooms: list[DetectedRoom],
         olo_rooms.append(olo_room)
 
     return {"rooms": olo_rooms}
+
+
+# ---------------------------------------------------------------------------
+# Mode Préprocessé — extraction depuis JSON + PNG
+# ---------------------------------------------------------------------------
+
+def extract_rooms_from_preprocessed(
+    json_data: dict,
+    enhanced_png_path: str,
+    overlay_png_path: str,
+) -> list:
+    """Parse les pièces depuis un JSON préprocessé + PNG enhanced/overlay.
+
+    Args:
+        json_data: dict contenant une clé "rooms" = liste de dicts avec les
+            champs : room_id (str), area_cm2 (float), seed_x (float, px),
+            seed_y (float, px), width_cm (float, optionnel),
+            depth_cm (float, optionnel).
+        enhanced_png_path: chemin fichier PNG avec cartouches supprimés,
+            extérieur bleu RGB(135,206,235), couloirs vert RGB(193,247,179).
+        overlay_png_path: chemin fichier PNG overlay (plan officiel).
+
+    Returns:
+        list[dict] : liste de dicts pièces compatibles avec le pipeline UI,
+            format identique à extract_all_rooms (test_comb).
+
+    Raises:
+        ValueError: si JSON mal formé ou fichiers PNG manquants.
+    """
+    import math
+    import os as _os
+
+    if "rooms" not in json_data:
+        raise ValueError("JSON mal formé : clé 'rooms' manquante")
+    rooms_data = json_data["rooms"]
+    if not isinstance(rooms_data, list):
+        raise ValueError("JSON mal formé : 'rooms' doit être une liste")
+    if not _os.path.isfile(enhanced_png_path):
+        raise ValueError(f"Fichier PNG enhanced introuvable : {enhanced_png_path}")
+    if not _os.path.isfile(overlay_png_path):
+        raise ValueError(f"Fichier PNG overlay introuvable : {overlay_png_path}")
+
+    result = []
+    for i, r in enumerate(rooms_data):
+        required = {"room_id", "area_cm2", "seed_x", "seed_y"}
+        missing = required - set(r.keys())
+        if missing:
+            raise ValueError(f"Pièce index {i} : champs obligatoires manquants {missing}")
+
+        room_id = str(r["room_id"])
+        area_cm2 = float(r["area_cm2"])
+        seed_x = float(r["seed_x"])
+        seed_y = float(r["seed_y"])
+
+        if "width_cm" in r and "depth_cm" in r:
+            width_cm = int(round(float(r["width_cm"])))
+            depth_cm = int(round(float(r["depth_cm"])))
+        else:
+            # Estimation carrée à partir de la surface
+            side = math.sqrt(max(area_cm2, 1.0))
+            width_cm = int(round(side))
+            depth_cm = int(round(side))
+
+        # seed_x/y = centre en px → approximation du coin NW (v1 : seed = NW)
+        nw_x = int(seed_x)
+        nw_y = int(seed_y)
+
+        room_dict = {
+            "name": room_id,
+            "seed_px": (nw_x, nw_y),
+            "bbox_px": (nw_x, nw_y, nw_x, nw_y),  # dégénéré v1 : pas de scale
+            "width_cm": width_cm,
+            "depth_cm": depth_cm,
+            "surface_m2": area_cm2 / 10_000.0,
+            "windows": [],
+            "openings": [],
+            "doors": [],
+            "exterior_faces": [],
+            "corridor_face": "",
+        }
+        result.append(room_dict)
+
+    logger.info("extract_rooms_from_preprocessed : %d pièce(s) chargée(s)", len(result))
+    return result
