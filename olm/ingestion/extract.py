@@ -1289,37 +1289,53 @@ def _cm_per_px_from_metadata(dpi: int, plan_scale_ratio: float) -> float:
     return (_INCH_TO_CM / float(dpi)) * plan_scale_ratio
 
 
+def _room_center_from_lines(line1: dict, line2: dict, line3: dict) -> tuple[float, float]:
+    """Calcule le centre (pixels) d'un cartouche depuis ses 3 lignes.
+
+    - x : moyenne des pixels_x des 3 lignes (les lignes sont empilées verticalement)
+    - y : pixels_y de surface_line2 (ligne du milieu par définition)
+    """
+    xs = [float(ln["pixels_x"]) for ln in (line1, line2, line3) if ln and "pixels_x" in ln]
+    cx = sum(xs) / len(xs) if xs else 0.0
+    cy = float(line2["pixels_y"]) if line2 and "pixels_y" in line2 else 0.0
+    return cx, cy
+
+
 def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
     overlay_png_path: str,
 ) -> list:
-    """Parse les pièces depuis un JSON cartouches + PNG enhanced/overlay.
+    """Parse les pièces depuis un JSON preprocessé v2 + PNG enhanced/overlay.
 
-    Format JSON attendu (structure cartouche, voir
-    `docs/specs/PREPROCESSED_JSON_SPEC.md`) :
+    Format JSON v2 attendu (voir `docs/specs/PREPROCESSED_JSON_SPEC.md`) :
 
         {
           "file": str, "building_id": str, "floor_id": str,
-          "plan_scale": str (ex: "1:100"),
+          "plan_scale": str (ex: "1 : 300"),
           "dpi": int,                // résolution image (défaut 300)
-          "scale": float,            // facteur dpi/72 (interne PDF→raster)
+          "scale_factor": float,     // facteur points→pixels (dpi/72)
           "rotation_angle": int,     // 0/90/180/270
-          "page_width_pts": int, "page_height_pts": int,
+          "page_width_pts": float, "page_height_pts": float,
           "page_width_px": int, "page_height_px": int,
-          "total_cartouches": int,
-          "cartouches": [
+          "total_text_blocks": int,
+          "total_rooms": int,
+          "total_doors": int,
+          "all_text_blocks": [ ... ],  // tous les textes PDF (non utilisé v1)
+          "rooms": [
             {
-              "number": str,
-              "center": {
-                "number": str,
-                "line1": {"text": "14", "pixels_x": float, "pixels_y": float, ...},
-                "line2": {"text": "14.28 m2", "pixels_x": float, "pixels_y": float, ...},
-                "line3": {"text": "916", "pixels_x": float, "pixels_y": float, ...},
-                "pixels_x": float, "pixels_y": float,
-                "width_px": float, "height_px": float, "font_size": float
-              },
-              "components": [...]
+              "code_line1":    {"text": "14",       "pixels_x": int, "pixels_y": int, "width_px": int, "height_px": int, "font_size": float, "font_name": str, "color_rgb": [r,g,b]},
+              "surface_line2": {"text": "14.28 m2", "pixels_x": int, "pixels_y": int, ...},
+              "id_line3":      {"text": "237",      "pixels_x": int, "pixels_y": int, ...}
+            },
+            ...
+          ],
+          "doors": [
+            {
+              "label": str, "associated_room": str,
+              "pixels_x": int, "pixels_y": int,
+              "width_px": int, "height_px": int,
+              "font_size": float, "font_name": str, "color_rgb": [r,g,b]
             },
             ...
           ]
@@ -1329,7 +1345,7 @@ def extract_rooms_from_preprocessed(
         cm_per_px = (2.54 / dpi) * N  où plan_scale = "1:N"
 
     Args:
-        json_data: dict au format cartouche décrit ci-dessus.
+        json_data: dict au format v2 décrit ci-dessus.
         enhanced_png_path: chemin fichier PNG avec cartouches supprimés,
             extérieur bleu RGB(135,206,235), couloirs vert RGB(193,247,179).
         overlay_png_path: chemin fichier PNG overlay (plan officiel).
@@ -1343,11 +1359,11 @@ def extract_rooms_from_preprocessed(
     """
     import os as _os
 
-    if "cartouches" not in json_data:
-        raise ValueError("JSON mal formé : clé 'cartouches' manquante")
-    cartouches = json_data["cartouches"]
-    if not isinstance(cartouches, list):
-        raise ValueError("JSON mal formé : 'cartouches' doit être une liste")
+    if "rooms" not in json_data:
+        raise ValueError("JSON mal formé : clé 'rooms' manquante")
+    rooms_raw = json_data["rooms"]
+    if not isinstance(rooms_raw, list):
+        raise ValueError("JSON mal formé : 'rooms' doit être une liste")
     if not _os.path.isfile(enhanced_png_path):
         raise ValueError(f"Fichier PNG enhanced introuvable : {enhanced_png_path}")
     if not _os.path.isfile(overlay_png_path):
@@ -1361,61 +1377,66 @@ def extract_rooms_from_preprocessed(
     scale_cm_per_px = _cm_per_px_from_metadata(dpi, plan_scale_ratio)
     if scale_cm_per_px <= 0:
         logger.warning(
-            "JSON cartouches : impossible de calculer cm/px "
+            "JSON preprocessed : impossible de calculer cm/px "
             "(dpi=%r, plan_scale=%r) — bbox sera dégénérée",
             dpi, plan_scale_raw,
         )
     else:
         logger.info(
-            "JSON cartouches : dpi=%d, plan_scale=%s, cm_per_px=%.4f",
+            "JSON preprocessed : dpi=%d, plan_scale=%s, cm_per_px=%.4f",
             dpi, plan_scale_raw, scale_cm_per_px,
         )
 
     rotation_angle = int(json_data.get("rotation_angle", 0) or 0)
     if rotation_angle not in (0, 90, 180, 270):
         logger.warning(
-            "JSON cartouches : rotation_angle=%r inattendu (ignoré)", rotation_angle,
+            "JSON preprocessed : rotation_angle=%r inattendu (ignoré)", rotation_angle,
         )
 
-    total_declared = json_data.get("total_cartouches")
-    if total_declared is not None and int(total_declared) != len(cartouches):
+    total_rooms_declared = json_data.get("total_rooms")
+    if total_rooms_declared is not None and int(total_rooms_declared) != len(rooms_raw):
         logger.warning(
-            "JSON cartouches : total_cartouches=%s ≠ len(cartouches)=%d",
-            total_declared, len(cartouches),
+            "JSON preprocessed : total_rooms=%s ≠ len(rooms)=%d",
+            total_rooms_declared, len(rooms_raw),
+        )
+
+    # Doors (pour usage futur — v1 : log seulement)
+    doors_raw = json_data.get("doors") or []
+    if doors_raw:
+        logger.info(
+            "JSON preprocessed : %d porte(s) détectées (non exploitées v1)",
+            len(doors_raw),
         )
 
     result = []
-    for i, c in enumerate(cartouches):
-        if not isinstance(c, dict):
-            raise ValueError(f"Cartouche index {i} : doit être un dict")
-        center = c.get("center")
-        if not isinstance(center, dict):
-            raise ValueError(f"Cartouche index {i} : champ 'center' manquant ou invalide")
+    for i, r in enumerate(rooms_raw):
+        if not isinstance(r, dict):
+            raise ValueError(f"Room index {i} : doit être un dict")
 
-        # room_id : priorité cartouche.number, fallback center.number / line3.text
-        room_id = (
-            c.get("number")
-            or center.get("number")
-            or (center.get("line3") or {}).get("text")
-            or f"room_{i}"
-        )
-        room_id = str(room_id)
+        code_line1 = r.get("code_line1") or {}
+        surface_line2 = r.get("surface_line2") or {}
+        id_line3 = r.get("id_line3") or {}
 
-        # Seed = centre du cartouche en px (page_*_px)
-        if "pixels_x" not in center or "pixels_y" not in center:
-            raise ValueError(
-                f"Cartouche index {i} : center.pixels_x/pixels_y manquants"
-            )
-        seed_x = float(center["pixels_x"])
-        seed_y = float(center["pixels_y"])
+        for name, blk in (("code_line1", code_line1),
+                          ("surface_line2", surface_line2),
+                          ("id_line3", id_line3)):
+            if not isinstance(blk, dict) or "pixels_x" not in blk or "pixels_y" not in blk:
+                raise ValueError(
+                    f"Room index {i} : champ '{name}' manquant ou pixels_x/y absents"
+                )
 
-        # Surface : parse depuis line2.text ("14.28 m2")
-        line2 = center.get("line2") or {}
-        surface_m2 = _parse_surface_m2(line2.get("text", ""))
+        # room_id : priorité id_line3.text
+        room_id = str(id_line3.get("text") or f"room_{i}")
+
+        # Seed = centre calculé depuis les 3 lignes
+        seed_x, seed_y = _room_center_from_lines(code_line1, surface_line2, id_line3)
+
+        # Surface : parse depuis surface_line2.text ("14.28 m2")
+        surface_m2 = _parse_surface_m2(surface_line2.get("text", ""))
         if surface_m2 <= 0:
             logger.warning(
-                "Cartouche %s : surface introuvable dans line2.text=%r — defaut 0",
-                room_id, line2.get("text"),
+                "Room %s : surface introuvable dans surface_line2.text=%r — défaut 0",
+                room_id, surface_line2.get("text"),
             )
         area_cm2 = surface_m2 * 10_000.0
 
@@ -1454,7 +1475,7 @@ def extract_rooms_from_preprocessed(
         result.append(room_dict)
 
     logger.info(
-        "extract_rooms_from_preprocessed : %d cartouche(s) chargée(s) "
+        "extract_rooms_from_preprocessed : %d room(s) chargée(s) "
         "(cm_per_px=%.4f)",
         len(result), scale_cm_per_px,
     )
