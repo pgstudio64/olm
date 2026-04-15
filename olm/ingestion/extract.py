@@ -1306,49 +1306,44 @@ def extract_rooms_from_preprocessed(
     enhanced_png_path: str,
     overlay_png_path: str,
 ) -> list:
-    """Parse les pièces depuis un JSON preprocessé v2 + PNG enhanced/overlay.
+    """Parse les pièces depuis un JSON preprocessé v3 + PNG enhanced/overlay.
 
-    Format JSON v2 attendu (voir `docs/specs/PREPROCESSED_JSON_SPEC.md`) :
+    Format JSON v3 attendu — voir `docs/specs/PREPROCESSED_JSON_SPEC.md`
+    (référence unique). Résumé minimal pour lecture :
 
         {
-          "file": str, "building_id": str, "floor_id": str,
-          "plan_scale": str (ex: "1 : 300"),
-          "dpi": int,                // résolution image (défaut 300)
-          "scale_factor": float,     // facteur points→pixels (dpi/72)
-          "rotation_angle": int,     // 0/90/180/270
-          "page_width_pts": float, "page_height_pts": float,
-          "page_width_px": int, "page_height_px": int,
-          "total_text_blocks": int,
-          "total_rooms": int,
-          "total_doors": int,
-          "all_text_blocks": [ ... ],  // tous les textes PDF (non utilisé v1)
-          "rooms": [
-            {
-              "code_line1":    {"text": "14",       "pixels_x": int, "pixels_y": int, "width_px": int, "height_px": int, "font_size": float, "font_name": str, "color_rgb": [r,g,b]},
-              "surface_line2": {"text": "14.28 m2", "pixels_x": int, "pixels_y": int, ...},
-              "id_line3":      {"text": "237",      "pixels_x": int, "pixels_y": int, ...}
+          "file": str,
+          "building_id": str (optional),
+          "floor_id": str (optional),
+          "north_angle_deg": float (optional, default 0),
+          "page_width_px": int,
+          "page_height_px": int,
+          "rooms": {                      # objet indexé par room_id
+            "237": {
+              "surface": "14.28 m2",       # obligatoire (string)
+              "seed_x": 1234,              # obligatoire (scalar int)
+              "seed_y": 575,               # obligatoire (scalar int)
+              "bbox_px": [x0,y0,x1,y1],    # optionnel (Save-only)
+              "canonical_top_face": "north",  # optionnel (Save-only)
+              "doors": [...],              # optionnel
+              "openings": [...],           # Save-only
+              "windows": [...]             # Save-only
             },
             ...
-          ],
-          "doors": [
-            {
-              "label": str, "associated_room": str,
-              "pixels_x": int, "pixels_y": int,
-              "width_px": int, "height_px": int,
-              "font_size": float, "font_name": str, "color_rgb": [r,g,b]
-            },
-            ...
-          ]
+          }
         }
 
-    Le facteur cm réel / pixel est calculé via `dpi` + `plan_scale` :
-        cm_per_px = (2.54 / dpi) * N  où plan_scale = "1:N"
+    L'échelle `cm_per_px` est déduite de la médiane des surfaces m² détectées
+    (pas besoin de `plan_scale`/`dpi` dans le JSON).
+
+    Convention d'omission : tout champ non renseigné est ABSENT du JSON.
+    Ne pas tester `if field` mais `if "field" in obj` avant accès.
 
     Args:
-        json_data: dict au format v2 décrit ci-dessus.
-        enhanced_png_path: chemin fichier PNG avec cartouches supprimés,
-            extérieur bleu RGB(135,206,235), couloirs vert RGB(193,247,179).
-        overlay_png_path: chemin fichier PNG overlay (plan officiel).
+        json_data: dict au format v3 décrit ci-dessus.
+        enhanced_png_path: chemin fichier PNG `<plan_id>_enhanced.png`
+            (cartouches effacés, extérieur bleu, couloirs verts).
+        overlay_png_path: chemin fichier PNG `<plan_id>.png` (plan officiel).
 
     Returns:
         list[dict] : liste de dicts pièces compatibles avec le pipeline UI,
@@ -1362,120 +1357,175 @@ def extract_rooms_from_preprocessed(
     if "rooms" not in json_data:
         raise ValueError("JSON mal formé : clé 'rooms' manquante")
     rooms_raw = json_data["rooms"]
-    if not isinstance(rooms_raw, list):
-        raise ValueError("JSON mal formé : 'rooms' doit être une liste")
-    if not _os.path.isfile(enhanced_png_path):
-        raise ValueError(f"Fichier PNG enhanced introuvable : {enhanced_png_path}")
+    _V2_LEGACY_KEYS = ("code_line1", "surface_line2", "id_line3")
+    if isinstance(rooms_raw, list):
+        # Any list-shaped rooms → legacy v2 format (v3 is always a dict)
+        raise ValueError(
+            "JSON v2 (legacy) format detected. Only v3 is supported — "
+            "see docs/specs/PREPROCESSED_JSON_SPEC.md. "
+            "Please regenerate the JSON."
+        )
+    if isinstance(rooms_raw, dict) and rooms_raw:
+        _first_val = next(iter(rooms_raw.values()))
+        if isinstance(_first_val, dict) and any(k in _first_val for k in _V2_LEGACY_KEYS):
+            raise ValueError(
+                "JSON v2 (legacy) format detected. Only v3 is supported — "
+                "see docs/specs/PREPROCESSED_JSON_SPEC.md. "
+                "Please regenerate the JSON."
+            )
+    if not isinstance(rooms_raw, dict):
+        raise ValueError(
+            "JSON v3 mal formé : 'rooms' doit être un objet indexé par room_id, "
+            f"reçu {type(rooms_raw).__name__}"
+        )
     if not _os.path.isfile(overlay_png_path):
         raise ValueError(f"Fichier PNG overlay introuvable : {overlay_png_path}")
-
-    # Calcul du facteur cm réel / pixel depuis dpi + plan_scale
-    # DPI par défaut = 300 (convention des PNG fournis en Mode Préprocessé)
-    dpi = int(json_data.get("dpi", 300) or 300)
-    plan_scale_raw = json_data.get("plan_scale", "")
-    plan_scale_ratio = _parse_plan_scale_ratio(plan_scale_raw)
-    scale_cm_per_px = _cm_per_px_from_metadata(dpi, plan_scale_ratio)
-    if scale_cm_per_px <= 0:
+    # enhanced_png_path est optionnel : certains plans n'ont pas de version enhanced
+    if enhanced_png_path and not _os.path.isfile(enhanced_png_path):
         logger.warning(
-            "JSON preprocessed : impossible de calculer cm/px "
-            "(dpi=%r, plan_scale=%r) — bbox sera dégénérée",
-            dpi, plan_scale_raw,
+            "JSON preprocessed : PNG enhanced absent (%s) — ray-cast désactivé",
+            enhanced_png_path,
+        )
+        enhanced_png_path = ""
+
+    # Première passe : parser chaque room et collecter les surfaces pour
+    # déduire cm_per_px par médiane.
+    parsed_rooms = []
+    for room_id, r in rooms_raw.items():
+        if not isinstance(r, dict):
+            raise ValueError(f"Room '{room_id}' : doit être un objet, reçu {type(r).__name__}")
+
+        if "seed_x" not in r or "seed_y" not in r:
+            raise ValueError(
+                f"Room '{room_id}' : champs 'seed_x' et 'seed_y' obligatoires"
+            )
+        if "surface" not in r:
+            raise ValueError(f"Room '{room_id}' : champ 'surface' obligatoire")
+
+        seed_x = int(r["seed_x"])
+        seed_y = int(r["seed_y"])
+        surface_m2 = _parse_surface_m2(str(r["surface"]))
+        if surface_m2 <= 0:
+            logger.warning(
+                "Room %s : surface introuvable dans 'surface'=%r — défaut 0",
+                room_id, r.get("surface"),
+            )
+
+        # bbox_px Save-only : présent si le plan a déjà été ray-casté
+        bbox_px_opt = r.get("bbox_px")
+        has_bbox = (
+            isinstance(bbox_px_opt, (list, tuple))
+            and len(bbox_px_opt) == 4
+        )
+
+        parsed_rooms.append({
+            "room_id": str(room_id),
+            "seed_x": seed_x,
+            "seed_y": seed_y,
+            "surface_m2": surface_m2,
+            "bbox_px_opt": tuple(int(v) for v in bbox_px_opt) if has_bbox else None,
+            "doors_raw": r.get("doors") or [],
+            "openings_raw": r.get("openings") or [],
+            "windows_raw": r.get("windows") or [],
+            "canonical_top_face": r.get("canonical_top_face"),
+        })
+
+    # Déduction cm_per_px par médiane des pièces déjà bboxées (Save-only).
+    # Les nouvelles pièces (Input pur) n'ont pas de bbox — on ne peut pas
+    # calculer l'échelle avant le ray-cast. On tente sur ce qui est dispo.
+    scale_samples = []
+    for p in parsed_rooms:
+        if p["bbox_px_opt"] and p["surface_m2"] > 0:
+            x0, y0, x1, y1 = p["bbox_px_opt"]
+            w_px = max(1, x1 - x0)
+            h_px = max(1, y1 - y0)
+            area_px = w_px * h_px
+            area_cm2 = p["surface_m2"] * 10_000.0
+            if area_px > 0:
+                scale_samples.append(math.sqrt(area_cm2 / area_px))
+    if scale_samples:
+        scale_samples.sort()
+        scale_cm_per_px = scale_samples[len(scale_samples) // 2]
+        logger.info(
+            "JSON preprocessed v3 : cm_per_px=%.4f déduit de %d échantillon(s)",
+            scale_cm_per_px, len(scale_samples),
         )
     else:
-        logger.info(
-            "JSON preprocessed : dpi=%d, plan_scale=%s, cm_per_px=%.4f",
-            dpi, plan_scale_raw, scale_cm_per_px,
-        )
-
-    rotation_angle = int(json_data.get("rotation_angle", 0) or 0)
-    if rotation_angle not in (0, 90, 180, 270):
+        scale_cm_per_px = 0.5
         logger.warning(
-            "JSON preprocessed : rotation_angle=%r inattendu (ignoré)", rotation_angle,
-        )
-
-    total_rooms_declared = json_data.get("total_rooms")
-    if total_rooms_declared is not None and int(total_rooms_declared) != len(rooms_raw):
-        logger.warning(
-            "JSON preprocessed : total_rooms=%s ≠ len(rooms)=%d",
-            total_rooms_declared, len(rooms_raw),
-        )
-
-    # Doors (pour usage futur — v1 : log seulement)
-    doors_raw = json_data.get("doors") or []
-    if doors_raw:
-        logger.info(
-            "JSON preprocessed : %d porte(s) détectées (non exploitées v1)",
-            len(doors_raw),
+            "JSON preprocessed v3 : aucun bbox_px Save-enriched pour calibrer "
+            "l'échelle — fallback cm_per_px=0.5 (ray-cast requis pour affiner)"
         )
 
     result = []
-    for i, r in enumerate(rooms_raw):
-        if not isinstance(r, dict):
-            raise ValueError(f"Room index {i} : doit être un dict")
-
-        code_line1 = r.get("code_line1") or {}
-        surface_line2 = r.get("surface_line2") or {}
-        id_line3 = r.get("id_line3") or {}
-
-        for name, blk in (("code_line1", code_line1),
-                          ("surface_line2", surface_line2),
-                          ("id_line3", id_line3)):
-            if not isinstance(blk, dict) or "pixels_x" not in blk or "pixels_y" not in blk:
-                raise ValueError(
-                    f"Room index {i} : champ '{name}' manquant ou pixels_x/y absents"
-                )
-
-        # room_id : priorité id_line3.text
-        room_id = str(id_line3.get("text") or f"room_{i}")
-
-        # Seed = centre calculé depuis les 3 lignes
-        seed_x, seed_y = _room_center_from_lines(code_line1, surface_line2, id_line3)
-
-        # Surface : parse depuis surface_line2.text ("14.28 m2")
-        surface_m2 = _parse_surface_m2(surface_line2.get("text", ""))
-        if surface_m2 <= 0:
-            logger.warning(
-                "Room %s : surface introuvable dans surface_line2.text=%r — défaut 0",
-                room_id, surface_line2.get("text"),
-            )
+    for p in parsed_rooms:
+        seed_x, seed_y = p["seed_x"], p["seed_y"]
+        surface_m2 = p["surface_m2"]
         area_cm2 = surface_m2 * 10_000.0
 
-        # Dimensions estimées : pièce carrée de surface = area_cm2
-        side_cm = math.sqrt(max(area_cm2, 1.0))
-        width_cm = int(round(side_cm))
-        depth_cm = int(round(side_cm))
-
-        # Bbox en pixels : si scale disponible → carré centré sur seed
-        # Sinon → bbox dégénérée (seed unique)
-        if scale_cm_per_px > 0 and side_cm > 0:
-            half_px = (side_cm / scale_cm_per_px) / 2.0
-            bbox_px = (
-                int(seed_x - half_px),
-                int(seed_y - half_px),
-                int(seed_x + half_px),
-                int(seed_y + half_px),
-            )
+        # Si bbox_px fourni dans le JSON → skip ray-cast, utiliser tel quel.
+        # Sinon → bbox dégénérée (seed seul), le ray-cast s'exécutera en aval.
+        if p["bbox_px_opt"]:
+            bbox_px = p["bbox_px_opt"]
+            w_px = max(1, bbox_px[2] - bbox_px[0])
+            h_px = max(1, bbox_px[3] - bbox_px[1])
+            width_cm = int(round(w_px * scale_cm_per_px))
+            depth_cm = int(round(h_px * scale_cm_per_px))
         else:
-            sx, sy = int(seed_x), int(seed_y)
-            bbox_px = (sx, sy, sx, sy)
+            # Dimensions estimées : pièce carrée depuis la surface
+            side_cm = math.sqrt(max(area_cm2, 1.0))
+            width_cm = int(round(side_cm))
+            depth_cm = int(round(side_cm))
+            if scale_cm_per_px > 0 and side_cm > 0:
+                half_px = (side_cm / scale_cm_per_px) / 2.0
+                bbox_px = (
+                    int(seed_x - half_px),
+                    int(seed_y - half_px),
+                    int(seed_x + half_px),
+                    int(seed_y + half_px),
+                )
+            else:
+                bbox_px = (seed_x, seed_y, seed_x, seed_y)
+
+        # Doors : transfère tels quels s'ils ont déjà les champs enrichis (face,
+        # offset_px, width_px, etc.), sinon laisse la structure minimale Input.
+        doors = []
+        for d in p["doors_raw"]:
+            if not isinstance(d, dict):
+                continue
+            dd = {}
+            # Champs enrichis Save
+            for k in ("face", "offset_px", "width_px", "hinge_side", "opens_inward"):
+                if k in d:
+                    dd[k] = d[k]
+            # Champs Input (seed de porte)
+            if "label_x" in d and "label_y" in d:
+                dd["label_x"] = int(d["label_x"])
+                dd["label_y"] = int(d["label_y"])
+            doors.append(dd)
+
+        openings = [o for o in p["openings_raw"] if isinstance(o, dict)]
+        windows = [w for w in p["windows_raw"] if isinstance(w, dict)]
 
         room_dict = {
-            "name": room_id,
-            "seed_px": (int(seed_x), int(seed_y)),
+            "name": p["room_id"],
+            "seed_px": (seed_x, seed_y),
             "bbox_px": bbox_px,
             "width_cm": width_cm,
             "depth_cm": depth_cm,
             "surface_m2": surface_m2,
-            "windows": [],
-            "openings": [],
-            "doors": [],
+            "windows": windows,
+            "openings": openings,
+            "doors": doors,
             "exterior_faces": [],
             "corridor_face": "",
         }
+        if p["canonical_top_face"]:
+            room_dict["canonical_top_face"] = p["canonical_top_face"]
         result.append(room_dict)
 
     logger.info(
-        "extract_rooms_from_preprocessed : %d room(s) chargée(s) "
+        "extract_rooms_from_preprocessed v3 : %d room(s) chargée(s) "
         "(cm_per_px=%.4f)",
         len(result), scale_cm_per_px,
     )

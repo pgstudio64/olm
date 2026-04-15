@@ -1197,6 +1197,8 @@ async function save() {
       windows: JSON.parse(JSON.stringify(state.room_windows)),
       openings: JSON.parse(JSON.stringify(state.room_openings)),
       exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions)),
+      // Preserve original bbox_px so overlay aligns correctly after save
+      bbox_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : undefined,
     };
     fpRoomAmendments[ramend.roomName] = amendedRoom;
     state.roomAmendMode = null;
@@ -1215,7 +1217,7 @@ async function save() {
       state.amendMode = null;
       exitAmendUI();
       clearDirty();
-      document.querySelector('.tab-btn[data-tab="design"]').click();
+      document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
       fpRenderCurrent();
       setStatus("No changes — amendment discarded.");
       return;
@@ -1244,7 +1246,7 @@ async function save() {
     exitAmendUI();
     setStatus("Amendment saved for room \"" + amend.roomName + "\".");
     // Switch back to Design
-    document.querySelector('.tab-btn[data-tab="design"]').click();
+    document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
     fpRenderCurrent();
     return;
   }
@@ -1381,7 +1383,7 @@ function switchToEditorWithPattern(data) {
   state.roomAmendMode = null;
   exitAmendUI();
   exitRoomAmendUI();
-  document.querySelector('.tab-btn[data-tab="catalogue"]').click();
+  document.querySelector('.tab-btn[data-tab="lytCatalogue"]').click();
   document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
   loadPatternFromData(JSON.parse(JSON.stringify(data)));
 }
@@ -1403,15 +1405,15 @@ function enterAmendMode(room, candidate) {
   if (candidate.standard && BLOCK_DEFS_BY_STD[candidate.standard]) {
     BLOCK_DEFS = BLOCK_DEFS_BY_STD[candidate.standard];
   }
-  // Show editor content, keep Design tab visually active
+  // Show editor content (inside Catalogue tab)
   document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
-  document.getElementById("tabCatalogue").classList.add("active");
+  document.getElementById("tabLytCatalogue").classList.add("active");
   document.querySelectorAll(".sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
   document.getElementById("subtabCatEditor").classList.add("active");
   document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
-  document.querySelector('.tab-btn[data-tab="design"]').classList.add("active");
+  document.querySelector('.tab-btn[data-tab="lytCatalogue"]').classList.add("active");
   // Hide sub-tab bar (Card view / Grid view / Pattern editor)
-  document.querySelector("#tabCatalogue .sub-tab-bar").style.display = "none";
+  document.querySelector("#tabLytCatalogue > .sub-tab-bar").style.display = "none";
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));
 
   // Disable room controls + irrelevant actions
@@ -1448,7 +1450,7 @@ function exitAmendUI() {
   document.getElementById("btnAmendCancel").style.display = "none";
   document.querySelector(".ol-header").classList.remove("edit-mode");
   // Restore sub-tab bar
-  var subBar = document.querySelector("#tabCatalogue .sub-tab-bar");
+  var subBar = document.querySelector("#tabLytCatalogue > .sub-tab-bar");
   if (subBar) subBar.style.display = "";
 }
 
@@ -1501,17 +1503,18 @@ function enterRoomAmendMode(room) {
   dslEl.style.cursor = "";
   document.getElementById("rvAmendApply").style.display = "";
 
-  // Show Save/Cancel in nav bar, hide Adjust room
+  // Show Save/Cancel/AddExcl in nav bar, hide Adjust room
   document.getElementById("rvBtnAdjustRoom").style.display = "none";
   document.getElementById("rvBtnSaveRoom").style.display = "";
   document.getElementById("rvBtnCancelRoom").style.display = "";
+  document.getElementById("rvBtnAddExcl").style.display = "";
 
   // Disable navigation during edit
   document.getElementById("rvBtnPrev").disabled = true;
   document.getElementById("rvBtnNext").disabled = true;
 
   // Visual cue: amber edit-mode on nav bar
-  document.querySelector("#tabReview .fp-nav").classList.add("edit-mode");
+  document.querySelector("#tabFpReview .fp-nav").classList.add("edit-mode");
   document.getElementById("rvRoomLabel").textContent = "\u270E " + room.name;
 }
 
@@ -1523,17 +1526,32 @@ function exitRoomAmendUI() {
   dslEl.style.cursor = "default";
   document.getElementById("rvAmendApply").style.display = "none";
 
-  // Restore nav bar: show Adjust room, hide Save/Cancel
+  // Restore nav bar: show Adjust room, hide Save/Cancel/AddExcl
   document.getElementById("rvBtnAdjustRoom").style.display = "";
   document.getElementById("rvBtnSaveRoom").style.display = "none";
   document.getElementById("rvBtnCancelRoom").style.display = "none";
+  document.getElementById("rvBtnAddExcl").style.display = "none";
+
+  // Reset rvTool and clean up any drawing in progress
+  if (window.rvTool) {
+    window.rvTool.mode = "idle";
+    window.rvTool.selectedIndex = -1;
+    window.rvTool.drawStart = null;
+    window.rvTool.dragOffset = null;
+  }
+  state.selectedExclusion = -1;
+  var _rvBtn = document.getElementById("rvBtnAddExcl");
+  if (_rvBtn) _rvBtn.classList.remove("active");
+  var _rvCv = document.getElementById("rvCanvas");
+  if (_rvCv) _rvCv.style.cursor = "";
+  if (window.rvRemoveGhostRect) window.rvRemoveGhostRect();
 
   // Re-enable navigation
   document.getElementById("rvBtnPrev").disabled = false;
   document.getElementById("rvBtnNext").disabled = false;
 
   // Remove edit-mode
-  document.querySelector("#tabReview .fp-nav").classList.remove("edit-mode");
+  document.querySelector("#tabFpReview .fp-nav").classList.remove("edit-mode");
 
   state.overlay = null;
 }

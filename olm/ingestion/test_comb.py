@@ -107,79 +107,92 @@ def find_seeds_by_ocr(image):
 
     try:
         # Tesseract configuration:
-        #   --psm 11  Sparse text — find text anywhere, no assumed layout
+        #   --psm 11  Sparse text — finds tokens that are isolated in whitespace,
+        #             excellent when cartouche lines are clearly separated.
+        #   --psm  6  Uniform block — reads text as a dense block, better when
+        #             cartouche lines are packed tight (3-line format D-81).
         #   --oem 3   Default engine (LSTM + legacy fallback)
-        #   tessedit_char_whitelist  Restricts output to the characters expected
-        #             in floor plan cartouches (digits, decimal separator, letters,
-        #             space).  Note: whitelist alone is not sufficient to disable
-        #             dictionaries when letters are included.
-        #   load_system_dawg=0 / load_freq_dawg=0  Explicitly disable English word
-        #             and frequency dictionaries.  Without these, Tesseract may
-        #             "spell-correct" partial matches toward dictionary words even
-        #             when the whitelist limits the output character set.
-        result = subprocess.run(
-            [
-                'tesseract', tmp_path, 'stdout',
-                '--psm', '11',
-                '--oem', '3',
-                '-c', f'tessedit_char_whitelist={TESSERACT_CHAR_WHITELIST}',
-                '-c', 'load_system_dawg=0',
-                '-c', 'load_freq_dawg=0',
-                'tsv',
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        #   tessedit_char_whitelist / load_*_dawg=0  See comments in older commits.
+        # We run BOTH PSM 11 and PSM 6, then merge + deduplicate the tokens. The
+        # two modes catch different cartouches on the same plan (PSM 11 misses
+        # tight 3-line cartouches, PSM 6 handles them; PSM 11 catches isolated
+        # cartouches that PSM 6 sometimes groups with neighbours).
 
-        if result.returncode != 0:
-            logger.warning(f"tesseract failed: {result.stderr}")
-            return {}, []
+        def _run_tesseract_pass(psm_mode):
+            return subprocess.run(
+                [
+                    'tesseract', tmp_path, 'stdout',
+                    '--psm', str(psm_mode),
+                    '--oem', '3',
+                    '-c', f'tessedit_char_whitelist={TESSERACT_CHAR_WHITELIST}',
+                    '-c', 'load_system_dawg=0',
+                    '-c', 'load_freq_dawg=0',
+                    'tsv',
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
 
         words = []
-        # Parse TSV output (tab-separated values)
-        lines = result.stdout.split('\n')
-        logger.debug(f"Tesseract output: {len(lines)} lines")
+        seen_keys = set()  # dedupe by (text, rounded cx, rounded cy)
         skipped_lines = 0
         low_conf = 0
-        for i, line in enumerate(lines):
-            if not line.strip() or line.startswith('level') or 'Estimating' in line:
-                continue
-            parts = line.split('\t')
-            if len(parts) < 12:
-                skipped_lines += 1
-                continue
-            try:
-                text = parts[11].strip()
-                conf = float(parts[10]) if parts[10] else -1  # convert to float, handle empty
-                x = int(parts[6])
-                y = int(parts[7])
-                w = int(parts[8])
-                h = int(parts[9])
 
-                if not text:
-                    low_conf += 1
-                    continue
-                # Accept texts with any confidence >= 0 (tesseract confidence range is 0-100, -1 = undefined)
-                if conf < 0:
-                    low_conf += 1
-                    continue
-
-                # Divide coordinates back to original image space (undo upscale)
-                scale = TESSERACT_UPSCALE
-                words.append({
-                    "text": text,
-                    "cx": (x + w // 2) // scale,
-                    "cy": (y + h // 2) // scale,
-                    "x": x // scale,
-                    "y": y // scale,
-                    "w": w // scale,
-                    "h": h // scale,
-                })
-            except (ValueError, IndexError) as e:
-                low_conf += 1
-                logger.debug(f"    Parse error on line {i}: {e}")
+        for psm_mode in (11, 6):
+            result = _run_tesseract_pass(psm_mode)
+            if result.returncode != 0:
+                logger.warning(f"tesseract PSM {psm_mode} failed: {result.stderr}")
                 continue
+
+            lines = result.stdout.split('\n')
+            logger.debug(f"Tesseract PSM {psm_mode}: {len(lines)} lines")
+            for i, line in enumerate(lines):
+                if not line.strip() or line.startswith('level') or 'Estimating' in line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) < 12:
+                    skipped_lines += 1
+                    continue
+                try:
+                    text = parts[11].strip()
+                    conf = float(parts[10]) if parts[10] else -1
+                    x = int(parts[6])
+                    y = int(parts[7])
+                    w = int(parts[8])
+                    h = int(parts[9])
+
+                    if not text:
+                        low_conf += 1
+                        continue
+                    if conf < 0:
+                        low_conf += 1
+                        continue
+
+                    # Divide coordinates back to original image space (undo upscale)
+                    scale = TESSERACT_UPSCALE
+                    cx = (x + w // 2) // scale
+                    cy = (y + h // 2) // scale
+
+                    # Dedupe: same text within a 10-px radius across passes counts once
+                    key = (text, cx // 10, cy // 10)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+
+                    words.append({
+                        "text": text,
+                        "cx": cx,
+                        "cy": cy,
+                        "x": x // scale,
+                        "y": y // scale,
+                        "w": w // scale,
+                        "h": h // scale,
+                    })
+                except (ValueError, IndexError) as e:
+                    low_conf += 1
+                    logger.debug(f"    PSM {psm_mode} parse error on line {i}: {e}")
+                    continue
 
     except FileNotFoundError:
         logger.warning("tesseract not installed: brew install tesseract (macOS) or apt-get install tesseract-ocr (Linux)")
@@ -204,108 +217,114 @@ def find_seeds_by_ocr(image):
         logger.debug(f"OCR: {len(room_numbers)} room number candidates: {room_numbers}")
         logger.debug(f"OCR: {len(surfaces)} surface candidates: {surfaces}")
 
-    # Count room codes
-    room_code_count = sum(1 for w in words if w["text"] == room_code)
-    logger.debug(f"OCR: found {room_code_count} instances of room code '{room_code}'")
+    # Cluster-based cartouche detection (generic, font-agnostic).
+    #
+    # Rationale: anchoring on a specific room_code ("14") is fragile because
+    # (a) Tesseract sometimes fails to segment the code line, and
+    # (b) greedy 1:1 matching from code to id mis-pairs when a cartouche is
+    #     partially unreadable (cascading mis-assignments).
+    # Surfaces are a much more reliable anchor: the format "X.XX" (with or
+    # without a " m²" suffix token) is near-universal across floor plans and
+    # rarely appears outside cartouches.
+    #
+    # Algorithm:
+    #   1. Compute h_med, the median text height → adaptive spatial window.
+    #   2. For each surface token, collect all tokens within ±3·h_med vertical
+    #      and ±1.5·h_med horizontal → the cartouche cluster.
+    #   3. Identify the ID (longest _RE_ROOM_NUMBER token in the cluster).
+    #   4. If room_code is configured, require one of its tokens in the
+    #      cluster — filters out non-target cartouches (meeting rooms, etc.).
+    #      If no room_code configured, accept every cluster.
+    # Meeting-room labels like "93A" are naturally rejected: they have no
+    # neighbouring surface, so no cluster forms around them.
 
     seeds = {}
     cartouche_bboxes = []
-    used_words = set()  # Track which words are already assigned to a cartouche
 
-    for word in words:
-        if word["text"] != room_code:
+    # Median text height over tokens likely to belong to cartouches (digits or
+    # the "m" unit token). Using all tokens would pull the median toward noise
+    # (small garbled fragments) and undersize the clustering window.
+    _cartouche_heights = [
+        w["h"] for w in words
+        if w["h"] > 0 and (w["text"].replace(".", "").replace(",", "").isdigit()
+                            or w["text"] in ("m", "m2", "m²"))
+    ]
+    if _cartouche_heights:
+        _cartouche_heights.sort()
+        h_med = _cartouche_heights[len(_cartouche_heights) // 2]
+    else:
+        h_med = 15  # safe fallback (typical cartouche text height)
+
+    # Vertical window must span the tallest cartouche (5 lines with gaps ≈ 7·h)
+    window_v = max(int(h_med * 7.0), 70)
+    window_h = int(h_med * 2.5)   # horizontal cluster extent (cartouche is ~narrow)
+    logger.debug(f"OCR: h_med={h_med}, window_v={window_v}, window_h={window_h}")
+
+    # Index surface tokens (the anchors)
+    surface_tokens = [w for w in words if _RE_SURFACE.match(w["text"])]
+    logger.debug(f"OCR: {len(surface_tokens)} surface anchor(s) found")
+
+    used_surfaces = set()  # prevent double-anchoring when multiple surfaces overlap
+
+    for anchor in surface_tokens:
+        if id(anchor) in used_surfaces:
             continue
+        used_surfaces.add(id(anchor))
 
-        seed_cx = word["cx"]
-        seed_cy = word["cy"]
-        word_idx = words.index(word)
+        ax, ay = anchor["cx"], anchor["cy"]
 
-        cart_words = [word]
-        room_name = f"room_{seed_cx}_{seed_cy}"
+        # Collect all tokens within the cluster window
+        cluster = []
+        for w in words:
+            if abs(w["cx"] - ax) <= window_h and abs(w["cy"] - ay) <= window_v:
+                cluster.append(w)
+
+        # Room code filter (optional, from config.json)
+        if room_code:
+            if not any(w["text"] == room_code for w in cluster):
+                logger.debug(
+                    f"  cluster at ({ax},{ay}) surface={anchor['text']!r} "
+                    f"rejected: no '{room_code}' token in {len(cluster)} neighbours"
+                )
+                continue
+
+        # Parse the surface value (universal "X.XX" format with optional ",")
         room_surface = 0.0
+        try:
+            val = float(anchor["text"].replace(",", "."))
+            if 0.5 < val < 2000.0:
+                room_surface = val
+        except ValueError:
+            pass
 
-        # Strategy #2: Find closest match + validation (no distance limit)
-        # Instead of a fixed window, find the most relevant texts for this cartouche
-
-        # Find the best room number token in the vertical neighbourhood.
-        # Ranking: longer tokens first (3 digits > 2 > 1) then closer distance.
-        # This prevents short noise tokens like "2" (from "m2") from beating
-        # real 3-digit room numbers that are slightly further away.
-        VERTICAL_TOLERANCE = 150  # px — covers compact (57 px) and spaced (102 px) layouts
-
-        room_candidates = []
-        for other_idx, other in enumerate(words):
-            if other is word or other_idx in used_words:
-                continue
-            if not _RE_ROOM_NUMBER.match(other["text"]):
-                continue
-            dx = abs(other["cx"] - seed_cx)
-            dy = abs(other["cy"] - seed_cy)
-            if dy >= VERTICAL_TOLERANCE:
-                continue
-            dist = (dx * dx + dy * dy) ** 0.5
-            room_candidates.append((other_idx, other, dist))
-
-        # Sort: longest text first, then closest — "-len" makes longer tokens sort first
-        room_candidates.sort(key=lambda t: (-len(t[1]["text"]), t[2]))
-
-        if room_candidates:
-            closest_room_idx, closest_match, closest_room_dist = room_candidates[0]
-            closest_room_name = closest_match["text"]
-            room_name = closest_room_name
-            used_words.add(closest_room_idx)
-            # NOTE: Do NOT add the room number to cart_words for bbox calculation:
-            # it may be far from the room code and would incorrectly expand the bbox.
-            logger.debug(
-                f"  Matched '{room_code}' at ({seed_cx},{seed_cy}) → room '{room_name}'"
-                f" at distance {closest_room_dist:.0f}px"
-                f" (len={len(closest_room_name)}, {len(room_candidates)} candidate(s))"
+        # Pick the room ID: longest _RE_ROOM_NUMBER token in the cluster,
+        # excluding the anchor itself and tokens that happen to match the code.
+        id_candidates = [
+            w for w in cluster
+            if w is not anchor
+            and w["text"] != room_code
+            and _RE_ROOM_NUMBER.match(w["text"])
+        ]
+        id_candidates.sort(
+            key=lambda w: (
+                -len(w["text"]),                                     # prefer longer IDs
+                (w["cx"] - ax) ** 2 + (w["cy"] - ay) ** 2,          # then closest
             )
+        )
+        if id_candidates:
+            room_name = id_candidates[0]["text"]
         else:
-            # No room number found in vertical tolerance — log all candidates for diagnosis
-            all_rn = []
-            for other_idx, other in enumerate(words):
-                if _RE_ROOM_NUMBER.match(other["text"]):
-                    dx = abs(other["cx"] - seed_cx)
-                    dy = abs(other["cy"] - seed_cy)
-                    dist = (dx * dx + dy * dy) ** 0.5
-                    all_rn.append((other["text"], dx, dy, dist, other_idx in used_words))
-            all_rn.sort(key=lambda x: x[3])
-            logger.debug(
-                f"  No match for '{room_code}' at ({seed_cx},{seed_cy})."
-                f" Closest room-number candidates: {all_rn[:3]}"
-            )
+            room_name = f"room_{ax}_{ay}"
+        logger.debug(
+            f"  cluster at ({ax},{ay}) surface={anchor['text']!r} "
+            f"→ room '{room_name}' ({len(cluster)} tokens)"
+        )
 
-        # Find cartouche texts (surface, etc) within adaptive window
-        text_heights = [w["h"] for w in words if w["h"] > 0]
-        if text_heights:
-            avg_text_height = sum(text_heights) / len(text_heights)
-            window_v = int(avg_text_height * 6)   # ±6× text height for surfaces and labels
-            window_h = int(avg_text_height * 3)
-        else:
-            window_v = 100
-            window_h = 60
-
-        for other in words:
-            if other is word or other in cart_words:
-                continue
-
-            dx = abs(other["cx"] - seed_cx)
-            dy = abs(other["cy"] - seed_cy)
-            if (dy < window_v and dx < window_h):
-                cart_words.append(other)
-                # Parse surface (decimal number like "14.28" or "9.8")
-                try:
-                    val = float(other["text"].replace(",", "."))
-                    if 1.0 < val < 200.0 and "." in other["text"].replace(",", "."):
-                        room_surface = val
-                except ValueError:
-                    pass
-
-        all_x0 = min(w["x"] for w in cart_words)
-        all_y0 = min(w["y"] for w in cart_words)
-        all_x1 = max(w["x"] + w["w"] for w in cart_words)
-        all_y1 = max(w["y"] + w["h"] for w in cart_words)
+        # Cartouche bbox = cluster bounding box with margin
+        all_x0 = min(w["x"] for w in cluster)
+        all_y0 = min(w["y"] for w in cluster)
+        all_x1 = max(w["x"] + w["w"] for w in cluster)
+        all_y1 = max(w["y"] + w["h"] for w in cluster)
         cartouche_bboxes.append((
             all_x0 - CARTOUCHE_MARGIN_PX,
             all_y0 - CARTOUCHE_MARGIN_PX,
@@ -315,11 +334,20 @@ def find_seeds_by_ocr(image):
 
         seed_cx = (all_x0 + all_x1) // 2
         seed_cy = (all_y0 + all_y1) // 2
+
+        # De-duplicate on room_name: if a cluster re-nominates an existing
+        # room, keep the one with a non-zero surface.
+        if room_name in seeds:
+            prev_cx, prev_cy, prev_surf = seeds[room_name]
+            if room_surface == 0.0 and prev_surf > 0.0:
+                continue
         seeds[room_name] = (seed_cx, seed_cy, room_surface)
-        logger.debug(f"  seed '{room_name}' at ({seed_cx}, {seed_cy}), surface={room_surface:.2f} m²")
 
     if not seeds:
-        logger.warning(f"No seeds found. Did you search for the correct room code '{room_code}'?")
+        logger.warning(
+            f"No seeds found. Check the room_code setting ('{room_code}') "
+            f"or cartouche text (surfaces must match '\\d+[.,]\\d+')."
+        )
     else:
         logger.info(f"OCR: found {len(seeds)} room(s): {', '.join(seeds.keys())}")
 

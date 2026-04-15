@@ -104,8 +104,8 @@
     var roomData = fpRoomAmendments[room.name] || room;
 
     // Render room SVG in canvas (empty room, no blocks)
-    var rvView = document.getElementById("ingRoomView");
-    if (rvView && rvView.style.display !== "none") {
+    var reviewSubtab = document.getElementById("tabFpReview");
+    if (reviewSubtab && reviewSubtab.classList.contains("active")) {
       fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
     }
 
@@ -699,17 +699,15 @@
 
     // --- Plan view / Room view toggle ---
     window.ingShowRoomView = function() {
-      document.getElementById("ingPlanView").style.display = "none";
-      document.getElementById("ingRoomView").style.display = "flex";
-      document.getElementById("rvRoomSidebar").style.display = "";
+      var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
+      if (reviewBtn) reviewBtn.click();
       rvRenderCurrent();
       // Update ingestion room list to highlight selected room
       if (window.updateIngRoomList) window.updateIngRoomList();
     };
     window.ingShowPlanView = function() {
-      document.getElementById("ingPlanView").style.display = "flex";
-      document.getElementById("ingRoomView").style.display = "none";
-      document.getElementById("rvRoomSidebar").style.display = "none";
+      var importBtn = document.querySelector('.tab-btn[data-tab="fpImport"]');
+      if (importBtn) importBtn.click();
       if (window.updateIngRoomList) window.updateIngRoomList();
     };
     document.getElementById("rvBtnBack").addEventListener("click", function() {
@@ -754,10 +752,10 @@
 
     // Keyboard nav — Design tab (Left/Right = rooms, Up/Down = candidates)
     document.addEventListener("keydown", function(e) {
-      var designTab = document.getElementById("tabDesign");
-      var reviewTab = document.getElementById("tabReview");
-      var inDesign = designTab && designTab.classList.contains("active");
-      var inReview = reviewTab && reviewTab.classList.contains("active");
+      var officeLayoutTab = document.getElementById("tabOfficeLayout");
+      var reviewSubtab = document.getElementById("tabFpReview");
+      var inDesign = officeLayoutTab && officeLayoutTab.classList.contains("active");
+      var inReview = reviewSubtab && reviewSubtab.classList.contains("active");
       if (!inDesign && !inReview) return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       if (e.key === "ArrowLeft") { e.preventDefault(); fpGo(-1); }

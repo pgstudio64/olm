@@ -165,6 +165,13 @@ function renderGeneralSettings() {
   el = document.getElementById("cfgGrid");
   if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
 
+  el = document.getElementById("cfgPlansDir");
+  if (el) {
+    var ing = APP_CONFIG.ingestion || {};
+    el.value = ing.plans_dir || "project/plans";
+    el.onchange = function() { saveConfigField(["ingestion", "plans_dir"], this.value); };
+  }
+
   var matching = APP_CONFIG.matching || {};
   el = document.getElementById("cfgWDensity");
   if (el) { el.value = matching.w_density != null ? matching.w_density : 0.5; el.onchange = function() { saveConfigField(["matching", "w_density"], parseFloat(this.value)||0.5); }; }
