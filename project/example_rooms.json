@@ -1,0 +1,21 @@
+{
+  "rooms": [
+    {
+      "name": "Room A",
+      "width_cm": 400,
+      "depth_cm": 500,
+      "windows": [{"face": "north", "offset_cm": 50, "width_cm": 200}],
+      "openings": [{"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"}]
+    },
+    {
+      "name": "Room B",
+      "width_cm": 600,
+      "depth_cm": 600,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 600}],
+      "openings": [
+        {"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"},
+        {"face": "south", "offset_cm": 510, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "right"}
+      ]
+    }
+  ]
+}

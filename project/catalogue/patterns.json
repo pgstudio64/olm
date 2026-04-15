@@ -1,0 +1,921 @@
+{
+  "patterns": [
+    {
+      "name": "310x480_AFNOR_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_2_ORTHO_R",
+              "orientation": 0,
+              "offset_ns_cm": 100,
+              "gap_cm": 130,
+              "sticks": [
+                "E"
+              ]
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 310,
+      "room_depth_cm": 480,
+      "standard": "AFNOR_ADVICE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 310
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "310x500_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 130,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "sticks": [
+                "E"
+              ],
+              "type": "BLOCK_2_ORTHO_R"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 310,
+      "room_depth_cm": 500,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 310
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "310x500_GROUP_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 130,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "sticks": [
+                "E"
+              ],
+              "type": "BLOCK_2_ORTHO_R"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 310,
+      "room_depth_cm": 500,
+      "standard": "GROUP",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 310
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "310x500_AFNOR_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 130,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "sticks": [
+                "E"
+              ],
+              "type": "BLOCK_2_ORTHO_R"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 310,
+      "room_depth_cm": 500,
+      "standard": "AFNOR_ADVICE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 310
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "270x450_SITE_2",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 90,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "type": "BLOCK_2_ORTHO_R"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 270,
+      "room_depth_cm": 450,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 270
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "480x480_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_4_FACE",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 160
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 480,
+      "room_depth_cm": 480,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 480
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "220x450_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 40,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "type": "BLOCK_2_ORTHO_R",
+              "sticks": [
+                "E"
+              ]
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 220,
+      "room_depth_cm": 450,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 220
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "1000x650_SITE_2O_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 160,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_4_FACE"
+            },
+            {
+              "gap_cm": 240,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_4_FACE"
+            },
+            {
+              "gap_cm": 200,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_2_SIDE"
+            }
+          ]
+        },
+        {
+          "blocks": [
+            {
+              "gap_cm": 160,
+              "offset_ns_cm": 30,
+              "orientation": 90,
+              "type": "BLOCK_2_SIDE"
+            },
+            {
+              "gap_cm": 10,
+              "offset_ns_cm": 30,
+              "orientation": 90,
+              "type": "BLOCK_2_SIDE"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [
+        180
+      ],
+      "room_width_cm": 1000,
+      "room_depth_cm": 650,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 1000
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        },
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "right",
+          "offset_cm": 910,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "1190x900_SITE_2O_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 160,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_4_FACE"
+            },
+            {
+              "gap_cm": 240,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_4_FACE"
+            },
+            {
+              "gap_cm": 200,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_2_SIDE"
+            }
+          ]
+        },
+        {
+          "blocks": [
+            {
+              "gap_cm": 160,
+              "offset_ns_cm": 30,
+              "orientation": 90,
+              "type": "BLOCK_2_SIDE"
+            },
+            {
+              "gap_cm": 10,
+              "offset_ns_cm": 30,
+              "orientation": 90,
+              "type": "BLOCK_2_SIDE"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [
+        180
+      ],
+      "room_width_cm": 1190,
+      "room_depth_cm": 900,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 1190
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        },
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "right",
+          "offset_cm": 910,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "1340x900_SITE_2O_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 160,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_4_FACE",
+              "sticks": [
+                "N"
+              ]
+            },
+            {
+              "gap_cm": 270,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_4_FACE",
+              "sticks": [
+                "N"
+              ]
+            },
+            {
+              "type": "BLOCK_4_FACE",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 270,
+              "sticks": [
+                "N"
+              ]
+            }
+          ]
+        },
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_4_FACE",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 380,
+              "sticks": [
+                "S"
+              ]
+            },
+            {
+              "type": "BLOCK_4_FACE",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 240,
+              "sticks": [
+                "S"
+              ]
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [
+        180
+      ],
+      "room_width_cm": 1340,
+      "room_depth_cm": 900,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 1340
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        },
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "right",
+          "offset_cm": 1240,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "260x480_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 0,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "sticks": [
+                "O"
+              ],
+              "type": "BLOCK_2_ORTHO_L"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 260,
+      "room_depth_cm": 480,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 260
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "460x480_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 230,
+              "offset_ns_cm": 80,
+              "orientation": 0,
+              "sticks": [
+                "E"
+              ],
+              "type": "BLOCK_2_ORTHO_R"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 460,
+      "room_depth_cm": 480,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 460
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "220x320_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_1",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 140
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 220,
+      "room_depth_cm": 320,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 220
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "offset_cm": 0,
+          "width_cm": 90,
+          "has_door": true,
+          "opens_inward": true,
+          "hinge_side": "left"
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "220x320_GROUP_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_1",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 140
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 220,
+      "room_depth_cm": 320,
+      "standard": "GROUP",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 220
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "offset_cm": 0,
+          "width_cm": 90,
+          "has_door": true,
+          "opens_inward": true,
+          "hinge_side": "left"
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "220x320_AFNOR_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_1",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 140
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 220,
+      "room_depth_cm": 320,
+      "standard": "AFNOR_ADVICE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 220
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "offset_cm": 0,
+          "width_cm": 90,
+          "has_door": true,
+          "opens_inward": true,
+          "hinge_side": "left"
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "name": "270x450_SITE_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 90,
+              "offset_ns_cm": 100,
+              "orientation": 0,
+              "type": "BLOCK_2_ORTHO_R"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 270,
+      "room_depth_cm": 450,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 270
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 0,
+              "offset_ns_cm": 0,
+              "orientation": 180,
+              "type": "BLOCK_2_SIDE"
+            },
+            {
+              "gap_cm": 200,
+              "offset_ns_cm": 0,
+              "orientation": 180,
+              "type": "BLOCK_4_FACE"
+            },
+            {
+              "gap_cm": 240,
+              "offset_ns_cm": 50,
+              "orientation": 180,
+              "type": "BLOCK_4_FACE"
+            }
+          ]
+        },
+        {
+          "blocks": [
+            {
+              "gap_cm": 110,
+              "offset_ns_cm": 30,
+              "orientation": 90,
+              "type": "BLOCK_2_SIDE"
+            },
+            {
+              "gap_cm": 10,
+              "offset_ns_cm": 30,
+              "orientation": 90,
+              "type": "BLOCK_2_SIDE"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [
+        230
+      ],
+      "room_width_cm": 1100,
+      "room_depth_cm": 700,
+      "standard": "SITE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 1100
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        },
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "right",
+          "offset_cm": 1010,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": [],
+      "name": "1100x700_SITE_2O_1"
+    },
+    {
+      "name": "240x320_AFNOR_1",
+      "rows": [
+        {
+          "blocks": [
+            {
+              "gap_cm": 140,
+              "offset_ns_cm": 0,
+              "orientation": 0,
+              "type": "BLOCK_1"
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 240,
+      "room_depth_cm": 320,
+      "standard": "AFNOR_ADVICE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 240
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": []
+    },
+    {
+      "rows": [],
+      "row_gaps_cm": [],
+      "room_width_cm": 630,
+      "room_depth_cm": 350,
+      "standard": "AFNOR_ADVICE",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 630
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
+          "opens_inward": true,
+          "width_cm": 90
+        }
+      ],
+      "room_exclusions": [],
+      "name": "630x350_AFNOR_1"
+    },
+    {
+      "rows": [
+        {
+          "blocks": [
+            {
+              "type": "BLOCK_1",
+              "orientation": 0,
+              "offset_ns_cm": 0,
+              "gap_cm": 120
+            }
+          ]
+        }
+      ],
+      "row_gaps_cm": [],
+      "room_width_cm": 250,
+      "room_depth_cm": 350,
+      "standard": "GROUP",
+      "room_windows": [
+        {
+          "face": "north",
+          "offset_cm": 0,
+          "width_cm": 250
+        }
+      ],
+      "room_openings": [
+        {
+          "face": "south",
+          "offset_cm": 0,
+          "width_cm": 90,
+          "has_door": true,
+          "opens_inward": true,
+          "hinge_side": "left"
+        }
+      ],
+      "room_exclusions": [],
+      "name": "250x350_GROUP_1"
+    }
+  ]
+}

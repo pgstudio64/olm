@@ -1,0 +1,59 @@
+{
+  "rooms": [
+    {
+      "name": "B.4.01",
+      "width_cm": 310,
+      "depth_cm": 480,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 310}],
+      "openings": [{"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"}]
+    },
+    {
+      "name": "B.4.02",
+      "width_cm": 400,
+      "depth_cm": 500,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 400}],
+      "openings": [{"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"}]
+    },
+    {
+      "name": "B.4.03",
+      "width_cm": 550,
+      "depth_cm": 550,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 550}],
+      "openings": [{"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"}]
+    },
+    {
+      "name": "B.4.04",
+      "width_cm": 800,
+      "depth_cm": 600,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 800}],
+      "openings": [{"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"}]
+    },
+    {
+      "name": "B.4.05",
+      "width_cm": 1100,
+      "depth_cm": 700,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 1100}],
+      "openings": [
+        {"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"},
+        {"face": "south", "offset_cm": 1010, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "right"}
+      ]
+    },
+    {
+      "name": "B.4.06",
+      "width_cm": 1400,
+      "depth_cm": 950,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 1400}],
+      "openings": [
+        {"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"},
+        {"face": "south", "offset_cm": 1310, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "right"}
+      ]
+    },
+    {
+      "name": "98K",
+      "width_cm": 250,
+      "depth_cm": 350,
+      "windows": [{"face": "north", "offset_cm": 0, "width_cm": 250}],
+      "openings": [{"face": "south", "offset_cm": 0, "width_cm": 90, "has_door": true, "opens_inward": true, "hinge_side": "left"}]
+    }
+  ]
+}

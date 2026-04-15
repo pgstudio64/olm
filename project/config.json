@@ -1,0 +1,72 @@
+{
+  "room_code": "14",
+  "standard_labels": {
+    "AFNOR_ADVICE": "AFNOR",
+    "GROUP": "GROUP",
+    "SITE": "SITE"
+  },
+  "default_door_width_cm": 90,
+  "desk_width_cm": 180,
+  "desk_depth_cm": 80,
+  "grid_cell_cm": 10,
+  "matching": {
+    "w_density": 0.5,
+    "w_comfort": 0.5,
+    "min_desks_drop_ratio": 0.3
+  },
+  "ingestion": {
+    "scale_cm_per_px": 0.5,
+    "threshold": 110,
+    "pdf_render_dpi": 200,
+    "plans_dir": "project/plans"
+  },
+  "export": {
+    "formats": [
+      "json"
+    ]
+  },
+  "spacing": {
+    "AFNOR_ADVICE": {
+      "chair_clearance_cm": 70,
+      "front_access_cm": 60,
+      "access_single_desk_cm": 100,
+      "passage_behind_one_row_cm": 160,
+      "passage_between_back_to_back_cm": 230,
+      "passage_cm": 90,
+      "door_exclusion_depth_cm": 180,
+      "desk_to_wall_cm": 20,
+      "max_island_size": 4,
+      "min_block_separation_cm": 90,
+      "main_corridor_cm": 140,
+      "name": "AFNOR_ADVICE"
+    },
+    "GROUP": {
+      "chair_clearance_cm": 70,
+      "front_access_cm": 60,
+      "access_single_desk_cm": 90,
+      "passage_behind_one_row_cm": 120,
+      "passage_between_back_to_back_cm": 180,
+      "passage_cm": 90,
+      "door_exclusion_depth_cm": 180,
+      "desk_to_wall_cm": 10,
+      "max_island_size": 6,
+      "min_block_separation_cm": 90,
+      "main_corridor_cm": 140,
+      "name": "GROUP"
+    },
+    "SITE": {
+      "chair_clearance_cm": 70,
+      "front_access_cm": 60,
+      "access_single_desk_cm": 90,
+      "passage_behind_one_row_cm": 140,
+      "passage_between_back_to_back_cm": 160,
+      "passage_cm": 90,
+      "door_exclusion_depth_cm": 120,
+      "desk_to_wall_cm": 0,
+      "max_island_size": 6,
+      "min_block_separation_cm": 90,
+      "main_corridor_cm": 140,
+      "name": "SITE"
+    }
+  }
+}
