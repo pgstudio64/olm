@@ -1,12 +1,12 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "olm"
 version = "0.1.0-alpha"
 description = "Office Layout Matching — local tool for matching desk layout patterns to floor plan rooms"
-readme = "olm/README.md"
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [

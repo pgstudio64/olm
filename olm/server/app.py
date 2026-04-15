@@ -30,6 +30,34 @@ CATALOGUE_DIR = os.path.join(os.path.dirname(BASE_DIR), "project", "catalogue")
 CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
 
 
+def _get_plans_dir() -> str:
+    """Return the plans directory path from config.json, or the default.
+
+    Reads ``ingestion.plans_dir`` from project/config.json. Relative paths are
+    resolved against the project root (parent of BASE_DIR). Falls back to
+    ``<root>/project/plans`` if the key is absent or the file unreadable.
+    """
+    _root = os.path.dirname(BASE_DIR)
+    _default = os.path.join(_root, "project", "plans")
+    _config_path = os.path.join(_root, "project", "config.json")
+    if not os.path.exists(_config_path):
+        return _default
+    try:
+        with open(_config_path, encoding="utf-8") as _f:
+            _cfg = json.load(_f)
+        _plans_dir = _cfg.get("ingestion", {}).get("plans_dir", "")
+        if not _plans_dir:
+            return _default
+        if os.path.isabs(_plans_dir):
+            return _plans_dir
+        return os.path.join(_root, _plans_dir)
+    except Exception:
+        return _default
+
+
+PLANS_DIR = _get_plans_dir()
+
+
 @app.route("/static/<path:filename>")
 def serve_static(filename: str):
     """Serve static files from the static/ folder."""
@@ -196,7 +224,7 @@ def serve_test_rooms():
 @app.route("/test_floor_plan.png")
 def serve_test_floor_plan():
     """DEV: serve test floor plan from project/plans/."""
-    plans_dir = os.path.join(os.path.dirname(BASE_DIR), "project", "plans")
+    plans_dir = _get_plans_dir()
     # Try available test plans in order of preference
     for name in ("test_floorplan3.png", "test_floorplan.png", "test_floor_plan.png"):
         if os.path.exists(os.path.join(plans_dir, name)):
@@ -231,9 +259,7 @@ def api_ingestion_extract():
         elif plan_path:
             # Resolve relative plan names to project/plans/ directory
             if not os.path.isabs(plan_path):
-                plans_dir = os.path.join(
-                    os.path.dirname(BASE_DIR), "project", "plans")
-                plan_path = os.path.join(plans_dir, plan_path)
+                plan_path = os.path.join(_get_plans_dir(), plan_path)
             if not os.path.exists(plan_path):
                 return jsonify({"error": f"Plan not found: {plan_path}"}), 404
         else:
@@ -300,9 +326,7 @@ def api_ingestion_debug():
             elif plan_path:
                 # Resolve relative plan names to project/plans/ directory
                 if not os.path.isabs(plan_path):
-                    plans_dir = os.path.join(
-                        os.path.dirname(BASE_DIR), "project", "plans")
-                    plan_path = os.path.join(plans_dir, plan_path)
+                    plan_path = os.path.join(_get_plans_dir(), plan_path)
                 if not os.path.exists(plan_path):
                     return jsonify({"error": f"Plan not found: {plan_path}"}), 404
             else:
@@ -334,10 +358,72 @@ def api_ingestion_debug():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/plans", methods=["GET"])
+def api_plans():
+    """List available plans in project/plans/ (grouped by stem).
+
+    A plan is identified by its base stem. The naming convention for the
+    preprocessed mode is <plan_id>.png (overlay), <plan_id>_enhanced.png
+    (algorithmic variant) and <plan_id>.json (metadata). The _enhanced
+    variant is NOT listed as a separate plan — it's a component of its
+    parent plan.
+
+    ``effective_mode`` is "preprocessed" when has_json AND json.mtime > png.mtime
+    (JSON was generated after the last PNG edit), "ocr" otherwise.
+
+    Returns:
+        { "plans": [{ "id": str, "has_png": bool, "has_json": bool,
+                      "has_enhanced": bool,
+                      "effective_mode": "ocr"|"preprocessed" }, ...] }
+    """
+    plans_dir = _get_plans_dir()
+    if not os.path.isdir(plans_dir):
+        return jsonify({"plans": []})
+    _entry_defaults: dict = {
+        "has_png": False, "has_json": False, "has_enhanced": False,
+        "png_mtime": 0.0, "json_mtime": 0.0,
+    }
+    stems: dict[str, dict] = {}
+    for fname in os.listdir(plans_dir):
+        name, ext = os.path.splitext(fname)
+        ext_lower = ext.lower()
+        fpath = os.path.join(plans_dir, fname)
+        if name.endswith("_enhanced"):
+            base = name[: -len("_enhanced")]
+            entry = stems.setdefault(base, dict(_entry_defaults))
+            if ext_lower in (".png", ".jpg", ".jpeg"):
+                entry["has_enhanced"] = True
+            continue
+        if ext_lower in (".png", ".jpg", ".jpeg"):
+            entry = stems.setdefault(name, dict(_entry_defaults))
+            entry["has_png"] = True
+            entry["png_mtime"] = os.path.getmtime(fpath)
+        elif ext_lower == ".json":
+            entry = stems.setdefault(name, dict(_entry_defaults))
+            entry["has_json"] = True
+            entry["json_mtime"] = os.path.getmtime(fpath)
+    plans = []
+    for stem, info in sorted(stems.items()):
+        if not info["has_png"]:
+            continue
+        if info["has_json"] and info["json_mtime"] > info["png_mtime"]:
+            effective_mode = "preprocessed"
+        else:
+            effective_mode = "ocr"
+        plans.append({
+            "id": stem,
+            "has_png": info["has_png"],
+            "has_json": info["has_json"],
+            "has_enhanced": info["has_enhanced"],
+            "effective_mode": effective_mode,
+        })
+    return jsonify({"plans": plans})
+
+
 @app.route("/api/ingestion/plans", methods=["GET"])
 def api_ingestion_plans():
     """List available plan images in project/plans/."""
-    plans_dir = os.path.join(os.path.dirname(BASE_DIR), "project", "plans")
+    plans_dir = _get_plans_dir()
     if not os.path.isdir(plans_dir):
         return jsonify({"plans": []})
     plans = [f for f in os.listdir(plans_dir)
@@ -348,8 +434,7 @@ def api_ingestion_plans():
 @app.route("/api/ingestion/plan/<filename>")
 def api_ingestion_plan_image(filename):
     """Serve a plan image from project/plans/."""
-    plans_dir = os.path.join(os.path.dirname(BASE_DIR), "project", "plans")
-    return send_from_directory(plans_dir, filename)
+    return send_from_directory(_get_plans_dir(), filename)
 
 
 @app.route("/api/ingestion/binarize", methods=["POST"])
@@ -397,12 +482,12 @@ def api_ingestion_binarize():
 
 @app.route("/api/import/ocr", methods=["POST"])
 def api_import_ocr():
-    """Mode OCR : upload image + échelle.
+    """Mode OCR : upload image (PNG/JPEG/PDF).
 
     Accepte multipart form avec :
-      - floorplan_image : fichier image du plan de sol
-      - scale_cm_per_px (optionnel) : cm par pixel
-      - threshold (optionnel) : seuil de binarisation (défaut 110)
+      - floorplan_image : fichier image du plan de sol (PNG, JPEG ou PDF)
+      - scale_cm_per_px (optionnel) : cm par pixel ; défaut depuis config.json
+      - threshold (optionnel) : seuil de binarisation ; défaut 110
 
     Retourne :
       {
@@ -410,33 +495,101 @@ def api_import_ocr():
         "mode": "ocr",
         "image_size": [w, h],
         "scale_cm_per_px": float,
-        "image_path": "chemin PNG temporaire"
+        "image_path": ""
       }
     """
     import tempfile
+    import shutil
+    import time
+    import uuid
+
+    # Nettoyage best-effort des anciens overlays (> 1 heure)
+    _overlay_dir = os.path.join(tempfile.gettempdir(), "olm_overlays")
+    os.makedirs(_overlay_dir, exist_ok=True)
+    _cutoff = time.time() - 3600
+    try:
+        for _f in os.listdir(_overlay_dir):
+            _fp = os.path.join(_overlay_dir, _f)
+            try:
+                if os.path.getmtime(_fp) < _cutoff:
+                    os.unlink(_fp)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+    # Valeurs par défaut depuis config.json
+    _config_path = os.path.join(os.path.dirname(BASE_DIR), "project", "config.json")
+    _default_scale: float = 0.5
+    _default_threshold: int = 110
+    _pdf_render_dpi: int = 200
+    if os.path.exists(_config_path):
+        with open(_config_path, encoding="utf-8") as _f:
+            _cfg = json.load(_f)
+        _ing = _cfg.get("ingestion", {})
+        _default_scale = float(_ing.get("scale_cm_per_px", _default_scale))
+        _default_threshold = int(_ing.get("threshold", _default_threshold))
+        _pdf_render_dpi = int(_ing.get("pdf_render_dpi", _pdf_render_dpi))
+
     try:
         scale_str = request.form.get("scale_cm_per_px", "")
         scale = float(scale_str) if scale_str else None
-        threshold = int(request.form.get("threshold", 110))
-        plan_path = ""
+        threshold = int(request.form.get("threshold") or _default_threshold)
 
-        if "floorplan_image" in request.files:
+        plan_id = request.form.get("plan_id", "").strip()
+        plan_path = ""
+        pdf_tmp_path = ""
+        use_temp = False
+
+        if plan_id:
+            # Résolution depuis project/plans/<plan_id>.png
+            for ext in (".png", ".jpg", ".jpeg", ".PNG", ".JPG", ".JPEG"):
+                candidate = os.path.join(PLANS_DIR, plan_id + ext)
+                if os.path.exists(candidate):
+                    plan_path = candidate
+                    break
+            if not plan_path:
+                return jsonify({"error": f"Plan '{plan_id}' introuvable dans project/plans/"}), 400
+        elif "floorplan_image" in request.files:
             f = request.files["floorplan_image"]
-            fd, plan_path = tempfile.mkstemp(suffix=".png")
-            os.close(fd)
-            f.save(plan_path)
+            filename_lower = (f.filename or "").lower()
+            is_pdf = filename_lower.endswith(".pdf") or f.mimetype == "application/pdf"
+            use_temp = True
+
+            if is_pdf:
+                import fitz  # type: ignore[import]
+                pdf_data = f.read()
+                doc = fitz.open(stream=pdf_data, filetype="pdf")
+                page = doc[0]
+                pix = page.get_pixmap(dpi=_pdf_render_dpi)
+                fd, plan_path = tempfile.mkstemp(suffix=".png")
+                os.close(fd)
+                pix.save(plan_path)
+                pdf_tmp_path = plan_path
+            else:
+                fd, plan_path = tempfile.mkstemp(suffix=".png")
+                os.close(fd)
+                f.save(plan_path)
         else:
-            return jsonify({"error": "Champ 'floorplan_image' manquant"}), 400
+            return jsonify({"error": "Paramètre 'plan_id' ou champ 'floorplan_image' requis"}), 400
 
         import sys
         sys.path.insert(0, os.path.join(BASE_DIR, "ingestion"))
-        from test_comb import extract_all_rooms
+        from test_comb import extract_all_rooms  # noqa: PLC0415
 
         result = extract_all_rooms(plan_path, scale_cm_per_px=scale, threshold=threshold)
-        os.unlink(plan_path)
+
+        if use_temp:
+            # Déplacer le PNG temporaire vers le dossier overlays persistant
+            overlay_filename = "overlay_" + uuid.uuid4().hex + ".png"
+            overlay_path = os.path.join(_overlay_dir, overlay_filename)
+            shutil.move(plan_path, overlay_path)
+            result["image_path"] = overlay_path
+        else:
+            # Plan fichier permanent — le servir directement via /api/ingestion/plan/
+            result["image_path"] = plan_path
 
         result["mode"] = "ocr"
-        result["image_path"] = ""
         return jsonify(result)
     except Exception as e:
         traceback.print_exc()
@@ -463,50 +616,104 @@ def api_import_preprocessed():
     import tempfile
     enhanced_path = ""
     overlay_path = ""
+    _temp_paths: list[str] = []
     try:
-        # --- Récupérer le JSON ---
-        json_data = None
-        if "rooms_json" in request.files:
-            f = request.files["rooms_json"]
-            raw = f.read().decode("utf-8")
-            json_data = json.loads(raw)
-        elif "rooms_json" in request.form:
-            json_data = json.loads(request.form["rooms_json"])
+        plan_id = request.form.get("plan_id", "").strip()
+
+        if plan_id:
+            # --- Mode plan_id : résolution depuis project/plans/ ---
+            json_path = os.path.join(PLANS_DIR, plan_id + ".json")
+            if not os.path.exists(json_path):
+                return jsonify({
+                    "error": f"Preprocessed mode: JSON file missing for plan '{plan_id}'"
+                }), 400
+            with open(json_path, encoding="utf-8") as f:
+                json_data = json.load(f)
+
+            overlay_path = ""
+            for ext in (".png", ".PNG"):
+                candidate = os.path.join(PLANS_DIR, plan_id + ext)
+                if os.path.exists(candidate):
+                    overlay_path = candidate
+                    break
+            if not overlay_path:
+                return jsonify({"error": f"Plan PNG manquant pour '{plan_id}'"}), 400
+
+            enhanced_candidate = os.path.join(PLANS_DIR, plan_id + "_enhanced.png")
+            enhanced_path = enhanced_candidate if os.path.exists(enhanced_candidate) else overlay_path
         else:
-            return jsonify({"error": "Champ 'rooms_json' manquant (fichier ou texte)"}), 400
+            # --- Mode upload fichiers (fallback) ---
+            json_data = None
+            if "rooms_json" in request.files:
+                raw = request.files["rooms_json"].read().decode("utf-8")
+                json_data = json.loads(raw)
+            elif "rooms_json" in request.form:
+                json_data = json.loads(request.form["rooms_json"])
+            else:
+                return jsonify({"error": "Champ 'rooms_json' manquant (fichier ou texte)"}), 400
 
-        # --- Sauvegarder les PNG ---
-        if "enhanced_png" not in request.files:
-            return jsonify({"error": "Champ 'enhanced_png' manquant"}), 400
-        if "overlay_png" not in request.files:
-            return jsonify({"error": "Champ 'overlay_png' manquant"}), 400
+            if "enhanced_png" not in request.files:
+                return jsonify({"error": "Champ 'enhanced_png' manquant"}), 400
+            if "overlay_png" not in request.files:
+                return jsonify({"error": "Champ 'overlay_png' manquant"}), 400
 
-        fd, enhanced_path = tempfile.mkstemp(suffix="_enhanced.png")
-        os.close(fd)
-        request.files["enhanced_png"].save(enhanced_path)
+            fd, enhanced_path = tempfile.mkstemp(suffix="_enhanced.png")
+            os.close(fd)
+            request.files["enhanced_png"].save(enhanced_path)
+            _temp_paths.append(enhanced_path)
 
-        fd, overlay_path = tempfile.mkstemp(suffix="_overlay.png")
-        os.close(fd)
-        request.files["overlay_png"].save(overlay_path)
+            fd, overlay_path = tempfile.mkstemp(suffix="_overlay.png")
+            os.close(fd)
+            request.files["overlay_png"].save(overlay_path)
+            _temp_paths.append(overlay_path)
 
         # --- Extraction ---
         from olm.ingestion.extract import extract_rooms_from_preprocessed
         rooms = extract_rooms_from_preprocessed(json_data, enhanced_path, overlay_path)
+
+        # Image size : lire depuis le JSON v3 si présent, sinon depuis le PNG
+        page_w = int(json_data.get("page_width_px") or 0)
+        page_h = int(json_data.get("page_height_px") or 0)
+        if page_w <= 0 or page_h <= 0:
+            try:
+                from PIL import Image as _PilImage
+                with _PilImage.open(overlay_path) as _im:
+                    page_w, page_h = _im.size
+            except Exception:
+                page_w = page_h = 0
+
+        # Scale cm/px : médiane des bbox déjà fournies dans le JSON (si présents)
+        import math as _math
+        scale_samples = []
+        for r in rooms:
+            bb = r.get("bbox_px")
+            surf = r.get("surface_m2", 0) or 0
+            if bb and surf > 0 and bb[2] > bb[0] and bb[3] > bb[1]:
+                area_px = (bb[2] - bb[0]) * (bb[3] - bb[1])
+                if area_px > 0:
+                    scale_samples.append(_math.sqrt((surf * 10_000.0) / area_px))
+        scale_samples.sort()
+        scale_cm_per_px = (
+            scale_samples[len(scale_samples) // 2] if scale_samples else 0.5
+        )
 
         return jsonify({
             "rooms": rooms,
             "mode": "preprocessed",
             "overlay_path": overlay_path,
             "enhanced_path": enhanced_path,
+            "image_size": [page_w, page_h],
+            "image_path": overlay_path,
+            "scale_cm_per_px": scale_cm_per_px,
         })
     except (json.JSONDecodeError, ValueError) as e:
-        for p in (enhanced_path, overlay_path):
+        for p in _temp_paths:
             if p and os.path.exists(p):
                 os.unlink(p)
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         traceback.print_exc()
-        for p in (enhanced_path, overlay_path):
+        for p in _temp_paths:
             if p and os.path.exists(p):
                 os.unlink(p)
         return jsonify({"error": str(e)}), 500
