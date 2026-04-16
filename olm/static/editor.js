@@ -1432,6 +1432,8 @@ async function loadPattern(name) {
     state.room_exclusions = data.room_exclusions || [];
     state.selectedRow = 0;
     state.selectedBlock = -1;
+    state.overlay = null;
+    state.corridor_face = "";
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
     var radios = document.querySelectorAll('input[name="standard"]');
