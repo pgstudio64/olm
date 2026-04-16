@@ -5,7 +5,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-04-16 : D-87 solidification D-83
+## [v0.3.0] — 2026-04-16 : D-87→D-90
 
 ### Corrigé
 - Overlay PNG décalé d'une demi-pièce pour les pièces avec corridor east/west (rotation 90°/270°) — ajout d'un translate compensatoire dans `editor.js`.
