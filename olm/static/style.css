@@ -459,7 +459,7 @@
   .sub-tab-bar {
     display: flex;
     gap: 0;
-    padding: 0 16px;
+    padding: 6px 16px 0 16px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     flex-shrink: 0;
@@ -471,8 +471,8 @@
     border-bottom: none;
     color: var(--text-dim);
     font-family: var(--font-mono);
-    font-size: var(--fs-sm);
-    padding: 4px var(--sp-md);
+    font-size: var(--fs-base);
+    padding: 5px var(--sp-lg);
     cursor: pointer;
     letter-spacing: 0.03em;
     margin-right: 2px;
