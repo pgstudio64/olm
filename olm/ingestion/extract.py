@@ -1492,7 +1492,15 @@ def extract_rooms_from_preprocessed(
             area_cm2 = p["surface_m2"] * 10_000.0
             if area_px > 0:
                 scale_samples.append(math.sqrt(area_cm2 / area_px))
-    if scale_samples:
+    # Priority: explicit scale override (from drawing_scale UI) > median > fallback
+    override_scale = json_data.get("_override_cm_per_px")
+    if override_scale and float(override_scale) > 0:
+        scale_cm_per_px = float(override_scale)
+        logger.info(
+            "JSON preprocessed v3 : cm_per_px=%.4f (drawing_scale override)",
+            scale_cm_per_px,
+        )
+    elif scale_samples:
         scale_samples.sort()
         scale_cm_per_px = scale_samples[len(scale_samples) // 2]
         logger.info(

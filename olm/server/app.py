@@ -532,8 +532,18 @@ def api_import_ocr():
         _pdf_render_dpi = int(_ing.get("pdf_render_dpi", _pdf_render_dpi))
 
     try:
-        scale_str = request.form.get("scale_cm_per_px", "")
-        scale = float(scale_str) if scale_str else None
+        # Drawing scale (e.g. "1 : 100") takes priority over raw scale_cm_per_px
+        import re as _re
+        drawing_scale_str = request.form.get("drawing_scale", "").strip()
+        render_dpi = int(request.form.get("render_dpi") or 300)
+        scale: float | None = None
+        if drawing_scale_str:
+            m = _re.match(r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str)
+            if m:
+                scale = 2.54 * float(m.group(1)) / render_dpi
+        if scale is None:
+            scale_str = request.form.get("scale_cm_per_px", "")
+            scale = float(scale_str) if scale_str else None
         threshold = int(request.form.get("threshold") or _default_threshold)
 
         plan_id = request.form.get("plan_id", "").strip()
@@ -676,6 +686,21 @@ def api_import_preprocessed():
             json_data.setdefault("corridor_rgb", _ing_pp.get("preprocessed_corridor_rgb", [193, 247, 179]))
             json_data.setdefault("exterior_rgb", _ing_pp.get("preprocessed_exterior_rgb", [135, 206, 235]))
 
+        # --- Drawing scale from frontend (priority over median estimation) ---
+        import re as _re_pp
+        import math as _math
+        drawing_scale_str = request.form.get("drawing_scale", "").strip()
+        render_dpi = int(request.form.get("render_dpi") or 300)
+        explicit_scale: float | None = None
+        if drawing_scale_str:
+            m = _re_pp.match(r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str)
+            if m:
+                explicit_scale = 2.54 * float(m.group(1)) / render_dpi
+
+        # Pass explicit scale to extract function if available
+        if explicit_scale is not None and explicit_scale > 0:
+            json_data["_override_cm_per_px"] = explicit_scale
+
         # --- Extraction ---
         from olm.ingestion.extract import extract_rooms_from_preprocessed
         rooms = extract_rooms_from_preprocessed(json_data, enhanced_path, overlay_path)
@@ -691,20 +716,22 @@ def api_import_preprocessed():
             except Exception:
                 page_w = page_h = 0
 
-        # Scale cm/px : médiane des bbox déjà fournies dans le JSON (si présents)
-        import math as _math
-        scale_samples = []
-        for r in rooms:
-            bb = r.get("bbox_px")
-            surf = r.get("surface_m2", 0) or 0
-            if bb and surf > 0 and bb[2] > bb[0] and bb[3] > bb[1]:
-                area_px = (bb[2] - bb[0]) * (bb[3] - bb[1])
-                if area_px > 0:
-                    scale_samples.append(_math.sqrt((surf * 10_000.0) / area_px))
-        scale_samples.sort()
-        scale_cm_per_px = (
-            scale_samples[len(scale_samples) // 2] if scale_samples else 0.5
-        )
+        # Scale cm/px : use explicit scale if provided, otherwise median from rooms
+        if explicit_scale is not None and explicit_scale > 0:
+            scale_cm_per_px = explicit_scale
+        else:
+            scale_samples = []
+            for r in rooms:
+                bb = r.get("bbox_px")
+                surf = r.get("surface_m2", 0) or 0
+                if bb and surf > 0 and bb[2] > bb[0] and bb[3] > bb[1]:
+                    area_px = (bb[2] - bb[0]) * (bb[3] - bb[1])
+                    if area_px > 0:
+                        scale_samples.append(_math.sqrt((surf * 10_000.0) / area_px))
+            scale_samples.sort()
+            scale_cm_per_px = (
+                scale_samples[len(scale_samples) // 2] if scale_samples else 0.5
+            )
 
         return jsonify({
             "rooms": rooms,
