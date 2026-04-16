@@ -466,7 +466,7 @@
     align-items: center;
   }
   /* Align Catalogue internal sub-tabs under the Catalogue button in the nav */
-  #tabLytCatalogue > .sub-tab-bar { padding-left: 428px; }
+  /* padding-left set dynamically by JS (alignCatalogueSubTabs) */
   .sub-tab-btn {
     background: var(--surface);
     border: 1px solid var(--border);

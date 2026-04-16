@@ -1057,4 +1057,19 @@ async function init() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", init);
+// Align Catalogue sub-tabs under the Catalogue button dynamically
+function alignCatalogueSubTabs() {
+  var catBtn = document.querySelector('.tab-btn[data-tab="lytCatalogue"]');
+  var subBar = document.querySelector('#tabLytCatalogue > .sub-tab-bar');
+  if (catBtn && subBar) {
+    var btnRect = catBtn.getBoundingClientRect();
+    var barRect = subBar.getBoundingClientRect();
+    subBar.style.paddingLeft = Math.max(0, btnRect.left - barRect.left) + 'px';
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  init();
+  alignCatalogueSubTabs();
+  window.addEventListener("resize", alignCatalogueSubTabs);
+});

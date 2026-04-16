@@ -607,7 +607,7 @@ Tâches :
 - [x] **Contraste onglet sélectionné** (2026-04-16) : border-bottom 3px accent sur l'onglet actif, hover avec fond surface2.
 - [x] **Hauteur onglets principaux** (2026-04-16) : padding vertical 10px → 14px, sous-onglets 4px → 8px.
 - [x] **Bug Review après Save** (2026-04-16) : render() masque state.rows quand isReview && !roomAmendMode, empêche l'affichage résiduel de blocs Design.
-- [x] **Limiter le dézoom** (2026-04-16) : clamp zoom min 0.5 dans editor.js, clamp viewBox max 2× plan dans ingestion.js.
+- [ ] **Limiter le dézoom** : le clamp actuel (zoom min 0.5 / viewBox max 2× plan) est insuffisant — on peut encore dézoomer au-delà du plan visible. Ajuster pour que le dézoom max corresponde exactement au contenu entier visible (zoomFit), pas plus. À corriger dans editor.js (zoomOut + wheel) et ingestion.js (wheel).
 - [ ] **Validation visuelle batch UX 2026-04-16** : vérifier en navigateur les 17 fixes UX/bugs de la session. Corriger si régressions. Checklist : couleur labels, hauteur onglets, contraste actif, zone cliquable sous-onglets, croix Settings, add room auto-incr, limite dézoom, plan fantôme, Esc bbox, Review après Save, synchro liste, warning Adjust room, dblclick Import→Review, room list Review, fond labels dimensions, grille labels mètres, UI anglais.
 - [x] **Warning sortie mode Adjust room** (2026-04-16) : confirm() dans _cancelAmendIfActive() pour roomAmendMode et amendMode (si dirty). Changement d'onglet bloqué si l'utilisateur refuse.
 - [x] **Esc dans bbox editor Import** (2026-04-16) : Esc restaure la bbox ET désélectionne la pièce.
@@ -617,6 +617,8 @@ Tâches :
 - [x] **Croix fermeture Settings** (2026-04-16) : padding élargi + flex center pour aligner zone cliquable.
 - [x] **Synchronisation liste gauche / pièce courante** (2026-04-16) : auto-scroll étendu à Import (était limité à Review).
 - [ ] **Repositionner boutons Adjust room** : les boutons Adjust room / Save / Cancel sont éloignés de la liste des pièces. Rapprocher dans la colonne de gauche ou sous la liste.
+- [ ] **Alignement sous-sous-onglets Catalogue** : la gauche de "Card view" doit être alignée avec la gauche de l'onglet "Catalogue". Actuellement décalé (padding-left hardcodé).
+- [ ] **Bug Pattern Editor : impossible de sélectionner un pattern** : dans l'onglet Catalogue > Editor, cliquer sur un pattern dans la liste ne le charge pas pour édition. Diagnostiquer le handler de sélection.
 - [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
 - [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".
 - [x] **Supprimer Debug log** : retirer la section Debug log dans Import si elle n'est plus nécessaire.
