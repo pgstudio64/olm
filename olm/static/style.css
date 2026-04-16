@@ -293,8 +293,8 @@
     background: rgba(200, 160, 80, 0.32);
     border: 1px solid rgba(200, 160, 80, 0.55);
     border-bottom: none;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
     overflow: hidden;
     position: relative;
     top: 1px;
@@ -312,7 +312,7 @@
     color: var(--accent);
     letter-spacing: 1px;
     text-transform: uppercase;
-    padding: 10px 8px 8px 12px;
+    padding: 6px 8px 4px 12px;
     white-space: nowrap;
     display: flex;
     align-items: center;
@@ -320,7 +320,7 @@
   .tab-group .tab-btn {
     font-size: 13px;
     line-height: 1;
-    padding: 10px 16px 8px 16px;
+    padding: 8px 16px 6px 16px;
     background: transparent;
     border: none;
     border-radius: 0;
