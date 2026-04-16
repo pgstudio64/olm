@@ -191,10 +191,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
         <div id="ingPlanSections" style="display:none;">
         <div class="section-title">Scale</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-          <label style="color:var(--text-dim);font-size:11px;white-space:nowrap;">Drawing scale</label>
-          <input type="text" id="ingDrawingScale" placeholder="1 : 100"
-            style="width:90px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;font-family:var(--font-mono);">
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+          <span style="color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">1 :</span>
+          <input type="number" id="ingDrawingScale" placeholder="100" min="1"
+            style="width:65px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
         </div>
         <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:6px;">
           Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
@@ -208,7 +208,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
         <div class="section-title">Room list</div>
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
-          <input type="text" id="ingNewRoomId" placeholder="Room ID"
+          <input type="text" id="ingNewRoomId" placeholder="Room ID" autocomplete="off"
             style="flex:1;min-width:0;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:10px;">
           <button class="btn btn-ok" id="ingBtnAddRoom" style="padding:2px 8px;font-size:11px;white-space:nowrap;">Add</button>
         </div>
