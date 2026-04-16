@@ -76,6 +76,7 @@ async function init() {
       });
       if (!resp.ok) { var err = await resp.json(); alert("Error: " + (err.error || "?")); return; }
       var data = await resp.json();
+      // D-83: DSL is in local coordinates — state is also in local, no conversion needed
       state.room_width_cm = data.width_cm;
       state.room_depth_cm = data.depth_cm;
       state.room_windows = data.windows || [];
