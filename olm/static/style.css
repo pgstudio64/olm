@@ -468,14 +468,13 @@
     flex-shrink: 0;
     align-items: center;
   }
-  /* Catalogue sub-tab-bar: visually connected to LAYOUT group */
+  /* Catalogue sub-tab-bar: gold band on left side, tabs aligned left with margin */
   .cat-sub-tab-bar {
     background: linear-gradient(to right,
-      rgba(200, 160, 80, 0.35) 0%, rgba(200, 160, 80, 0.35) 60px,
-      var(--bg) 60px, var(--bg) calc(100% - 60px),
-      rgba(200, 160, 80, 0.35) calc(100% - 60px), rgba(200, 160, 80, 0.35) 100%);
+      rgba(200, 160, 80, 0.35) 0%, rgba(200, 160, 80, 0.35) 8px,
+      var(--bg) 8px);
     border-bottom: 1px solid var(--border);
-    padding: 0 16px;
+    padding: 0 0 0 16px;
   }
   .sub-tab-btn {
     background: var(--surface);
