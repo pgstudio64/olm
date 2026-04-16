@@ -467,7 +467,32 @@
     align-items: center;
   }
   /* Align Catalogue internal sub-tabs under the Catalogue button in the nav */
-  /* padding-left set dynamically by JS (alignCatalogueSubTabs) */
+  /* Catalogue inline sub-tabs (inside tab-group-layout) */
+  .cat-subtab-sep {
+    color: var(--border);
+    font-size: 14px;
+    margin: 0 2px;
+    user-select: none;
+  }
+  .cat-subtab-btn {
+    padding: 1px 10px 0 10px;
+    font-size: 11px;
+    line-height: 1.3;
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 0;
+    color: var(--text-dim);
+    margin: 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+  }
+  .cat-subtab-btn:hover { color: var(--text); }
+  .cat-subtab-btn.active {
+    color: var(--accent);
+    background: var(--bg);
+  }
   .sub-tab-btn {
     background: var(--surface);
     border: 1px solid var(--border);

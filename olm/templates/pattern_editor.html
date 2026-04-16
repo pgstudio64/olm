@@ -31,6 +31,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <span class="tab-group-label">LAYOUT</span>
           <button class="tab-btn" data-tab="lytDesign">Design</button>
           <button class="tab-btn" data-tab="lytCatalogue">Catalogue</button>
+          <span class="cat-subtab-sep" style="display:none;">│</span>
+          <button class="cat-subtab-btn active" data-subtab="catCards" style="display:none;">Card</button>
+          <button class="cat-subtab-btn" data-subtab="catGrid" style="display:none;">Grid</button>
+          <button class="cat-subtab-btn" data-subtab="catEditor" style="display:none;">Editor</button>
         </div>
       </div>
       <span id="tabDescription" class="tab-description"></span>
@@ -370,11 +374,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
 <!-- TAB: CATALOGUE -->
 <div class="tab-content" id="tabLytCatalogue">
-  <div class="sub-tab-bar">
-    <button class="sub-tab-btn active" data-subtab="catCards">Card view</button>
-    <button class="sub-tab-btn" data-subtab="catGrid">Grid view</button>
-    <button class="sub-tab-btn" data-subtab="catEditor">Pattern editor</button>
-  </div>
 
 <!-- SUB-TAB: PATTERN EDITOR -->
 <div class="sub-tab-content" id="subtabCatEditor">

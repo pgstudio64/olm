@@ -314,6 +314,27 @@ async function init() {
     "lytCatalogue": "Browse and edit the pattern catalogue",
   };
 
+  // --- Catalogue inline sub-tabs (show/hide) ---
+  function _showCatSubtabs(show) {
+    document.querySelectorAll(".cat-subtab-btn, .cat-subtab-sep").forEach(function(el) {
+      el.style.display = show ? "" : "none";
+    });
+  }
+
+  function _activateCatSubtab(subtabName) {
+    // Toggle active class on inline buttons
+    document.querySelectorAll(".cat-subtab-btn").forEach(function(b) { b.classList.remove("active"); });
+    var target = document.querySelector('.cat-subtab-btn[data-subtab="' + subtabName + '"]');
+    if (target) target.classList.add("active");
+    // Toggle sub-tab content panes inside tabLytCatalogue
+    var catTab = document.getElementById("tabLytCatalogue");
+    if (catTab) {
+      catTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
+      var pane = document.getElementById("subtab" + subtabName.charAt(0).toUpperCase() + subtabName.slice(1));
+      if (pane) pane.classList.add("active");
+    }
+  }
+
   // Main tabs (flat nav)
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
@@ -331,6 +352,13 @@ async function init() {
       if (tab) tab.classList.add("active");
       var descEl = document.getElementById("tabDescription");
       if (descEl) descEl.textContent = TAB_DESCRIPTIONS[btn.dataset.tab] || "";
+      // Show catalogue inline sub-tabs only when Catalogue is active
+      _showCatSubtabs(btn.dataset.tab === "lytCatalogue");
+      if (btn.dataset.tab === "lytCatalogue") {
+        // Activate the currently selected sub-tab content
+        var activeSub = document.querySelector(".cat-subtab-btn.active");
+        if (activeSub) _activateCatSubtab(activeSub.dataset.subtab);
+      }
       if (isLayoutTab) {
         _restoreEditorState();
         loadCatalogue();
@@ -341,22 +369,14 @@ async function init() {
     });
   });
 
-  // Sub-tabs (all levels — scoped to avoid cross-level interference)
-  document.querySelectorAll(".sub-tab-btn").forEach(function(btn) {
+  // Catalogue inline sub-tab click handlers
+  document.querySelectorAll(".cat-subtab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       // Cancel amend mode when leaving editor sub-tab
       if (btn.dataset.subtab !== "catEditor") {
         if (_cancelAmendIfActive() === false) return;
       }
-      // Deactivate sibling sub-tabs only (not nested sub-tabs)
-      var bar = btn.parentElement;
-      bar.querySelectorAll(":scope > .sub-tab-btn").forEach(function(b) { b.classList.remove("active"); });
-      btn.classList.add("active");
-      // Show/hide direct-child sub-tab content only (not nested)
-      var parentTab = bar.parentElement;
-      parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
-      var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
-      if (subtab) subtab.classList.add("active");
+      _activateCatSubtab(btn.dataset.subtab);
       // Trigger view-specific renders
       if (btn.dataset.subtab === "catCards") loadCatalogue();
       if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
@@ -1057,19 +1077,6 @@ async function init() {
   });
 }
 
-// Align Catalogue sub-tabs under the Catalogue button dynamically
-function alignCatalogueSubTabs() {
-  var catBtn = document.querySelector('.tab-btn[data-tab="lytCatalogue"]');
-  var subBar = document.querySelector('#tabLytCatalogue > .sub-tab-bar');
-  if (catBtn && subBar) {
-    var btnRect = catBtn.getBoundingClientRect();
-    var barRect = subBar.getBoundingClientRect();
-    subBar.style.paddingLeft = Math.max(0, btnRect.left - barRect.left) + 'px';
-  }
-}
-
 document.addEventListener("DOMContentLoaded", function() {
   init();
-  alignCatalogueSubTabs();
-  window.addEventListener("resize", alignCatalogueSubTabs);
 });
