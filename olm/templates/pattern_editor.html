@@ -104,6 +104,16 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </div>
     </div>
     <div class="settings-section">
+      <div class="section-title">Rendering</div>
+      <div class="settings-grid">
+        <label class="settings-label">Render DPI</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="number" id="cfgRenderDpi" class="settings-input" style="width:70px;" min="72" max="600" step="1">
+          <span style="font-size:9px;color:var(--text-dim);">DPI used to rasterize PDF plans (default 300)</span>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-title">Semantic colors</div>
       <div class="settings-grid">
         <label class="settings-label">Exterior RGB</label>
@@ -173,6 +183,15 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <!-- OCR form (default mode — no extra controls needed) -->
         <div id="ingFormOcr"></div>
 
+        <div class="section-title">Scale</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <label style="color:var(--text-dim);font-size:11px;white-space:nowrap;">Drawing scale</label>
+          <input type="text" id="ingDrawingScale" placeholder="1 : 100"
+            style="width:90px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;font-family:var(--font-mono);">
+        </div>
+        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:6px;">
+          Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
+        </div>
 
         <div class="section-title">Floor properties</div>
         <table>

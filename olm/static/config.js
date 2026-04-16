@@ -213,6 +213,15 @@ function initSettingsTabs() {
 
 function renderFloorplanSettings() {
   var ing = APP_CONFIG.ingestion || {};
+
+  // Render DPI
+  var dpiEl = document.getElementById("cfgRenderDpi");
+  if (dpiEl) {
+    dpiEl.value = ing.render_dpi || 300;
+    dpiEl.onchange = function() {
+      saveConfigField(["ingestion", "render_dpi"], parseInt(this.value) || 300);
+    };
+  }
   var ext = ing.preprocessed_exterior_rgb || [135, 206, 235];
   var cor = ing.preprocessed_corridor_rgb || [193, 247, 179];
 

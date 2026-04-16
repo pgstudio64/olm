@@ -603,7 +603,8 @@ Tâches :
 - [x] **Couleur labels dimensions** (2026-04-16) : `--text-dim` #6e6a62 → #908a7e, `COLOR_RULER` → #b0a898, labels dimensions SVG utilisent `COLOR_RULER`.
 - [ ] **Review layout 2 colonnes** : colonne gauche = même room list que Import (sans "Current floorplan"). Colonne droite = caractéristiques de la pièce, DSL, boutons Adjust/Save/Cancel. Plus homogène avec le layout de Design qui a aussi une colonne d'info à droite.
 - [x] **Room list taille par défaut** (2026-04-16) : Review room list alignée sur Import (height 210px, min/max/resize).
-- [ ] **PRIORITÉ HAUTE — Taille des pièces fausse** : revoir le calcul de la taille d'une pièce par rapport à l'indication de surface en m². Certaines pièces sont plus petites que la pièce réelle sur le plan. Peut-être lié à une mauvaise identification de la bbox par le pipeline d'extraction.
+- [x] **PRIORITÉ HAUTE — Taille des pièces fausse** (2026-04-16, D-88) : ajout du paramètre `drawing_scale` explicite (format "1 : 100") + `render_dpi` dans Settings. Formule : `cm_per_px = 2.54 × scale / dpi`. Estimation inverse proposée en jaune si non renseigné. Recalcul live sans re-import.
+- [ ] **Validation drawing_scale** : tester avec un plan réel ayant une échelle connue. Vérifier que les dimensions cm correspondent aux dimensions attendues.
 - [x] **Contraste onglet sélectionné** (2026-04-16) : border-bottom 3px accent sur l'onglet actif, hover avec fond surface2.
 - [x] **Hauteur onglets principaux** (2026-04-16) : padding vertical 10px → 14px, sous-onglets 4px → 8px.
 - [x] **Bug Review après Save** (2026-04-16) : render() masque state.rows quand isReview && !roomAmendMode, empêche l'affichage résiduel de blocs Design.

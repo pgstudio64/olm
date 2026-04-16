@@ -7,6 +7,32 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-88 · Drawing scale — échelle explicite du plan (2026-04-16)
+
+**Décision** : L'échelle du plan est désormais un paramètre explicite `drawing_scale` (format `"1 : 100"`) combiné au `render_dpi` (DPI de rastérisation du PDF, 300 par défaut).
+
+**Formule** : `cm_per_px = 2.54 × scale_number / render_dpi`
+
+**Sources d'échelle par priorité** :
+1. **Champ UI** `drawing_scale` dans Import (sous le sélecteur de plan) — saisi par l'utilisateur
+2. **Estimation médiane** — si le champ est vide, le backend calcule cm_per_px à partir des surfaces m² et des bbox (formule existante). L'échelle estimée est rétro-affichée dans le champ en jaune (warning) avec mention "may be inaccurate".
+3. **Fallback 0.5** — si aucune donnée disponible
+
+**render_dpi** : configurable dans Settings > Floorplan (défaut 300). Correspond au DPI utilisé pour rastériser le PDF source en PNG.
+
+Modifier le champ `drawing_scale` après import recalcule **immédiatement** les dimensions de toutes les pièces (via `ingState.scale` et `_updateRoomDims`), sans re-import.
+
+**Justification** : La déduction par médiane des surfaces était le seul chemin et produisait des échelles incorrectes quand les bbox ne collaient pas exactement aux pièces. Un paramètre explicite élimine cette source d'erreur pour les plans dont l'échelle est connue.
+
+**Impact** :
+- `project/config.json` : ajout `drawing_scale` (string) et `render_dpi` (int) dans `ingestion`
+- `olm/templates/pattern_editor.html` : champ Drawing scale dans Import + champ Render DPI dans Settings > Floorplan
+- `olm/static/ingestion.js` : parsing, envoi au backend, recalcul live, suggestion inverse
+- `olm/server/app.py` : routes OCR et Preprocessed acceptent `drawing_scale` + `render_dpi`
+- `olm/ingestion/extract.py` : supporte `_override_cm_per_px` dans json_data
+
+---
+
 ## D-87 · Solidification D-83 — overlay, state, port Python + tests (2026-04-16)
 
 **Décision** : Correction des bugs résiduels de l'orientation canonique (D-83) et port de la logique en Python avec couverture de tests.

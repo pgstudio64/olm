@@ -8,6 +8,67 @@
 (function () {
   'use strict';
 
+  // --- Drawing scale helpers ---
+
+  /**
+   * Parse a drawing scale string like "1 : 300" or "1:100" → number (300 or 100).
+   * Returns 0 if unparseable.
+   */
+  function parseDrawingScale(str) {
+    if (!str) return 0;
+    var m = String(str).match(/1\s*:\s*(\d+(?:\.\d+)?)/);
+    return m ? parseFloat(m[1]) : 0;
+  }
+
+  /**
+   * Compute cm_per_px from drawing scale and render DPI.
+   * Formula: cm_per_px = 2.54 × scale_number / render_dpi
+   */
+  function computeCmPerPx(scaleNumber, renderDpi) {
+    if (!scaleNumber || scaleNumber <= 0 || !renderDpi || renderDpi <= 0) return 0;
+    return 2.54 * scaleNumber / renderDpi;
+  }
+
+  /** Read current drawing_scale from the UI field. */
+  function getDrawingScale() {
+    var el = document.getElementById('ingDrawingScale');
+    return el ? el.value.trim() : '';
+  }
+
+  /** Read render_dpi from config (APP_CONFIG). */
+  function getRenderDpi() {
+    var ing = (window.APP_CONFIG || {}).ingestion || {};
+    return ing.render_dpi || 300;
+  }
+
+  /**
+   * After import: if drawing_scale field is empty, back-calculate an estimated
+   * scale from the cm_per_px returned by the backend, and show it as a suggestion.
+   */
+  function _suggestDrawingScale(scaleCmPerPx) {
+    var dsField = document.getElementById('ingDrawingScale');
+    var info = document.getElementById('ingScaleInfo');
+    if (!dsField) return;
+    var dpi = getRenderDpi();
+    if (dsField.value.trim()) {
+      // User already provided a scale — just show the effective cm/px
+      if (info) info.textContent = 'Scale applied: ' + dsField.value.trim() +
+        ' → ' + scaleCmPerPx.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
+      return;
+    }
+    // Back-calculate: scale_number = cm_per_px × render_dpi / 2.54
+    if (scaleCmPerPx > 0 && dpi > 0) {
+      var estimated = Math.round(scaleCmPerPx * dpi / 2.54);
+      if (estimated > 0) {
+        dsField.value = '1 : ' + estimated;
+        dsField.style.color = 'var(--warn)';
+        if (info) info.textContent = 'Estimated from room surfaces (may be inaccurate). ' +
+          'Effective: ' + scaleCmPerPx.toFixed(4) + ' cm/px at ' + dpi + ' DPI. ' +
+          'Edit to correct.';
+      }
+    }
+  }
+
   // --- State ---
   var ingState = {
     planPath: '',
@@ -149,6 +210,9 @@
 
     var formData = new FormData();
     formData.append('plan_id', planId);
+    var ds = getDrawingScale();
+    if (ds) formData.append('drawing_scale', ds);
+    formData.append('render_dpi', String(getRenderDpi()));
 
     fetch('/api/import/ocr', { method: 'POST', body: formData })
       .then(function (r) { return r.json(); })
@@ -171,6 +235,7 @@
           ? '/api/image?path=' + encodeURIComponent(data.image_path)
           : '';
         ingState.scale = data.scale_cm_per_px;
+        _suggestDrawingScale(data.scale_cm_per_px);
         ingState.vb = { x: 0, y: 0, w: ingState.planW, h: ingState.planH };
         // Update header badge with selected plan ID
         var hdrEl = document.getElementById('hdrCurrentPlan');
@@ -1080,6 +1145,35 @@
     setupToggles();
     setupZoomPan();
 
+    // Drawing scale field: recalculate room dimensions on change
+    var dsField = document.getElementById('ingDrawingScale');
+    if (dsField) {
+      // Pre-fill from config if available
+      var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale || '';
+      if (cfgDs) dsField.value = cfgDs;
+
+      dsField.addEventListener('change', function() {
+        this.style.color = '';  // reset warning color on manual edit
+        var scaleNum = parseDrawingScale(this.value);
+        var dpi = getRenderDpi();
+        if (scaleNum > 0 && dpi > 0 && ingState.rooms.length > 0) {
+          ingState.scale = computeCmPerPx(scaleNum, dpi);
+          // Recompute all room dimensions from bbox_px
+          ingState.rooms.forEach(function(r) {
+            if (r.bbox_px) _updateRoomDims(r);
+          });
+          updateIngRoomList();
+          renderIngestion();
+          populateRoomsJson();
+          var info = document.getElementById('ingScaleInfo');
+          if (info) info.textContent = 'Scale applied: ' + scaleNum +
+            ' → ' + ingState.scale.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
+        }
+        // Persist to config
+        saveConfigField(["ingestion", "drawing_scale"], this.value);
+      });
+    }
+
     // Keyboard shortcuts for bbox editor (arrows = move, Delete = remove, Escape = deselect)
     document.addEventListener('keydown', function(e) {
       // Ignore when focus is in a form field
@@ -1364,6 +1458,9 @@
     }
     // Mode plan_id : le backend résout les chemins depuis project/plans/
     formData.append('plan_id', planId);
+    var ds2 = getDrawingScale();
+    if (ds2) formData.append('drawing_scale', ds2);
+    formData.append('render_dpi', String(getRenderDpi()));
 
     fetch('/api/import/preprocessed', { method: 'POST', body: formData })
       .then(function (r) { return r.json(); })
@@ -1394,6 +1491,7 @@
         }
         if (typeof data.scale_cm_per_px === 'number' && data.scale_cm_per_px > 0) {
           ingState.scale = data.scale_cm_per_px;
+          _suggestDrawingScale(data.scale_cm_per_px);
         }
         // Focus auto : si des pièces ont des bbox, cadrer sur leur enveloppe
         var hasBoxes = ingState.rooms.some(function(r) { return r.bbox_px && r.bbox_px[2] > r.bbox_px[0]; });
