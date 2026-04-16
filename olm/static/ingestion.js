@@ -880,6 +880,22 @@
         var name = this.dataset.bboxBody;
         var be = ingState.bboxEditor;
         if (be.selectedName === name) {
+          // Double-click detection: if 2nd mousedown on same room within 400ms → open in Review
+          var now = Date.now();
+          if (be._lastSelectTime && (now - be._lastSelectTime) < 400) {
+            be._lastSelectTime = 0;
+            be.selectedName = null;
+            be.mode = 'idle';
+            // Navigate to this room in Review
+            if (window.fpData) {
+              var fpRooms = window.fpData.rooms || [];
+              for (var fi = 0; fi < fpRooms.length; fi++) {
+                if (fpRooms[fi].name === name) { window.fpData.currentIdx = fi; break; }
+              }
+            }
+            if (window.ingShowRoomView) window.ingShowRoomView();
+            return;
+          }
           // Start moving
           var room = ingState.rooms.find(function(r) { return r.name === name; });
           if (!room) return;
@@ -895,6 +911,7 @@
           be.mode = 'idle';
           be.handle = null;
           be.dragStart = null;
+          be._lastSelectTime = Date.now();
           renderIngestion();
         }
       });
@@ -967,32 +984,6 @@
   function setupZoomPan() {
     var svg = document.getElementById('ingSvg');
     if (!svg) return;
-
-    // Delegated dblclick: navigate to Review (survives re-renders)
-    svg.addEventListener('dblclick', function(e) {
-      // Use bbox editor selection (set by the 1st mousedown) rather than e.target
-      // which may point to a different element after the re-render
-      var name = ingState.bboxEditor.selectedName;
-      if (!name) {
-        var body = e.target.closest('[data-bbox-body]');
-        if (!body) return;
-        name = body.dataset.bboxBody;
-      }
-      e.stopPropagation();
-      ingState.bboxEditor.selectedName = null;
-      ingState.bboxEditor.mode = 'idle';
-      if (window.fpData) {
-        var rooms = window.fpData.rooms || [];
-        for (var i = 0; i < rooms.length; i++) {
-          if (rooms[i].name === name) {
-            window.fpData.currentIdx = i;
-            break;
-          }
-        }
-      }
-      var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
-      if (reviewBtn) reviewBtn.click();
-    });
 
     svg.addEventListener('wheel', function (e) {
       e.preventDefault();
