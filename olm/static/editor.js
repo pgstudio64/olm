@@ -881,8 +881,9 @@ function _renderImpl(targetSvg) {
     }
   }
 
-  // Overlay raster background
-  if (state.overlay) {
+  // Overlay raster background (only for Review/Design canvases, not the Pattern Editor)
+  var isEditor = svg && svg.id === "canvas";
+  if (state.overlay && !isEditor) {
     var ov = state.overlay;
     var ovScale = SCALE / ov.pxPerCm;  // convert image px to SVG units
     var ovW = ov.imgW * ovScale;
