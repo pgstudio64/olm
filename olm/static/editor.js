@@ -668,10 +668,10 @@ function _renderImpl(targetSvg) {
   var dimFs = (16.5 * zf).toFixed(1);
   var dimOff = 16 * zf;
   elements.push({ z: 10, s: '<text x="' + (roomX + roomWPx / 2) + '" y="' + (roomY - dimOff) +
-    '" text-anchor="middle" fill="#6e6a62" font-size="' + dimFs + '" font-family="monospace">' +
+    '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="' + dimFs + '" font-family="monospace">' +
     state.room_width_cm + ' cm</text>' });
   elements.push({ z: 10, s: '<text x="' + (roomX - dimOff) + '" y="' + (roomY + roomHPx / 2) +
-    '" text-anchor="middle" fill="#6e6a62" font-size="' + dimFs + '" font-family="monospace"' +
+    '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="' + dimFs + '" font-family="monospace"' +
     ' transform="rotate(-90,' + (roomX - dimOff) + ',' + (roomY + roomHPx / 2) + ')">' +
     state.room_depth_cm + ' cm</text>' });
 
@@ -847,9 +847,16 @@ function _renderImpl(targetSvg) {
     // D-83: rotate overlay to match local coordinate system
     var ovAngle = _canonicalAngle(state.corridor_face);
     if (ovAngle !== 0 && !isEditor) {
-      var ocx = (roomX + roomWPx / 2).toFixed(1);
-      var ocy = (roomY + roomHPx / 2).toFixed(1);
-      ovImg = '<g transform="rotate(' + ovAngle + ' ' + ocx + ' ' + ocy + ')">' + ovImg + '</g>';
+      var ocx = roomX + roomWPx / 2;
+      var ocy = roomY + roomHPx / 2;
+      // Pour 90/270, la room canonicalisée a w/h swappés vs l'image originale.
+      // Après rotation autour du centre room, compenser le décalage dû au swap.
+      var dx = 0, dy = 0;
+      if (ovAngle === 90 || ovAngle === 270) {
+        dx = (roomWPx - roomHPx) / 2;
+        dy = (roomHPx - roomWPx) / 2;
+      }
+      ovImg = '<g transform="translate(' + dx.toFixed(1) + ' ' + dy.toFixed(1) + ') rotate(' + ovAngle + ' ' + ocx.toFixed(1) + ' ' + ocy.toFixed(1) + ')">' + ovImg + '</g>';
     }
     elements.push({ z: -1, s: ovImg });
   }
@@ -1240,6 +1247,7 @@ async function save() {
       ? window._decanonicalizeRoom(localRoom, origCf)
       : localRoom;
     fpRoomAmendments[ramend.roomName] = amendedRoom;
+    amendedRoom.corridor_face = origCf;
     state.roomAmendMode = null;
     exitRoomAmendUI();
     // Re-run matching then refresh Review
@@ -1517,6 +1525,7 @@ function enterRoomAmendMode(room) {
   state.room_windows = JSON.parse(JSON.stringify(localRoom.windows || []));
   state.room_openings = JSON.parse(JSON.stringify(localRoom.openings || []));
   state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
+  state.corridor_face = room.corridor_face || "";
 
   // Inject overlay for visual reference, aligned to room bbox
   if (window.fpOverlay) {
@@ -1679,6 +1688,9 @@ function zoomIn(targetSvg) {
 }
 
 function zoomOut(targetSvg) {
+  // Clamp: don't zoom out beyond content fitting the viewport
+  var minZoom = 0.5;
+  if (state.zoom / 1.25 < minZoom) return;
   const vb = state.viewBox;
   const factor = 1.25;
   const newW = vb.w * factor;
