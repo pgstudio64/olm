@@ -324,13 +324,13 @@
     border: 1px solid var(--border);
     border-bottom: none;
     border-radius: 0;
-    color: var(--text-dim);
+    color: #7a756c;
     margin: 0;
   }
   .tab-group .tab-btn:hover { color: var(--text); background: rgba(0, 0, 0, 0.18); }
   .tab-group .tab-btn.active {
     background: var(--bg);
-    color: var(--accent);
+    color: #ddb860;
   }
   .tab-step {
     display: inline-flex;
