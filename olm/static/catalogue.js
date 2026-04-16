@@ -646,7 +646,10 @@ function renderMatrixView() {
   for (var r = 0; r < depths.length; r++) {
     cx = MARGIN + LABEL_W;
     for (var c = 0; c < widths.length; c++) {
-      // Cell border
+      // Cell border + clip to prevent overflow into adjacent cells
+      var cellId = 'mc_' + r + '_' + c;
+      parts.push('<clipPath id="' + cellId + '"><rect x="' + cx + '" y="' + cy +
+        '" width="' + colWidths[c] + '" height="' + rowHeights[r] + '"/></clipPath>');
       parts.push('<rect x="' + cx + '" y="' + cy +
         '" width="' + colWidths[c] + '" height="' + rowHeights[r] +
         '" class="matrix-cell-border"/>');
@@ -655,6 +658,7 @@ function renderMatrixView() {
       if (patterns.length > 0) {
         var pieceW = widths[c] * CELL_SCALE;
         var pieceH = depths[r] * CELL_SCALE;
+        parts.push('<g clip-path="url(#' + cellId + ')">');
         for (var pi = 0; pi < patterns.length; pi++) {
           var pieceX = cx + CELL_PAD + pi * (pieceW + CELL_GAP);
           var pieceY = cy + CELL_PAD;
@@ -665,6 +669,7 @@ function renderMatrixView() {
             '" fill="transparent" style="cursor:pointer;" data-matrix-pattern="' +
             (patterns[pi].name || "") + '"/>');
         }
+        parts.push('</g>');
       } else {
         parts.push('<text x="' + (cx + colWidths[c] / 2) + '" y="' + (cy + rowHeights[r] / 2 + 3) +
           '" text-anchor="middle" fill="#2a2826" font-size="10" font-family="monospace">\u2014</text>');
@@ -754,7 +759,7 @@ function initMatrixPanZoom() {
     matrixPanStart = { x: e.clientX, y: e.clientY };
     matrixViewBox.x -= dx * (matrixViewBox.w / rect.width);
     matrixViewBox.y -= dy * (matrixViewBox.h / rect.height);
-    svgEl.setAttribute("viewBox", matrixViewBox.x + " " + matrixViewBox.y + " " + matrixViewBox.w + " " + matrixViewBox.h);
+    applyMatrixViewBox();
   });
 
   document.addEventListener("mouseup", function(e) {
