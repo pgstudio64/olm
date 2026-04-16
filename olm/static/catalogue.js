@@ -94,7 +94,7 @@ function renderCatalogue() {
       if (e.target.classList.contains("card-delete")) return;
       var name = card.dataset.patternName;
       if (name) {
-        document.querySelector('.cat-subtab-btn[data-subtab="catEditor"]').click();
+        document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
         loadPattern(name);
       }
     });
@@ -691,7 +691,7 @@ function renderMatrixView() {
       e.stopPropagation();
       var name = el.dataset.matrixPattern;
       if (!name) return;
-      document.querySelector('.cat-subtab-btn[data-subtab="catEditor"]').click();
+      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
       loadPattern(name);
     });
   });
