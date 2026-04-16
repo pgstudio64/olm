@@ -342,6 +342,17 @@ async function init() {
   });
 
   // Sub-tabs (Catalogue sub-tab-bar)
+  var SUB_TAB_DESCRIPTIONS = {
+    "catCards": "Browse patterns as cards",
+    "catGrid": "Patterns organized by room dimensions",
+    "catEditor": "Create and edit patterns",
+  };
+
+  function _updateSubTabDescription(subtabName) {
+    var el = document.getElementById("subTabDescription");
+    if (el) el.textContent = SUB_TAB_DESCRIPTIONS[subtabName] || "";
+  }
+
   document.querySelectorAll(".sub-tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       if (btn.dataset.subtab !== "catEditor") {
@@ -354,10 +365,13 @@ async function init() {
       parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
       var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
       if (subtab) subtab.classList.add("active");
+      _updateSubTabDescription(btn.dataset.subtab);
       if (btn.dataset.subtab === "catCards") loadCatalogue();
       if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
     });
   });
+  // Initial description
+  _updateSubTabDescription("catCards");
 
   // Matrix pan/zoom
   initMatrixPanZoom();
