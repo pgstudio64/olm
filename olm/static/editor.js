@@ -673,13 +673,37 @@ function _renderImpl(targetSvg) {
   // Room dimension labels — data already in local coordinates, no swap needed
   var dimFs = (16.5 * zf).toFixed(1);
   var dimOff = 16 * zf;
-  elements.push({ z: 10, s: '<text x="' + (roomX + roomWPx / 2) + '" y="' + (roomY - dimOff) +
+  var dimBgColor = "#0e0e0d";
+  var dimCharW = dimFs * 0.62;  // approximate monospace char width
+  var dimPadX = dimFs * 0.3, dimPadY = dimFs * 0.2;
+  // Width label (top)
+  var wLabel = state.room_width_cm + ' cm';
+  var wLabelW = wLabel.length * dimCharW;
+  var wLabelX = roomX + roomWPx / 2;
+  var wLabelY = roomY - dimOff;
+  elements.push({ z: 9.5, s: '<rect x="' + (wLabelX - wLabelW / 2 - dimPadX).toFixed(1) +
+    '" y="' + (wLabelY - dimFs * 0.75 - dimPadY).toFixed(1) +
+    '" width="' + (wLabelW + dimPadX * 2).toFixed(1) +
+    '" height="' + (dimFs * 1.1 + dimPadY * 2).toFixed(1) +
+    '" rx="' + (dimFs * 0.2).toFixed(1) + '" fill="' + dimBgColor + '" opacity="0.85"/>' });
+  elements.push({ z: 10, s: '<text x="' + wLabelX + '" y="' + wLabelY +
     '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="' + dimFs + '" font-family="monospace">' +
-    state.room_width_cm + ' cm</text>' });
-  elements.push({ z: 10, s: '<text x="' + (roomX - dimOff) + '" y="' + (roomY + roomHPx / 2) +
+    wLabel + '</text>' });
+  // Depth label (left, rotated)
+  var dLabel = state.room_depth_cm + ' cm';
+  var dLabelW = dLabel.length * dimCharW;
+  var dLabelX = roomX - dimOff;
+  var dLabelY = roomY + roomHPx / 2;
+  elements.push({ z: 9.5, s: '<rect x="' + (dLabelX - dLabelW / 2 - dimPadX).toFixed(1) +
+    '" y="' + (dLabelY - dimFs * 0.75 - dimPadY).toFixed(1) +
+    '" width="' + (dLabelW + dimPadX * 2).toFixed(1) +
+    '" height="' + (dimFs * 1.1 + dimPadY * 2).toFixed(1) +
+    '" rx="' + (dimFs * 0.2).toFixed(1) + '" fill="' + dimBgColor + '" opacity="0.85"' +
+    ' transform="rotate(-90,' + dLabelX + ',' + dLabelY + ')"/>' });
+  elements.push({ z: 10, s: '<text x="' + dLabelX + '" y="' + dLabelY +
     '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="' + dimFs + '" font-family="monospace"' +
-    ' transform="rotate(-90,' + (roomX - dimOff) + ',' + (roomY + roomHPx / 2) + ')">' +
-    state.room_depth_cm + ' cm</text>' });
+    ' transform="rotate(-90,' + dLabelX + ',' + dLabelY + ')">' +
+    dLabel + '</text>' });
 
   // Windows, doors, openings, exclusion zones
   renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview);
@@ -834,7 +858,22 @@ function _renderImpl(targetSvg) {
         '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
     }
 
-    // Ruler labels rendered in HTML overlays (updateRulers), not in SVG
+    // Grid meter labels (e.g. "1m", "2m") along room edges
+    var gridLabelFs = (9 * zf).toFixed(1);
+    for (let mx = meterPx; mx <= roomX + roomWPx; mx += meterPx) {
+      if (mx <= roomX) continue;
+      var mVal = Math.round((mx - roomX) / meterPx);
+      elements.push({ z: -0.3, s: '<text x="' + mx.toFixed(1) + '" y="' + (roomY - 2 * zf).toFixed(1) +
+        '" text-anchor="middle" fill="' + COLOR_GRID_METER + '" font-size="' + gridLabelFs +
+        '" font-family="monospace" opacity="0.7">' + mVal + 'm</text>' });
+    }
+    for (let my = meterPx; my <= roomY + roomHPx; my += meterPx) {
+      if (my <= roomY) continue;
+      var mValY = Math.round((my - roomY) / meterPx);
+      elements.push({ z: -0.3, s: '<text x="' + (roomX - 2 * zf).toFixed(1) + '" y="' + (my + 3 * zf).toFixed(1) +
+        '" text-anchor="end" fill="' + COLOR_GRID_METER + '" font-size="' + gridLabelFs +
+        '" font-family="monospace" opacity="0.7">' + mValY + 'm</text>' });
+    }
   }
 
   // Overlay raster background

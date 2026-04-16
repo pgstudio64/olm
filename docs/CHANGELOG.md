@@ -30,6 +30,10 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Synchro liste gauche : auto-scroll étendu à Import (était limité à Review).
 - Warning sortie Adjust room : confirm() bloque le changement d'onglet si modifications non sauvegardées.
 - Double-click Import → Review : dblclick délégué sur ingSvg (survit aux re-renders SVG).
+- Room list Review : hauteur alignée sur Import (210px, min/max/resize).
+- Labels dimensions : rectangle de fond sombre pour lisibilité sur overlay.
+- Grille Design : labels "1m", "2m"… le long des bords de la pièce.
+- UI 100% anglais : 5 chaînes françaises dans ingestion.js traduites.
 
 ---
 
