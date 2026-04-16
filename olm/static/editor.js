@@ -357,11 +357,27 @@ function computePatternDims() {
 }
 
 function _canonicalAngle(corridorFace) {
-  // Corridor face = where the main door is = canonical south (bottom).
-  // Rotation to apply so that corridor_face ends up at the bottom of the SVG.
-  // SVG Y-axis points down, so south = bottom = no rotation when corridor is south.
   var map = { south: 0, east: 90, north: 180, west: 270 };
   return map[corridorFace] || 0;
+}
+
+function _roomVisualInfo(corridorFace, roomWPx, roomHPx) {
+  var angle = _canonicalAngle(corridorFace);
+  var cx = roomWPx / 2;
+  var cy = roomHPx / 2;
+  var swap = (angle === 90 || angle === 270);
+  return {
+    angle: angle,
+    cx: cx,
+    cy: cy,
+    swap: swap,
+    visW: swap ? roomHPx : roomWPx,
+    visH: swap ? roomWPx : roomHPx,
+    visX: swap ? cx - roomHPx / 2 : 0,
+    visY: swap ? cy - roomWPx / 2 : 0,
+    labelTopVal: swap ? "depth" : "width",
+    labelSideVal: swap ? "width" : "depth",
+  };
 }
 
 function render(targetSvg) {
@@ -648,16 +664,15 @@ function _renderImpl(targetSvg) {
   elements.push({ z: 0.05, s: '<rect x="' + roomX + '" y="' + roomY +
     '" width="' + roomWPx + '" height="' + roomHPx +
     '" fill="none" stroke="' + wallColor + '" stroke-width="' + wallWidth + '"/>' });
-  // Room dimension labels
+  // Room dimension labels — data already in local coordinates, no swap needed
   var dimFs = (16.5 * zf).toFixed(1);
-  var dimOffY = 16 * zf;
-  var dimOffX = 16 * zf;
-  elements.push({ z: 10, s: '<text x="' + (roomX + roomWPx / 2) + '" y="' + (roomY - dimOffY) +
+  var dimOff = 16 * zf;
+  elements.push({ z: 10, s: '<text x="' + (roomX + roomWPx / 2) + '" y="' + (roomY - dimOff) +
     '" text-anchor="middle" fill="#6e6a62" font-size="' + dimFs + '" font-family="monospace">' +
     state.room_width_cm + ' cm</text>' });
-  elements.push({ z: 10, s: '<text x="' + (roomX - dimOffX) + '" y="' + (roomY + roomHPx / 2) +
+  elements.push({ z: 10, s: '<text x="' + (roomX - dimOff) + '" y="' + (roomY + roomHPx / 2) +
     '" text-anchor="middle" fill="#6e6a62" font-size="' + dimFs + '" font-family="monospace"' +
-    ' transform="rotate(-90,' + (roomX - dimOffX) + ',' + (roomY + roomHPx / 2) + ')">' +
+    ' transform="rotate(-90,' + (roomX - dimOff) + ',' + (roomY + roomHPx / 2) + ')">' +
     state.room_depth_cm + ' cm</text>' });
 
   // Windows, doors, openings, exclusion zones
@@ -824,23 +839,29 @@ function _renderImpl(targetSvg) {
     var ovH = ov.imgH * ovScale;
     var ovX = -(ov.offsetX * SCALE);
     var ovY = -(ov.offsetY * SCALE);
-    elements.push({ z: -1, s: '<image href="' + ov.dataUrl +
+    var ovImg = '<image href="' + ov.dataUrl +
       '" x="' + ovX.toFixed(1) + '" y="' + ovY.toFixed(1) +
       '" width="' + ovW.toFixed(1) + '" height="' + ovH.toFixed(1) +
       '" opacity="' + (ov.opacity / 100).toFixed(2) +
-      '" preserveAspectRatio="none"/>' });
+      '" preserveAspectRatio="none"/>';
+    // D-83: rotate overlay to match local coordinate system
+    var ovAngle = _canonicalAngle(state.corridor_face);
+    if (ovAngle !== 0 && !isEditor) {
+      var ocx = (roomX + roomWPx / 2).toFixed(1);
+      var ocy = (roomY + roomHPx / 2).toFixed(1);
+      ovImg = '<g transform="rotate(' + ovAngle + ' ' + ocx + ' ' + ocy + ')">' + ovImg + '</g>';
+    }
+    elements.push({ z: -1, s: ovImg });
   }
 
   // Hide canvas background when overlay is active (avoid dark veil)
   svg.style.background = state.overlay ? 'transparent' : '';
 
   elements.sort(function(a, b) { return a.z - b.z; });
-  var svgContent = elements.map(function(e) { return e.s; }).join("\n");
 
-  // D-83 canonical rotation: disabled pending blue/green fill detection.
-  // Will transform data (not SVG) once corridor_face is reliably detected.
-
-  svg.innerHTML = svgContent;
+  // D-83: data is already in local coordinates — render directly, no SVG rotation needed.
+  // Only the overlay needs rotation (handled separately via overlay transform).
+  svg.innerHTML = elements.map(function(e) { return e.s; }).join("\n");
 
   // Store dimensions for zoomFit
   state._lastContentW = totalW;
@@ -1203,16 +1224,21 @@ async function save() {
   // Room amend mode: store amended room geometry and re-run matching
   if (state.roomAmendMode) {
     var ramend = state.roomAmendMode;
-    var amendedRoom = {
+    // State contains local coordinates (D-83) — convert back to absolute for storage
+    var origCf = ramend.originalRoom.corridor_face || "";
+    var localRoom = {
       name: ramend.roomName,
       width_cm: state.room_width_cm,
       depth_cm: state.room_depth_cm,
       windows: JSON.parse(JSON.stringify(state.room_windows)),
       openings: JSON.parse(JSON.stringify(state.room_openings)),
       exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions)),
-      // Preserve original bbox_px so overlay aligns correctly after save
       bbox_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : undefined,
+      corridor_face: origCf,
     };
+    var amendedRoom = (origCf && origCf !== "south" && typeof window._decanonicalizeRoom === "function")
+      ? window._decanonicalizeRoom(localRoom, origCf)
+      : localRoom;
     fpRoomAmendments[ramend.roomName] = amendedRoom;
     state.roomAmendMode = null;
     exitRoomAmendUI();
@@ -1481,14 +1507,16 @@ function enterRoomAmendMode(room) {
     originalRoom: JSON.parse(JSON.stringify(room)),
   };
 
-  // Load room geometry into shared state (no blocks)
+  // D-83: convert absolute data to local coordinates for editing
+  var localRoom = (typeof window._canonicalizeRoom === "function")
+    ? window._canonicalizeRoom(room) : room;
   state.rows = [];
   state.row_gaps_cm = [];
-  state.room_width_cm = room.width_cm;
-  state.room_depth_cm = room.depth_cm;
-  state.room_windows = JSON.parse(JSON.stringify(room.windows || []));
-  state.room_openings = JSON.parse(JSON.stringify(room.openings || []));
-  state.room_exclusions = JSON.parse(JSON.stringify(room.exclusion_zones || []));
+  state.room_width_cm = localRoom.width_cm;
+  state.room_depth_cm = localRoom.depth_cm;
+  state.room_windows = JSON.parse(JSON.stringify(localRoom.windows || []));
+  state.room_openings = JSON.parse(JSON.stringify(localRoom.openings || []));
+  state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
 
   // Inject overlay for visual reference, aligned to room bbox
   if (window.fpOverlay) {
@@ -1699,11 +1727,10 @@ function zoomFit(targetSvg) {
   var svg = targetSvg || document.getElementById("canvas");
   // First render to compute content dimensions
   render(svg);
-  // Fit viewBox to content + screen ratio
+
+  // D-83: data already in local coords — standard zoomFit works for all angles
   fitViewBoxToContent(svg,
-    state._lastContentW || 100,
-    state._lastContentH || 100,
-    state._lastMinX || 0);
+    state._lastContentW || 100, state._lastContentH || 100, state._lastMinX || 0);
   // Re-render with corrected viewBox (for the grid)
   render(svg);
 }

@@ -11,6 +11,127 @@
   function fpRooms() { return fpData.rooms; }
   function fpCurrent() { return fpData.rooms[fpData.currentIdx] || null; }
 
+  // ── D-83: Canonical room orientation (corridor at bottom) ─────────────
+  var _FACE_MAPS = {
+    north: { north: "south", south: "north", east: "west", west: "east" },
+    east:  { north: "east",  east: "south",  south: "west", west: "north" },
+    west:  { north: "west",  west: "south",  south: "east", east: "north" },
+  };
+
+  function _canonicalizeRoom(room) {
+    var cf = room.corridor_face || "";
+    if (!cf || cf === "south") return room;
+    var faceMap = _FACE_MAPS[cf];
+    if (!faceMap) return room;
+
+    var copy = JSON.parse(JSON.stringify(room));
+    var W = room.width_cm, D = room.depth_cm;
+    var swap = (cf === "east" || cf === "west");
+    if (swap) { copy.width_cm = D; copy.depth_cm = W; }
+
+    function faceLen(face) {
+      return (face === "north" || face === "south") ? W : D;
+    }
+    function xformOpening(o) {
+      var r = Object.assign({}, o);
+      r.face = faceMap[o.face] || o.face;
+      if (cf === "north") {
+        r.offset_cm = faceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
+      } else if (cf === "west") {
+        r.offset_cm = faceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
+      }
+      if ((cf === "north" || cf === "west") && o.hinge_side) {
+        r.hinge_side = o.hinge_side === "left" ? "right" : "left";
+      }
+      return r;
+    }
+
+    copy.windows = (room.windows || []).map(xformOpening);
+    copy.openings = (room.openings || []).map(xformOpening);
+
+    if (room.exclusion_zones && room.exclusion_zones.length) {
+      copy.exclusion_zones = room.exclusion_zones.map(function(e) {
+        var ex = Object.assign({}, e);
+        if (cf === "north") {
+          ex.x_cm = W - e.x_cm - e.width_cm;
+          ex.y_cm = D - e.y_cm - e.depth_cm;
+        } else if (cf === "east") {
+          ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
+          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+        } else if (cf === "west") {
+          ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
+          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+        }
+        return ex;
+      });
+    }
+
+    copy.corridor_face = "south";
+    copy._originalCorridorFace = cf;
+    return copy;
+  }
+
+  // Inverse face maps: local face → absolute face
+  var _INV_FACE_MAPS = {
+    north: { north: "south", south: "north", east: "west", west: "east" },
+    east:  { north: "west",  east: "north",  south: "east", west: "south" },
+    west:  { north: "east",  east: "south",  south: "west", west: "north" },
+  };
+
+  function _decanonicalizeRoom(room, originalCorridorFace) {
+    if (!originalCorridorFace || originalCorridorFace === "south") return room;
+    var invMap = _INV_FACE_MAPS[originalCorridorFace];
+    if (!invMap) return room;
+
+    var copy = JSON.parse(JSON.stringify(room));
+    var W = room.width_cm, D = room.depth_cm;
+    var swap = (originalCorridorFace === "east" || originalCorridorFace === "west");
+    if (swap) { copy.width_cm = D; copy.depth_cm = W; }
+
+    function localFaceLen(face) {
+      return (face === "north" || face === "south") ? W : D;
+    }
+    function xformBack(o) {
+      var r = Object.assign({}, o);
+      r.face = invMap[o.face] || o.face;
+      if (originalCorridorFace === "north") {
+        r.offset_cm = localFaceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
+        if (o.hinge_side) r.hinge_side = o.hinge_side === "left" ? "right" : "left";
+      } else if (originalCorridorFace === "west") {
+        r.offset_cm = localFaceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
+        if (o.hinge_side) r.hinge_side = o.hinge_side === "left" ? "right" : "left";
+      }
+      // east (90° CW): offset and hinge stay the same
+      return r;
+    }
+
+    copy.windows = (room.windows || []).map(xformBack);
+    copy.openings = (room.openings || []).map(xformBack);
+
+    if (room.exclusion_zones && room.exclusion_zones.length) {
+      copy.exclusion_zones = room.exclusion_zones.map(function(e) {
+        var ex = Object.assign({}, e);
+        if (originalCorridorFace === "north") {
+          var absW = swap ? D : W, absD = swap ? W : D;
+          ex.x_cm = absW - e.x_cm - e.width_cm;
+          ex.y_cm = absD - e.y_cm - e.depth_cm;
+        } else if (originalCorridorFace === "east") {
+          ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
+          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+        } else if (originalCorridorFace === "west") {
+          ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
+          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+        }
+        return ex;
+      });
+    }
+
+    copy.corridor_face = originalCorridorFace;
+    return copy;
+  }
+  window._canonicalizeRoom = _canonicalizeRoom;
+  window._decanonicalizeRoom = _decanonicalizeRoom;
+
   // ── Natural alphanumeric sort ─────────────────────────────────────────
   function natSort(a, b) {
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -123,18 +244,19 @@
     var area = ((roomData.width_cm || 0) * (roomData.depth_cm || 0) / 10000).toFixed(1);
     document.getElementById("rvRoomArea").textContent = area;
 
-    // Room definition (read-only)
-    var dsl = "ROOM " + (roomData.width_cm || 0) + "x" + (roomData.depth_cm || 0);
+    // Room definition in local coordinates (D-83: canonicalized from absolute)
+    var localRoom = _canonicalizeRoom(roomData);
+    var dsl = "ROOM " + (localRoom.width_cm || 0) + "x" + (localRoom.depth_cm || 0);
     var faceMap = { north: "N", south: "S", east: "E", west: "W" };
-    (roomData.windows || []).forEach(function(w) {
+    (localRoom.windows || []).forEach(function(w) {
       var f = faceMap[w.face] || w.face || "?";
-      if (w.offset_cm === 0 && w.width_cm === (f === "N" || f === "S" ? roomData.width_cm : roomData.depth_cm)) {
+      if (w.offset_cm === 0 && w.width_cm === (f === "N" || f === "S" ? localRoom.width_cm : localRoom.depth_cm)) {
         dsl += "\nWINDOW " + f;
       } else {
         dsl += "\nWINDOW " + f + " " + (w.offset_cm || 0) + " " + (w.width_cm || 0);
       }
     });
-    (roomData.openings || []).forEach(function(o) {
+    (localRoom.openings || []).forEach(function(o) {
       var f = faceMap[o.face] || o.face || "?";
       if (o.has_door) {
         var dir = o.opens_inward ? "INT" : "EXT";
@@ -144,7 +266,7 @@
         dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
       }
     });
-    (roomData.exclusion_zones || []).forEach(function(e) {
+    (localRoom.exclusion_zones || []).forEach(function(e) {
       dsl += "\nEXCLUSION " + (e.x_cm || 0) + " " + (e.y_cm || 0) + " " + (e.width_cm || 0) + " " + (e.depth_cm || 0);
     });
     document.getElementById("rvRoomDsl").value = dsl;
@@ -199,14 +321,16 @@
   }
 
   function fpRenderEmptyRoom(room, targetSvg) {
-    // Load room geometry into state with no blocks
+    // D-83: convert absolute data to local coordinates for rendering
+    var isEditor = targetSvg && targetSvg.id === "canvas";
+    var localRoom = (!isEditor) ? _canonicalizeRoom(room) : room;
     state.rows = [];
     state.row_gaps_cm = [];
-    state.room_width_cm = room.width_cm;
-    state.room_depth_cm = room.depth_cm;
-    state.room_windows = room.windows || [];
-    state.room_openings = room.openings || [];
-    state.room_exclusions = room.exclusion_zones || [];
+    state.room_width_cm = localRoom.width_cm;
+    state.room_depth_cm = localRoom.depth_cm;
+    state.room_windows = localRoom.windows || [];
+    state.room_openings = localRoom.openings || [];
+    state.room_exclusions = localRoom.exclusion_zones || [];
     state.corridor_face = room.corridor_face || "";
     state.selectedRow = 0;
     state.selectedBlock = -1;
