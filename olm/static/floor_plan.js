@@ -29,10 +29,12 @@
     // Sort by alphanumeric name
     parsed.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
 
-    // Preserve bbox_px from input (not returned by matching API)
+    // Preserve fields from input (not returned by matching API)
     var bboxByName = {};
+    var corridorByName = {};
     parsed.rooms.forEach(function(r) {
       if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
+      if (r.corridor_face) corridorByName[r.name] = r.corridor_face;
     });
 
     document.getElementById("fpCandidatesList").innerHTML =
@@ -51,6 +53,7 @@
       // Re-attach bbox_px from input
       data.rooms.forEach(function(r) {
         if (bboxByName[r.name]) r.bbox_px = bboxByName[r.name];
+        if (corridorByName[r.name]) r.corridor_face = corridorByName[r.name];
       });
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;
@@ -204,6 +207,7 @@
     state.room_windows = room.windows || [];
     state.room_openings = room.openings || [];
     state.room_exclusions = room.exclusion_zones || [];
+    state.corridor_face = room.corridor_face || "";
     state.selectedRow = 0;
     state.selectedBlock = -1;
 
@@ -353,6 +357,7 @@
     state.room_windows = pat.room_windows || [];
     state.room_openings = pat.room_openings || [];
     state.room_exclusions = pat.room_exclusions || [];
+    state.corridor_face = room.corridor_face || "";
     state.name = candidate.pattern_name || pat.name || "";
     state._savedName = null;
     state.selectedRow = 0;
@@ -721,7 +726,8 @@
         fpRenderCurrent();
       }
     });
-    document.getElementById("fpBtnExport").addEventListener("click", fpExport);
+    var btnExport = document.getElementById("fpBtnExport");
+    if (btnExport) btnExport.addEventListener("click", fpExport);
 
     var btnLoadJson = document.getElementById("fpBtnLoadJson");
     if (btnLoadJson) {
@@ -792,10 +798,12 @@
               imgW: img.width,
               imgH: img.height,
             };
-            document.getElementById("fpOverlayStatus").textContent =
-              img.width + "x" + img.height + " px loaded";
-            document.getElementById("fpOverlayToggle").checked = true;
-            document.getElementById("rvOverlayToggle").checked = true;
+            var ovStatus = document.getElementById("fpOverlayStatus");
+            if (ovStatus) ovStatus.textContent = img.width + "x" + img.height + " px loaded";
+            var fpTog = document.getElementById("fpOverlayToggle");
+            if (fpTog) fpTog.checked = true;
+            var rvTog = document.getElementById("rvOverlayToggle");
+            if (rvTog) rvTog.checked = true;
           };
           img.src = ev.target.result;
         };

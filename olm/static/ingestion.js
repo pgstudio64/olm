@@ -168,13 +168,19 @@
         ingState.planW = data.image_size[0];
         ingState.planH = data.image_size[1];
         ingState.planUrl = data.image_path
-          ? '/api/import/preprocessed/image?path=' + encodeURIComponent(data.image_path)
+          ? '/api/image?path=' + encodeURIComponent(data.image_path)
           : '';
         ingState.scale = data.scale_cm_per_px;
         ingState.vb = { x: 0, y: 0, w: ingState.planW, h: ingState.planH };
         // Update header badge with selected plan ID
         var hdrEl = document.getElementById('hdrCurrentPlan');
         if (hdrEl) hdrEl.textContent = planId;
+        var btnSave = document.getElementById('btnSavePlan');
+        if (btnSave) btnSave.style.display = '';
+        var btnClose = document.getElementById('btnClosePlan');
+        if (btnClose) btnClose.style.display = '';
+        var eraseWrap = document.getElementById('eraseWrapper');
+        if (eraseWrap) eraseWrap.style.display = '';
         if (status) status.textContent = ingState.rooms.length + ' rooms — scale ' +
           ingState.scale + ' cm/px';
         renderIngestion();
@@ -244,6 +250,9 @@
     listEl.innerHTML = html;
     if (context === 'review') {
       listEl.querySelectorAll('.room-del').forEach(function(el) { el.remove(); });
+      // Auto-scroll to selected room
+      var selected = listEl.querySelector('[style*="font-weight:bold"]');
+      if (selected) selected.scrollIntoView({ block: 'nearest' });
     }
     listEl.querySelectorAll('[data-ing-room]').forEach(function(el) {
       el.addEventListener('click', function() {
@@ -307,8 +316,11 @@
     if (!input) return;
     var name = input.value.trim();
     if (!name) {
-      showHelp('⚠ Enter a room ID.', ERR_COLOR);
-      return;
+      name = prompt('Enter room ID:');
+      if (!name) return;
+      name = name.trim();
+      if (!name) return;
+      input.value = name;
     }
     if (ingState.rooms.some(function(r) { return r.name === name; })) {
       showHelp('⚠ Room "' + name + '" already exists.', ERR_COLOR);
@@ -394,6 +406,12 @@
     populateRoomsJson();
     updateIngRoomList();
     renderIngestion();
+
+    // Re-trigger matching so the new room appears in Review/Design
+    var json = document.getElementById('fpRoomsJson').value;
+    if (json && typeof window.fpLoadAndMatch === 'function') {
+      window.fpLoadAndMatch(json);
+    }
   }
   window.addIngRoom = addIngRoom;
 
@@ -407,6 +425,11 @@
     populateRoomsJson();
     updateIngRoomList();
     renderIngestion();
+
+    var json = document.getElementById('fpRoomsJson').value;
+    if (json && typeof window.fpLoadAndMatch === 'function') {
+      window.fpLoadAndMatch(json);
+    }
   }
   window.deleteIngRoom = deleteIngRoom;
 
@@ -471,6 +494,10 @@
 
     var els = [];
 
+    // Full-viewport background to avoid white edges when viewbox extends beyond image
+    els.push('<rect x="' + vb.x + '" y="' + vb.y + '" width="' + vb.w + '" height="' + vb.h +
+      '" fill="#1e1e1e"/>');
+
     // Background: floor plan image (as overlay)
     if (ingState.overlayVisible && ingState.planUrl) {
       els.push('<image href="' + ingState.planUrl +
@@ -499,8 +526,8 @@
         }
       }
       // 1m lines
-      var mxS = Math.max(0, Math.floor(vb.x / step1m) * step1m);
-      var myS = Math.max(0, Math.floor(vb.y / step1m) * step1m);
+      var mxS = Math.floor((vb.x - margin) / step1m) * step1m;
+      var myS = Math.floor((vb.y - margin) / step1m) * step1m;
       for (var mx = mxS; mx <= gxE; mx += step1m) {
         els.push('<line x1="' + mx.toFixed(1) + '" y1="' + gyS.toFixed(1) +
           '" x2="' + mx.toFixed(1) + '" y2="' + gyE.toFixed(1) +
@@ -591,6 +618,7 @@
       if (show.door) {
         (room.doors || []).forEach(function (d) {
           var jh = d.jamb_hinge_px, jf = d.jamb_free_px;
+          if (jh == null || jf == null || isNaN(jh) || isNaN(jf)) return;
           var dw = Math.abs(jf - jh);  // door width in px
           var swing = d.hinge_side || 'left';
           var inward = d.opens_inward !== false;
@@ -781,6 +809,25 @@
           renderIngestion();
         }
       });
+      el.addEventListener('dblclick', function(e) {
+        e.stopPropagation();
+        var name = this.dataset.bboxBody;
+        // Deselect bbox editor
+        ingState.bboxEditor.selectedName = null;
+        ingState.bboxEditor.mode = 'idle';
+        // Navigate to Review with this room
+        if (window.fpData) {
+          var rooms = window.fpData.rooms || [];
+          for (var i = 0; i < rooms.length; i++) {
+            if (rooms[i].name === name) {
+              window.fpData.currentIdx = i;
+              break;
+            }
+          }
+        }
+        var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
+        if (reviewBtn) reviewBtn.click();
+      });
     });
 
     // Mousedown on corner handle: start resize
@@ -850,8 +897,19 @@
     var svg = document.getElementById('ingSvg');
     if (!svg) return;
 
-    // Mouse wheel zoom disabled on this view
-    // svg.addEventListener('wheel', function (e) { ... });
+    svg.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var factor = e.deltaY > 0 ? 1.15 : 0.87;
+      var rect = svg.getBoundingClientRect();
+      var vb = ingState.vb;
+      var mx = vb.x + (e.clientX - rect.left) / rect.width * vb.w;
+      var my = vb.y + (e.clientY - rect.top) / rect.height * vb.h;
+      vb.x = mx - (mx - vb.x) * factor;
+      vb.y = my - (my - vb.y) * factor;
+      vb.w *= factor;
+      vb.h *= factor;
+      renderIngestion();
+    }, { passive: false });
 
     // Mouse drag pan
     svg.addEventListener('mousedown', function (e) {
@@ -1032,12 +1090,14 @@
       }
 
       if (e.key === 'Enter') {
-        if (be.selectedName && (be.mode === 'moving' || be.mode === 'resizing')) {
-          // Force commit (same as mouseup)
+        if (be.selectedName) {
+          // Commit and deselect
           be.mode = 'idle';
           be.handle = null;
           be.dragStart = null;
           be.preDragBbox = null;
+          be.sessionStartBbox = null;
+          be.selectedName = null;
           populateRoomsJson();
           updateIngRoomList();
           renderIngestion();
@@ -1296,6 +1356,12 @@
         if (planId) {
           var hdrEl2 = document.getElementById('hdrCurrentPlan');
           if (hdrEl2) hdrEl2.textContent = planId;
+          var btnSave2 = document.getElementById('btnSavePlan');
+          if (btnSave2) btnSave2.style.display = '';
+          var btnClose2 = document.getElementById('btnClosePlan');
+          if (btnClose2) btnClose2.style.display = '';
+          var eraseWrap2 = document.getElementById('eraseWrapper');
+          if (eraseWrap2) eraseWrap2.style.display = '';
         }
 
         // Canvas dimensions, scale, viewbox — alignés sur le flux OCR
@@ -1306,13 +1372,28 @@
         if (typeof data.scale_cm_per_px === 'number' && data.scale_cm_per_px > 0) {
           ingState.scale = data.scale_cm_per_px;
         }
-        ingState.vb = { x: 0, y: 0, w: ingState.planW || 1000, h: ingState.planH || 1000 };
+        // Focus auto : si des pièces ont des bbox, cadrer sur leur enveloppe
+        var hasBoxes = ingState.rooms.some(function(r) { return r.bbox_px && r.bbox_px[2] > r.bbox_px[0]; });
+        if (hasBoxes) {
+          var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          ingState.rooms.forEach(function(r) {
+            if (!r.bbox_px) return;
+            if (r.bbox_px[0] < minX) minX = r.bbox_px[0];
+            if (r.bbox_px[1] < minY) minY = r.bbox_px[1];
+            if (r.bbox_px[2] > maxX) maxX = r.bbox_px[2];
+            if (r.bbox_px[3] > maxY) maxY = r.bbox_px[3];
+          });
+          var pad = Math.max(maxX - minX, maxY - minY) * 0.10;
+          ingState.vb = { x: minX - pad, y: minY - pad, w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
+        } else {
+          ingState.vb = { x: 0, y: 0, w: ingState.planW || 1000, h: ingState.planH || 1000 };
+        }
 
         // Overlay par défaut = le PNG enhanced s'il est disponible, sinon l'overlay standard.
         // (le toggle enhanced/plain sera ajouté plus tard — cf TODO)
         var overlaySrc = data.enhanced_path || data.image_path || data.overlay_path;
         if (overlaySrc) {
-          ingState.planUrl = '/api/import/preprocessed/image?path=' +
+          ingState.planUrl = '/api/image?path=' +
             encodeURIComponent(overlaySrc);
         }
 

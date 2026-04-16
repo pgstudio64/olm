@@ -667,6 +667,15 @@ def api_import_preprocessed():
             request.files["overlay_png"].save(overlay_path)
             _temp_paths.append(overlay_path)
 
+        # Inject semantic colors from config into json_data for face detection
+        _config_path_pp = os.path.join(os.path.dirname(BASE_DIR), "project", "config.json")
+        if os.path.exists(_config_path_pp):
+            with open(_config_path_pp, encoding="utf-8") as _fc:
+                _cfg_pp = json.load(_fc)
+            _ing_pp = _cfg_pp.get("ingestion", {})
+            json_data.setdefault("corridor_rgb", _ing_pp.get("preprocessed_corridor_rgb", [193, 247, 179]))
+            json_data.setdefault("exterior_rgb", _ing_pp.get("preprocessed_exterior_rgb", [135, 206, 235]))
+
         # --- Extraction ---
         from olm.ingestion.extract import extract_rooms_from_preprocessed
         rooms = extract_rooms_from_preprocessed(json_data, enhanced_path, overlay_path)
@@ -719,17 +728,22 @@ def api_import_preprocessed():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/import/preprocessed/image")
-def api_import_preprocessed_image():
-    """Serve a preprocessed PNG (enhanced or overlay) from a temp path.
-
-    Query param: ?path=<absolute_path>
-    """
+@app.route("/api/image")
+def api_serve_image():
+    """Serve a plan/overlay PNG from allowed directories only."""
     from flask import send_file
+    import tempfile
     path = request.args.get("path", "")
     if not path or not os.path.isfile(path):
-        return jsonify({"error": "Fichier introuvable"}), 404
-    return send_file(path, mimetype="image/png")
+        return jsonify({"error": "File not found"}), 404
+    real = os.path.realpath(path)
+    allowed = [
+        os.path.realpath(os.path.join(tempfile.gettempdir(), "olm_overlays")),
+        os.path.realpath(PLANS_DIR),
+    ]
+    if not any(real.startswith(d + os.sep) or real == d for d in allowed):
+        return jsonify({"error": "Access denied"}), 403
+    return send_file(real, mimetype="image/png")
 
 
 @app.route("/specs/<path:filename>")
