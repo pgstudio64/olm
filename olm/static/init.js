@@ -308,8 +308,8 @@ async function init() {
 
   // Tab descriptions (flat nav — 4 tabs)
   var TAB_DESCRIPTIONS = {
-    "fpImport": "Load the floor plan and extract rooms",
-    "fpReview": "Review and adjust rooms one by one",
+    "fpImport": "Load the floor plan and manage rooms",
+    "fpReview": "Review and adjust each room",
     "lytDesign": "Design the layout for each room",
     "lytCatalogue": "Browse and edit the pattern catalogue",
   };

@@ -1743,9 +1743,11 @@ function zoomIn(targetSvg) {
 }
 
 function zoomOut(targetSvg) {
-  // Clamp: don't zoom out beyond content fitting the viewport
-  var minZoom = 0.5;
-  if (state.zoom / 1.25 < minZoom) return;
+  // Clamp: don't zoom out beyond the fitViewBox (content fully visible)
+  if (state._fitViewBox) {
+    var newW = state.viewBox.w * 1.25;
+    if (newW > state._fitViewBox.w * 1.1) return;  // 10% margin
+  }
   const vb = state.viewBox;
   const factor = 1.25;
   const newW = vb.w * factor;
@@ -1759,10 +1761,13 @@ function zoomOut(targetSvg) {
 }
 
 function fitViewBoxToContent(svg, totalW, totalH, minX) {
-  var padLeft = 35;   // left margin (depth labels + ruler)
-  var padTop = 50;    // top margin (title + width label + ruler)
-  var padRight = 15;
-  var padBottom = 30;
+  // Review/Design canvases get extra breathing room
+  var isRoomView = svg && (svg.id === "rvCanvas" || svg.id === "fpCanvas");
+  var extraPad = isRoomView ? 25 : 0;
+  var padLeft = 35 + extraPad;
+  var padTop = 50 + extraPad;
+  var padRight = 15 + extraPad;
+  var padBottom = 30 + extraPad;
   var x = minX - padLeft;
   var y = -padTop;
   var w = totalW - minX + padLeft + padRight;
@@ -1787,6 +1792,7 @@ function fitViewBoxToContent(svg, totalW, totalH, minX) {
   }
 
   state.viewBox = { x: x, y: y, w: w, h: h };
+  state._fitViewBox = { w: w, h: h };  // max zoom-out limit
   state.zoom = 1.0;
 }
 
