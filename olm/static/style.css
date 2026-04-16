@@ -331,7 +331,6 @@
     background: var(--bg);
     color: var(--accent);
     border-color: var(--accent);
-    font-weight: bold;
   }
   .tab-step {
     display: inline-flex;
@@ -433,7 +432,7 @@
   }
   .settings-tab-btn:hover { color: var(--text); }
   .settings-tab-btn.active {
-    background: var(--bg); color: var(--accent); font-weight: bold;
+    background: var(--bg); color: var(--accent);
     border-color: var(--accent);
   }
   .settings-tab-pane { display: none; }
@@ -489,7 +488,6 @@
     background: var(--surface2);
     color: var(--accent);
     border-color: var(--border);
-    font-weight: bold;
   }
   .sub-tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
   .sub-tab-content.active { display: flex; flex-direction: column; }
