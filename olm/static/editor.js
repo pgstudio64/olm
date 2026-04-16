@@ -387,6 +387,12 @@ function render(targetSvg) {
 function _renderImpl(targetSvg) {
   const svg = targetSvg || document.getElementById("canvas");
   const isReview = svg && svg.id === "rvCanvas";
+  // Review canvas outside amend mode: never show pattern blocks (shared state residual)
+  var _savedRows;
+  if (isReview && !state.roomAmendMode) {
+    _savedRows = state.rows;
+    state.rows = [];
+  }
   normalizeRowGaps();
 
   const MARGIN = 0;
@@ -879,6 +885,8 @@ function _renderImpl(targetSvg) {
   document.getElementById("canvasDims").textContent =
     state.room_width_cm + " x " + state.room_depth_cm + " cm";
   // zoomLevel display removed — simplified toolbar
+  // Restore rows if they were hidden for Review
+  if (_savedRows !== undefined) state.rows = _savedRows;
 }
 
 function updateViewBox(targetSvg) {

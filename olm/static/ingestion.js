@@ -250,10 +250,10 @@
     listEl.innerHTML = html;
     if (context === 'review') {
       listEl.querySelectorAll('.room-del').forEach(function(el) { el.remove(); });
-      // Auto-scroll to selected room
-      var selected = listEl.querySelector('[style*="font-weight:bold"]');
-      if (selected) selected.scrollIntoView({ block: 'nearest' });
     }
+    // Auto-scroll to selected room in both Import and Review
+    var selected = listEl.querySelector('[style*="font-weight:bold"]');
+    if (selected) selected.scrollIntoView({ block: 'nearest' });
     listEl.querySelectorAll('[data-ing-room]').forEach(function(el) {
       el.addEventListener('click', function() {
         var name = this.dataset.ingRoom;
@@ -816,25 +816,7 @@
           renderIngestion();
         }
       });
-      el.addEventListener('dblclick', function(e) {
-        e.stopPropagation();
-        var name = this.dataset.bboxBody;
-        // Deselect bbox editor
-        ingState.bboxEditor.selectedName = null;
-        ingState.bboxEditor.mode = 'idle';
-        // Navigate to Review with this room
-        if (window.fpData) {
-          var rooms = window.fpData.rooms || [];
-          for (var i = 0; i < rooms.length; i++) {
-            if (rooms[i].name === name) {
-              window.fpData.currentIdx = i;
-              break;
-            }
-          }
-        }
-        var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
-        if (reviewBtn) reviewBtn.click();
-      });
+      // dblclick is handled via delegated listener on ingSvg (setupZoomPan)
     });
 
     // Mousedown on corner handle: start resize
@@ -903,6 +885,27 @@
   function setupZoomPan() {
     var svg = document.getElementById('ingSvg');
     if (!svg) return;
+
+    // Delegated dblclick: navigate to Review (survives re-renders)
+    svg.addEventListener('dblclick', function(e) {
+      var body = e.target.closest('[data-bbox-body]');
+      if (!body) return;
+      e.stopPropagation();
+      var name = body.dataset.bboxBody;
+      ingState.bboxEditor.selectedName = null;
+      ingState.bboxEditor.mode = 'idle';
+      if (window.fpData) {
+        var rooms = window.fpData.rooms || [];
+        for (var i = 0; i < rooms.length; i++) {
+          if (rooms[i].name === name) {
+            window.fpData.currentIdx = i;
+            break;
+          }
+        }
+      }
+      var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
+      if (reviewBtn) reviewBtn.click();
+    });
 
     svg.addEventListener('wheel', function (e) {
       e.preventDefault();
@@ -1090,10 +1093,13 @@
             cancelRoom.bbox_px = be.sessionStartBbox.slice();
             _updateRoomDims(cancelRoom);
           }
-          // Cancel any in-progress drag, but stay selected (sessionStartBbox is kept).
+          // Cancel and deselect
           be.mode = 'idle';
+          be.handle = null;
           be.dragStart = null;
           be.preDragBbox = null;
+          be.sessionStartBbox = null;
+          be.selectedName = null;
           populateRoomsJson();
           updateIngRoomList();
           renderIngestion();
