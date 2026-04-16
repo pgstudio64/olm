@@ -289,7 +289,7 @@
     display: inline-flex;
     align-items: stretch;
     gap: 0;
-    padding: 0;
+    padding: 0 6px 0 0;
     background: rgba(200, 160, 80, 0.32);
     border: 1px solid rgba(200, 160, 80, 0.55);
     border-bottom: none;
@@ -481,7 +481,7 @@
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
-    padding: 1px var(--sp-md) 4px var(--sp-md);
+    padding: 0 var(--sp-md) 2px var(--sp-md);
     cursor: pointer;
     letter-spacing: 0.03em;
     margin-right: 2px;
