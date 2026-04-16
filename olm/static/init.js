@@ -768,11 +768,11 @@ async function init() {
     var target = e.target.closest("[data-row]");
     // Block selection only in Catalogue > Editor or amend mode
     var activeTab = document.querySelector(".tab-btn.active");
-    var inEditor = activeTab && activeTab.dataset.tab === "catalogue";
+    var inEditor = activeTab && activeTab.dataset.tab === "lytCatalogue";
     var inAmend = !!state.amendMode;
     if (!inEditor && !inAmend) return;
     var editorSub = document.getElementById("subtabCatEditor");
-    if (!editorSub || !editorSub.classList.contains("active")) return;
+    if (!inAmend && (!editorSub || !editorSub.classList.contains("active"))) return;
     if (target) {
       state.selectedRow = parseInt(target.dataset.row);
       state.selectedBlock = parseInt(target.dataset.block);
@@ -789,11 +789,11 @@ async function init() {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     // Keyboard editing only in Catalogue > Editor or amend mode
     var activeTab = document.querySelector(".tab-btn.active");
-    var inEditor = activeTab && activeTab.dataset.tab === "catalogue";
+    var inEditor = activeTab && activeTab.dataset.tab === "lytCatalogue";
     var inAmend = !!state.amendMode;
     if (!inEditor && !inAmend) return;
     var editorSub = document.getElementById("subtabCatEditor");
-    if (!editorSub || !editorSub.classList.contains("active")) return;
+    if (!inAmend && (!editorSub || !editorSub.classList.contains("active"))) return;
     const step = e.shiftKey ? GRID_STEP_CM * 5 : GRID_STEP_CM;
 
     // Exclusion selected
