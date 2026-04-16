@@ -455,8 +455,7 @@
     background: var(--bg);
     color: var(--accent);
     border-color: var(--border);
-    border-bottom: 3px solid var(--accent);
-    font-weight: bold;
+    border-bottom: 2px solid var(--accent);
   }
   .tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
   .tab-content.active { display: flex; flex-direction: column; }
