@@ -122,7 +122,7 @@
     var planId = sel ? sel.value : '';
     var debugLog = document.getElementById('ingDebugLog');
     if (!planId) {
-      if (debugLog) debugLog.textContent = '[ERROR] Aucun plan sélectionné.';
+      if (debugLog) debugLog.textContent = '[ERROR] No plan selected.';
       return;
     }
 
@@ -1354,7 +1354,7 @@
     var formData = new FormData();
 
     if (!planId) {
-      if (status) status.textContent = 'Erreur : aucun plan sélectionné';
+      if (status) status.textContent = 'Error: no plan selected';
       return;
     }
     // Mode plan_id : le backend résout les chemins depuis project/plans/
@@ -1364,11 +1364,11 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) {
-          if (status) status.textContent = 'Erreur : ' + data.error;
+          if (status) status.textContent = 'Error: ' + data.error;
           return;
         }
         ingState.rooms = data.rooms || [];
-        if (status) status.textContent = ingState.rooms.length + ' pièce(s) importée(s)';
+        if (status) status.textContent = ingState.rooms.length + ' room(s) imported';
 
         // Header badge
         if (planId) {
@@ -1437,7 +1437,7 @@
         if (rvTog) rvTog.checked = true;
       })
       .catch(function (e) {
-        if (status) status.textContent = 'Erreur : ' + e;
+        if (status) status.textContent = 'Error: ' + e;
       });
   }
 
