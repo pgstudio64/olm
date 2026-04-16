@@ -590,7 +590,7 @@
     order: -1;  /* move to left */
   }
   .fp-info-col {
-    width: 210px; min-width: 130px; max-width: 520px; flex-shrink: 0;
+    width: 315px; min-width: 180px; max-width: 520px; flex-shrink: 0;
     border-left: 1px solid var(--border);
     display: flex; flex-direction: column; overflow-y: auto;
     background: var(--bg); padding: var(--sp-sm); padding-top: var(--sp-page);
