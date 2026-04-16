@@ -459,7 +459,7 @@
   .sub-tab-bar {
     display: flex;
     gap: 0;
-    padding: 6px 16px 0 16px;
+    padding: 10px 16px 0 4px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     flex-shrink: 0;
