@@ -669,38 +669,38 @@
       "room_exclusions": []
     },
     {
-      "name": "220x320_AFNOR_1",
+      "name": "540x520_AFNOR_1",
       "rows": [
         {
           "blocks": [
             {
               "type": "BLOCK_1",
               "orientation": 0,
-              "offset_ns_cm": 0,
-              "gap_cm": 140
+              "offset_ns_cm": 130,
+              "gap_cm": 240
             }
           ]
         }
       ],
       "row_gaps_cm": [],
-      "room_width_cm": 220,
-      "room_depth_cm": 320,
+      "room_width_cm": 540,
+      "room_depth_cm": 520,
       "standard": "AFNOR_ADVICE",
       "room_windows": [
         {
           "face": "north",
           "offset_cm": 0,
-          "width_cm": 220
+          "width_cm": 540
         }
       ],
       "room_openings": [
         {
           "face": "south",
-          "offset_cm": 0,
-          "width_cm": 90,
           "has_door": true,
+          "hinge_side": "left",
+          "offset_cm": 0,
           "opens_inward": true,
-          "hinge_side": "left"
+          "width_cm": 90
         }
       ],
       "room_exclusions": []
