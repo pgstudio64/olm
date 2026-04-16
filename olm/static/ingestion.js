@@ -58,18 +58,18 @@
     var info = document.getElementById('ingScaleInfo');
     if (!dsField) return;
     var dpi = getRenderDpi();
-    if (dsField.value.trim()) {
+    if (dsField.value.trim() && parseDrawingScale(dsField.value) > 0) {
       // User already provided a scale — show effective cm/px, white text
       dsField.style.color = 'var(--text)';
-      if (info) info.textContent = '1 : ' + dsField.value.trim() +
-        ' → ' + scaleCmPerPx.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
+      var num = parseDrawingScale(dsField.value);
+      if (info) info.textContent = num + ' → ' + scaleCmPerPx.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
       return;
     }
     // Back-calculate: scale_number = cm_per_px × render_dpi / 2.54
     if (scaleCmPerPx > 0 && dpi > 0) {
       var estimated = Math.round(scaleCmPerPx * dpi / 2.54);
       if (estimated > 0) {
-        dsField.value = estimated;
+        dsField.value = '1 : ' + estimated;
         dsField.style.color = 'var(--warn)';
         if (info) info.textContent = 'Estimated from room surfaces (may be inaccurate). ' +
           'Effective: ' + scaleCmPerPx.toFixed(4) + ' cm/px at ' + dpi + ' DPI. ' +
@@ -1157,23 +1157,37 @@
     // Drawing scale field: recalculate room dimensions on change
     var dsField = document.getElementById('ingDrawingScale');
     if (dsField) {
-      // Pre-fill from config if available (extract number from "1 : 300")
+      // Pre-fill from config if available
       var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale || '';
       if (cfgDs) {
         var cfgNum = parseDrawingScale(cfgDs);
         if (cfgNum > 0) {
-          dsField.value = cfgNum;
+          dsField.value = '1 : ' + cfgNum;
           dsField.style.color = 'var(--text)';
         }
       }
 
-      dsField.addEventListener('change', function() {
-        this.style.color = 'var(--text)';  // confirmed: white text
-        var scaleNum = parseDrawingScale(this.value);
+      // On focus: select only the number part (after "1 : ")
+      dsField.addEventListener('focus', function() {
+        var val = this.value;
+        var m = val.match(/^1\s*:\s*/);
+        if (m) {
+          var start = m[0].length;
+          var self = this;
+          setTimeout(function() { self.setSelectionRange(start, val.length); }, 0);
+        }
+      });
+
+      // On blur/change: reformat to "1 : <number>" and apply
+      function _applyDrawingScale() {
+        var scaleNum = parseDrawingScale(dsField.value);
+        if (scaleNum > 0) {
+          dsField.value = '1 : ' + scaleNum;
+          dsField.style.color = 'var(--text)';
+        }
         var dpi = getRenderDpi();
         if (scaleNum > 0 && dpi > 0 && ingState.rooms.length > 0) {
           ingState.scale = computeCmPerPx(scaleNum, dpi);
-          // Recompute all room dimensions from bbox_px
           ingState.rooms.forEach(function(r) {
             if (r.bbox_px) _updateRoomDims(r);
           });
@@ -1181,11 +1195,15 @@
           renderIngestion();
           populateRoomsJson();
           var info = document.getElementById('ingScaleInfo');
-          if (info) info.textContent = 'Scale applied: ' + scaleNum +
+          if (info) info.textContent = scaleNum +
             ' → ' + ingState.scale.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
         }
-        // Persist to config
-        saveConfigField(["ingestion", "drawing_scale"], this.value);
+        saveConfigField(["ingestion", "drawing_scale"], dsField.value);
+      }
+      dsField.addEventListener('change', _applyDrawingScale);
+      dsField.addEventListener('blur', function() {
+        var scaleNum = parseDrawingScale(this.value);
+        if (scaleNum > 0) this.value = '1 : ' + scaleNum;
       });
     }
 
