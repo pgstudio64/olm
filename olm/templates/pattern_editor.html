@@ -174,15 +174,32 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <!-- TAB: IMPORT -->
 <div class="tab-content active" id="tabFpImport">
     <div class="fp-container">
-      <!-- Left panel: plan selector + room list (navigation) -->
+      <!-- Left panel: all plan info in one column -->
       <div class="fp-info-col" id="fpLeftInfoCol" style="border-left:none;border-right:1px solid var(--border);order:-2;">
         <div class="section-title">Current floorplan</div>
-        <select id="ingPlanIdSelect" style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
+        <select id="ingPlanIdSelect" style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:1px solid var(--border);color:var(--text);margin-bottom:var(--sp-sm);">
           <option value="">— Select a plan —</option>
         </select>
         <div id="ingFormOcr"></div>
 
         <div id="ingPlanSections" style="display:none;">
+
+        <div class="section-title">Scale</div>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+          <span style="color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">1 :</span>
+          <input type="number" id="ingDrawingScale" placeholder="100" min="1"
+            style="width:65px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
+        </div>
+        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:var(--sp-sm);">
+          Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
+        </div>
+
+        <div class="section-title">Floor properties</div>
+        <table style="margin-bottom:var(--sp-sm);">
+          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
+          <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
+        </table>
+
         <div class="section-title">Room list</div>
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
           <input type="text" id="ingNewRoomId" placeholder="Room ID" autocomplete="off"
@@ -191,6 +208,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
         <div id="ingAddRoomHelp" style="font-size:9px;color:var(--text-dim);opacity:0.6;margin-bottom:4px;">Stub placed above the plan. Drag body to move, drag corners to resize.</div>
         <div id="ingRoomList" style="height:370px;min-height:80px;max-height:800px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);"></div>
+
         </div><!-- /ingPlanSections -->
 
         <div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
@@ -227,25 +245,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <svg id="ingSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"
             preserveAspectRatio="xMidYMid meet" class="svg-canvas" style="flex:1;"></svg>
         </div>
-      </div>
-
-      <!-- Right panel: scale + floor properties (detail) -->
-      <div class="fp-info-col" id="fpRightInfoCol" style="display:none;">
-        <div class="section-title">Scale</div>
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-          <span style="color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">1 :</span>
-          <input type="number" id="ingDrawingScale" placeholder="100" min="1"
-            style="width:65px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
-        </div>
-        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:6px;">
-          Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
-        </div>
-
-        <div class="section-title">Floor properties</div>
-        <table>
-          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
-          <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
-        </table>
       </div>
     </div>
 </div><!-- /tabFpImport -->

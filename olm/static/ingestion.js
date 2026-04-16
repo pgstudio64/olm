@@ -87,8 +87,6 @@
     // Import panel sections
     var sections = document.getElementById('ingPlanSections');
     if (sections) sections.style.display = hasRooms ? '' : 'none';
-    var rightCol = document.getElementById('fpRightInfoCol');
-    if (rightCol) rightCol.style.display = hasRooms ? '' : 'none';
     // Review and Design tabs: hidden when no plan loaded
     ['fpReview', 'lytDesign'].forEach(function(tab) {
       var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
