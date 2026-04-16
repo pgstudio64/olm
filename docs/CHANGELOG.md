@@ -35,6 +35,9 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Grille Design : labels "1m", "2m"… le long des bords de la pièce.
 - UI 100% anglais : 5 chaînes françaises dans ingestion.js traduites.
 
+### Fonctionnalité (D-90)
+- **Option B layout** : navigation à gauche, détail à droite. Floor = colonne unique. Rooms = room list gauche + détail droite. Design = room list + candidates gauche + info droite.
+
 ### Amélioré (UX navigation)
 - Onglets : Floor / Room (renommés depuis Import / Review).
 - Contraste onglets renforcé (actif #e8c46a, inactif #6a655c).

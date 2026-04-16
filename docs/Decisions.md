@@ -7,11 +7,29 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-90 · Option B layout — navigation gauche, détail droite (2026-04-16)
+
+**Décision** : Réorganisation des colonnes selon le pattern "navigation à gauche, détail à droite".
+
+- **Floor** : colonne unique à gauche (plan selector, scale, floor properties, room list). Pas de colonne droite — un seul objet (le plan), pas de séparation utile.
+- **Rooms** : room list à gauche, room props + DSL + adjust à droite.
+- **Design** : room list + candidates à gauche, room info + layout info + workstations à droite. Room list ajoutée au-dessus des candidates pour navigation cohérente avec Rooms.
+- **Catalogue Editor** : inchangé.
+
+**Justification** : Cohérence "je sélectionne à gauche, je vois le détail à droite" (pattern IDE). Floor est une exception car il n'y a qu'un objet à consulter.
+
+**Impact** :
+- `olm/templates/pattern_editor.html` : colonne droite ajoutée dans Rooms, room list ajoutée dans Design
+- `olm/static/ingestion.js` : room list Design câblée (clic = changement de pièce sans changer d'onglet)
+- `olm/static/floor_plan.js` : fpRenderCurrent appelle updateIngRoomList
+
+---
+
 ## D-89 · Navigation UX — onglets, sous-onglets, hover, descriptions (2026-04-16)
 
 **Décision** : Refonte UX de la navigation par onglets.
 
-- Renommage Import → Floor, Review → Room (plus court, plus clair).
+- Renommage Import → Floor, Review → Rooms (plus court, plus clair).
 - Sous-onglets Catalogue : sub-tab-bar séparée (l'approche inline D-89 initiale a été abandonnée — trop de conflits visuels). Description italique à droite. Actif en gras + jaune.
 - Zone hover des onglets étendue via pseudo-element `::before` (-8px top, -5px latéral) — pas de changement visuel, meilleure réactivité.
 - Onglets Review/Design masqués (`display:none`) tant qu'aucun plan n'est chargé. Sections Scale/Floor Properties/Room List conditionnelles.

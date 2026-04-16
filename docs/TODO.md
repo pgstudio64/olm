@@ -601,7 +601,7 @@ Tâches :
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
 - [x] **Bug plan fantôme** (2026-04-16) : canvas rvCanvas/fpCanvas vidés quand aucune room n'est chargée.
 - [x] **Couleur labels dimensions** (2026-04-16) : `--text-dim` #6e6a62 → #908a7e, `COLOR_RULER` → #b0a898, labels dimensions SVG utilisent `COLOR_RULER`.
-- [ ] **Review layout 2 colonnes** : colonne gauche = même room list que Import (sans "Current floorplan"). Colonne droite = caractéristiques de la pièce, DSL, boutons Adjust/Save/Cancel. Plus homogène avec le layout de Design qui a aussi une colonne d'info à droite.
+- [x] **Review layout 2 colonnes** (2026-04-16, D-90) : room list à gauche, détail (props, DSL, adjust) à droite. Room list ajoutée aussi dans Design.
 - [x] **Room list taille par défaut** (2026-04-16) : Review room list alignée sur Import (height 210px, min/max/resize).
 - [x] **PRIORITÉ HAUTE — Taille des pièces fausse** (2026-04-16, D-88) : ajout du paramètre `drawing_scale` explicite (format "1 : 100") + `render_dpi` dans Settings. Formule : `cm_per_px = 2.54 × scale / dpi`. Estimation inverse proposée en jaune si non renseigné. Recalcul live sans re-import.
 - [ ] **Validation drawing_scale** : tester avec un plan réel ayant une échelle connue. Vérifier que les dimensions cm correspondent aux dimensions attendues.
