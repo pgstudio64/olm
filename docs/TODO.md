@@ -618,7 +618,8 @@ Tâches :
 - [x] **Croix fermeture Settings** (2026-04-16) : padding élargi + flex center pour aligner zone cliquable.
 - [x] **Synchronisation liste gauche / pièce courante** (2026-04-16) : auto-scroll étendu à Import (était limité à Review).
 - [ ] **Repositionner boutons Adjust room** : les boutons Adjust room / Save / Cancel sont éloignés de la liste des pièces. Rapprocher dans la colonne de gauche ou sous la liste.
-- [ ] **Alignement sous-sous-onglets Catalogue** : la gauche de "Card view" doit être alignée avec la gauche de l'onglet "Catalogue". Actuellement décalé (padding-left hardcodé).
+- [x] **Alignement sous-sous-onglets Catalogue** (2026-04-16) : padding-left dynamique via JS (alignCatalogueSubTabs).
+- [x] **Marge gauche onglets** (2026-04-16) : padding-left 4px sur .tab-bar pour aligner la marge gauche de Floorplan avec le gap inter-groupes.
 - [ ] **Bug Pattern Editor : impossible de sélectionner un pattern** : dans l'onglet Catalogue > Editor, cliquer sur un pattern dans la liste ne le charge pas pour édition. Diagnostiquer le handler de sélection.
 - [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
 - [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".
