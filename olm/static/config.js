@@ -131,9 +131,12 @@ function renderCatStandardFilter() {
 function renderFpStandardFilter() {
   var container = document.getElementById("fpStandardFilter");
   if (!container) return;
-  var html = '<label><input type="radio" name="fpStandard" value="" checked> All</label>';
+  var defStd = APP_CONFIG.default_standard || "";
+  var allChecked = defStd ? "" : " checked";
+  var html = '<label><input type="radio" name="fpStandard" value=""' + allChecked + '> All</label>';
   getStandards().forEach(function(s) {
-    html += '<label><input type="radio" name="fpStandard" value="' + s + '"> ' + getStdLabel(s) + '</label>';
+    var checked = (s === defStd) ? " checked" : "";
+    html += '<label><input type="radio" name="fpStandard" value="' + s + '"' + checked + '> ' + getStdLabel(s) + '</label>';
   });
   container.innerHTML = html;
 }
@@ -164,6 +167,19 @@ function renderGeneralSettings() {
 
   el = document.getElementById("cfgGrid");
   if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
+
+  el = document.getElementById("cfgDefaultStandard");
+  if (el) {
+    var stds = getStandards();
+    var dsHtml = '<option value="">All</option>';
+    stds.forEach(function(s) { dsHtml += '<option value="' + s + '">' + getStdLabel(s) + '</option>'; });
+    el.innerHTML = dsHtml;
+    el.value = APP_CONFIG.default_standard || "";
+    el.onchange = function() {
+      saveConfigField("default_standard", this.value);
+      renderFpStandardFilter();
+    };
+  }
 
   el = document.getElementById("cfgPlansDir");
   if (el) {

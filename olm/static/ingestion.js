@@ -1000,9 +1000,9 @@
       e.preventDefault();
       var factor = e.deltaY > 0 ? 1.15 : 0.87;
       var vb = ingState.vb;
-      // Clamp: don't zoom out beyond 2x the plan size
+      // Clamp: don't zoom out beyond 1.1x the plan size
       if (factor > 1) {
-        var maxW = (ingState.planW || 1000) * 2;
+        var maxW = (ingState.planW || 1000) * 1.1;
         if (vb.w * factor > maxW) return;
       }
       var rect = svg.getBoundingClientRect();
