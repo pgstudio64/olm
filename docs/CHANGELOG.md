@@ -5,6 +5,26 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-04-16 : D-87 solidification D-83
+
+### Corrigé
+- Overlay PNG décalé d'une demi-pièce pour les pièces avec corridor east/west (rotation 90°/270°) — ajout d'un translate compensatoire dans `editor.js`.
+- `corridor_face` perdu après Save en mode Room Amend — propagation dans `enterRoomAmendMode()` et `fpRoomAmendments`.
+
+### Ajouté
+- Module Python `olm/core/canonical.py` : port de `canonicalize_room()` / `decanonicalize_room()` depuis JS.
+- 19 tests pytest round-trip dans `olm/tests/test_canonical.py`.
+
+### Amélioré (UX)
+- Couleur labels dimensions : `--text-dim` #6e6a62 → #908a7e, `COLOR_RULER` → #b0a898, labels SVG utilisent la constante.
+- Hauteur onglets principaux : padding 10px → 14px. Sous-onglets : 4px → 8px (zone cliquable élargie).
+- Contraste onglet actif : border-bottom 3px accent, hover fond surface2.
+- Croix fermeture Settings : padding élargi + flex center (zone cliquable alignée).
+- Add room : prompt auto-incrémenté basé sur max ID numérique existant.
+- Dézoom limité : clamp zoom min 0.5 (Review/Design), clamp viewBox max 2× plan (Import).
+
+---
+
 ## [Unreleased] — Conception 2026-04-14 / 2026-04-15 : D-78 à D-85
 
 ### Décisions d'architecture (tracées dans Decisions.md)

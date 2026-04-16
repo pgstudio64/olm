@@ -7,6 +7,27 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-87 · Solidification D-83 — overlay, state, port Python + tests (2026-04-16)
+
+**Décision** : Correction des bugs résiduels de l'orientation canonique (D-83) et port de la logique en Python avec couverture de tests.
+
+**Corrections** :
+- **Overlay décalé 90°/270°** : ajout d'un `translate` compensatoire `(w-h)/2` lors de la rotation de l'overlay PNG pour corridor east/west. Sans cela, l'image était décalée d'une demi-pièce car les dimensions canonicalisées (w/h swappés) ne correspondaient plus au cadre de l'overlay original.
+- **corridor_face perdu après Save** : `enterRoomAmendMode()` ne propageait pas `corridor_face` dans `state`, et `fpRoomAmendments` ne conservait pas `corridor_face` sur les données amendées. Résultat : après Save, la rotation overlay revenait à 0°.
+
+**Port Python** :
+- Module `olm/core/canonical.py` : `canonicalize_room()` et `decanonicalize_room()`, port fidèle de la logique JS (`floor_plan.js`). Réutilisable côté serveur (matching, export).
+- 19 tests pytest (`olm/tests/test_canonical.py`) : round-trip pour les 4 orientations, dimensions, face mapping, exclusion zones, rooms minimales.
+
+**Justification** : Les bugs étaient visibles sur toute pièce avec corridor east/west (≈50 % des pièces typiques). Le port Python garantit la cohérence JS/Python et permet des tests automatisés.
+
+**Impact** :
+- `olm/static/editor.js` : 3 lignes modifiées (translate overlay, state.corridor_face dans enterRoomAmendMode, corridor_face dans amendedRoom).
+- `olm/core/canonical.py` : nouveau module.
+- `olm/tests/test_canonical.py` : nouveau fichier de tests.
+
+---
+
 ## D-86 · Portes principales/secondaires et orientation canonique (2026-04-15)
 
 **Décision** : Classification des ouvertures en deux catégories et orientation canonique des pièces dans Review et Design.

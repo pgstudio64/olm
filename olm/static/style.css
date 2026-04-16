@@ -5,7 +5,7 @@
     --surface2: #1e1e1c;
     --border:   #2a2826;
     --text:     #e4e0d8;
-    --text-dim: #6e6a62;
+    --text-dim: #908a7e;
     --text-mid: #a8a39a;
     --accent:   #c8a050;
     --accent2:  #5090c0;
@@ -414,8 +414,9 @@
   }
   .settings-header h2 { font-size: 16px; color: var(--accent); margin: 0; }  /* 16px intentional — drawer title */
   .settings-close {
-    background: none; border: none; color: var(--text-dim); font-size: 20px;
-    cursor: pointer; padding: 4px 8px;
+    background: none; border: none; color: var(--text-dim); font-size: 22px;
+    cursor: pointer; padding: 8px 12px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
   }
   .settings-close:hover { color: var(--text); }
   .settings-section { margin-bottom: var(--sp-xl); }
@@ -444,17 +445,17 @@
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: var(--fs-md);
-    padding: 10px var(--sp-xl);
+    padding: 14px var(--sp-xl);
     cursor: pointer;
     letter-spacing: 0.03em;
     margin-bottom: -1px;
   }
-  .tab-btn:hover { color: var(--text); }
+  .tab-btn:hover { color: var(--text); background: var(--surface2); }
   .tab-btn.active {
     background: var(--bg);
     color: var(--accent);
     border-color: var(--border);
-    border-bottom-color: var(--accent);
+    border-bottom: 3px solid var(--accent);
     font-weight: bold;
   }
   .tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
@@ -479,7 +480,7 @@
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
-    padding: 4px var(--sp-md);
+    padding: 8px var(--sp-md);
     cursor: pointer;
     letter-spacing: 0.03em;
     margin-right: 2px;

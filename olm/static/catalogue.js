@@ -230,10 +230,10 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
 
   // Room dimension labels (z=10)
   elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 3) +
-    '" text-anchor="middle" fill="#6e6a62" font-size="7" font-family="monospace">' +
+    '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="7" font-family="monospace">' +
     roomWcm + ' cm</text>' });
   elements.push({ z: 10, s: '<text x="' + (offsetX - 3) + '" y="' + (offsetY + roomH / 2) +
-    '" text-anchor="middle" fill="#6e6a62" font-size="7" font-family="monospace"' +
+    '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="7" font-family="monospace"' +
     ' transform="rotate(-90,' + (offsetX - 3) + ',' + (offsetY + roomH / 2) + ')">' +
     roomHcm + ' cm</text>' });
 

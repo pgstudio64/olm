@@ -316,7 +316,14 @@
     if (!input) return;
     var name = input.value.trim();
     if (!name) {
-      name = prompt('Enter room ID:');
+      // Auto-increment: find max numeric ID among existing rooms
+      var maxId = 0;
+      ingState.rooms.forEach(function(r) {
+        var n = parseInt(r.name, 10);
+        if (!isNaN(n) && n > maxId) maxId = n;
+      });
+      var suggested = String(maxId + 1);
+      name = prompt('Enter room ID:', suggested);
       if (!name) return;
       name = name.trim();
       if (!name) return;
@@ -900,8 +907,13 @@
     svg.addEventListener('wheel', function (e) {
       e.preventDefault();
       var factor = e.deltaY > 0 ? 1.15 : 0.87;
-      var rect = svg.getBoundingClientRect();
       var vb = ingState.vb;
+      // Clamp: don't zoom out beyond 2x the plan size
+      if (factor > 1) {
+        var maxW = (ingState.planW || 1000) * 2;
+        if (vb.w * factor > maxW) return;
+      }
+      var rect = svg.getBoundingClientRect();
       var mx = vb.x + (e.clientX - rect.left) / rect.width * vb.w;
       var my = vb.y + (e.clientY - rect.top) / rect.height * vb.h;
       vb.x = mx - (mx - vb.x) * factor;
