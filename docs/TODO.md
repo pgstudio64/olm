@@ -612,7 +612,7 @@ Tâches :
 - [ ] **Validation visuelle batch UX 2026-04-16** : vérifier en navigateur les 17 fixes UX/bugs de la session. Corriger si régressions. Checklist : couleur labels, hauteur onglets, contraste actif, zone cliquable sous-onglets, croix Settings, add room auto-incr, limite dézoom, plan fantôme, Esc bbox, Review après Save, synchro liste, warning Adjust room, dblclick Import→Review, room list Review, fond labels dimensions, grille labels mètres, UI anglais.
 - [x] **Warning sortie mode Adjust room** (2026-04-16) : confirm() dans _cancelAmendIfActive() pour roomAmendMode et amendMode (si dirty). Changement d'onglet bloqué si l'utilisateur refuse.
 - [x] **Esc dans bbox editor Import** (2026-04-16) : Esc restaure la bbox ET désélectionne la pièce.
-- [x] **Double-click Import → Review** (2026-04-16) : dblclick délégué sur ingSvg (survit aux re-renders), remplace le listener inline cassé par le re-render du mousedown.
+- [ ] **Double-click Import → Review** : le dblclick délégué sur ingSvg ne fonctionne pas de manière fiable (conflit mousedown/re-render/bbox editor). Le clic dans la room list navigue vers Review (fonctionne). Le dblclick sur le plan reste à implémenter proprement (timer ou détection manuelle).
 - [x] **Add room prompt** (2026-04-16) : auto-incrément basé sur max ID numérique existant.
 - [x] **Zone cliquable sous-onglets** (2026-04-16) : padding vertical 4px → 8px.
 - [x] **Croix fermeture Settings** (2026-04-16) : padding élargi + flex center pour aligner zone cliquable.
