@@ -54,7 +54,7 @@
   .tab-description {
     font-size: 11px;
     color: var(--text-dim);
-    margin-left: 16px; margin-right: 16px;
+    margin-left: 4px; margin-right: 16px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0;
     letter-spacing: 0.02em;
   }

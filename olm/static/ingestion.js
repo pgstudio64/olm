@@ -69,6 +69,27 @@
     }
   }
 
+  /**
+   * Show/hide plan-dependent UI sections and enable/disable Review+Design tabs.
+   * Called after import or plan close.
+   */
+  function updatePlanDependentUI() {
+    var hasRooms = ingState.rooms && ingState.rooms.length > 0;
+    // Import panel sections
+    var sections = document.getElementById('ingPlanSections');
+    if (sections) sections.style.display = hasRooms ? '' : 'none';
+    // Review and Design tabs
+    ['fpReview', 'lytDesign'].forEach(function(tab) {
+      var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
+      if (btn) {
+        btn.disabled = !hasRooms;
+        btn.style.opacity = hasRooms ? '' : '0.35';
+        btn.style.pointerEvents = hasRooms ? '' : 'none';
+      }
+    });
+  }
+  window.updatePlanDependentUI = updatePlanDependentUI;
+
   // --- State ---
   var ingState = {
     planPath: '',
@@ -251,6 +272,7 @@
         renderIngestion();
         populateRoomsJson();
         updateIngRoomList();
+        updatePlanDependentUI();
 
         // Feed rooms into the floor plan pipeline (Review + Design)
         var json = document.getElementById('fpRoomsJson').value;
@@ -277,6 +299,7 @@
 
   // --- Room list (clickable, same style as Review) ---
   window.updateIngRoomList = updateIngRoomList;
+  window.ingState = ingState;
   function updateIngRoomList() {
     var reviewSubtab = document.getElementById('tabFpReview');
     var inRoomView = reviewSubtab && reviewSubtab.classList.contains('active');
@@ -1144,6 +1167,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     setupToggles();
     setupZoomPan();
+    updatePlanDependentUI();  // initial state: hide sections, disable tabs
 
     // Drawing scale field: recalculate room dimensions on change
     var dsField = document.getElementById('ingDrawingScale');
@@ -1521,6 +1545,7 @@
         renderIngestion();
         populateRoomsJson();
         updateIngRoomList();
+        updatePlanDependentUI();
 
         var json = document.getElementById('fpRoomsJson').value;
         if (json && typeof window.fpLoadAndMatch === 'function') {

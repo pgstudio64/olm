@@ -622,6 +622,8 @@ Tâches :
 - [x] **Marge gauche onglets** (2026-04-16) : padding-left 4px sur .tab-bar pour aligner la marge gauche de Floorplan avec le gap inter-groupes.
 - [x] **Bug Pattern Editor : impossible de sélectionner un pattern** (2026-04-16) : data-tab comparait à "catalogue" au lieu de "lytCatalogue" (renommé D-78). Click et clavier restaurés.
 - [x] **Sous-onglets Catalogue inline** (2026-04-16, D-89) : Card/Grid/Editor intégrés dans la tab-bar LAYOUT sur une seule ligne. Apparaissent dynamiquement quand Catalogue est actif. Suppression de la sub-tab-bar séparée.
+- [x] **Rapprocher texte descriptif des onglets LAYOUT** (2026-04-16) : gap 16px → 8px, margin-left 16px → 4px.
+- [x] **Inhiber UI sans plan chargé** (2026-04-16) : sections Scale/Floor Properties/Room List masquées tant qu'aucun plan importé. Onglets Review et Design grisés (disabled + opacity 0.35 + pointer-events none). Réactivés après import, re-désactivés après Close. : tant qu'aucun plan n'est sélectionné dans Import, masquer les sections Scale, Floor Properties et Room List. Désactiver les onglets Review et Design (grisés, non cliquables). Actuellement un clic sur Design sans plan montre un vieux plan résiduel (7 pièces dont "98K").
 - [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
 - [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".
 - [x] **Supprimer Debug log** : retirer la section Debug log dans Import si elle n'est plus nécessaire.
