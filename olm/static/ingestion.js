@@ -87,10 +87,13 @@
     // Import panel sections
     var sections = document.getElementById('ingPlanSections');
     if (sections) sections.style.display = hasRooms ? '' : 'none';
-    // Review and Design tabs: hidden when no plan loaded
+    // Review and Design tabs: invisible when no plan loaded (keep layout stable)
     ['fpReview', 'lytDesign'].forEach(function(tab) {
       var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
-      if (btn) btn.style.display = hasRooms ? '' : 'none';
+      if (btn) {
+        btn.style.visibility = hasRooms ? '' : 'hidden';
+        btn.style.pointerEvents = hasRooms ? '' : 'none';
+      }
     });
   }
   window.updatePlanDependentUI = updatePlanDependentUI;
