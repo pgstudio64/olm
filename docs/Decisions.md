@@ -7,6 +7,39 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-86 · Portes principales/secondaires et orientation canonique (2026-04-15)
+
+**Décision** : Classification des ouvertures en deux catégories et orientation canonique des pièces dans Review et Design.
+
+**Catégories d'ouvertures** :
+
+| Catégorie | Définition | Rôle |
+|---|---|---|
+| **Principale** | Ouverture/porte donnant sur le couloir (zone verte dans le PNG enhanced) | Définit le **sud** du référentiel canonique de la pièce |
+| **Secondaire** | Ouverture/porte entre bureaux (zone blanche — pièce voisine) | N'affecte pas l'orientation canonique |
+
+**Orientation canonique** :
+- Dans les vues Review et Design, toute pièce est affichée avec la porte principale en bas (sud) et les fenêtres en haut (nord)
+- L'utilisateur "entre" visuellement par le bas de l'écran
+- Rotation purement visuelle (0°/90°/180°/270°) déduite de la face réelle de la porte principale sur le plan d'étage
+- Coordonnées internes de la pièce inchangées
+
+**Détection de la porte principale** :
+- Mode Préprocessé : la face qui borde la zone verte (couloir) dans le PNG enhanced est la face principale
+- Mode OCR : heuristique existante `corridor_face` (première face avec une porte détectée)
+- Le champ `corridor_face` (déjà présent dans `DetectedRoom` et transmis au frontend) porte cette information
+
+**Justification** : Les patterns sont conçus dans un référentiel canonique (couloir au sud, fenêtres au nord). L'affichage canonique garantit que le rendu visuel correspond toujours à cette convention, quelle que soit l'orientation réelle sur le plan d'étage. Pas besoin de rotation dans le pipeline de matching — seul le rendu est transformé.
+
+**Impact** :
+- `corridor_face` devient la source de vérité pour l'orientation
+- Helper JS `computeCanonicalRotation(corridorFace)` retourne l'angle de rotation
+- Wrapper `<g transform="rotate(...)">` appliqué au contenu des canvas `rvCanvas` et `fpCanvas`
+- L'overlay (image du plan) est inclus dans le groupe transformé
+- ViewBox ajusté après rotation si nécessaire
+
+---
+
 ## D-61 · Navigation : 2 onglets principaux + sous-onglets (2026-04-03)
 
 **Décision** : Restructuration de la navigation en 2 onglets principaux (Floor Plan / Office Layout) avec sous-onglets. Interface traduite en anglais.

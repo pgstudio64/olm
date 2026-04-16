@@ -1301,6 +1301,55 @@ def _room_center_from_lines(line1: dict, line2: dict, line3: dict) -> tuple[floa
     return cx, cy
 
 
+def _detect_face_colors(
+    img_array: np.ndarray,
+    bbox_px: tuple,
+    corridor_rgb: tuple[int, int, int],
+    exterior_rgb: tuple[int, int, int],
+    margin_px: int = 8,
+    tolerance: int = 40,
+) -> dict:
+    """Sample pixels just outside each face of a room bbox to detect color zones.
+
+    Returns dict with keys: corridor_face, exterior_faces.
+    """
+    h, w = img_array.shape[:2]
+    x0, y0, x1, y1 = bbox_px
+
+    def _dominant_color(samples: np.ndarray, target_rgb: tuple, tol: int) -> bool:
+        if len(samples) == 0:
+            return False
+        diffs = np.abs(samples.astype(int) - np.array(target_rgb, dtype=int))
+        matches = np.all(diffs <= tol, axis=1)
+        return np.sum(matches) > len(samples) * 0.3
+
+    faces = {}
+    # Sample strip just outside each face
+    strip = margin_px
+    regions = {
+        "north": img_array[max(0, y0 - strip):y0, x0:x1],
+        "south": img_array[y1:min(h, y1 + strip), x0:x1],
+        "west":  img_array[y0:y1, max(0, x0 - strip):x0],
+        "east":  img_array[y0:y1, x1:min(w, x1 + strip)],
+    }
+
+    corridor_face = ""
+    exterior_faces = []
+    for face, region in regions.items():
+        if region.size == 0:
+            continue
+        pixels = region.reshape(-1, 3)
+        if _dominant_color(pixels, corridor_rgb, tolerance):
+            if not corridor_face:
+                corridor_face = face
+            faces[face] = "corridor"
+        elif _dominant_color(pixels, exterior_rgb, tolerance):
+            exterior_faces.append(face)
+            faces[face] = "exterior"
+
+    return {"corridor_face": corridor_face, "exterior_faces": exterior_faces}
+
+
 def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
@@ -1518,11 +1567,34 @@ def extract_rooms_from_preprocessed(
             "openings": openings,
             "doors": doors,
             "exterior_faces": [],
-            "corridor_face": "",
+            "corridor_face": (
+                doors[0]["face"] if doors and "face" in doors[0]
+                else openings[0]["face"] if openings and "face" in openings[0]
+                else ""
+            ),
         }
         if p["canonical_top_face"]:
             room_dict["canonical_top_face"] = p["canonical_top_face"]
         result.append(room_dict)
+
+    # Detect corridor/exterior faces from enhanced PNG colors
+    if enhanced_png_path:
+        try:
+            _enh_img = np.array(Image.open(enhanced_png_path).convert("RGB"))
+            _corridor_rgb = tuple(json_data.get("corridor_rgb", [193, 247, 179]))
+            _exterior_rgb = tuple(json_data.get("exterior_rgb", [135, 206, 235]))
+            for room_dict in result:
+                bb = room_dict["bbox_px"]
+                if bb and bb[2] > bb[0] and bb[3] > bb[1]:
+                    colors = _detect_face_colors(
+                        _enh_img, bb, _corridor_rgb, _exterior_rgb,
+                    )
+                    if colors["corridor_face"]:
+                        room_dict["corridor_face"] = colors["corridor_face"]
+                    if colors["exterior_faces"]:
+                        room_dict["exterior_faces"] = colors["exterior_faces"]
+        except Exception as e:
+            logger.warning("Face color detection failed: %s", e)
 
     logger.info(
         "extract_rooms_from_preprocessed v3 : %d room(s) chargée(s) "

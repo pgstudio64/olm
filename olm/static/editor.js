@@ -29,6 +29,7 @@ let state = {
   amendMode: null,       // { roomName, roomIdx, candidate } when adjusting a solution
   roomAmendMode: null,   // { roomName, originalRoom } when editing room geometry
   overlay: null,         // { dataUrl, pxPerCm, opacity, offsetX, offsetY, imgW, imgH }
+  corridor_face: "",     // face with main door (defines canonical south)
   viewBox: { x: 0, y: 0, w: 800, h: 600 },
   zoom: 1.0,
   isPanning: false,
@@ -353,6 +354,14 @@ function computePatternDims() {
     eoTotal: maxWest + maxRowEO + maxEast,
     nsTotal: nsBlocks,
   };
+}
+
+function _canonicalAngle(corridorFace) {
+  // Corridor face = where the main door is = canonical south (bottom).
+  // Rotation to apply so that corridor_face ends up at the bottom of the SVG.
+  // SVG Y-axis points down, so south = bottom = no rotation when corridor is south.
+  var map = { south: 0, east: 90, north: 180, west: 270 };
+  return map[corridorFace] || 0;
 }
 
 function render(targetSvg) {
@@ -826,7 +835,11 @@ function _renderImpl(targetSvg) {
   svg.style.background = state.overlay ? 'transparent' : '';
 
   elements.sort(function(a, b) { return a.z - b.z; });
-  const svgContent = elements.map(function(e) { return e.s; }).join("\n");
+  var svgContent = elements.map(function(e) { return e.s; }).join("\n");
+
+  // D-83 canonical rotation: disabled pending blue/green fill detection.
+  // Will transform data (not SVG) once corridor_face is reliably detected.
+
   svg.innerHTML = svgContent;
 
   // Store dimensions for zoomFit

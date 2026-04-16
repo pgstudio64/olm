@@ -31,6 +31,47 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - **D-80** — Zones interdites à double origine : promotion automatique des petits artefacts en ingestion (`min_size_artifact_cm2` défaut 2500) pour les open space avec poteaux, + outil souris Review (Add / move / Delete, pas de redimensionnement souris — DSL = source de vérité).
 - **D-81** — Cartouche OCR aligné sur 3 lignes (code / surface / id), alignement avec le format Mode Préprocessé. Suppression de N REEL / N THEO non exploitées et sources d'ambiguïté OCR. `INGESTION_HYPOTHESES.md` §H-09 mise à jour.
 
+### Session 2026-04-15 (après-midi)
+
+#### UX / Interface
+- Fusion header + barre d'onglets en une seule ligne (table layout). Suppression du titre "Office Layout Studio".
+- Onglets agrandis (+20%), espacement ajusté entre groupes et sous-onglets.
+- Fond des sous-onglets inactifs assombri pour meilleure lisibilité.
+- Description de l'onglet actif affichée à droite des onglets.
+- Bouton Save masqué tant qu'aucun plan n'est chargé. Bouton DEV Export v3 supprimé (redondant avec Save).
+- Boutons Close et Erase (All / Layout only) ajoutés dans le header. Erase ne ferme plus le plan.
+- Zoom molette souris dans Import (centré sur curseur).
+- Focus auto sur la bbox des pièces en mode Préprocessé à l'ouverture.
+- Double-click sur une pièce dans Import → navigation vers Review avec focus.
+- Enter valide la sélection bbox dans Import. Esc annule en mode Adjust room.
+- Re-trigger du matching après ajout/suppression de pièce dans Import.
+- Prompt dialog si ajout de pièce sans ID. Placeholder "Room ID" simplifié.
+- Marge haute colonne gauche Import/Review. Renommage "Floor plan" → "Current floorplan".
+- Debug log supprimé de Import.
+- Colonne gauche Review redimensionnable (poignée + localStorage) — instructions IMPLEMENTER.
+
+#### Backend / Pipeline
+- Endpoint `/api/image` sécurisé : ne sert que depuis `olm_overlays` et `PLANS_DIR` (réalpath + guard).
+- Choix plan base/enhanced selon contexte : plan de base en Import, enhanced en overlay Review/Match.
+- `corridor_face` calculé en mode Préprocessé depuis `doors[0].face` (au lieu de `""` en dur).
+- Détection couleurs de face (`_detect_face_colors`) : échantillonnage pixels au-delà de chaque face de bbox dans le PNG enhanced pour détecter vert (couloir) et bleu (extérieur).
+- Paramètres `preprocessed_exterior_rgb` et `preprocessed_corridor_rgb` dans config.json.
+- Outil CLI `olm/tools/colorize_enhanced.py` : flood fill extérieur (bleu) + couloirs (vert) avec dilatation des murs pour boucher les portes.
+
+#### Settings
+- Drawer Settings restructuré en 5 onglets : General, Floorplan, Layout, Catalogue, Export.
+- Couleurs sémantiques (exterior RGB, corridor RGB) exposées dans Settings > Floorplan avec preview.
+
+#### Corrections
+- Fix crash `fpBtnExport` manquant (guard `if` ajouté).
+- Fix crash `fpOverlayStatus` null (guard ajouté).
+- Fix lignes blanches fantômes : portes avec coordonnées `undefined` ignorées, rect fond SVG ajouté.
+- Fix grille 1m : lignes à x=0/y=0 ne sont plus privilégiées.
+- Fix Close : dropdown plan reset à la position placeholder.
+
+#### Architecture (D-86)
+- **D-86** — Classification portes principales (couloir/vert) vs secondaires (entre bureaux). `corridor_face` = source de vérité pour l'orientation canonique. Rotation D-83 préparée (code posé puis désactivée en attente du PNG enhanced colorisé).
+
 ### Documentation
 
 - `docs/TODO.md` : R-08 refondu (nav 3 onglets), R-11 nouveau (round trip), R-05 enrichi (validation Tesseract D-73, cartouche 3 lignes D-81, zones interdites D-80, paramétrage couleurs RGB sémantiques, révision logique fenêtres, générateur de plan de test)

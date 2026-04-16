@@ -199,6 +199,52 @@ function renderGeneralSettings() {
   }
 }
 
+function initSettingsTabs() {
+  document.querySelectorAll(".settings-tab-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      document.querySelectorAll(".settings-tab-btn").forEach(function(b) { b.classList.remove("active"); });
+      document.querySelectorAll(".settings-tab-pane").forEach(function(p) { p.classList.remove("active"); });
+      btn.classList.add("active");
+      var pane = document.getElementById(btn.dataset.settingsTab);
+      if (pane) pane.classList.add("active");
+    });
+  });
+}
+
+function renderFloorplanSettings() {
+  var ing = APP_CONFIG.ingestion || {};
+  var ext = ing.preprocessed_exterior_rgb || [135, 206, 235];
+  var cor = ing.preprocessed_corridor_rgb || [193, 247, 179];
+
+  var ids = [["cfgExteriorR","cfgExteriorG","cfgExteriorB"], ["cfgCorridorR","cfgCorridorG","cfgCorridorB"]];
+  var vals = [ext, cor];
+  var keys = ["preprocessed_exterior_rgb", "preprocessed_corridor_rgb"];
+  var previews = ["cfgExteriorPreview", "cfgCorridorPreview"];
+
+  for (var i = 0; i < 2; i++) {
+    (function(idx) {
+      for (var c = 0; c < 3; c++) {
+        var el = document.getElementById(ids[idx][c]);
+        if (el) {
+          el.value = vals[idx][c];
+          el.onchange = function() {
+            var rgb = [
+              parseInt(document.getElementById(ids[idx][0]).value) || 0,
+              parseInt(document.getElementById(ids[idx][1]).value) || 0,
+              parseInt(document.getElementById(ids[idx][2]).value) || 0
+            ];
+            saveConfigField(["ingestion", keys[idx]], rgb);
+            var prev = document.getElementById(previews[idx]);
+            if (prev) prev.style.background = "rgb(" + rgb.join(",") + ")";
+          };
+        }
+      }
+      var prev = document.getElementById(previews[idx]);
+      if (prev) prev.style.background = "rgb(" + vals[idx].join(",") + ")";
+    })(i);
+  }
+}
+
 async function saveSpacingField(standard, field, value) {
   var status = document.getElementById("spacingSaveStatus");
   try {

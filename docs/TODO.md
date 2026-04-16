@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-05
+Dernière mise à jour : 2026-04-15
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
@@ -121,8 +121,11 @@ Objectif : ingestion simplifiée — rectangles + murs + fenêtres + ouvertures.
 - [x] Import JSON manuel (textarea ou upload fichier) — conservé de l'existant
 - [ ] **Bug overlay (post-simplification Import)** : `/api/import/ocr` renvoie `image_path=""` et unlink le temp file, l'overlay n'est plus affiché. Fix : persister le PNG uploadé (ou rasterisé depuis PDF) dans un dossier servi, renvoyer un chemin exploitable par le frontend.
 - [ ] **Régénérer `project/plans/test_floorplan3.png`** à l'échelle cible `ingestion.scale_cm_per_px=0.5` (actuellement les surfaces totales tombent à ~10 m² → le fichier est resté sur une ancienne échelle). Valider que les cartouches 3 lignes (D-81) sont conformes.
-- [ ] **Restructuration 4 sous-onglets Floor Plan** : renommer top-level `tabImport` en "Floor Plan", créer une nav de sous-onglets (Import / Review / Match / Export), déplacer le contenu actuel de `tabDesign` dans Match, et celui de `tabExport` dans Export. Les top-level Design et Export disparaissent. Catalogue reste top-level séparé. Adapter `init.js` et tous les sélecteurs `.click()` programmatiques.
 - [ ] **Liste des pièces (Review) redimensionnable** : ajouter une poignée de resize horizontale sur le panneau latéral de la liste des pièces ; largeur par défaut = 70 % de la largeur actuelle (soit −30 %), min/max raisonnables, persistance localStorage.
+
+- [ ] **Choix du plan selon le contexte** : en Floor level (Import), afficher le plan de base (`<plan_id>.png`) car les cartouches/écritures sont dans le bon sens de lecture. Dans les vues où le plan est en overlay (Room level, Match), utiliser le plan `<plan_id>_enhanced.png` qui est visuellement plus propre. Lié au toggle overlay existant (voir Revue UX).
+- [ ] **Zoom molette souris** dans Floorplan Import : permettre de zoomer/dézoomer avec la molette de la souris (scroll wheel), indépendamment du pinch-to-zoom trackpad.
+- [ ] **Focus auto sur les pièces** (mode JSON/Préprocessé) : à l'ouverture dans Floor level (Import), cadrer automatiquement sur la bounding box englobante de toutes les pièces identifiées + 10 % de marge.
 
 Abandonné (inutile) : saisie manuelle d'échelle (cm/px ou points de calage) et saisie de code pièce à l'import — l'échelle vient de `plan_scale` du JSON v2 en Préprocessé ou des métadonnées OCR, le code pièce vient de Settings.
 
@@ -139,6 +142,11 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 - [ ] Sélection d'une zone interdite existante → poignée de déplacement, touche Delete pour supprimer
 - [ ] **Pas de redimensionnement souris** : pour modifier la taille d'une zone interdite, passer par le DSL pièce (ligne `EXCLUSION x y w h` éditable). La souris ne fait que positionner, déplacer, supprimer — cohérent avec la logique "édition visuelle simple, géométrie précise via DSL".
 - [x] Sauvegarde des amendements (bouton Save)
+- [x] **Bug bouton Save** : le bouton Save apparaît avant qu'un plan soit sélectionné (il ne devrait pas être visible tant qu'aucun plan n'est chargé). De plus, il est centré au milieu de la page au lieu d'être positionné dans la barre d'actions.
+- [ ] **Bouton Close** : ferme le projet courant. Si des modifications non sauvegardées existent, émettre un warning de confirmation avant de fermer.
+- [ ] **Bouton Erase** avec deux options :
+  - **All** : supprime toutes les données chargées (floorplan + layouts)
+  - **Layout only** : supprime uniquement les descriptions de layout (bureaux/postes) mais conserve les amendements éventuels du floorplan (bbox, ouvertures, zones interdites). Nettoie le JSON des informations de layout associées.
 
 #### Match
 
@@ -588,9 +596,17 @@ Tâches :
 
 ### Revue UX (restant)
 
+- [x] **Sous-onglets non sélectionnés peu lisibles** : le texte des sous-onglets inactifs est trop clair sur fond sombre. Assombrir le fond des sous-onglets non sélectionnés pour améliorer le contraste et la lisibilité.
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
+- [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
+- [ ] **Bug plan fantôme** : si aucun plan n'est chargé, les onglets Review et Design affichent un plan par défaut résiduel au lieu d'être vides. Nettoyer l'état initial des canvas rvCanvas et fpCanvas.
+- [ ] **Synchronisation liste gauche / pièce courante** : dans Import et Review, la liste des pièces dans la colonne de gauche doit toujours refléter la pièce courante sélectionnée (highlight + auto-scroll). Actuellement la synchro ne fonctionne pas toujours lors de la navigation Prev/Next.
+- [ ] **Repositionner boutons Adjust room** : les boutons Adjust room / Save / Cancel sont éloignés de la liste des pièces. Rapprocher dans la colonne de gauche ou sous la liste.
+- [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
+- [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".
+- [x] **Supprimer Debug log** : retirer la section Debug log dans Import si elle n'est plus nécessaire.
 - [ ] Tester le floor plan de référence (`project/plans/test_floorplan.png`) — valider visuellement le matching sur un cas réaliste
-- [ ] Adapter le texte/label de chaque onglet workflow (ex: premier onglet → "Review" au lieu de "Import")
+- [ ] **Renommage onglets top-level** : `Floorplan` → deux sous-onglets `Import` et `Review` ; `Layout` → `Design` ; `Catalogue` → conserver le nom mais remettre les indications descriptives de chaque onglet dans la partie droite (à la même hauteur que l'onglet, justifié à droite)
 - [x] Bug : zone de recul de chaise (chair clearance) apparaît sous la grille dans la vue Design Layout — corriger le z-order (FIXÉ 2026-04-07 : fond opaque #1e1e1e z=0.5 masque grille sous blocs)
 - [x] Bug : pointillés de l'arc de porte doivent avoir la même épaisseur que le pointillé vert d'ouverture (free opening) (FIXÉ 2026-04-07 : stroke-width 1.5 + dasharray 6 3)
 - [ ] UX : mettre une boîte de la couleur du canvas sous les dimensions d'une pièce dans Import floor plan
@@ -611,8 +627,11 @@ Tâches :
   - **Room level** : vue par pièce. L'utilisateur modifie **toutes les autres caractéristiques** : dimensions internes via DSL, ouvertures (portes/baies/fenêtres), zones interdites. Pas de déplacement ni de redimensionnement global de la pièce.
   Cette séparation clarifie le mental model et évite les doubles ergonomies qui se chevauchent actuellement.
 
-### Refactoring architecture frontend — Découplage des vues
+### Refactoring architecture frontend — State unique et découplage
 
+- [ ] **State unique** : fusionner `ingState.rooms`, `fpData.rooms`, `window.fpOverlay`, `window.fpAmendments`, `window.fpRoomAmendments` en un seul store cohérent. Aujourd'hui 5 sources de vérité partiellement synchronisées causent des bugs (pièce ajoutée dans Import invisible en Review, etc.).
+- [ ] **Découper init.js** (~900 lignes) : extraire les handlers Settings, Adjust room, Erase/Close dans des modules séparés
+- [ ] **Découper ingestion.js** (~1200 lignes) : séparer le rendering, le bbox editor, la room list, le zoom
 - [ ] Fonctions de rendu pures (données en entrée, SVG en sortie) — plus de dépendance au state global
 - [ ] Supprimer le mécanisme snapshot/restore léger de l'état éditeur
 
