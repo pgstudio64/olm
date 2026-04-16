@@ -20,7 +20,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <table class="tab-row" style="width:100%;border-collapse:collapse;border-bottom:1px solid var(--border);">
 <tr>
   <td style="vertical-align:bottom;padding:21px 0 0 0;">
-    <div style="display:flex;align-items:baseline;gap:16px;">
+    <div style="display:flex;align-items:baseline;gap:8px;">
       <div class="tab-bar">
         <div class="tab-group tab-group-floorplan">
           <span class="tab-group-label">FLOORPLAN</span>
@@ -187,6 +187,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <!-- OCR form (default mode — no extra controls needed) -->
         <div id="ingFormOcr"></div>
 
+        <div id="ingPlanSections" style="display:none;">
         <div class="section-title">Scale</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
           <label style="color:var(--text-dim);font-size:11px;white-space:nowrap;">Drawing scale</label>
@@ -212,6 +213,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <!-- TODO: consider toggling on #ingNewRoomId focus for more visible help -->
         <div id="ingAddRoomHelp" style="font-size:9px;color:var(--text-dim);opacity:0.6;margin-bottom:4px;">Stub placed above the plan. Drag body to move, drag corners to resize.</div>
         <div id="ingRoomList" style="height:210px;min-height:80px;max-height:600px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);"></div>
+        </div><!-- /ingPlanSections -->
 
 <div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
         <textarea id="fpRoomsJson" placeholder='{"rooms": [...]}'

@@ -1008,6 +1008,10 @@ async function init() {
     // Reset plan dropdown to placeholder
     var planSel = document.getElementById("ingPlanIdSelect");
     if (planSel) planSel.selectedIndex = 0;
+    // Reset ingestion state rooms
+    if (window.ingState) window.ingState.rooms = [];
+    // Hide plan-dependent sections, disable Review/Design
+    if (window.updatePlanDependentUI) window.updatePlanDependentUI();
     // Switch to Import tab
     var importBtn = document.querySelector('.tab-btn[data-tab="fpImport"]');
     if (importBtn) importBtn.click();
