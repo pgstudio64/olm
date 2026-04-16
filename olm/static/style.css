@@ -330,7 +330,6 @@
   .tab-group .tab-btn.active {
     background: var(--bg);
     color: var(--accent);
-    border-color: var(--accent);
   }
   .tab-step {
     display: inline-flex;
@@ -440,21 +439,18 @@
   .tab-btn {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-bottom: 2px solid transparent;
+    border-bottom: none;
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: var(--fs-md);
     padding: 14px var(--sp-xl);
     cursor: pointer;
     letter-spacing: 0.03em;
-    margin-bottom: -1px;
   }
   .tab-btn:hover { color: var(--text); background: var(--surface2); }
   .tab-btn.active {
     background: var(--bg);
     color: var(--accent);
-    border-color: var(--border);
-    border-bottom: 2px solid var(--accent);
   }
   .tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
   .tab-content.active { display: flex; flex-direction: column; }
@@ -487,7 +483,6 @@
   .sub-tab-btn.active {
     background: var(--surface2);
     color: var(--accent);
-    border-color: var(--border);
   }
   .sub-tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
   .sub-tab-content.active { display: flex; flex-direction: column; }
