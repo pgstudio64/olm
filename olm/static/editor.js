@@ -387,6 +387,12 @@ function render(targetSvg) {
 function _renderImpl(targetSvg) {
   const svg = targetSvg || document.getElementById("canvas");
   const isReview = svg && svg.id === "rvCanvas";
+  const isDesign = svg && svg.id === "fpCanvas";
+  // Review/Design canvases: skip render entirely if no rooms loaded (shared state residual)
+  if ((isReview || isDesign) && (!window.fpData || !window.fpData.rooms || !window.fpData.rooms.length)) {
+    svg.innerHTML = "";
+    return;
+  }
   // Review canvas outside amend mode: never show pattern blocks (shared state residual)
   var _savedRows;
   if (isReview && !state.roomAmendMode) {
@@ -859,20 +865,19 @@ function _renderImpl(targetSvg) {
     }
 
     // Grid meter labels (e.g. "1m", "2m") along room edges
-    var gridLabelFs = (9 * zf).toFixed(1);
-    for (let mx = meterPx; mx <= roomX + roomWPx; mx += meterPx) {
-      if (mx <= roomX) continue;
+    var gridLabelFs = (10 * zf).toFixed(1);
+    var gridLabelColor = COLOR_RULER;  // same as dimension labels for consistency
+    for (let mx = roomX + meterPx; mx < roomX + roomWPx; mx += meterPx) {
       var mVal = Math.round((mx - roomX) / meterPx);
-      elements.push({ z: -0.3, s: '<text x="' + mx.toFixed(1) + '" y="' + (roomY - 2 * zf).toFixed(1) +
-        '" text-anchor="middle" fill="' + COLOR_GRID_METER + '" font-size="' + gridLabelFs +
-        '" font-family="monospace" opacity="0.7">' + mVal + 'm</text>' });
+      elements.push({ z: 8, s: '<text x="' + mx.toFixed(1) + '" y="' + (roomY + roomHPx + 8 * zf).toFixed(1) +
+        '" text-anchor="middle" fill="' + gridLabelColor + '" font-size="' + gridLabelFs +
+        '" font-family="monospace" opacity="0.5">' + mVal + 'm</text>' });
     }
-    for (let my = meterPx; my <= roomY + roomHPx; my += meterPx) {
-      if (my <= roomY) continue;
+    for (let my = roomY + meterPx; my < roomY + roomHPx; my += meterPx) {
       var mValY = Math.round((my - roomY) / meterPx);
-      elements.push({ z: -0.3, s: '<text x="' + (roomX - 2 * zf).toFixed(1) + '" y="' + (my + 3 * zf).toFixed(1) +
-        '" text-anchor="end" fill="' + COLOR_GRID_METER + '" font-size="' + gridLabelFs +
-        '" font-family="monospace" opacity="0.7">' + mValY + 'm</text>' });
+      elements.push({ z: 8, s: '<text x="' + (roomX + roomWPx + 4 * zf).toFixed(1) + '" y="' + (my + 3 * zf).toFixed(1) +
+        '" text-anchor="start" fill="' + gridLabelColor + '" font-size="' + gridLabelFs +
+        '" font-family="monospace" opacity="0.5">' + mValY + 'm</text>' });
     }
   }
 

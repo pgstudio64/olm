@@ -888,10 +888,15 @@
 
     // Delegated dblclick: navigate to Review (survives re-renders)
     svg.addEventListener('dblclick', function(e) {
-      var body = e.target.closest('[data-bbox-body]');
-      if (!body) return;
+      // Use bbox editor selection (set by the 1st mousedown) rather than e.target
+      // which may point to a different element after the re-render
+      var name = ingState.bboxEditor.selectedName;
+      if (!name) {
+        var body = e.target.closest('[data-bbox-body]');
+        if (!body) return;
+        name = body.dataset.bboxBody;
+      }
       e.stopPropagation();
-      var name = body.dataset.bboxBody;
       ingState.bboxEditor.selectedName = null;
       ingState.bboxEditor.mode = 'idle';
       if (window.fpData) {
