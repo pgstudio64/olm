@@ -586,14 +586,14 @@
   .fp-sidebar {
     width: 240px; border-right: 1px solid var(--border);
     display: flex; flex-direction: column; overflow-y: auto;
-    background: var(--bg); padding: var(--sp-sm); padding-top: 20px;
+    background: var(--bg); padding: var(--sp-sm); padding-top: 22px;
     order: -1;  /* move to left */
   }
   .fp-info-col {
     width: 315px; min-width: 180px; max-width: 520px; flex-shrink: 0;
     border-left: 1px solid var(--border);
     display: flex; flex-direction: column; overflow-y: auto;
-    background: var(--bg); padding: var(--sp-sm); padding-top: 20px;
+    background: var(--bg); padding: var(--sp-sm); padding-top: 22px;
   }
   .fp-resize-handle {
     width: 8px; cursor: col-resize; flex-shrink: 0;
