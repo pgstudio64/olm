@@ -471,8 +471,8 @@
   /* Catalogue sub-tab-bar */
   .cat-sub-tab-bar {
     background: var(--bg);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
+    border-top: none;
+    border-bottom: none;
     padding: 2px 0 0 16px;
   }
   .sub-tab-btn {
