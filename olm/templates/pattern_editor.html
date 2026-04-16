@@ -25,7 +25,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div class="tab-group tab-group-floorplan">
           <span class="tab-group-label">FLOORPLAN</span>
           <button class="tab-btn active" data-tab="fpImport">Floor</button>
-          <button class="tab-btn" data-tab="fpReview">Room</button>
+          <button class="tab-btn" data-tab="fpReview">Rooms</button>
         </div>
         <div class="tab-group tab-group-layout">
           <span class="tab-group-label">LAYOUT</span>
@@ -174,46 +174,26 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <!-- TAB: IMPORT -->
 <div class="tab-content active" id="tabFpImport">
     <div class="fp-container">
-      <!-- Left panel: extraction settings + room list -->
+      <!-- Left panel: plan selector + room list (navigation) -->
       <div class="fp-info-col" id="fpLeftInfoCol" style="border-left:none;border-right:1px solid var(--border);order:-2;">
-        <!-- Plan selector (auto-detection OCR vs Preprocessed by file mtime) -->
         <div class="section-title">Current floorplan</div>
         <select id="ingPlanIdSelect" style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
           <option value="">— Select a plan —</option>
         </select>
-
-        <!-- OCR form (default mode — no extra controls needed) -->
         <div id="ingFormOcr"></div>
 
         <div id="ingPlanSections" style="display:none;">
-        <div class="section-title">Scale</div>
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-          <span style="color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">1 :</span>
-          <input type="number" id="ingDrawingScale" placeholder="100" min="1"
-            style="width:65px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
-        </div>
-        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:6px;">
-          Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
-        </div>
-
-        <div class="section-title">Floor properties</div>
-        <table>
-          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
-          <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
-        </table>
-
         <div class="section-title">Room list</div>
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
           <input type="text" id="ingNewRoomId" placeholder="Room ID" autocomplete="off"
             style="flex:1;min-width:0;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:10px;">
           <button class="btn btn-ok" id="ingBtnAddRoom" style="padding:2px 8px;font-size:11px;white-space:nowrap;">Add</button>
         </div>
-        <!-- TODO: consider toggling on #ingNewRoomId focus for more visible help -->
         <div id="ingAddRoomHelp" style="font-size:9px;color:var(--text-dim);opacity:0.6;margin-bottom:4px;">Stub placed above the plan. Drag body to move, drag corners to resize.</div>
         <div id="ingRoomList" style="height:370px;min-height:80px;max-height:800px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);"></div>
         </div><!-- /ingPlanSections -->
 
-<div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
+        <div class="section-title" style="display:none;" id="ingRoomDataTitle">Room data</div>
         <textarea id="fpRoomsJson" placeholder='{"rooms": [...]}'
           class="sidebar-textarea" rows="8" style="display:none;"></textarea>
         <div style="margin-top:4px;display:none;" id="ingLoadFileWrap">
@@ -248,30 +228,35 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             preserveAspectRatio="xMidYMid meet" class="svg-canvas" style="flex:1;"></svg>
         </div>
       </div>
+
+      <!-- Right panel: scale + floor properties (detail) -->
+      <div class="fp-info-col" id="fpRightInfoCol" style="display:none;">
+        <div class="section-title">Scale</div>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+          <span style="color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">1 :</span>
+          <input type="number" id="ingDrawingScale" placeholder="100" min="1"
+            style="width:65px;padding:3px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;font-family:var(--font-mono);">
+        </div>
+        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:6px;">
+          Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
+        </div>
+
+        <div class="section-title">Floor properties</div>
+        <table>
+          <tr><td>Rooms</td><td id="rvFloorRooms">0</td></tr>
+          <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
+        </table>
+      </div>
     </div>
 </div><!-- /tabFpImport -->
 
 <!-- TAB: REVIEW -->
 <div class="tab-content" id="tabFpReview">
     <div class="fp-container">
-      <!-- Left panel: room properties -->
+      <!-- Left panel: room list (navigation) -->
       <div class="fp-sidebar" id="rvRoomSidebar" style="width:170px;min-width:120px;max-width:350px;border-left:none;border-right:none;">
-        <div class="section-title">Room</div>
-        <table>
-          <tr><td>Width (cm)</td><td id="rvRoomWidth">-</td></tr>
-          <tr><td>Depth (cm)</td><td id="rvRoomDepth">-</td></tr>
-          <tr><td>Area (m²)</td><td id="rvRoomArea">-</td></tr>
-        </table>
         <div class="section-title">Room list</div>
         <div id="rvRoomList" style="height:370px;min-height:80px;max-height:800px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);margin-bottom:var(--sp-sm);"></div>
-        <div class="section-title">Room definition</div>
-        <textarea id="rvRoomDsl" readonly rows="12" class="sidebar-textarea"></textarea>
-        <div id="rvAmendApply" style="display:none;">
-          <button class="btn" id="rvBtnApplyDsl" style="width:100%;">Apply</button>
-        </div>
-        <div>
-          <span id="rvDslHelpToggle" class="help-link">Syntax help</span>
-        </div>
       </div>
       <div class="fp-resize-handle" id="rvLeftResize"></div>
 
@@ -307,6 +292,24 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             </div>
             <svg id="rvCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
           </div>
+        </div>
+      </div>
+
+      <!-- Right panel: room detail -->
+      <div class="fp-info-col" id="rvRightInfoCol">
+        <div class="section-title">Room</div>
+        <table>
+          <tr><td>Width (cm)</td><td id="rvRoomWidth">-</td></tr>
+          <tr><td>Depth (cm)</td><td id="rvRoomDepth">-</td></tr>
+          <tr><td>Area (m²)</td><td id="rvRoomArea">-</td></tr>
+        </table>
+        <div class="section-title">Room definition</div>
+        <textarea id="rvRoomDsl" readonly rows="12" class="sidebar-textarea"></textarea>
+        <div id="rvAmendApply" style="display:none;">
+          <button class="btn" id="rvBtnApplyDsl" style="width:100%;">Apply</button>
+        </div>
+        <div>
+          <span id="rvDslHelpToggle" class="help-link">Syntax help</span>
         </div>
       </div>
     </div>
