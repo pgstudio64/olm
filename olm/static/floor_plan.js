@@ -293,6 +293,9 @@
       return;
     }
 
+    // Update room list highlight in Design
+    if (window.updateIngRoomList) window.updateIngRoomList();
+
     // Reset action buttons on room change
     document.getElementById("fpBtnEditPattern").disabled = true;
     document.getElementById("fpBtnAdjustLayout").disabled = true;

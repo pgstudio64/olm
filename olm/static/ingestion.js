@@ -307,7 +307,9 @@
   window.ingState = ingState;
   function updateIngRoomList() {
     var reviewSubtab = document.getElementById('tabFpReview');
-    var inRoomView = reviewSubtab && reviewSubtab.classList.contains('active');
+    var designTab = document.getElementById('tabLytDesign');
+    var inRoomView = (reviewSubtab && reviewSubtab.classList.contains('active')) ||
+                     (designTab && designTab.classList.contains('active'));
     var selectedName = inRoomView && window.fpData && window.fpData.rooms.length
       ? (window.fpData.rooms[window.fpData.currentIdx] || {}).name : '';
     var beSel = ingState.bboxEditor.selectedName;
@@ -336,22 +338,22 @@
       '" data-ing-room="">&#9664; All (' + rooms.length + ')</div>' + html;
     _wireRoomListEl(document.getElementById('ingRoomList'), html, 'import');
     _wireRoomListEl(document.getElementById('rvRoomList'), html, 'review');
+    _wireRoomListEl(document.getElementById('fpDesignRoomList'), html, 'design');
   }
 
   function _wireRoomListEl(listEl, html, context) {
     if (!listEl) return;
     listEl.innerHTML = html;
-    if (context === 'review') {
+    if (context === 'review' || context === 'design') {
       listEl.querySelectorAll('.room-del').forEach(function(el) { el.remove(); });
     }
-    // Auto-scroll to selected room in both Import and Review
+    // Auto-scroll to selected room
     var selected = listEl.querySelector('[style*="font-weight:bold"]');
     if (selected) selected.scrollIntoView({ block: 'nearest' });
     listEl.querySelectorAll('[data-ing-room]').forEach(function(el) {
       el.addEventListener('click', function() {
         var name = this.dataset.ingRoom;
         if (name) {
-          // Navigate to room view (room list click always navigates)
           if (window.fpData) {
             var rooms = window.fpData.rooms || [];
             for (var i = 0; i < rooms.length; i++) {
@@ -361,7 +363,17 @@
               }
             }
           }
-          if (window.ingShowRoomView) window.ingShowRoomView();
+          if (context === 'design') {
+            // Stay on Design, re-render current room
+            if (window.fpRenderCurrent) window.fpRenderCurrent();
+            if (window.rvRenderCurrent) window.rvRenderCurrent();
+            updateIngRoomList();
+          } else if (context === 'import') {
+            // "All" entry handled below; named room → go to Review
+            if (window.ingShowRoomView) window.ingShowRoomView();
+          } else {
+            if (window.ingShowRoomView) window.ingShowRoomView();
+          }
         } else {
           // "All" — back to plan view
           ingState.zoomRoom = '';
