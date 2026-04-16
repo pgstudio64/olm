@@ -35,6 +35,9 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Grille Design : labels "1m", "2m"… le long des bords de la pièce.
 - UI 100% anglais : 5 chaînes françaises dans ingestion.js traduites.
 
+### Fonctionnalité (D-89)
+- **Sous-onglets Catalogue inline** : Card/Grid/Editor intégrés dans la tab-bar LAYOUT sur une seule ligne, apparition dynamique.
+
 ### Fonctionnalité (D-88)
 - **Drawing scale** : paramètre explicite `drawing_scale` (format "1 : 100") dans Import + `render_dpi` dans Settings > Floorplan. Formule `cm_per_px = 2.54 × scale / dpi`. Si non renseigné, estimation inverse affichée en jaune. Recalcul live des dimensions sans re-import.
 

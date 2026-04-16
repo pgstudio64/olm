@@ -7,6 +7,20 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-89 · Sous-onglets Catalogue inline dans la tab-bar (2026-04-16)
+
+**Décision** : Les sous-onglets du Catalogue (Card / Grid / Editor) sont intégrés directement dans la barre de navigation principale, à l'intérieur du groupe LAYOUT, sur une seule ligne. Ils apparaissent dynamiquement quand l'onglet Catalogue est actif et disparaissent sinon.
+
+**Justification** : Supprime la sub-tab-bar séparée qui créait un problème d'alignement récurrent (magic number 428px, puis calcul JS dynamique). Une seule ligne de navigation = pas de décalage possible, hiérarchie visuelle claire.
+
+**Impact** :
+- `olm/templates/pattern_editor.html` : boutons `.cat-subtab-btn` dans `.tab-group-layout`, suppression de `.sub-tab-bar` dans `tabLytCatalogue`
+- `olm/static/style.css` : styles `.cat-subtab-btn` (taille discrète, séparateur `│`)
+- `olm/static/init.js` : `_showCatSubtabs()` et `_activateCatSubtab()`, suppression `alignCatalogueSubTabs()`
+- `olm/static/catalogue.js`, `olm/static/editor.js` : sélecteurs `.sub-tab-btn` → `.cat-subtab-btn`
+
+---
+
 ## D-88 · Drawing scale — échelle explicite du plan (2026-04-16)
 
 **Décision** : L'échelle du plan est désormais un paramètre explicite `drawing_scale` (format `"1 : 100"`) combiné au `render_dpi` (DPI de rastérisation du PDF, 300 par défaut).

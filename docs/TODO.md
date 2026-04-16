@@ -620,7 +620,8 @@ Tâches :
 - [ ] **Repositionner boutons Adjust room** : les boutons Adjust room / Save / Cancel sont éloignés de la liste des pièces. Rapprocher dans la colonne de gauche ou sous la liste.
 - [x] **Alignement sous-sous-onglets Catalogue** (2026-04-16) : padding-left dynamique via JS (alignCatalogueSubTabs).
 - [x] **Marge gauche onglets** (2026-04-16) : padding-left 4px sur .tab-bar pour aligner la marge gauche de Floorplan avec le gap inter-groupes.
-- [ ] **Bug Pattern Editor : impossible de sélectionner un pattern** : dans l'onglet Catalogue > Editor, cliquer sur un pattern dans la liste ne le charge pas pour édition. Diagnostiquer le handler de sélection.
+- [x] **Bug Pattern Editor : impossible de sélectionner un pattern** (2026-04-16) : data-tab comparait à "catalogue" au lieu de "lytCatalogue" (renommé D-78). Click et clavier restaurés.
+- [x] **Sous-onglets Catalogue inline** (2026-04-16, D-89) : Card/Grid/Editor intégrés dans la tab-bar LAYOUT sur une seule ligne. Apparaissent dynamiquement quand Catalogue est actif. Suppression de la sub-tab-bar séparée.
 - [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
 - [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".
 - [x] **Supprimer Debug log** : retirer la section Debug log dans Import si elle n'est plus nécessaire.

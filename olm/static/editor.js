@@ -1486,7 +1486,7 @@ function switchToEditorWithPattern(data) {
   exitAmendUI();
   exitRoomAmendUI();
   document.querySelector('.tab-btn[data-tab="lytCatalogue"]').click();
-  document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+  document.querySelector('.cat-subtab-btn[data-subtab="catEditor"]').click();
   loadPatternFromData(JSON.parse(JSON.stringify(data)));
 }
 
