@@ -23,6 +23,14 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Add room : prompt auto-incrémenté basé sur max ID numérique existant.
 - Dézoom limité : clamp zoom min 0.5 (Review/Design), clamp viewBox max 2× plan (Import).
 
+### Corrigé (bugs)
+- Plan fantôme : canvas rvCanvas/fpCanvas vidés quand aucune room n'est chargée.
+- Esc bbox editor Import : restaure la position ET désélectionne la pièce.
+- Review après Save : render() masque state.rows en Review hors mode édition, empêche l'affichage résiduel de blocs Design.
+- Synchro liste gauche : auto-scroll étendu à Import (était limité à Review).
+- Warning sortie Adjust room : confirm() bloque le changement d'onglet si modifications non sauvegardées.
+- Double-click Import → Review : dblclick délégué sur ingSvg (survit aux re-renders SVG).
+
 ---
 
 ## [Unreleased] — Conception 2026-04-14 / 2026-04-15 : D-78 à D-85

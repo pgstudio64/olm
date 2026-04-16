@@ -293,14 +293,17 @@ async function init() {
   // Cancel any active amend mode when navigating away from editor
   function _cancelAmendIfActive() {
     if (state.amendMode) {
+      if (state.dirty && !confirm("Unsaved layout changes will be lost. Continue?")) return false;
       state.amendMode = null;
       exitAmendUI();
       _restoreEditorState();
     }
     if (state.roomAmendMode) {
+      if (!confirm("Unsaved room changes will be lost. Continue?")) return false;
       state.roomAmendMode = null;
       exitRoomAmendUI();
     }
+    return true;
   }
 
   // Tab descriptions (flat nav — 4 tabs)
@@ -317,7 +320,7 @@ async function init() {
       var isLayoutTab = btn.dataset.tab === "lytDesign" || btn.dataset.tab === "lytCatalogue";
       // Cancel amend mode when leaving Layout tabs
       if (!isLayoutTab) {
-        _cancelAmendIfActive();
+        if (_cancelAmendIfActive() === false) return;
         _saveEditorState();
       }
       document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
@@ -343,7 +346,7 @@ async function init() {
     btn.addEventListener("click", function() {
       // Cancel amend mode when leaving editor sub-tab
       if (btn.dataset.subtab !== "catEditor") {
-        _cancelAmendIfActive();
+        if (_cancelAmendIfActive() === false) return;
       }
       // Deactivate sibling sub-tabs only (not nested sub-tabs)
       var bar = btn.parentElement;

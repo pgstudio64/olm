@@ -599,23 +599,23 @@ Tâches :
 - [x] **Sous-onglets non sélectionnés peu lisibles** : le texte des sous-onglets inactifs est trop clair sur fond sombre. Assombrir le fond des sous-onglets non sélectionnés pour améliorer le contraste et la lisibilité.
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
-- [ ] **Bug plan fantôme** : si aucun plan n'est chargé, les onglets Review et Design affichent un plan par défaut résiduel au lieu d'être vides. Nettoyer l'état initial des canvas rvCanvas et fpCanvas.
+- [x] **Bug plan fantôme** (2026-04-16) : canvas rvCanvas/fpCanvas vidés quand aucune room n'est chargée.
 - [x] **Couleur labels dimensions** (2026-04-16) : `--text-dim` #6e6a62 → #908a7e, `COLOR_RULER` → #b0a898, labels dimensions SVG utilisent `COLOR_RULER`.
 - [ ] **Review layout 2 colonnes** : colonne gauche = même room list que Import (sans "Current floorplan"). Colonne droite = caractéristiques de la pièce, DSL, boutons Adjust/Save/Cancel. Plus homogène avec le layout de Design qui a aussi une colonne d'info à droite.
 - [ ] **Room list taille par défaut** : aligner la hauteur de la room list dans Review sur celle de Import (même taille).
 - [ ] **PRIORITÉ HAUTE — Taille des pièces fausse** : revoir le calcul de la taille d'une pièce par rapport à l'indication de surface en m². Certaines pièces sont plus petites que la pièce réelle sur le plan. Peut-être lié à une mauvaise identification de la bbox par le pipeline d'extraction.
 - [x] **Contraste onglet sélectionné** (2026-04-16) : border-bottom 3px accent sur l'onglet actif, hover avec fond surface2.
 - [x] **Hauteur onglets principaux** (2026-04-16) : padding vertical 10px → 14px, sous-onglets 4px → 8px.
-- [ ] **Bug Review après Save** : après Adjust room → Save dans Review, un clic sur le fond affiche un rendu Design (blocs de pattern) au lieu du rendu Review (pièce vide). State résiduel non nettoyé.
+- [x] **Bug Review après Save** (2026-04-16) : render() masque state.rows quand isReview && !roomAmendMode, empêche l'affichage résiduel de blocs Design.
 - [x] **Limiter le dézoom** (2026-04-16) : clamp zoom min 0.5 dans editor.js, clamp viewBox max 2× plan dans ingestion.js.
-- [ ] **Validation visuelle batch UX 2026-04-16** : vérifier en navigateur les 7 fixes UX (couleur labels, hauteur onglets, contraste actif, zone cliquable sous-onglets, croix Settings, add room auto-incr, limite dézoom). Corriger si régressions.
-- [ ] **Warning sortie mode Adjust room** : naviguer ailleurs (← Floor plan, changer d'onglet, Prev/Next) pendant un Adjust room actif abandonne silencieusement les modifications. Ajouter un warning de confirmation ("Unsaved changes will be lost") ou masquer le bouton ← Floor plan en mode édition. Tout changement de contexte doit déclencher un confirm si des modifications sont en cours.
-- [ ] **Esc dans bbox editor Import** : Esc ne désélectionne plus la pièce dans le bbox editor.
-- [ ] **Double-click Import → Review** : le double-click sur une pièce dans Import ne bascule pas vers Review. Le handler dblclick a été ajouté mais ne fonctionne pas (probable conflit avec le mousedown du bbox editor).
+- [ ] **Validation visuelle batch UX 2026-04-16** : vérifier en navigateur les 13 fixes UX/bugs (couleur labels, hauteur onglets, contraste actif, zone cliquable sous-onglets, croix Settings, add room auto-incr, limite dézoom, plan fantôme, Esc bbox, Review après Save, synchro liste, warning Adjust room, dblclick Import→Review). Corriger si régressions.
+- [x] **Warning sortie mode Adjust room** (2026-04-16) : confirm() dans _cancelAmendIfActive() pour roomAmendMode et amendMode (si dirty). Changement d'onglet bloqué si l'utilisateur refuse.
+- [x] **Esc dans bbox editor Import** (2026-04-16) : Esc restaure la bbox ET désélectionne la pièce.
+- [x] **Double-click Import → Review** (2026-04-16) : dblclick délégué sur ingSvg (survit aux re-renders), remplace le listener inline cassé par le re-render du mousedown.
 - [x] **Add room prompt** (2026-04-16) : auto-incrément basé sur max ID numérique existant.
 - [x] **Zone cliquable sous-onglets** (2026-04-16) : padding vertical 4px → 8px.
 - [x] **Croix fermeture Settings** (2026-04-16) : padding élargi + flex center pour aligner zone cliquable.
-- [ ] **Synchronisation liste gauche / pièce courante** : dans Import et Review, la liste des pièces dans la colonne de gauche doit toujours refléter la pièce courante sélectionnée (highlight + auto-scroll). Actuellement la synchro ne fonctionne pas toujours lors de la navigation Prev/Next.
+- [x] **Synchronisation liste gauche / pièce courante** (2026-04-16) : auto-scroll étendu à Import (était limité à Review).
 - [ ] **Repositionner boutons Adjust room** : les boutons Adjust room / Save / Cancel sont éloignés de la liste des pièces. Rapprocher dans la colonne de gauche ou sous la liste.
 - [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
 - [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".

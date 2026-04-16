@@ -209,6 +209,7 @@
     if (!room) {
       document.getElementById("rvRoomLabel").textContent = "-";
       document.getElementById("rvNavInfo").textContent = "0 / 0";
+      document.getElementById("rvCanvas").innerHTML = "";
       return;
     }
 
@@ -288,6 +289,7 @@
       document.getElementById("fpRoomSize").textContent = "-";
       document.getElementById("fpCandidatesList").innerHTML =
         '<div class="fp-no-match">Load a room JSON file from the Input tab</div>';
+      document.getElementById("fpCanvas").innerHTML = "";
       return;
     }
 
