@@ -11,13 +11,18 @@
   // --- Drawing scale helpers ---
 
   /**
-   * Parse a drawing scale string like "1 : 300" or "1:100" → number (300 or 100).
-   * Returns 0 if unparseable.
+   * Parse drawing scale value → number. Accepts plain number ("300")
+   * or "1 : 300" format. Returns 0 if unparseable.
    */
   function parseDrawingScale(str) {
     if (!str) return 0;
-    var m = String(str).match(/1\s*:\s*(\d+(?:\.\d+)?)/);
-    return m ? parseFloat(m[1]) : 0;
+    var s = String(str).trim();
+    // Try "1 : 300" format first
+    var m = s.match(/1\s*:\s*(\d+(?:\.\d+)?)/);
+    if (m) return parseFloat(m[1]);
+    // Plain number
+    var n = parseFloat(s);
+    return (n > 0) ? n : 0;
   }
 
   /**
@@ -29,10 +34,13 @@
     return 2.54 * scaleNumber / renderDpi;
   }
 
-  /** Read current drawing_scale from the UI field. */
+  /** Read current drawing_scale from the UI field, formatted for backend. */
   function getDrawingScale() {
     var el = document.getElementById('ingDrawingScale');
-    return el ? el.value.trim() : '';
+    var val = el ? el.value.trim() : '';
+    if (!val) return '';
+    var n = parseDrawingScale(val);
+    return n > 0 ? '1 : ' + n : '';
   }
 
   /** Read render_dpi from config (APP_CONFIG). */
@@ -51,8 +59,9 @@
     if (!dsField) return;
     var dpi = getRenderDpi();
     if (dsField.value.trim()) {
-      // User already provided a scale — just show the effective cm/px
-      if (info) info.textContent = 'Scale applied: ' + dsField.value.trim() +
+      // User already provided a scale — show effective cm/px, white text
+      dsField.style.color = 'var(--text)';
+      if (info) info.textContent = '1 : ' + dsField.value.trim() +
         ' → ' + scaleCmPerPx.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
       return;
     }
@@ -60,7 +69,7 @@
     if (scaleCmPerPx > 0 && dpi > 0) {
       var estimated = Math.round(scaleCmPerPx * dpi / 2.54);
       if (estimated > 0) {
-        dsField.value = '1 : ' + estimated;
+        dsField.value = estimated;
         dsField.style.color = 'var(--warn)';
         if (info) info.textContent = 'Estimated from room surfaces (may be inaccurate). ' +
           'Effective: ' + scaleCmPerPx.toFixed(4) + ' cm/px at ' + dpi + ' DPI. ' +
@@ -342,18 +351,7 @@
       el.addEventListener('click', function() {
         var name = this.dataset.ingRoom;
         if (name) {
-          // If bbox editor is active, switch selection to this room
-          if (ingState.bboxEditor.selectedName !== null) {
-            var listSelRoom = ingState.rooms.find(function(r) { return r.name === name; });
-            ingState.bboxEditor.selectedName = name;
-            ingState.bboxEditor.sessionStartBbox = listSelRoom ? listSelRoom.bbox_px.slice() : null;
-            ingState.bboxEditor.mode = 'idle';
-            ingState.bboxEditor.dragStart = null;
-            updateIngRoomList();
-            renderIngestion();
-            return;
-          }
-          // Otherwise navigate to room view
+          // Navigate to room view (room list click always navigates)
           if (window.fpData) {
             var rooms = window.fpData.rooms || [];
             for (var i = 0; i < rooms.length; i++) {
@@ -1168,12 +1166,18 @@
     // Drawing scale field: recalculate room dimensions on change
     var dsField = document.getElementById('ingDrawingScale');
     if (dsField) {
-      // Pre-fill from config if available
+      // Pre-fill from config if available (extract number from "1 : 300")
       var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale || '';
-      if (cfgDs) dsField.value = cfgDs;
+      if (cfgDs) {
+        var cfgNum = parseDrawingScale(cfgDs);
+        if (cfgNum > 0) {
+          dsField.value = cfgNum;
+          dsField.style.color = 'var(--text)';
+        }
+      }
 
       dsField.addEventListener('change', function() {
-        this.style.color = '';  // reset warning color on manual edit
+        this.style.color = 'var(--text)';  // confirmed: white text
         var scaleNum = parseDrawingScale(this.value);
         var dpi = getRenderDpi();
         if (scaleNum > 0 && dpi > 0 && ingState.rooms.length > 0) {
