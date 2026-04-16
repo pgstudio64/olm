@@ -1745,8 +1745,7 @@ function zoomIn(targetSvg) {
 function zoomOut(targetSvg) {
   // Clamp: don't zoom out beyond the fitViewBox (content fully visible)
   if (state._fitViewBox) {
-    var newW = state.viewBox.w * 1.25;
-    if (newW > state._fitViewBox.w * 1.1) return;  // 10% margin
+    if (state.viewBox.w * 1.25 > state._fitViewBox.w * 1.1) return;
   }
   const vb = state.viewBox;
   const factor = 1.25;
