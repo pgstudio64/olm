@@ -7,17 +7,26 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
-## D-89 · Sous-onglets Catalogue inline dans la tab-bar (2026-04-16)
+## D-89 · Navigation UX — onglets, sous-onglets, hover, descriptions (2026-04-16)
 
-**Décision** : Les sous-onglets du Catalogue (Card / Grid / Editor) sont intégrés directement dans la barre de navigation principale, à l'intérieur du groupe LAYOUT, sur une seule ligne. Ils apparaissent dynamiquement quand l'onglet Catalogue est actif et disparaissent sinon.
+**Décision** : Refonte UX de la navigation par onglets.
 
-**Justification** : Supprime la sub-tab-bar séparée qui créait un problème d'alignement récurrent (magic number 428px, puis calcul JS dynamique). Une seule ligne de navigation = pas de décalage possible, hiérarchie visuelle claire.
+- Renommage Import → Floor, Review → Room (plus court, plus clair).
+- Sous-onglets Catalogue : sub-tab-bar séparée (l'approche inline D-89 initiale a été abandonnée — trop de conflits visuels). Description italique à droite. Actif en gras + jaune.
+- Zone hover des onglets étendue via pseudo-element `::before` (-8px top, -5px latéral) — pas de changement visuel, meilleure réactivité.
+- Onglets Review/Design masqués (`display:none`) tant qu'aucun plan n'est chargé. Sections Scale/Floor Properties/Room List conditionnelles.
+- Contraste onglets renforcé : actif #e8c46a, inactif #6a655c.
+- Standard par défaut configurable (`default_standard` dans config.json + Settings).
+- Dézoom limité au fitViewBox × 1.1.
+- Double-click plan Import : détection par timer mousedown (400ms) au lieu du dblclick natif (cassé par re-render).
 
 **Impact** :
-- `olm/templates/pattern_editor.html` : boutons `.cat-subtab-btn` dans `.tab-group-layout`, suppression de `.sub-tab-bar` dans `tabLytCatalogue`
-- `olm/static/style.css` : styles `.cat-subtab-btn` (taille discrète, séparateur `│`)
-- `olm/static/init.js` : `_showCatSubtabs()` et `_activateCatSubtab()`, suppression `alignCatalogueSubTabs()`
-- `olm/static/catalogue.js`, `olm/static/editor.js` : sélecteurs `.sub-tab-btn` → `.cat-subtab-btn`
+- `olm/static/style.css` : couleurs onglets, pseudo-element hover, sub-tab-bar, descriptions italiques
+- `olm/templates/pattern_editor.html` : renommage onglets, description sous-onglets
+- `olm/static/init.js` : descriptions sous-onglets, handlers
+- `olm/static/ingestion.js` : masquage conditionnel, dblclick timer
+- `olm/static/config.js` : default_standard wiring
+- `project/config.json` : `default_standard: "SITE"`
 
 ---
 
