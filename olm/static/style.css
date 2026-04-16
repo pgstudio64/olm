@@ -293,8 +293,8 @@
     background: rgba(200, 160, 80, 0.32);
     border: 1px solid rgba(200, 160, 80, 0.55);
     border-bottom: none;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
     position: relative;
     top: 1px;
   }
