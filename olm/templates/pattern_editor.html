@@ -25,11 +25,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div class="tab-group tab-group-floorplan">
           <span class="tab-group-label">FLOORPLAN</span>
           <button class="tab-btn active" data-tab="fpImport">Floor</button>
-          <button class="tab-btn" data-tab="fpReview">Rooms</button>
+          <button class="tab-btn" data-tab="fpReview">Room</button>
         </div>
         <div class="tab-group tab-group-layout">
           <span class="tab-group-label">LAYOUT</span>
-          <button class="tab-btn" data-tab="lytDesign">Design</button>
+          <button class="tab-btn" data-tab="lytDesign">Office</button>
           <button class="tab-btn" data-tab="lytCatalogue">Catalogue</button>
         </div>
       </div>
@@ -41,6 +41,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan"></div>
       <div id="planActions" style="display:flex;gap:8px;align-items:center;">
         <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
+        <button class="btn" id="btnExportPlan" title="Export floor plan data" style="display:none;flex-shrink:0;">Export</button>
         <button class="btn" id="btnClosePlan" title="Close current floor plan" style="display:none;flex-shrink:0;">Close</button>
         <div id="eraseWrapper" style="display:none;position:relative;flex-shrink:0;">
           <button class="btn" id="btnErasePlan" title="Erase data">Erase ▾</button>
@@ -65,10 +66,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
   <div class="settings-tabs">
     <button class="settings-tab-btn active" data-settings-tab="stGeneral">General</button>
-    <button class="settings-tab-btn" data-settings-tab="stFloorplan">Floorplan</button>
-    <button class="settings-tab-btn" data-settings-tab="stLayout">Layout</button>
+    <span style="border-left:1px solid var(--border);height:16px;margin:0 4px;"></span>
+    <button class="settings-tab-btn" data-settings-tab="stFloorplan">Floor</button>
+    <button class="settings-tab-btn" data-settings-tab="stLayout">Office</button>
     <button class="settings-tab-btn" data-settings-tab="stCatalogue">Catalogue</button>
-    <button class="settings-tab-btn" data-settings-tab="stExport">Export</button>
   </div>
 
   <!-- GENERAL -->
@@ -93,6 +94,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="settings-section">
       <div class="section-title">Standard labels</div>
       <div id="cfgStandardLabels" class="settings-grid"></div>
+    </div>
+    <div class="settings-section">
+      <div class="section-title">Export</div>
+      <p style="color:var(--text-dim);font-size:var(--fs-sm);">Export settings will be available here.</p>
     </div>
   </div>
 
@@ -163,12 +168,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   </div>
 
   <!-- EXPORT -->
-  <div class="settings-tab-pane" id="stExport">
-    <div class="settings-section">
-      <div class="section-title">Export</div>
-      <p style="color:var(--text-dim);font-size:var(--fs-sm);">Export settings will be available here.</p>
-    </div>
-  </div>
 </div>
 
 <!-- TAB: IMPORT -->
