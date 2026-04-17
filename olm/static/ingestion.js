@@ -268,6 +268,8 @@
         if (hdrEl) hdrEl.textContent = planId;
         var btnSave = document.getElementById('btnSavePlan');
         if (btnSave) btnSave.style.display = '';
+        var btnExport = document.getElementById('btnExportPlan');
+        if (btnExport) btnExport.style.display = '';
         var btnClose = document.getElementById('btnClosePlan');
         if (btnClose) btnClose.style.display = '';
         var eraseWrap = document.getElementById('eraseWrapper');
@@ -1170,7 +1172,7 @@
     var dsField = document.getElementById('ingDrawingScale');
     if (dsField) {
       // Pre-fill from config if available
-      var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale || '';
+      var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale_text || '';
       if (cfgDs) {
         var cfgNum = parseDrawingScale(cfgDs);
         if (cfgNum > 0) {
@@ -1210,7 +1212,7 @@
           if (info) info.textContent = scaleNum +
             ' → ' + ingState.scale.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
         }
-        saveConfigField(["ingestion", "drawing_scale"], dsField.value);
+        saveConfigField(["ingestion", "drawing_scale_text"], dsField.value);
       }
       dsField.addEventListener('change', _applyDrawingScale);
       dsField.addEventListener('blur', function() {
@@ -1523,6 +1525,8 @@
           if (hdrEl2) hdrEl2.textContent = planId;
           var btnSave2 = document.getElementById('btnSavePlan');
           if (btnSave2) btnSave2.style.display = '';
+          var btnExport2 = document.getElementById('btnExportPlan');
+          if (btnExport2) btnExport2.style.display = '';
           var btnClose2 = document.getElementById('btnClosePlan');
           if (btnClose2) btnClose2.style.display = '';
           var eraseWrap2 = document.getElementById('eraseWrapper');

@@ -7,6 +7,35 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-91 · Convention fichiers -SD + drawing_scale_measured (2026-04-17)
+
+**Décision** : Refonte de la convention de nommage des fichiers préprocessés et de la gestion de l'échelle.
+
+- PNG standard `<plan_id>.png` (avec cartouches) + PNG `<plan_id>-SD.png` (Sans Description, pour l'algo). Remplace l'ancien suffixe `_enhanced`.
+- JSON v3 : `drawing_scale` renommé `drawing_scale_text`, ajout `drawing_scale_measured` (cm/px depuis la règle de 5m) et `orientation` (degrés par rapport au nord).
+- `drawing_scale_measured` prioritaire sur le calcul text+DPI, avec log warning si divergence > 20%.
+
+**Justification** : Le preprocessing externe fournit une échelle mesurée sur la règle du plan, plus fiable que l'échelle textuelle. Le suffixe `-SD` est plus explicite que `_enhanced`.
+
+**Impact** : `config.json`, `app.py`, `ingestion.js`, `extract.py`, JSON de test mis à jour. Convention `-SD` propagée dans TODO et code.
+
+---
+
+## D-92 · Renommage sous-onglets + restructuration Settings (2026-04-17)
+
+**Décision** : Renommage des sous-onglets et alignement des Settings.
+
+- Sous-onglets : Floor, **Room** (ex-Rooms), **Office** (ex-Design), Catalogue.
+- Settings : General (+ Export intégré) | Floor, Office, Catalogue. Séparateur visuel entre General et les onglets applicatifs.
+- Standard par défaut pré-sélectionné dans Office à chaque changement de pièce.
+- Bouton Export ajouté à droite de Save dans la barre d'actions.
+
+**Justification** : Cohérence nommage entre onglets et Settings. "Office" reflète mieux le rôle (aménagement de bureau). Export est un paramètre global, pas un onglet dédié.
+
+**Impact** : `pattern_editor.html`, `init.js`, `floor_plan.js`.
+
+---
+
 ## D-90 · Option B layout — navigation gauche, détail droite (2026-04-16)
 
 **Décision** : Réorganisation des colonnes selon le pattern "navigation à gauche, détail à droite".

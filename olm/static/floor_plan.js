@@ -296,6 +296,13 @@
     // Update room list highlight in Design
     if (window.updateIngRoomList) window.updateIngRoomList();
 
+    // Reset standard filter to default on room change
+    var defStd = (window.APP_CONFIG || {}).default_standard || "";
+    if (defStd) {
+      var radio = document.querySelector('input[name="fpStandard"][value="' + defStd + '"]');
+      if (radio) radio.checked = true;
+    }
+
     // Reset action buttons on room change
     document.getElementById("fpBtnEditPattern").disabled = true;
     document.getElementById("fpBtnAdjustLayout").disabled = true;

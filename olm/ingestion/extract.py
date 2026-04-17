@@ -1390,8 +1390,8 @@ def extract_rooms_from_preprocessed(
 
     Args:
         json_data: dict au format v3 décrit ci-dessus.
-        enhanced_png_path: chemin fichier PNG `<plan_id>_enhanced.png`
-            (cartouches effacés, extérieur bleu, couloirs verts).
+        enhanced_png_path: chemin fichier PNG `<plan_id>-SD.png`
+            (sans description / cartouches effacés, extérieur bleu, couloirs verts).
         overlay_png_path: chemin fichier PNG `<plan_id>.png` (plan officiel).
 
     Returns:

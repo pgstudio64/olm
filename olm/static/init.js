@@ -310,7 +310,7 @@ async function init() {
   var TAB_DESCRIPTIONS = {
     "fpImport": "Load the floor plan and manage rooms",
     "fpReview": "Review and adjust each room",
-    "lytDesign": "Design the layout for each room",
+    "lytDesign": "Office layout for each room",
     "lytCatalogue": "Browse and edit the pattern catalogue",
   };
 
@@ -961,14 +961,24 @@ async function init() {
     }
   });
 
+  // Export button — download current state as JSON file
+  document.getElementById("btnExportPlan").addEventListener("click", function() {
+    if (typeof window.devExportV3Json === "function") {
+      window.devExportV3Json();
+    } else {
+      alert("Export not available — load a floor plan first.");
+    }
+  });
+
   // Close button
   document.getElementById("btnClosePlan").addEventListener("click", function() {
     if (!confirm("Close the current floor plan? Unsaved changes will be lost.")) return;
     // Reset header
     var hdr = document.getElementById("hdrCurrentPlan");
     if (hdr) hdr.textContent = "";
-    // Hide Save/Close buttons
+    // Hide Save/Export/Close buttons
     document.getElementById("btnSavePlan").style.display = "none";
+    document.getElementById("btnExportPlan").style.display = "none";
     document.getElementById("btnClosePlan").style.display = "none";
     document.getElementById("eraseWrapper").style.display = "none";
     // Reset floor plan data

@@ -363,10 +363,10 @@ def api_plans():
     """List available plans in project/plans/ (grouped by stem).
 
     A plan is identified by its base stem. The naming convention for the
-    preprocessed mode is <plan_id>.png (overlay), <plan_id>_enhanced.png
-    (algorithmic variant) and <plan_id>.json (metadata). The _enhanced
-    variant is NOT listed as a separate plan — it's a component of its
-    parent plan.
+    preprocessed mode is <plan_id>.png (overlay with cartouches),
+    <plan_id>-SD.png (sans description / cartouches removed) and
+    <plan_id>.json (metadata). The -SD variant is NOT listed as a
+    separate plan — it's a component of its parent plan.
 
     ``effective_mode`` is "preprocessed" when has_json AND json.mtime > png.mtime
     (JSON was generated after the last PNG edit), "ocr" otherwise.
@@ -388,8 +388,8 @@ def api_plans():
         name, ext = os.path.splitext(fname)
         ext_lower = ext.lower()
         fpath = os.path.join(plans_dir, fname)
-        if name.endswith("_enhanced"):
-            base = name[: -len("_enhanced")]
+        if name.endswith("-SD"):
+            base = name[: -len("-SD")]
             entry = stems.setdefault(base, dict(_entry_defaults))
             if ext_lower in (".png", ".jpg", ".jpeg"):
                 entry["has_enhanced"] = True
@@ -612,7 +612,7 @@ def api_import_preprocessed():
 
     Accepte multipart form avec :
       - rooms_json : fichier JSON ou champ texte JSON brut
-      - enhanced_png : fichier PNG "_enhanced" (cartouches supprimés)
+      - enhanced_png : fichier PNG "-SD" (sans description / cartouches supprimés)
       - overlay_png : fichier PNG overlay (plan officiel)
 
     Retourne :
@@ -649,8 +649,8 @@ def api_import_preprocessed():
             if not overlay_path:
                 return jsonify({"error": f"Plan PNG manquant pour '{plan_id}'"}), 400
 
-            enhanced_candidate = os.path.join(PLANS_DIR, plan_id + "_enhanced.png")
-            enhanced_path = enhanced_candidate if os.path.exists(enhanced_candidate) else overlay_path
+            sd_candidate = os.path.join(PLANS_DIR, plan_id + "-SD.png")
+            enhanced_path = sd_candidate if os.path.exists(sd_candidate) else overlay_path
         else:
             # --- Mode upload fichiers (fallback) ---
             json_data = None
@@ -686,16 +686,38 @@ def api_import_preprocessed():
             json_data.setdefault("corridor_rgb", _ing_pp.get("preprocessed_corridor_rgb", [193, 247, 179]))
             json_data.setdefault("exterior_rgb", _ing_pp.get("preprocessed_exterior_rgb", [135, 206, 235]))
 
-        # --- Drawing scale from frontend (priority over median estimation) ---
+        # --- Scale resolution: JSON measured > frontend drawing_scale > median ---
         import re as _re_pp
         import math as _math
-        drawing_scale_str = request.form.get("drawing_scale", "").strip()
         render_dpi = int(request.form.get("render_dpi") or 300)
-        explicit_scale: float | None = None
+
+        # 1) drawing_scale_measured from JSON (ruler-based, most reliable)
+        measured_scale: float | None = None
+        measured_str = str(json_data.get("drawing_scale_measured", "")).strip()
+        if measured_str:
+            m_val = _re_pp.match(r"([\d.]+)\s*cm/px", measured_str)
+            if m_val:
+                measured_scale = float(m_val.group(1))
+
+        # 2) drawing_scale from frontend UI (text-based)
+        drawing_scale_str = request.form.get("drawing_scale", "").strip()
+        text_scale: float | None = None
         if drawing_scale_str:
-            m = _re_pp.match(r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str)
-            if m:
-                explicit_scale = 2.54 * float(m.group(1)) / render_dpi
+            m_txt = _re_pp.match(r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str)
+            if m_txt:
+                text_scale = 2.54 * float(m_txt.group(1)) / render_dpi
+
+        # Cross-check: log if both sources diverge significantly
+        if measured_scale and text_scale:
+            ratio = measured_scale / text_scale if text_scale > 0 else 0
+            if ratio < 0.8 or ratio > 1.2:
+                app.logger.warning(
+                    "Scale divergence: measured=%.4f cm/px vs text=%.4f cm/px "
+                    "(ratio=%.2f) — using measured value",
+                    measured_scale, text_scale, ratio,
+                )
+
+        explicit_scale = measured_scale or text_scale
 
         # Pass explicit scale to extract function if available
         if explicit_scale is not None and explicit_scale > 0:

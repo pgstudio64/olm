@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-15
+Dernière mise à jour : 2026-04-17
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
@@ -93,39 +93,13 @@ Migration de paramétrage : bouton "Upgrade to new standard" qui lit le paramét
 
 ## Chantiers actifs — Refonte OLM
 
-### R-01 : Renommage OLO → OLM + séparation open source / spécifique (D-67, D-68)
-
-- [x] Créer la structure `olm/` (open source) + `project/` (spécifique)
-- [x] Migrer le code vers `olm/` (core/, server/, static/, templates/)
-- [x] Migrer les données spécifiques (catalogue, plans, config) vers `project/`
-- [x] Migrer la documentation interne vers `docs/`
-- [x] Ajouter `LICENSE` (MIT)
-- [x] Ajouter `README.md`, `pyproject.toml`
-- [x] Ajouter `.gitignore` pour exclure `project/` de la publication
-
-### R-03 : Score composite densité / confort paramétrable
-
-- [x] Remplacer la sélection lexicographique par un score pondéré : `w_density × density + w_comfort × comfort`
-- [x] Ajouter les poids dans Settings > Matching
-- [x] Champs numériques dans l'interface (`cfgWDensity`, `cfgWComfort`)
-- [x] Recalcul en temps réel au changement de poids
-
 ### R-04 : Floor Plan — 4 sous-onglets (Import / Review / Match / Export)
 
 #### Import
 
 Objectif : ingestion simplifiée — rectangles + murs + fenêtres + ouvertures. Pas de zones interdites (ajoutées en Review).
 
-- [x] Upload image (PNG/JPEG) ou PDF (rasterisé via pymupdf)
-- [x] Bouton **Load** → lance l'extraction (OCR ou Préprocessé selon `ingestion_mode`) → affiche les pièces détectées → permet correction noms/dimensions
-- [x] Import JSON manuel (textarea ou upload fichier) — conservé de l'existant
 - [ ] **Bug overlay (post-simplification Import)** : `/api/import/ocr` renvoie `image_path=""` et unlink le temp file, l'overlay n'est plus affiché. Fix : persister le PNG uploadé (ou rasterisé depuis PDF) dans un dossier servi, renvoyer un chemin exploitable par le frontend.
-- [ ] **Régénérer `project/plans/test_floorplan3.png`** à l'échelle cible `ingestion.scale_cm_per_px=0.5` (actuellement les surfaces totales tombent à ~10 m² → le fichier est resté sur une ancienne échelle). Valider que les cartouches 3 lignes (D-81) sont conformes.
-- [ ] **Liste des pièces (Review) redimensionnable** : ajouter une poignée de resize horizontale sur le panneau latéral de la liste des pièces ; largeur par défaut = 70 % de la largeur actuelle (soit −30 %), min/max raisonnables, persistance localStorage.
-
-- [ ] **Choix du plan selon le contexte** : en Floor level (Import), afficher le plan de base (`<plan_id>.png`) car les cartouches/écritures sont dans le bon sens de lecture. Dans les vues où le plan est en overlay (Room level, Match), utiliser le plan `<plan_id>_enhanced.png` qui est visuellement plus propre. Lié au toggle overlay existant (voir Revue UX).
-- [ ] **Zoom molette souris** dans Floorplan Import : permettre de zoomer/dézoomer avec la molette de la souris (scroll wheel), indépendamment du pinch-to-zoom trackpad.
-- [ ] **Focus auto sur les pièces** (mode JSON/Préprocessé) : à l'ouverture dans Floor level (Import), cadrer automatiquement sur la bounding box englobante de toutes les pièces identifiées + 10 % de marge.
 
 Abandonné (inutile) : saisie manuelle d'échelle (cm/px ou points de calage) et saisie de code pièce à l'import — l'échelle vient de `plan_scale` du JSON v2 en Préprocessé ou des métadonnées OCR, le code pièce vient de Settings.
 
@@ -133,318 +107,78 @@ Abandonné (inutile) : saisie manuelle d'échelle (cm/px ou points de calage) et
 
 Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adjust room" (D-63).
 
-- [x] Liste des pièces avec navigation previous/next
-- [x] Rendu SVG de la pièce (rvCanvas séparé)
-- [x] Édition dimensions via DSL pièce
-- [x] Propriétés pièce (width, depth, area) + propriétés étage (total rooms, area)
 - [ ] CRUD ouvertures : ajout, suppression, déplacement, type (porte/baie)
-- [ ] **Outil zone interdite** (souris) : mode "Add forbidden zone" (select function dans la toolbar), dessin par clic + drag → rectangle aligné sur la grille. Cliquer ailleurs désactive le mode.
-- [ ] Sélection d'une zone interdite existante → poignée de déplacement, touche Delete pour supprimer
-- [ ] **Pas de redimensionnement souris** : pour modifier la taille d'une zone interdite, passer par le DSL pièce (ligne `EXCLUSION x y w h` éditable). La souris ne fait que positionner, déplacer, supprimer — cohérent avec la logique "édition visuelle simple, géométrie précise via DSL".
-- [x] Sauvegarde des amendements (bouton Save)
-- [x] **Bug bouton Save** : le bouton Save apparaît avant qu'un plan soit sélectionné (il ne devrait pas être visible tant qu'aucun plan n'est chargé). De plus, il est centré au milieu de la page au lieu d'être positionné dans la barre d'actions.
+- [ ] **Zones interdites et transparentes (Room)** : permettre de définir des zones interdites (obstacles réels, rouge) et des zones transparentes (artefacts graphiques à ignorer, vert) par pièce au niveau Room. Même ergonomie que la création/redimensionnement des pièces au niveau Floor.
+- [ ] **Relance analyse pièce (Room)** : bouton pour relancer l'identification automatique des fenêtres, portes et ouvertures sur la pièce courante. Permet de placer d'abord les zones interdites/transparentes, puis de relancer l'analyse qui en tiendra compte.
+- [ ] **Préserver les modifications manuelles** : lorsque l'utilisateur a redéfini manuellement la taille ou les contours d'une pièce, la relance de l'analyse automatique ne doit pas remettre en cause ces modifications. Les données manuelles ont priorité sur la détection auto.
 - [ ] **Bouton Close** : ferme le projet courant. Si des modifications non sauvegardées existent, émettre un warning de confirmation avant de fermer.
 - [ ] **Bouton Erase** avec deux options :
   - **All** : supprime toutes les données chargées (floorplan + layouts)
   - **Layout only** : supprime uniquement les descriptions de layout (bureaux/postes) mais conserve les amendements éventuels du floorplan (bbox, ouvertures, zones interdites). Nettoie le JSON des informations de layout associées.
 
-#### Match
+#### Office (ex-Match/Design)
 
-Deux actions distinctes sur un candidat :
-- **Edit pattern** : le modèle n'est pas bon → bascule vers l'éditeur pour modifier le pattern (comportement actuel)
-- **Amend layout** : le pattern est bon mais la solution pour cette pièce nécessite des ajustements (poteau, obstacle…) → édition en place dans Match sans quitter le contexte
-
-- [ ] **Amend layout en place dans Match** : rester dans le fpCanvas, sélection de blocs/postes, suppression (Delete), sauvegarde de l'amendement, puis continuer avec les autres pièces — pas de bascule vers l'éditeur
-- [x] Navigation pièces, filtre standard, rendu SVG (fpCanvas), liste candidats, score composite
-- [ ] Affichage du poids densité/confort utilisé
+- [ ] **Bug "No matching patterns"** : le matching ne trouve aucun candidat — investiguer pourquoi (échelle, dimensions, catalogue vide ou incompatible ?)
+- [ ] **Amend layout en place** : éditer la solution directement dans Office (sélection de blocs/postes, suppression Delete, sauvegarde), sans basculer vers l'éditeur de patterns
 
 #### Export
 
-- [x] Export JSON : résultat complet du matching (pièces, candidats retenus, métriques)
-- [ ] Export CSV : tableau tabulaire importable dans Excel
+- [ ] Export CSV : tableau tabulaire importable dans Excel (inclut traçabilité des amendements manuels)
 - [ ] Export PDF : fond de plan raster + overlay aménagement
-- [ ] Traçabilité des amendements : log des pièces modifiées manuellement
 
 ### R-05 : Module d'ingestion — Dual-mode (OCR + Préprocessé)
 
 #### Mode OCR — Validation Tesseract sur test_floorplan3 (D-73)
 
-- [ ] Rejouer l'extraction OCR sur `test_floorplan3.png` avec la nouvelle configuration Tesseract (whitelist typée, désactivation des dictionnaires `load_system_dawg=0` / `load_freq_dawg=0`, upscale x2 LANCZOS) décrite dans D-73
+- [ ] Rejouer l'extraction OCR sur `test_floorplan3.png` avec la nouvelle configuration Tesseract (D-73)
 - [ ] Vérifier que les 28 pièces sont correctement détectées (numéro + surface exacts)
-- [ ] Comparer avec le résultat pré-D-73 (régression éventuelle sur les codes courts type `"2"` vs `"m2"`)
-- [ ] Documenter les écarts dans `specs/RASTER_EXTRACTION_SPEC.md` si besoin
-- [ ] Si régression : ajuster les regex `_RE_ROOM_CODE` / `_RE_ROOM_NUMBER` / `_RE_SURFACE` ou la whitelist
+- [ ] **Taille minimale ouvertures/portes** : filtrer les ouvertures et portes détectées automatiquement en dessous de 60 cm (seuil paramétrable). Exception : ouverture < 60 cm acceptée si elle est directement connectée à une autre ouverture (entrée commune pour 2 pièces contiguës).
 
 #### Mode OCR — Cartouche 3 lignes (D-81)
 
-Passer le format de cartouche du Mode OCR de **5 lignes** (code / N REEL / N THEO / surface / id) à **3 lignes** (code / surface / id). Les lignes N REEL et N THEO ne sont pas exploitées par OLS et créent de l'ambiguïté pour l'OCR (confusion avec les numéros de pièce courts).
+Passer de 5 lignes à 3 lignes (code / surface / id). Format identique au Mode Préprocessé.
 
-Nouveau format (voir `specs/INGESTION_HYPOTHESES.md` §H-09 mis à jour) :
-
-```
-Ligne 1 : "14"        ← code pièce (paramétrable via room_code)
-Ligne 2 : "14.28 m2"  ← surface avec suffixe " m2" explicite
-Ligne 3 : "237"       ← identifiant de pièce (chiffres + suffixe alpha optionnel)
-```
-
-Ce format est **identique** au format du Mode Préprocessé (`code_line1` / `surface_line2` / `id_line3`, cf. `PREPROCESSED_JSON_SPEC.md` §3) — les deux modes partagent désormais la même sémantique de cartouche, ce qui simplifie le parsing et permet un code d'extraction commun.
-
-Tâches :
-
-- [ ] Adapter l'algorithme de regroupement en cartouche dans `olm/ingestion/extract.py` (et/ou `test_comb.py`) : ne plus rechercher 5 textes empilés mais 3, et ignorer tout texte intermédiaire restant à l'ancien format
-- [ ] S'assurer que la whitelist Tesseract et les regex `_RE_ROOM_CODE` / `_RE_SURFACE` / `_RE_ROOM_NUMBER` (D-73) sont alignées : la whitelist contient les caractères nécessaires aux 3 lignes uniquement, les regex filtrent les tokens valides
-- [ ] Vérifier la tolérance aux plans contenant encore l'ancien format 5 lignes : loguer un warning "anciennes lignes REEL/THEO détectées et ignorées" pour traçabilité
-- [ ] Revalider sur `test_floorplan3.png` (couplé à la validation D-73 ci-dessus) — les 28 pièces doivent toujours être détectées avec le nouveau format
-- [ ] Mettre à jour les tests OCR dans `olm/tests/` pour le format 3 lignes
-- [ ] Aucune migration données nécessaire : le changement est en lecture (parsing), pas en écriture
+- [ ] Adapter le regroupement cartouche (5→3 lignes) + revalider sur test_floorplan3.png + mettre à jour les tests
 
 #### Mode Préprocessé (D-74)
 
 **Convention de nommage des fichiers** (à respecter à l'import et en interne) :
 
-Un jeu Mode Préprocessé est composé de **deux PNG** + le JSON v2 :
+Un jeu Mode Préprocessé est composé de **deux PNG** + le JSON :
 
 | Fichier | Rôle |
 |---|---|
 | `<plan_id>.png` | **Fichier d'affichage** — conserve les cartouches, labels, cotes, bref le plan tel que l'humain le lit. C'est celui montré par défaut en **overlay** dans Review/Match. Le nom de base (`<plan_id>`) sert d'identifiant de référence du floor plan (clé stable pour R-11, round trip). |
-| `<plan_id>_enhanced.png` | **Fichier algorithmique** — pas de cartouches, extérieur peint en bleu ciel `preprocessed_exterior_rgb`, couloirs en vert `preprocessed_corridor_rgb`. C'est celui consommé par l'extraction ray-cast / détection de pièces. |
-| `<plan_id>.json` | JSON v2 (rooms, doors, all_text_blocks, métadonnées ROOT, `olm_state`). |
+| `<plan_id>-SD.png` | **Fichier algorithmique** (Sans Description) — pas de cartouches, extérieur peint en bleu ciel `preprocessed_exterior_rgb`, couloirs en vert `preprocessed_corridor_rgb`. C'est celui consommé par l'extraction ray-cast / détection de pièces. |
+| `<plan_id>.json` | JSON v3 (rooms dict indexé, `drawing_scale_text`, `drawing_scale_measured`, `orientation`, `olm_state`). |
 
-Règle : l'utilisateur fournit `<plan_id>.png` à l'import, OLM résout automatiquement `<plan_id>_enhanced.png` et `<plan_id>.json` dans le même dossier. Erreur explicite si l'un des deux est absent. Jamais de fichier enhanced affiché à l'utilisateur sauf mode debug.
+Règle : l'utilisateur fournit `<plan_id>.png` à l'import, OLM résout automatiquement `<plan_id>-SD.png` et `<plan_id>.json` dans le même dossier. Erreur explicite si l'un des deux est absent. Jamais de fichier -SD affiché à l'utilisateur sauf mode debug.
 
 Tâches :
-- [ ] Adopter la convention `<plan_id>.png` / `<plan_id>_enhanced.png` dans le loader Mode Préprocessé (`extract_rooms_from_preprocessed()`)
-- [ ] Route `/api/import/preprocessed` : prendre `<plan_id>.png` comme entrée principale, résoudre les deux autres par convention de nommage
-- [ ] UI Review/Match : afficher `<plan_id>.png` comme overlay par défaut (pas l'enhanced)
-- [ ] Mode debug (Settings > Ingestion ou query param) : bascule d'affichage vers `_enhanced.png` pour diagnostic visuel
-- [ ] Générateur de plan de test (ci-dessous) : produire les deux PNG avec cette convention de nommage
-- [ ] Documenter la convention dans `specs/PREPROCESSED_JSON_SPEC.md`
+- [ ] **Overlay par niveau** : Floor affiche `<plan_id>.png` (standard), Room et Office affichent `<plan_id>-SD.png` (sans description)
+- [ ] Générateur de plan de test : produire les deux PNG avec cette convention de nommage
 
 ---
 
-Implémentation du système dual-mode ingestion. ✅ Complété 2026-04-12
-
-- [x] Créer enum `IngestionMode` dans `olm/core/types.py` (OCR | Preprocessed)
-- [x] Fonction `extract_rooms_from_preprocessed()` dans `olm/ingestion/extract.py` : parser JSON pièces + charger PNG overlay/enhanced
-- [x] Valider le JSON d'entrée (structure, champs obligatoires : room_id, area, seed position)
-- [x] Routes API : POST `/api/import/ocr` (image + scale) et POST `/api/import/preprocessed` (JSON + overlays)
-- [x] Frontend : dropdown "Input Mode" dans Settings > Ingestion
-- [x] Deux panels upload distinct pour Mode OCR et Mode Préprocessé
-- [x] Refresh UI au changement de mode
-
-**Notes v1** :
-- Mode préprocessé v1 : bbox dégénérée (seed = NW, pas de scale disponible) — amélioration v2 nécessaire
-- Validation JSON complète : clé "rooms" + champs obligatoires par pièce + existence des PNG
-- Tests de validation passent (3 cas d'erreur + 2 pièces nominal)
-
-#### Générateur de plan de test pour Mode Préprocessé
-
-**Stratégie révisée (2026-04-14)** : découper en deux morceaux indépendants pour débloquer le pipeline sans attendre le générateur complet.
-
-**(A) Bouton DEV "Export v3 JSON"** — implémenté côté frontend (onglet Load, contour orange vif). Sérialise l'état courant de l'OCR Mode (`ingState.rooms` y compris éditions manuelles bbox / add / delete) dans un JSON v3 conforme à `PREPROCESSED_JSON_SPEC.md`. Téléchargement direct navigateur sous `<plan_stem>.json`. Permet de produire instantanément le JSON d'un plan sans dépendance externe. Voir §5 de `PREPROCESSED_JSON_SPEC.md`.
-
-- [x] Bouton dev frontend exposé (Load panel)
-- [x] Sérialisation v3 (code/surface/id/seed_px + bbox_px + doors/openings/windows imbriqués)
-- [x] Téléchargement comme Blob navigateur
-
-**(B) PNG `_enhanced` — création manuelle** pour l'instant :
-
-- [ ] Produire `<plan_id>_enhanced.png` manuellement dans un éditeur d'image (Photoshop, GIMP, Affinity) à partir du PNG overlay :
-  - Effacer les cartouches (tampon ou fill blanc)
-  - Flood fill extérieur en bleu ciel RGB(135,206,235)
-  - Flood fill couloirs en vert RGB(193,247,179)
-  - Sauvegarder en PNG sans transparence à côté du PNG overlay
-- [ ] Une fois disponible, valider le chargement en Mode Préprocessé via la route `/api/import/preprocessed`
 
 **(C) Automatisation future (optionnelle)** — générateur CLI qui enchaîne A + B automatiquement :
 
-- [ ] Script `olm/tools/make_preprocessed_test.py` prenant un PNG Mode OCR et produisant le triplet (`<plan_id>.png`, `<plan_id>_enhanced.png`, `<plan_id>.json`)
+- [ ] Script `olm/tools/make_preprocessed_test.py` prenant un PNG Mode OCR et produisant le triplet (`<plan_id>.png`, `<plan_id>-SD.png`, `<plan_id>.json`)
 - [ ] Étapes B automatisées : effacement cartouches via `clean_text_from_image()`, flood fill extérieur bleu ciel depuis les bords, détection couloirs (stratégie à définir — flood fill manuel via clics ou auto par exclusion des zones blanches non-pièces)
 - [ ] Validation end-to-end : charger le triplet produit → vérifier cohérence avec le résultat du Mode OCR sur le même plan
 
-#### Exploitation avancée du PNG enhanced et du JSON v2 (D-77)
+#### Exploitation avancée du PNG -SD et du JSON v3 (D-77)
 
-En Mode Préprocessé, les couleurs du PNG enhanced et les métadonnées du JSON permettent de simplifier considérablement le pipeline ray-cast.
-
-**Ray-casting traversant les portes via `doors[]`** :
-
-Problème : dans le pipeline ray-cast actuel, un ray qui rencontre un trait de porte s'arrête sur ce trait au lieu d'atteindre le vrai mur derrière.
-
-Solution : pour chaque porte du JSON v2 (`doors[]`), définir une zone de transparence autour du label porte (`pixels_x/y`, `width_px/height_px` + marge). Les pixels dans cette zone sont ignorés par le ray-cast → le ray traverse la porte et s'arrête correctement :
-- sur la frontière blanc-vert si la porte donne sur un couloir
-- sur le mur de la pièce voisine si la porte est mitoyenne
-
-Tâches :
-- [ ] Indexer les portes par `associated_room` à l'import
-- [ ] Construire un masque de transparence (zone de porte) par pièce
-- [ ] Modifier le ray-cast (phase 2) pour ignorer les pixels à l'intérieur du masque porte
-- [ ] Tester sur un plan avec portes multiples (pièce + couloir + pièce mitoyenne)
-- [ ] Valider que la détection d'ouverture n'est plus perturbée par le trait de porte
-
-**Paramétrage des couleurs sémantiques (Settings > Ingestion)** :
-
-Les codes RGB de l'extérieur bleu ciel et du couloir vert doivent être exposés comme paramètres éditables dans Settings > Ingestion (section Mode Préprocessé), avec les valeurs par défaut :
-- `preprocessed_exterior_rgb` : `[135, 206, 235]`
-- `preprocessed_corridor_rgb` : `[193, 247, 179]`
-
-Motivation : l'outil de preprocessing externe peut évoluer ou plusieurs prestataires peuvent adopter des conventions différentes. Ne pas figer ces constantes dans le code.
-
-Tâches :
-- [ ] Ajouter les champs `preprocessed_exterior_rgb` et `preprocessed_corridor_rgb` dans `project/config.json`
-- [ ] Exposer dans la section Settings > Ingestion (inputs RGB triples ou color picker)
-- [ ] Faire consommer ces valeurs par le pipeline d'extraction préprocessé (masques et règles d'arrêt ray-cast)
-- [ ] Persistance cohérente avec les autres paramètres Settings
-
-**Détection fenêtres en Mode Préprocessé — revoir la logique entière** :
-
-La logique actuelle du Mode OCR (flood fill depuis les bords + analyse de texture transversale sur murs périphériques — `RASTER_EXTRACTION_SPEC.md` §6.6) n'est plus adaptée au Mode Préprocessé. L'extérieur coloré en bleu ciel change radicalement le raisonnement : la fenêtre n'est plus distinguée par sa texture mais par **la nature de ce qu'elle borde** (bleu → façade → candidat fenêtre).
-
-Questions à trancher avant implémentation :
-- Une fenêtre est-elle toujours reconnaissable par sa texture (traits parallèles) ou le preprocessing peut-il l'avoir altérée ?
-- Comment distinguer un mur plein donnant sur façade d'une fenêtre si les deux bordent du bleu ? Conserver l'analyse de texture uniquement sur les segments façade, ou trouver un signal plus fiable (largeur d'ouverture, tracé discontinu) ?
-- Les portes-fenêtres donnant sur l'extérieur sont-elles dans `doors[]` ou traitées comme fenêtres ? Règle à définir.
-- Les cours intérieures : doivent-elles être distinguées de l'extérieur principal pour l'éclairage naturel, ou traitées identiquement ?
-- Pour le matching : tous les murs donnant sur du bleu génèrent-ils des contraintes "façade" (poste orienté, distance au mur) indépendamment de la présence d'une fenêtre ?
-
-Tâches :
-- [ ] Atelier de conception : redéfinir le modèle « fenêtre » en Mode Préprocessé (entrées, signaux, sortie)
-- [ ] Documenter la nouvelle logique dans `RASTER_EXTRACTION_SPEC.md` (section dédiée Mode Préprocessé)
-- [ ] Implémenter la détection : ray-cast context-aware + règle d'arrêt sur bleu + classification du segment bordant
-- [ ] Valider sur plan avec cours intérieure (fenêtres donnant sur la cour doivent être détectées)
-- [ ] Valider sur plan avec porte-fenêtre / baie vitrée
-- [ ] Comparer avec le résultat du Mode OCR sur le même plan pour non-régression
-
-**Analyse couloirs via le vert** :
-
-Tâches :
-- [ ] Détecter la couleur verte RGB(193,247,179) sur les segments de mur → identifie immédiatement les portes sur couloir
-- [ ] Plus de classification texture nécessaire pour ces segments
-
-**Exploitation `all_text_blocks[]` (v2 bonus)** :
-
-- [ ] Extraire les cotes (texte numérique proche d'un trait de cote) pour calibration indépendante du plan_scale
-- [ ] Détecter labels de zones spéciales (sanitaires, locaux techniques, escaliers) pour filtrage auto
+- [ ] **Ray-casting traversant les portes** : masque de transparence sur les zones de porte (via `doors[]` du JSON) pour que le ray-cast atteigne le vrai mur derrière le trait de porte
+- [ ] **Détection fenêtres Mode Préprocessé** : refondre la logique — le bleu extérieur change le raisonnement (mur bordant du bleu = façade → candidat fenêtre). Distinguer mur plein / fenêtre / baie vitrée sur segments façade.
+- [ ] **Détection couloirs via le vert** : segment de mur bordant du vert RGB(193,247,179) = porte sur couloir, sans classification texture
 
 ---
 
-#### Analyse : Artefacts arc de porte dans PNG enhanced (D-75)
+#### Robustesse ingestion
 
-Le preprocessing supprime les cartouches mais génère des artefacts aux arcs de porte (traits partiellement effacés).
-
-Tâches :
-- [ ] Examiner le processus de preprocessing externe : à quel stade les arcs disparaissent-ils ?
-- [ ] Proposer une stratégie de récupération : post-traitement Hough circles, filtre morpho, wall-tracing amélioré ?
-- [ ] Tester la robustesse du wall-tracing actuel (D-76) face aux arcs incomplets
-- [ ] Documenter les limites acceptables dans `specs/RASTER_EXTRACTION_SPEC.md`
-
-#### Zones interdites — promotion automatique des petits artefacts (D-80)
-
-Les plans réels comportent fréquemment des obstacles internes qu'il ne faut ni confondre avec les murs (ils briseraient la détection du rectangle) ni ignorer en aménagement (un poste ne peut pas être placé dessus). Cas d'école : **les poteaux au milieu d'un grand open space**.
-
-Le concept unifie deux mécanismes — un automatique et un manuel — qui aboutissent à la même structure de données (`EXCLUSION x y w h`) et au même traitement aval.
-
-**Promotion automatique en zone interdite** (pendant l'ingestion)
-
-Un nouveau paramètre `min_size_artifact_cm2` (section Settings > Ingestion) définit la taille minimale d'un obstacle "significatif". Tout artefact détecté à l'intérieur d'une pièce dont la surface est **inférieure** à ce seuil est :
-- **Pas considéré comme un mur** lors de la phase ray-cast — les rays l'ignorent (ils "traversent")
-- **Automatiquement inséré comme zone interdite** (`EXCL`) dans la pièce extraite
-
-Effet dans la phase "rectangle inscrit" (`RASTER_EXTRACTION_SPEC.md` §7.1) : le détecteur peut maintenant englober un grand rectangle traversant un poteau — le rectangle est correct, et le poteau devient une exclusion locale plutôt qu'une entaille dans la bbox.
-
-Effet dans la phase de matching : les exclusions issues de petits artefacts sont prises en compte par `effective_dimensions()` (D-62 existe déjà) et par le scoring de couverture. Le matching **ne part pas de zéro** pour ces pièces : il propose le meilleur pattern open space global, en ignorant localement les postes qui collideraient avec les poteaux. L'utilisateur lève les conflits résiduels via Amend layout (Match en place).
-
-**Amendement manuel** (en Review)
-
-L'utilisateur peut à tout moment ajouter des zones interdites non détectées via l'outil souris de la section Review (cf. R-04 > Review ci-dessus). Utilisé pour :
-- Les obstacles que l'ingestion n'a pas repérés (mobilier fixe, gaines, escaliers)
-- L'ajustement visuel d'une exclusion auto mal positionnée (supprimer → redessiner)
-
-**Paramètres à introduire dans Settings > Ingestion** :
-
-| Paramètre | Défaut | Rôle |
-|---|---|---|
-| `min_size_artifact_cm2` | `2500` (50×50 cm) | Seuil de promotion auto en zone interdite. En dessous → `EXCL`. Au-dessus → mur ou obstacle majeur détecté normalement. |
-| `artifact_promotion_enabled` | `true` | Active/désactive la promotion auto (fallback en cas de sur-détection) |
-
-Tâches :
-
-- [ ] Ajouter `min_size_artifact_cm2` et `artifact_promotion_enabled` dans `project/config.json` + Settings > Ingestion
-- [ ] Modifier la phase de détection des artefacts post ray-cast (section « Détection des zones interdites » ci-dessous) pour appliquer le seuil :
-  - Taille < seuil → émettre une `EXCL` au lieu d'un obstacle bloquant les rays
-  - Taille ≥ seuil → traitement actuel (obstacle significatif, potentiellement un mur interne)
-- [ ] S'assurer que la phase rectangle inscrit traite les pixels promus en `EXCL` comme "intérieur libre" (les rays passent à travers)
-- [ ] Vérifier que `effective_dimensions()` (D-62) et le scoring de couverture gèrent correctement les `EXCL` issues de promotion auto
-- [ ] UX Match : badge visuel sur les pièces contenant des `EXCL` promues (signalement "poteau détecté, vérifier manuellement")
-- [ ] Test sur open space avec poteaux : matching doit proposer un pattern + l'amendement manuel doit permettre de déplacer/supprimer les postes en conflit
-- [ ] Documenter dans `RASTER_EXTRACTION_SPEC.md` §7.1 et §7.3 l'effet de la promotion sur la détection du rectangle utile
-- [ ] Documenter dans `PATTERN_DSL_SPEC.md` / `ROOM_DSL_SPEC.md` que `EXCLUSION` peut être d'origine auto ou manuelle (marqueur optionnel `EXCLUSION ... auto`)
-
-#### Détection des zones interdites (post ray-cast)
-
-Approche en 3 phases, exécutée **après** la détection des contours de la pièce (phases 1-3 du ray-cast) :
-
-Phase A — Extraction + binarisation de l'intérieur de la pièce :
-- Cropper l'image au rectangle englobant détecté
-- Binariser (seuil Otsu) → matrice binaire (1 = encre, 0 = vide)
-- Effacer les murs extérieurs (déjà connus) pour ne garder que l'encre intérieure
-
-Phase B — Discrétisation en grille de cellules :
-- Grille de cellules carrées de 5 cm (`CELL_SIZE_CM = 5`)
-- Taux de remplissage par cellule → marquer OCCUPIED si > `FILL_THRESHOLD` (10%)
-- Résultat : matrice binaire de cellules
-
-Phase C — Couverture rectangulaire gloutonne :
-- Boucle : trouver le plus grand rectangle de cellules OCCUPIED (algo histogramme O(n×m))
-- Accepter si taux de remplissage du rectangle > `MERGE_THRESHOLD` (30%) — permet de capturer les cagibis morcelés (murs + porte + hachures)
-- Ignorer les rectangles < `MIN_AREA_CELLS` (4 cellules = 10×10 cm)
-- Marquer les cellules couvertes, itérer
-
-Paramètres : `CELL_SIZE_CM=5`, `FILL_THRESHOLD=0.10`, `MERGE_THRESHOLD=0.30`, `MIN_AREA_CELLS=4`, `MAX_ITERATIONS=50`
-
-Tâches :
-- [ ] Implémenter phase A (crop + binarisation + effacement murs)
-- [ ] Implémenter phase B (grille de cellules + taux de remplissage)
-- [ ] Implémenter phase C (couverture rectangulaire gloutonne, algo histogramme)
-- [ ] Intégrer dans le pipeline extract.py (après detect_room_three_phase)
-- [ ] Visualiser les zones détectées dans le viewer
-- [ ] Tester sur le plan synthétique (poteaux, débarras, L-shapes)
-
-#### Robustesse aux arcs de porte (post-traitement ray-cast)
-
-Problème : les arcs de porte (quarts de cercle, rayon 70-93 cm) interceptent les rays avant le vrai mur → encoches dans la bbox détectée. Un arc n'affecte qu'un petit groupe de rays (5-20°) tandis qu'un mur est touché de manière continue.
-
-Approche retenue : **post-traitement par consensus médian** (pas de modification du ray-cast) :
-
-1. Collecter **tous les hits** le long de chaque ray (pas seulement le premier) → `hits[i] = [d1, d2, ..., dk]`
-2. Retenir `d_max[i]` (distance max = mur le plus lointain)
-3. Pour chaque ray, comparer `d_max[i]` à la médiane des `d_max` des voisins (fenêtre ±5 rays)
-4. Si cohérent (écart < 15 cm) → garder. Sinon → chercher dans `hits[i]` la distance la plus proche de la médiane. Si aucun hit → interpoler.
-
-Paramètres : `NEIGHBOR_WINDOW=5`, `WALL_TOLERANCE_CM=15`
-
-Alternative (si insuffisant) : pré-traitement par `cv2.HoughCircles` pour effacer les arcs avant le scan. Plus complexe, à implémenter seulement si le post-traitement ne suffit pas.
-
-Tâches :
-- [ ] Modifier le ray-cast phase 2 pour collecter tous les hits (pas seulement le premier)
-- [ ] Implémenter le filtre médian sur d_max avec fenêtre de voisins
-- [ ] Mode debug : visualiser rays corrigés (rouge) vs non corrigés (vert)
-- [ ] Tester sur plan synthétique avec arcs de porte
-
-#### Détection des cours intérieures
-
-Les cours intérieures sont des zones extérieures enclavées dans le bâtiment. Les fenêtres donnant sur une cour doivent être détectées comme fenêtres (2 traits), même si le flood fill depuis les bords de l'image ne les atteint pas.
-
-- [ ] Identifier les particularités graphiques des cours intérieures sur les plans réels
-- [ ] Adapter le flood fill : après le fill depuis les bords, détecter les zones blanches non-remplies qui ne sont ni des pièces ni des corridors → candidats cours intérieures
-- [ ] Marquer les cours comme extérieur (même traitement que la façade pour la détection fenêtres)
-- [ ] Tester sur un plan avec cour intérieure
-
-#### Autres améliorations ingestion
-
-- [ ] Test avec OCR réel (easyocr) sur un plan réel
-- [ ] Support PDF : rasterisation via `pymupdf` (prioritaire) ou extraction vectorielle (bonus)
-- [ ] Import IFC (`ifcopenshell`) : extraction IfcSpace/IfcDoor/IfcWindow + calage raster
-- [ ] Export IFC enrichi : round-trip avec mobilier (IfcFurnishingElement)
+- [ ] **Arcs de porte** : le preprocessing génère des artefacts aux arcs de porte → post-traitement par consensus médian sur les hits du ray-cast (filtrer les encoches causées par les arcs)
+- [ ] **Cours intérieures** : détecter les zones extérieures enclavées dans le bâtiment (non atteintes par le flood fill depuis les bords) et les marquer comme extérieur pour la détection fenêtres
 
 ### R-11 : Full round trip — Persistance des amendements dans le JSON
 
@@ -487,17 +221,10 @@ Objectif : garantir qu'à un re-import d'un plan déjà travaillé, l'utilisateu
 
 Tâches :
 
-- [ ] Schéma `olm_state` dans le JSON (extension non-breaking de PREPROCESSED_JSON_SPEC v2)
-- [ ] Fonction `merge_state_into_rooms()` : à l'import, fusionner `olm_state.rooms_state` avec les pièces extraites
 - [ ] Fonction `build_olm_state()` : à l'export, sérialiser l'état courant (sélections + amendements) dans la structure `olm_state`
-- [ ] Modifier la route `/api/import/preprocessed` : parser et renvoyer `olm_state` si présent
 - [ ] Modifier la route d'export pour produire un JSON enrichi avec `olm_state` à jour
 - [ ] UI : badge "Nouveau" sur les pièces sans état + warning listant les orphelines
-- [ ] UI : bouton "Reset" par pièce pour supprimer son état et revenir au candidat auto
-- [ ] Mode OCR : sidecar `test_floorplan3_state.json` à côté du PNG (puisque pas de JSON d'entrée)
 - [ ] Test end-to-end : import → sélection + amendement → export → re-import → vérifier réhydratation
-- [ ] Test diff : import → sélection → modifier le JSON (ajouter/supprimer pièces) → re-import → vérifier warnings
-- [ ] Documenter dans `PREPROCESSED_JSON_SPEC.md` la section `olm_state`
 
 ### R-09 : Identify merges — Fusion de pièces mitoyennes
 
@@ -515,80 +242,14 @@ Pré-requis : les pièces doivent être positionnées sur le plan (données d'im
 
 Tâches :
 
-- [ ] Algorithme de détection des murs mitoyens (segments communs entre bbox adjacentes)
-- [ ] Géométrie de fusion : enveloppe des deux pièces, suppression du mur commun, recalcul fenêtres/portes/exclusions
-- [ ] Vue plan complet zoomable avec checkboxes sur les murs mitoyens
-- [ ] Création de la pièce merged dans la liste (nom composé, tag merged)
-- [ ] Intégration dans le pipeline (Review/Match/Export voient les pièces merged)
+- [ ] Géométrie de fusion : suppression du mur commun entre deux pièces sélectionnées manuellement, recalcul de la pièce résultante (fenêtres/portes/exclusions)
+- [ ] Création de la pièce fusionnée dans la liste (nom composé, tag merged) + intégration dans le pipeline (Room/Office/Export)
 
-### R-10 : Splash screen
 
-- [ ] Ajouter un paramètre `splash_page` dans `config.json` (chemin vers un fichier HTML)
-- [ ] Afficher la page au lancement, bouton "Start" ou dismiss
-- [ ] Si absent ou vide, aucun splash
-
-### Vérification : rotation des patterns dans les solutions
-
-- [ ] Auditer `catalogue_matcher.py` : vérifier que les rotations 90°/180°/270° des patterns sont testées lors du matching (pas seulement les miroirs E-O)
-- [ ] Si absent, ajouter la rotation comme axe de recherche dans le pipeline
-
-### R-06 : Généralisation de l'outil
-
-L'outil est un matcher générique de layouts de pièces vers des patterns d'aménagement simples (pas uniquement des bureaux).
-
-- [ ] Vocabulaire générique dans l'UI : "workspace" au lieu de "desk", "layout" au lieu de "pattern"
-- [ ] Paramétrage du type d'élément placé (desk, table, poste, workstation…) via Settings
-- [ ] Paramétrage des métriques affichées (m²/personne, score, grade…)
-- [ ] Documenter l'API et le format JSON pour des usages hors bureaux
 
 ### R-07 : Packaging et déploiement
 
-Dépendances identifiées :
-
-| Package | Rôle | Installation |
-|---|---|---|
-| `flask` | Serveur web | pip |
-| `Pillow` | Traitement image | pip |
-| `numpy` | Calcul | pip |
-| `jinja2` | Templates HTML | pip (dépendance flask) |
-| `easyocr` | OCR (optionnel, ingestion) | pip |
-| `pymupdf` | PDF (optionnel, ingestion) | pip |
-
-Note : `ortools` n'est plus nécessaire dans le produit (solveur CP-SAT réservé au `solver_lab/` de R&D).
-
-Tâches :
-
-- [ ] Créer `requirements.txt` avec dépendances exactes
-- [ ] Créer `install.bat` : `python -m venv venv && venv\Scripts\pip install -r requirements.txt`
-- [ ] Créer `launch.bat` : `venv\Scripts\python -m olm.server` (démarrage serveur, Ctrl+C = arrêt)
-- [ ] Vérifier compatibilité Anaconda sans admin
-- [ ] Tester le cycle complet : install → launch → utilisation → fermer
-
----
-
-## PRIORITÉ HAUTE — Ingestion (R-05)
-
-Intégrer le pipeline d'extraction raster dans l'onglet Import et compléter le POC.
-
-Voir la section R-05 ci-dessus pour le détail des tâches.
-
-### Tâche prioritaire — Coloration programmatique du PNG enhanced
-
-Écrire un utilitaire Python qui prend en entrée `test_floorplan_preprocessed_enhanced.png` (ou tout autre PNG du même type — cartouches déjà effacés) et colorie :
-- **Extérieur du bâtiment** en bleu ciel RGB(135, 206, 235) via flood fill depuis les 4 coins de l'image (les zones blanches atteintes depuis les bords sans franchir un mur noir deviennent "extérieur").
-- **Couloirs intérieurs** en vert RGB(193, 247, 179). Stratégie à choisir : (a) sélection manuelle par clic dans une UI simple, (b) détection automatique par exclusion — toutes les zones blanches restantes qui ne sont PAS des pièces (pas de cartouche OCR associé à proximité) sont des couloirs, ou (c) paramétrage de points-seeds dans un fichier d'accompagnement. L'option (b) est la plus automatique.
-
-Objectif : produire un outil CLI utilisable sur n'importe quel plan sans intervention manuelle (ou avec intervention minimale), qui débloque complètement le test end-to-end du Mode Préprocessé. Pendant ce temps, l'utilisateur peut créer le PNG à la main via un éditeur d'image.
-
-Emplacement recommandé : `olm/tools/colorize_enhanced_png.py` (CLI avec argparse, lit un PNG + JSON v3 optionnel, écrit un PNG colorisé).
-
-Tâches :
-- [ ] Charger le PNG avec Pillow, obtenir l'array numpy des pixels
-- [ ] Flood fill depuis les 4 coins de l'image sur les pixels blancs → zones "extérieur"
-- [ ] Peindre l'extérieur en RGB(135, 206, 235)
-- [ ] Optionnel : lire le JSON v3 pour récupérer les positions des cartouches → pour chaque zone blanche connexe restante, vérifier si un cartouche OCR est à l'intérieur → si oui c'est une pièce (rester blanc), sinon c'est un couloir (peindre en vert RGB(193, 247, 179))
-- [ ] Sauvegarder le PNG résultat avec suffixe `_colorized.png` (ou écraser l'input si option `--in-place`)
-- [ ] Test sur `test_floorplan_preprocessed_enhanced.png`
+- [ ] Packaging Windows sans admin : `requirements.txt`, `install.bat`, `launch.bat`, validation Anaconda, test cycle complet
 
 ---
 
@@ -596,120 +257,48 @@ Tâches :
 
 ### Revue UX (restant)
 
-- [x] **Sous-onglets non sélectionnés peu lisibles** : le texte des sous-onglets inactifs est trop clair sur fond sombre. Assombrir le fond des sous-onglets non sélectionnés pour améliorer le contraste et la lisibilité.
+- [ ] **Renommage sous-onglets** : renommer les 4 sous-onglets en **Floor**, **Room**, **Office**, **Catalogue**
+- [ ] **Bouton Export** : ajouter un bouton Export à droite du bouton Save (barre d'actions)
+- [ ] **Édition contours au niveau Room** : ajouter la capacité de modifier les contours de la pièce dans Room (même outil que l'édition bbox dans Floor)
+
+- [ ] **Bug position pièce 305 dans Office** : la pièce 305 est positionnée en (0,0) dans Office alors qu'elle est correctement placée dans Floor et Room. Semble arriver lorsqu'il y a un match automatique.
+- [ ] **Bug orientation pièce 922** : la pièce 922 (`canonical_top_face: "west"`) est positionnée comme si elle était à l'est alors qu'elle est au nord. Vérifier la logique de rotation canonique pour les pièces en orientation non standard.
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
-- [x] **Bug plan fantôme** (2026-04-16) : canvas rvCanvas/fpCanvas vidés quand aucune room n'est chargée.
-- [x] **Couleur labels dimensions** (2026-04-16) : `--text-dim` #6e6a62 → #908a7e, `COLOR_RULER` → #b0a898, labels dimensions SVG utilisent `COLOR_RULER`.
-- [x] **Review layout 2 colonnes** (2026-04-16, D-90) : room list à gauche, détail (props, DSL, adjust) à droite. Room list ajoutée aussi dans Design.
-- [x] **Room list taille par défaut** (2026-04-16) : Review room list alignée sur Import (height 210px, min/max/resize).
-- [x] **PRIORITÉ HAUTE — Taille des pièces fausse** (2026-04-16, D-88) : ajout du paramètre `drawing_scale` explicite (format "1 : 100") + `render_dpi` dans Settings. Formule : `cm_per_px = 2.54 × scale / dpi`. Estimation inverse proposée en jaune si non renseigné. Recalcul live sans re-import.
-- [ ] **Validation drawing_scale** : tester avec un plan réel ayant une échelle connue. Vérifier que les dimensions cm correspondent aux dimensions attendues.
-- [x] **Contraste onglet sélectionné** (2026-04-16) : border-bottom 3px accent sur l'onglet actif, hover avec fond surface2.
-- [x] **Hauteur onglets principaux** (2026-04-16) : padding vertical 10px → 14px, sous-onglets 4px → 8px.
-- [x] **Bug Review après Save** (2026-04-16) : render() masque state.rows quand isReview && !roomAmendMode, empêche l'affichage résiduel de blocs Design.
-- [x] **Limiter le dézoom** (2026-04-16) : zoomOut clampé sur _fitViewBox (110% du contenu visible). Import clampé à 110% du plan.
-- [ ] **Validation visuelle batch UX 2026-04-16** : vérifier en navigateur les 17 fixes UX/bugs de la session. Corriger si régressions. Checklist : couleur labels, hauteur onglets, contraste actif, zone cliquable sous-onglets, croix Settings, add room auto-incr, limite dézoom, plan fantôme, Esc bbox, Review après Save, synchro liste, warning Adjust room, dblclick Import→Review, room list Review, fond labels dimensions, grille labels mètres, UI anglais.
-- [x] **Warning sortie mode Adjust room** (2026-04-16) : confirm() dans _cancelAmendIfActive() pour roomAmendMode et amendMode (si dirty). Changement d'onglet bloqué si l'utilisateur refuse.
-- [x] **Esc dans bbox editor Import** (2026-04-16) : Esc restaure la bbox ET désélectionne la pièce.
-- [ ] **Double-click Import → Review** : le dblclick délégué sur ingSvg ne fonctionne pas de manière fiable (conflit mousedown/re-render/bbox editor). Le clic dans la room list navigue vers Review (fonctionne). Le dblclick sur le plan reste à implémenter proprement (timer ou détection manuelle).
-- [x] **Add room prompt** (2026-04-16) : auto-incrément basé sur max ID numérique existant.
-- [x] **Zone cliquable sous-onglets** (2026-04-16) : padding vertical 4px → 8px.
-- [x] **Croix fermeture Settings** (2026-04-16) : padding élargi + flex center pour aligner zone cliquable.
-- [x] **Synchronisation liste gauche / pièce courante** (2026-04-16) : auto-scroll étendu à Import (était limité à Review).
-- [ ] **Repositionner boutons Adjust room** : les boutons Adjust room / Save / Cancel sont éloignés de la liste des pièces. Rapprocher dans la colonne de gauche ou sous la liste.
-- [x] **Alignement sous-sous-onglets Catalogue** (2026-04-16) : padding-left dynamique via JS (alignCatalogueSubTabs).
-- [x] **Marge gauche onglets** (2026-04-16) : padding-left 4px sur .tab-bar pour aligner la marge gauche de Floorplan avec le gap inter-groupes.
-- [x] **Bug Pattern Editor : impossible de sélectionner un pattern** (2026-04-16) : data-tab comparait à "catalogue" au lieu de "lytCatalogue" (renommé D-78). Click et clavier restaurés.
-- [x] **Sous-onglets Catalogue inline** (2026-04-16, D-89) : Card/Grid/Editor intégrés dans la tab-bar LAYOUT sur une seule ligne. Apparaissent dynamiquement quand Catalogue est actif. Suppression de la sub-tab-bar séparée.
-- [x] **Rapprocher texte descriptif des onglets LAYOUT** (2026-04-16) : gap 16px → 8px, margin-left 16px → 4px.
-- [x] **Inhiber UI sans plan chargé** (2026-04-16) : sections Scale/Floor Properties/Room List masquées tant qu'aucun plan importé. Onglets Review et Design grisés (disabled + opacity 0.35 + pointer-events none). Réactivés après import, re-désactivés après Close.
-- [ ] **Catalogue Grid view — bugs règle + artefacts** : (1) La règle graduée (cm/mètres) ne suit pas les déplacements par drag (pan). Le zoom a un effet mais incohérent. (2) Artefacts visuels (petits carrés bleus) dans les cellules de dimensions sans pattern. Nettoyer le rendu des cellules vides. : tant qu'aucun plan n'est sélectionné dans Import, masquer les sections Scale, Floor Properties et Room List. Désactiver les onglets Review et Design (grisés, non cliquables). Actuellement un clic sur Design sans plan montre un vieux plan résiduel (7 pièces dont "98K").
-- [x] **Marge haute colonne gauche** : dans les sous-onglets Import et Review, ajouter une marge en hauteur entre la barre d'onglets et le haut de la colonne de gauche pour aérer.
-- [x] **Renommer titre Import** : dans la colonne de gauche de Import, renommer "FLOOR PLAN" en "CURRENT FLOORPLAN".
-- [x] **Supprimer Debug log** : retirer la section Debug log dans Import si elle n'est plus nécessaire.
-- [ ] Tester le floor plan de référence (`project/plans/test_floorplan.png`) — valider visuellement le matching sur un cas réaliste
-- [ ] **Renommage onglets top-level** : `Floorplan` → deux sous-onglets `Import` et `Review` ; `Layout` → `Design` ; `Catalogue` → conserver le nom mais remettre les indications descriptives de chaque onglet dans la partie droite (à la même hauteur que l'onglet, justifié à droite)
-- [x] Bug : zone de recul de chaise (chair clearance) apparaît sous la grille dans la vue Design Layout — corriger le z-order (FIXÉ 2026-04-07 : fond opaque #1e1e1e z=0.5 masque grille sous blocs)
-- [x] Bug : pointillés de l'arc de porte doivent avoir la même épaisseur que le pointillé vert d'ouverture (free opening) (FIXÉ 2026-04-07 : stroke-width 1.5 + dasharray 6 3)
-- [x] UX (2026-04-16) : rectangle de fond (#0e0e0d) derrière les labels de dimensions dans Review/Design pour lisibilité sur overlay.
-- [x] UX (2026-04-16) : labels "1m", "2m" sur la grille Design le long des bords de la pièce.
-- [x] **Orientation canonique des pièces** (D-83) — implémenté (rotation SVG purement visuelle, DSL en coordonnées locales, détection corridor_face par couleurs PNG). Reste à solidifier :
-- [x] **D-83 solidification** (2026-04-16) : overlay décalé 90°/270° corrigé (translate compensatoire), bug corridor_face perdu après Save corrigé (enterRoomAmendMode + fpRoomAmendments), port Python `olm/core/canonical.py` + 19 tests round-trip pytest.
-- [ ] **Toggle overlay enhanced / plain** (Mode Préprocessé) : en vue Room level avec rotation canonique active, les cartouches de l'overlay plein (`<plan_id>.png`) apparaissent à l'envers. Afficher par défaut l'overlay `<plan_id>_enhanced.png` (sans cartouches, visuellement propre sous rotation). Ajouter un toggle dans la toolbar du canvas Room level pour basculer vers l'overlay plein si l'utilisateur veut lire les numéros dans leur orientation native. Documenté dans `PREPROCESSED_JSON_SPEC.md` §"Suffixe réservé `_enhanced`".
-- [x] **Standard par défaut** (2026-04-16) : `default_standard` dans config.json + Settings > General (select). Filtre Design pré-positionné sur ce standard.
-- [x] **Renommage onglets** (2026-04-16) : Import → Floor level, Review → Room level.
-- [ ] **Couleur par standard** (Settings) : associer une couleur à chaque standard, utilisée pour l'affichage du nom du pattern/solution à la place de la couleur texte par défaut
-- [x] **UI 100 % anglais** (2026-04-16) : 5 chaînes françaises dans `ingestion.js` traduites en anglais (messages d'erreur + statut import). Audit complet : templates HTML et autres JS déjà en anglais.
+- [ ] **Standard par défaut dans Office** : le standard sélectionné dans Settings est automatiquement pré-sélectionné à chaque entrée dans Office et à chaque changement de pièce. Permet de travailler sur un standard donné tout en pouvant ponctuellement choisir un autre standard pour amender le design (bouton "Amend design").
 - [ ] **Structurer le panneau Settings en catégories** (drawer à droite) : une section **General** + **une section par onglet top-level** (aujourd'hui : Floorplan, Layout). Le contenu actuel est un mur de champs peu organisés. Cible :
   - **General** : `room_code`, `default_door_width_cm`, `desk_width_cm`, `desk_depth_cm`, `grid_cell_cm`, `default_standard`, couleurs par standard
   - **Floorplan** : tout ce qui touche à l'ingestion et à la vue du plan — `input_mode` (ocr/preprocessed), `scale_cm_per_px`, `threshold`, `pdf_render_dpi`, `min_size_artifact_cm2`, `artifact_promotion_enabled`, `preprocessed_exterior_rgb`, `preprocessed_corridor_rgb`
   - **Layout** : paramètres de matching et design — `w_density`, `w_comfort`, seuils de couverture, standards ES-*/PS-* par standard
   Le drawer Settings actuel est structuré en "sections" mais pas alignées sur les onglets. Refondre pour que la structure du panneau suive exactement l'arborescence des onglets, avec titres de section clairs et séparateurs visuels. Quand on ajoute un nouvel onglet, on ajoute naturellement sa section dans Settings.
-- [x] ~~**Mode OCR/Preprocessed → paramètre Settings**~~ — **Obsolète (D-85)** : remplacé par l'auto-détection par fichier (PNG seul → OCR, PNG + JSON récent → Preprocessed). Plus de toggle, plus de paramètre Settings dédié.
-- [ ] **Renommage sous-onglets Floorplan** : `Import` → `Floor level`, `Review` → `Room level`. Et séparation stricte des responsabilités :
-  - **Floor level** : vue globale du plan. L'utilisateur peut **uniquement** ajouter/supprimer des pièces et modifier leur **position et taille** (bbox editor). Pas d'édition de caractéristiques internes.
-  - **Room level** : vue par pièce. L'utilisateur modifie **toutes les autres caractéristiques** : dimensions internes via DSL, ouvertures (portes/baies/fenêtres), zones interdites. Pas de déplacement ni de redimensionnement global de la pièce.
-  Cette séparation clarifie le mental model et évite les doubles ergonomies qui se chevauchent actuellement.
 
 ### Refactoring architecture frontend — State unique et découplage
 
-- [ ] **State unique** : fusionner `ingState.rooms`, `fpData.rooms`, `window.fpOverlay`, `window.fpAmendments`, `window.fpRoomAmendments` en un seul store cohérent. Aujourd'hui 5 sources de vérité partiellement synchronisées causent des bugs (pièce ajoutée dans Import invisible en Review, etc.).
-- [ ] **Découper init.js** (~900 lignes) : extraire les handlers Settings, Adjust room, Erase/Close dans des modules séparés
-- [ ] **Découper ingestion.js** (~1200 lignes) : séparer le rendering, le bbox editor, la room list, le zoom
-- [ ] Fonctions de rendu pures (données en entrée, SVG en sortie) — plus de dépendance au state global
-- [ ] Supprimer le mécanisme snapshot/restore léger de l'état éditeur
+- [ ] **State unique** : fusionner les 5 sources de vérité (`ingState.rooms`, `fpData.rooms`, `fpOverlay`, `fpAmendments`, `fpRoomAmendments`) en un seul store cohérent
+- [ ] **Découpage JS** : extraire init.js (~900 l.) et ingestion.js (~1200 l.) en modules thématiques, fonctions de rendu pures sans dépendance au state global
 
 ---
 
 ## Étapes existantes non impactées
 
-### Étape 10 : Minimize room size
+### Peuplement du catalogue (priorité haute)
 
-- [ ] Calcul de la pièce minimale par pattern par standard (ES-04/05/06/08/09)
-- [ ] Prise en compte des sticks
-- [ ] Usage unitaire : Ctrl+M dans l'éditeur (pattern courant)
-- [ ] Usage groupé : sélection multiple dans le catalogue → minimize all selected
-- [ ] Usage batch : minimize all — recalcule la taille minimale de tous les patterns du catalogue
-- [ ] Feedback visuel : afficher l'ancienne et la nouvelle taille, nombre de patterns modifiés
-
-### Recalibration patterns SITE (D-56)
-
-- [ ] Recalculer les tailles minimales avec les nouvelles distances
-- [ ] Vérifier/recréer les patterns SITE existants
+- [ ] **Minimize room size** : calcul de la pièce minimale par pattern par standard, Ctrl+M unitaire + batch "minimize all", feedback visuel
+- [ ] **Recalibration patterns SITE** (D-56) : recalculer les tailles minimales avec les nouvelles distances, vérifier/recréer les patterns SITE
 
 ---
 
 ## Après le prototype — Industrialisation
 
-### Nettoyage
-
-- [ ] Supprimer les anciens modèles (`Room` dans `solver/model.py`, `RoomDims` dans `debt_model.py`)
-- [ ] Supprimer le code abandonné (matcher.py, static_matcher.py, debt_model.py)
-
-### Documentation
-
-- [ ] Réécriture SRS alignée sur OLM
-- [ ] Réécriture SDS alignée sur OLM
-- [ ] SPEC_matcher.md
-- [ ] Mise à jour CHANGELOG
+- [ ] **Nettoyage** : supprimer les anciens modèles et code abandonné (solver/model.py, debt_model.py, matcher.py, static_matcher.py)
+- [ ] **Documentation** : réécriture SRS/SDS alignée OLM, SPEC_matcher.md
 
 ---
 
 ## Phases conditionnelles (R&D dans solver_lab/)
 
-### Phase 2 — CP-SAT résiduel
-
-- [ ] CP-SAT sur zones libres après matching statique
-- [ ] Blocs complémentaires sur zones résiduelles
-
-### Phase 3 — Géométrie stochastique
-
-- [ ] MCMC warm-started depuis catalogue
-- [ ] Fonction d'énergie : densité + circulation + confort
+- [ ] **Phase 2** : CP-SAT résiduel sur zones libres après matching statique
+- [ ] **Phase 3** : géométrie stochastique (MCMC warm-started depuis catalogue)
 
 ---
 
-## Diagnostics en attente
-
-- [ ] 10 tests en échec (debt_model, matcher) — potentiellement obsolètes

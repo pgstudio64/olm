@@ -5,6 +5,25 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [v0.3.1] — 2026-04-17 : D-91→D-92
+
+### Modifié
+- Convention fichiers préprocessés : `_enhanced.png` → `-SD.png` (Sans Description).
+- `config.json` : `drawing_scale` → `drawing_scale_text`.
+- Sous-onglets renommés : Rooms → Room, Design → Office.
+- Settings : Floorplan → Floor, Layout → Office, Export intégré dans General avec séparateur visuel.
+
+### Ajouté
+- `drawing_scale_measured` (cm/px) et `orientation` (degrés) dans le JSON v3 préprocessé.
+- Priorité `drawing_scale_measured` > `drawing_scale_text` + DPI dans le calcul d'échelle, avec log warning si divergence > 20%.
+- Bouton Export à droite de Save dans la barre d'actions.
+- Standard par défaut pré-sélectionné dans Office à chaque changement de pièce.
+
+### Nettoyage
+- TODO.md : 161 → 48 items (−70%), suppression des obsolètes, doublons, historique [x], sections spéculatives.
+
+---
+
 ## [v0.3.0] — 2026-04-16 : D-87→D-90
 
 ### Corrigé
