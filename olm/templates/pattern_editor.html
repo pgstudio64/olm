@@ -87,13 +87,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <input type="number" id="cfgDeskD" class="settings-input">
         <label class="settings-label">Grid cell (cm)</label>
         <input type="number" id="cfgGrid" class="settings-input">
-        <label class="settings-label">Default standard</label>
-        <select id="cfgDefaultStandard" class="settings-input"></select>
       </div>
     </div>
     <div class="settings-section">
-      <div class="section-title">Standard labels</div>
-      <div id="cfgStandardLabels" class="settings-grid"></div>
+      <div class="section-title">Standards</div>
+      <div id="cfgStandardLabels"></div>
     </div>
     <div class="settings-section">
       <div class="section-title">Export</div>
@@ -107,35 +105,34 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="section-title">Ingestion</div>
       <div class="settings-grid">
         <label class="settings-label">Plans directory</label>
-        <input type="text" id="cfgPlansDir" class="settings-input" placeholder="project/plans">
+        <input type="text" id="cfgPlansDir" class="settings-input" style="width:100%;" placeholder="project/plans">
       </div>
     </div>
     <div class="settings-section">
       <div class="section-title">Rendering</div>
-      <div class="settings-grid">
+      <div class="settings-grid" style="align-items:center;">
         <label class="settings-label">Render DPI</label>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <input type="number" id="cfgRenderDpi" class="settings-input" style="width:70px;" min="72" max="600" step="1">
-          <span style="font-size:9px;color:var(--text-dim);">DPI used to rasterize PDF plans (default 300)</span>
-        </div>
+        <input type="number" id="cfgRenderDpi" class="settings-input" style="width:70px;" min="72" max="600" step="1">
       </div>
     </div>
     <div class="settings-section">
-      <div class="section-title">Semantic colors</div>
+      <div class="section-title">Standard colors</div>
       <div class="settings-grid">
-        <label class="settings-label">Exterior RGB</label>
+        <label class="settings-label">Exterior</label>
         <div style="display:flex;gap:4px;align-items:center;">
           <input type="number" id="cfgExteriorR" class="settings-input" style="width:50px;" min="0" max="255">
           <input type="number" id="cfgExteriorG" class="settings-input" style="width:50px;" min="0" max="255">
           <input type="number" id="cfgExteriorB" class="settings-input" style="width:50px;" min="0" max="255">
           <span id="cfgExteriorPreview" style="display:inline-block;width:20px;height:20px;border:1px solid var(--border);"></span>
+          <span style="font-size:9px;color:var(--text-dim);">Color used for the outside of the building</span>
         </div>
-        <label class="settings-label">Corridor RGB</label>
+        <label class="settings-label">Corridor</label>
         <div style="display:flex;gap:4px;align-items:center;">
           <input type="number" id="cfgCorridorR" class="settings-input" style="width:50px;" min="0" max="255">
           <input type="number" id="cfgCorridorG" class="settings-input" style="width:50px;" min="0" max="255">
           <input type="number" id="cfgCorridorB" class="settings-input" style="width:50px;" min="0" max="255">
           <span id="cfgCorridorPreview" style="display:inline-block;width:20px;height:20px;border:1px solid var(--border);"></span>
+          <span style="font-size:9px;color:var(--text-dim);">Color used for the corridors</span>
         </div>
       </div>
     </div>
@@ -146,10 +143,16 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="settings-section">
       <div class="section-title">Matching weights</div>
       <div class="settings-grid">
-        <label class="settings-label">Density weight</label>
-        <input type="number" id="cfgWDensity" step="0.1" min="0" max="1" class="settings-input">
-        <label class="settings-label">Comfort weight</label>
-        <input type="number" id="cfgWComfort" step="0.1" min="0" max="1" class="settings-input">
+        <label class="settings-label">Density</label>
+        <input type="number" id="cfgWDensity" step="0.1" min="0" max="1" class="settings-input" title="Weight for desk count (more desks = better)">
+        <label class="settings-label">Comfort</label>
+        <input type="number" id="cfgWComfort" step="0.1" min="0" max="1" class="settings-input" title="Weight for circulation grade">
+        <label class="settings-label">Back to door</label>
+        <input type="number" id="cfgWBackDoor" step="0.1" min="0" max="1" class="settings-input" title="Penalty for desks facing away from the door">
+        <label class="settings-label">Natural light</label>
+        <input type="number" id="cfgWLight" step="0.1" min="0" max="1" class="settings-input" title="Weight for proximity to windows">
+        <label class="settings-label">Face to wall</label>
+        <input type="number" id="cfgWFaceWall" step="0.1" min="0" max="1" class="settings-input" title="Penalty for desks facing a blank wall">
       </div>
     </div>
   </div>
@@ -220,7 +223,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <!-- Main area: floor plan SVG -->
       <div class="fp-main">
         <div id="ingPlanView" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-          <div class="fp-nav">
+          <div class="fp-nav" id="ingToolbar" style="display:none;">
             <label><input type="checkbox" id="ing_bbox" checked> Rooms</label>
             <label><input type="checkbox" id="ing_window" checked> Windows</label>
             <label><input type="checkbox" id="ing_door" checked> Doors</label>

@@ -976,10 +976,12 @@ async function init() {
     // Reset header
     var hdr = document.getElementById("hdrCurrentPlan");
     if (hdr) hdr.textContent = "";
-    // Hide Save/Export/Close buttons
+    // Hide Save/Export/Close buttons + toolbar
     document.getElementById("btnSavePlan").style.display = "none";
     document.getElementById("btnExportPlan").style.display = "none";
     document.getElementById("btnClosePlan").style.display = "none";
+    var ingTbClose = document.getElementById("ingToolbar");
+    if (ingTbClose) ingTbClose.style.display = "none";
     document.getElementById("eraseWrapper").style.display = "none";
     // Reset floor plan data
     window.fpData = { rooms: [], currentIdx: 0 };

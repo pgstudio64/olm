@@ -274,6 +274,8 @@
         if (btnClose) btnClose.style.display = '';
         var eraseWrap = document.getElementById('eraseWrapper');
         if (eraseWrap) eraseWrap.style.display = '';
+        var ingTb = document.getElementById('ingToolbar');
+        if (ingTb) ingTb.style.display = '';
         if (status) status.textContent = ingState.rooms.length + ' rooms — scale ' +
           ingState.scale + ' cm/px';
         renderIngestion();
@@ -1531,6 +1533,8 @@
           if (btnClose2) btnClose2.style.display = '';
           var eraseWrap2 = document.getElementById('eraseWrapper');
           if (eraseWrap2) eraseWrap2.style.display = '';
+          var ingTb2 = document.getElementById('ingToolbar');
+          if (ingTb2) ingTb2.style.display = '';
         }
 
         // Canvas dimensions, scale, viewbox — alignés sur le flux OCR
