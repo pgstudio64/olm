@@ -5,7 +5,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [v0.3.1] — 2026-04-17 : D-91→D-92
+## [v0.3.1] — 2026-04-17 : D-91→D-93
 
 ### Modifié
 - Convention fichiers préprocessés : `_enhanced.png` → `-SD.png` (Sans Description).
@@ -18,6 +18,12 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Priorité `drawing_scale_measured` > `drawing_scale_text` + DPI dans le calcul d'échelle, avec log warning si divergence > 20%.
 - Bouton Export à droite de Save dans la barre d'actions.
 - Standard par défaut pré-sélectionné dans Office à chaque changement de pièce.
+
+### Amélioré (UX)
+- Settings General : section Standards unifiée (radio default + label éditable par ligne).
+- Settings Floor : Plans directory élargi, DPI centré, "Standard colors" avec descriptions.
+- Settings Office : 3 nouveaux poids de scoring (back to door, natural light, face to wall).
+- Toolbar Floor masquée tant qu'aucun plan chargé.
 
 ### Nettoyage
 - TODO.md : 161 → 48 items (−70%), suppression des obsolètes, doublons, historique [x], sections spéculatives.

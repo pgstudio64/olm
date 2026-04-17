@@ -7,6 +7,22 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-93 · Settings restructuration + poids scoring Office (2026-04-17)
+
+**Décision** : Refonte du panneau Settings et ajout des poids de scoring.
+
+- Standards dans General : radio default + label éditable par ligne, sans clé technique affichée.
+- Settings Floor : Plans directory élargi, DPI centré, "Standard colors" (ex-Semantic colors) avec descriptions.
+- Settings Office : 5 poids de matching — Density, Comfort (existants), Back to door, Natural light, Face to wall (nouveaux, défaut 0 = inactifs).
+- Export intégré dans General.
+- Toolbar Floor masquée tant qu'aucun plan n'est chargé.
+
+**Justification** : Settings organisé par onglet applicatif. Poids de scoring préparés dans l'UI avant implémentation des détections correspondantes.
+
+**Impact** : `pattern_editor.html`, `config.js`, `init.js`, `ingestion.js`.
+
+---
+
 ## D-91 · Convention fichiers -SD + drawing_scale_measured (2026-04-17)
 
 **Décision** : Refonte de la convention de nommage des fichiers préprocessés et de la gestion de l'échelle.

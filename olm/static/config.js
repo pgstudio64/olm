@@ -168,18 +168,7 @@ function renderGeneralSettings() {
   el = document.getElementById("cfgGrid");
   if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
 
-  el = document.getElementById("cfgDefaultStandard");
-  if (el) {
-    var stds = getStandards();
-    var dsHtml = '<option value="">All</option>';
-    stds.forEach(function(s) { dsHtml += '<option value="' + s + '">' + getStdLabel(s) + '</option>'; });
-    el.innerHTML = dsHtml;
-    el.value = APP_CONFIG.default_standard || "";
-    el.onchange = function() {
-      saveConfigField("default_standard", this.value);
-      renderFpStandardFilter();
-    };
-  }
+
 
   el = document.getElementById("cfgPlansDir");
   if (el) {
@@ -195,21 +184,46 @@ function renderGeneralSettings() {
   el = document.getElementById("cfgWComfort");
   if (el) { el.value = matching.w_comfort != null ? matching.w_comfort : 0.5; el.onchange = function() { saveConfigField(["matching", "w_comfort"], parseFloat(this.value)||0.5); }; }
 
+  el = document.getElementById("cfgWBackDoor");
+  if (el) { el.value = matching.w_back_door != null ? matching.w_back_door : 0; el.onchange = function() { saveConfigField(["matching", "w_back_door"], parseFloat(this.value)||0); }; }
+
+  el = document.getElementById("cfgWLight");
+  if (el) { el.value = matching.w_light != null ? matching.w_light : 0; el.onchange = function() { saveConfigField(["matching", "w_light"], parseFloat(this.value)||0); }; }
+
+  el = document.getElementById("cfgWFaceWall");
+  if (el) { el.value = matching.w_face_wall != null ? matching.w_face_wall : 0; el.onchange = function() { saveConfigField(["matching", "w_face_wall"], parseFloat(this.value)||0); }; }
+
   var labelsDiv = document.getElementById("cfgStandardLabels");
   if (labelsDiv) {
-    var html = "";
-    getStandards().forEach(function(s) {
+    var defStd = APP_CONFIG.default_standard || "";
+    var stds = getStandards();
+    var html = '';
+    stds.forEach(function(s) {
       var label = getStdLabel(s);
-      html += '<label style="color:var(--text-dim);">' + s + '</label>';
+      var checked = (s === defStd) ? " checked" : "";
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+      html += '<input type="radio" name="cfgDefaultStd" value="' + s + '"' + checked +
+        ' style="margin:0;cursor:pointer;" title="Set as default standard">';
       html += '<input type="text" data-std-label="' + s + '" value="' + label +
-        '" style="width:100px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">';
+        '" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">';
+      html += '</div>';
     });
     labelsDiv.innerHTML = html;
+    // Label change
     labelsDiv.querySelectorAll("input[data-std-label]").forEach(function(inp) {
       inp.addEventListener("change", function() {
         var labels = APP_CONFIG.standard_labels || {};
         labels[inp.dataset.stdLabel] = inp.value;
         saveConfigField("standard_labels", labels);
+        renderFpStandardFilter();
+      });
+    });
+    // Default standard radio
+    labelsDiv.querySelectorAll('input[name="cfgDefaultStd"]').forEach(function(radio) {
+      radio.addEventListener("change", function() {
+        APP_CONFIG.default_standard = this.value;
+        saveConfigField("default_standard", this.value);
+        renderFpStandardFilter();
       });
     });
   }

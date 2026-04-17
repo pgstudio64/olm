@@ -80,5 +80,6 @@
       "main_corridor_cm": 140,
       "name": "SITE"
     }
-  }
+  },
+  "default_standard": "SITE"
 }

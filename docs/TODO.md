@@ -257,20 +257,12 @@ Tâches :
 
 ### Revue UX (restant)
 
-- [ ] **Renommage sous-onglets** : renommer les 4 sous-onglets en **Floor**, **Room**, **Office**, **Catalogue**
-- [ ] **Bouton Export** : ajouter un bouton Export à droite du bouton Save (barre d'actions)
 - [ ] **Édition contours au niveau Room** : ajouter la capacité de modifier les contours de la pièce dans Room (même outil que l'édition bbox dans Floor)
 
 - [ ] **Bug position pièce 305 dans Office** : la pièce 305 est positionnée en (0,0) dans Office alors qu'elle est correctement placée dans Floor et Room. Semble arriver lorsqu'il y a un match automatique.
 - [ ] **Bug orientation pièce 922** : la pièce 922 (`canonical_top_face: "west"`) est positionnée comme si elle était à l'est alors qu'elle est au nord. Vérifier la logique de rotation canonique pour les pièces en orientation non standard.
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
-- [ ] **Standard par défaut dans Office** : le standard sélectionné dans Settings est automatiquement pré-sélectionné à chaque entrée dans Office et à chaque changement de pièce. Permet de travailler sur un standard donné tout en pouvant ponctuellement choisir un autre standard pour amender le design (bouton "Amend design").
-- [ ] **Structurer le panneau Settings en catégories** (drawer à droite) : une section **General** + **une section par onglet top-level** (aujourd'hui : Floorplan, Layout). Le contenu actuel est un mur de champs peu organisés. Cible :
-  - **General** : `room_code`, `default_door_width_cm`, `desk_width_cm`, `desk_depth_cm`, `grid_cell_cm`, `default_standard`, couleurs par standard
-  - **Floorplan** : tout ce qui touche à l'ingestion et à la vue du plan — `input_mode` (ocr/preprocessed), `scale_cm_per_px`, `threshold`, `pdf_render_dpi`, `min_size_artifact_cm2`, `artifact_promotion_enabled`, `preprocessed_exterior_rgb`, `preprocessed_corridor_rgb`
-  - **Layout** : paramètres de matching et design — `w_density`, `w_comfort`, seuils de couverture, standards ES-*/PS-* par standard
-  Le drawer Settings actuel est structuré en "sections" mais pas alignées sur les onglets. Refondre pour que la structure du panneau suive exactement l'arborescence des onglets, avec titres de section clairs et séparateurs visuels. Quand on ajoute un nouvel onglet, on ajoute naturellement sa section dans Settings.
 
 ### Refactoring architecture frontend — State unique et découplage
 
