@@ -983,11 +983,10 @@ async function init() {
     var ingTbClose = document.getElementById("ingToolbar");
     if (ingTbClose) ingTbClose.style.display = "none";
     document.getElementById("eraseWrapper").style.display = "none";
-    // Reset floor plan data
-    window.fpData = { rooms: [], currentIdx: 0 };
-    window.fpOverlay = null;
-    window.fpAmendments = {};
-    window.fpRoomAmendments = {};
+    // Reset floor plan data (D-94: in-place reset preserves refs)
+    window.olmStore.reset("floor");
+    window.olmStore.reset("plan.overlay");
+    window.olmStore.reset("amendments");
     // Clear ingestion SVG
     var svg = document.getElementById("ingSvg");
     if (svg) svg.innerHTML = "";
@@ -1010,8 +1009,8 @@ async function init() {
     // Reset plan dropdown to placeholder
     var planSel = document.getElementById("ingPlanIdSelect");
     if (planSel) planSel.selectedIndex = 0;
-    // Reset ingestion state rooms
-    if (window.ingState) window.ingState.rooms = [];
+    // Reset ingestion state rooms (keeps ingState identity; only rooms cleared)
+    window.ingState.rooms = [];
     // Hide plan-dependent sections, disable Review/Design
     if (window.updatePlanDependentUI) window.updatePlanDependentUI();
     // Switch to Import tab
@@ -1036,16 +1035,13 @@ async function init() {
   document.getElementById("btnEraseAll").addEventListener("click", function() {
     document.getElementById("eraseMenu").style.display = "none";
     if (!confirm("Erase all data (floor plan + layouts)?")) return;
-    // Clear layout data
-    window.fpAmendments = {};
-    window.fpRoomAmendments = {};
-    if (window.fpData) {
-      window.fpData.rooms.forEach(function(r) {
-        r.candidates = [];
-        r.selectedCandidate = null;
-      });
-      window.fpData.currentIdx = 0;
-    }
+    // Clear layout data (D-94: reset in place)
+    window.olmStore.reset("amendments");
+    window.fpData.rooms.forEach(function(r) {
+      r.candidates = [];
+      r.selectedCandidate = null;
+    });
+    window.fpData.currentIdx = 0;
     // Clear Design/Review canvases
     var fpCanvas = document.getElementById("fpCanvas");
     if (fpCanvas) fpCanvas.innerHTML = "";
@@ -1066,15 +1062,13 @@ async function init() {
   document.getElementById("btnEraseLayout").addEventListener("click", function() {
     document.getElementById("eraseMenu").style.display = "none";
     if (!confirm("Erase layout data only? Floor plan amendments will be kept.")) return;
-    // Clear layout-specific data
-    window.fpAmendments = {};
-    if (window.fpData) {
-      window.fpData.rooms.forEach(function(r) {
-        r.candidates = [];
-        r.selectedCandidate = null;
-      });
-      window.fpData.currentIdx = 0;
-    }
+    // Clear layout-specific data (D-94: reset in place)
+    window.olmStore.reset("amendments.layout");
+    window.fpData.rooms.forEach(function(r) {
+      r.candidates = [];
+      r.selectedCandidate = null;
+    });
+    window.fpData.currentIdx = 0;
     // Clear Design canvas
     var fpCanvas = document.getElementById("fpCanvas");
     if (fpCanvas) fpCanvas.innerHTML = "";

@@ -95,37 +95,9 @@
   }
   window.updatePlanDependentUI = updatePlanDependentUI;
 
-  // --- State ---
-  var ingState = {
-    planPath: '',
-    planUrl: '',
-    planW: 0,
-    planH: 0,
-    scale: 0.5,
-    threshold: 110,
-    rooms: [],
-    show: {
-      bbox: true, window: true, door: true, opening: true,
-      names: true, vrays: false, hrays: false, candidates: false,
-      grid: true,
-    },
-    zoomRoom: '',
-    merges: {},  // key: "roomA|roomB" → true if merge checked
-    opacity: 0.3,
-    overlayVisible: true,
-    // Viewbox state for pan/zoom
-    vb: { x: 0, y: 0, w: 1920, h: 1080 },
-    pan: null, // { startX, startY, startVb }
-    // Bbox editor state
-    bboxEditor: {
-      selectedName: null,      // name of room being edited, or null
-      mode: 'idle',            // 'idle' | 'moving' | 'resizing'
-      handle: null,            // 'nw' | 'ne' | 'sw' | 'se' (when resizing)
-      dragStart: null,         // { mouseX, mouseY, bbox: [x0,y0,x1,y1] }
-      preDragBbox: null,       // bbox_px snapshot before current drag (for Enter-cancel)
-      sessionStartBbox: null,  // bbox_px snapshot at selection entry (for Escape session-restore)
-    },
-  };
+  // --- State (D-94: owned by olmStore) ---
+  // Full shape (rooms, show, vb, bboxEditor, …) is declared in store.js.
+  var ingState = window.ingState;
 
   // --- Colors (matching OLM conventions) ---
   var COLORS = {
@@ -308,7 +280,7 @@
 
   // --- Room list (clickable, same style as Review) ---
   window.updateIngRoomList = updateIngRoomList;
-  window.ingState = ingState;
+  // window.ingState is already exposed by store.js (D-94).
   function updateIngRoomList() {
     var reviewSubtab = document.getElementById('tabFpReview');
     var designTab = document.getElementById('tabLytDesign');
@@ -1033,6 +1005,13 @@
 
     window.addEventListener('mousemove', function (e) {
       if (!ingState.pan) return;
+      // Defensive: if no mouse button is actually pressed, clear stuck pan
+      // state (mouseup can be missed e.g. when released outside viewport).
+      if (e.buttons === 0) {
+        ingState.pan = null;
+        svg.style.cursor = 'grab';
+        return;
+      }
       var rect = svg.getBoundingClientRect();
       var dx = (e.clientX - ingState.pan.startX) / rect.width * ingState.pan.startVb.w;
       var dy = (e.clientY - ingState.pan.startY) / rect.height * ingState.pan.startVb.h;
@@ -1207,6 +1186,21 @@
           ingState.rooms.forEach(function(r) {
             if (r.bbox_px) _updateRoomDims(r);
           });
+          // D-95: propagate new dims to fpData.rooms so Room/Office reads fresh
+          // values next time they render. The actual re-render happens when the
+          // user switches to those tabs (triggered by existing tab handlers).
+          if (window.fpData && window.fpData.rooms && window.fpData.rooms.length) {
+            var byName = {};
+            ingState.rooms.forEach(function(r) { byName[r.name] = r; });
+            window.fpData.rooms.forEach(function(fr) {
+              var src = byName[fr.name];
+              if (src) {
+                fr.width_cm = src.width_cm;
+                fr.depth_cm = src.depth_cm;
+                fr.surface_m2 = src.surface_m2;
+              }
+            });
+          }
           updateIngRoomList();
           renderIngestion();
           populateRoomsJson();
@@ -1308,6 +1302,14 @@
     window.addEventListener('mousemove', function(e) {
       var be = ingState.bboxEditor;
       if (!be.selectedName || be.mode === 'idle' || !be.dragStart) return;
+      // Defensive: clear stuck drag state if no button is actually pressed
+      if (e.buttons === 0) {
+        be.mode = 'idle';
+        be.handle = null;
+        be.dragStart = null;
+        be.preDragBbox = null;
+        return;
+      }
       var p = screenToIngSvg(e);
       var dx = p.x - be.dragStart.mouseX;
       var dy = p.y - be.dragStart.mouseY;
@@ -1474,6 +1476,17 @@
       page_height_px: ingState.planH || 0,
       rooms: roomsDict,
     };
+
+    // D-95: persist the current scale in both fields. The UI value always
+    // wins over anything previously stored in the JSON (Option D).
+    if (ingState.scale && ingState.scale > 0) {
+      var dpiExp = getRenderDpi();
+      if (dpiExp > 0) {
+        var scaleNumExp = Math.round(ingState.scale * dpiExp / 2.54);
+        if (scaleNumExp > 0) out.drawing_scale_text = '1 : ' + scaleNumExp;
+      }
+      out.drawing_scale_measured = ingState.scale.toFixed(4) + ' cm/px';
+    }
 
     var json = JSON.stringify(out, null, 2);
     var blob = new Blob([json], { type: 'application/json' });

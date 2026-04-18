@@ -472,7 +472,7 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     flex-shrink: 0;
-    align-items: center;
+    align-items: baseline;
   }
   .sub-tab-btn {
     background: var(--surface);
