@@ -26,6 +26,16 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 ### UX
 - `.sub-tab-bar` : `align-items: baseline` — les descriptions des sous-onglets (Catalogue) s'alignent sur la baseline des boutons au lieu d'être centrées verticalement.
 
+### Refactor (D-96 — primitives SVG partagées, P2)
+- Nouveau `olm/static/render_shared.js` : `doorSvg()` + `gridSvg()` + constantes couleurs partagées.
+- `editor.js` et `ingestion.js` : 172 lignes de rendu porte/grille dupliquées factorisées en appels au module partagé (-70 l. editor, -50 l. ingestion).
+
+### Fix (Floor + Pattern editor)
+- `ingestion.js` : support du format door `offset_px`/`width_px` (mode préprocessé), en plus du format `jamb_hinge_px`/`jamb_free_px` (mode OCR) — les portes s'affichent désormais dans Floor en mode préprocessé.
+- `ingestion.js` : ajout d'un `eraseWallSegment` qui casse le rectangle blanc de la bbox à l'emplacement des portes et openings (comportement déjà présent dans l'éditeur de patterns).
+- `editor.js` : contour de pièce blanc dans le Pattern editor (précédemment gris #4a4640) pour cohérence avec Review/Office. Épaisseur réduite de 50 % (1.5 → 0.75 en éditeur, 2 → 1 en Review/Office).
+- `editor.js` : murs passés de `z=0.05` à `z=4` (au-dessus des blocs, sous les ouvertures) — demande utilisateur.
+
 ---
 
 ## [v0.3.1] — 2026-04-17 : D-91→D-93

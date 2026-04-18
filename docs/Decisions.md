@@ -7,6 +7,24 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-96 · render_shared.js — primitives SVG partagées (2026-04-18)
+
+**Décision** : Création de `olm/static/render_shared.js` (phase 2 du refactoring front-end D-94). Expose `renderShared.doorSvg()` et `renderShared.gridSvg()` pour centraliser la logique de rendu dupliquée entre `editor.js` et `ingestion.js`.
+
+- `doorSvg(face, hingeCoord, freeCoord, wallCoord, swingSide, opensInward, leafOffsetMag)` → retourne `[arcPath, leafLine]`. West wall inverse la relation swing↔hinge-coord (convention héritée).
+- `gridSvg({ vb, cmPerPx, dotColor?, lineColor?, marginRatio?, minStartAt0? })` → retourne `{ dots, lines }` séparés pour que l'appelant applique des z-indices différents (editor : dots z=-0.5, lines z=-0.4).
+- Constantes exposées : `COLOR_DOOR_ARC`, `COLOR_DOOR_LEAF`, `COLOR_WINDOW`, `COLOR_OPENING`.
+
+**Justification** : 172 lignes de rendu porte/grille étaient dupliquées entre `editor.js` et `ingestion.js`. Toute correction (couleur, style, géométrie) devait être portée manuellement dans deux endroits. Single source of truth = moins de risque de désynchronisation.
+
+**Impact** :
+- `olm/static/render_shared.js` : nouveau fichier (~175 lignes).
+- `olm/static/editor.js` : -70 lignes (portes + grille).
+- `olm/static/ingestion.js` : -50 lignes (portes + grille).
+- `pattern_editor.html` : `render_shared.js` chargé après `block_svg.js`, avant les modules qui l'utilisent.
+
+---
+
 ## D-95 · Échelle de dessin — l'input UI prime et écrase les deux champs JSON (2026-04-18)
 
 **Décision** : Option D. Le champ `drawing_scale` de l'UI permet à l'utilisateur d'outrepasser les valeurs présentes dans le JSON v3 préprocessé. Toute édition du champ est immédiatement propagée à `ingState.rooms` ET à `fpData.rooms` (Room/Office restent synchronisés). À la sauvegarde (Save / Export), les deux champs `drawing_scale_text` ET `drawing_scale_measured` du JSON sont écrits depuis la valeur courante de `ingState.scale` — les anciennes valeurs mesurées sont écrasées.

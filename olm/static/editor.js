@@ -188,69 +188,27 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       return;
     }
 
-    // Hinged door — sweep arc + leaf (matching viewer style)
+    // Hinged door — delegate arc + leaf geometry to render_shared.
+    // West wall inverts the swing↔hinge-coord mapping (see render_shared).
     var swing = o.hinge_side;  // "left" or "right"
+    var swingLeft = (swing === "left");
+    var hingeAtStart = swingLeft !== (o.face === "west");
+    var along, wallCoord;
     if (o.face === "south") {
-      var dx = roomX + o.offset_cm * SCALE;
-      var dy = roomY + roomHPx;
-      var hingeX = (swing === "left") ? dx : dx + dw;
-      var freeX  = (swing === "left") ? dx + dw : dx;
-      var sweepDir = (swing === "left") ? 0 : 1;
-      if (!o.opens_inward) sweepDir = 1 - sweepDir;
-      var arcEndY = o.opens_inward ? dy - dw : dy + dw;
-      elements.push({ z: 6, s: '<path d="M ' + freeX + ' ' + dy +
-        ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
-      var leafOff = (swing === "left") ? 1.5 : -1.5;
-      elements.push({ z: 6, s: '<line x1="' + (hingeX + leafOff) + '" y1="' + dy +
-        '" x2="' + (hingeX + leafOff) + '" y2="' + arcEndY +
-        '" stroke="#e4e0d8" stroke-width="1.5"/>' });
+      along = roomX + o.offset_cm * SCALE; wallCoord = roomY + roomHPx;
     } else if (o.face === "north") {
-      var dx = roomX + o.offset_cm * SCALE;
-      var dy = roomY;
-      var hingeX = (swing === "left") ? dx : dx + dw;
-      var freeX  = (swing === "left") ? dx + dw : dx;
-      var sweepDir = (swing === "left") ? 1 : 0;
-      if (!o.opens_inward) sweepDir = 1 - sweepDir;
-      var arcEndY = o.opens_inward ? dy + dw : dy - dw;
-      elements.push({ z: 6, s: '<path d="M ' + freeX + ' ' + dy +
-        ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
-      var leafOff = (swing === "left") ? 1.5 : -1.5;
-      elements.push({ z: 6, s: '<line x1="' + (hingeX + leafOff) + '" y1="' + dy +
-        '" x2="' + (hingeX + leafOff) + '" y2="' + arcEndY +
-        '" stroke="#e4e0d8" stroke-width="1.5"/>' });
-    } else if (o.face === "west") {
-      var dx = roomX;
-      var dy = roomY + o.offset_cm * SCALE;
-      var hingeY = (swing === "left") ? dy + dw : dy;
-      var freeY  = (swing === "left") ? dy : dy + dw;
-      var sweepDir = (swing === "left") ? 0 : 1;
-      if (!o.opens_inward) sweepDir = 1 - sweepDir;
-      var arcEndX = o.opens_inward ? dx + dw : dx - dw;
-      elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + freeY +
-        ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
-      var leafOff = (swing === "left") ? -1.5 : 1.5;
-      elements.push({ z: 6, s: '<line x1="' + dx + '" y1="' + (hingeY + leafOff) +
-        '" x2="' + arcEndX + '" y2="' + (hingeY + leafOff) +
-        '" stroke="#e4e0d8" stroke-width="1.5"/>' });
+      along = roomX + o.offset_cm * SCALE; wallCoord = roomY;
     } else if (o.face === "east") {
-      var dx = roomX + roomWPx;
-      var dy = roomY + o.offset_cm * SCALE;
-      var hingeY = (swing === "left") ? dy : dy + dw;
-      var freeY  = (swing === "left") ? dy + dw : dy;
-      var sweepDir = (swing === "left") ? 1 : 0;
-      if (!o.opens_inward) sweepDir = 1 - sweepDir;
-      var arcEndX = o.opens_inward ? dx - dw : dx + dw;
-      elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + freeY +
-        ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-        '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>' });
-      var leafOff = (swing === "left") ? 1.5 : -1.5;
-      elements.push({ z: 6, s: '<line x1="' + dx + '" y1="' + (hingeY + leafOff) +
-        '" x2="' + arcEndX + '" y2="' + (hingeY + leafOff) +
-        '" stroke="#e4e0d8" stroke-width="1.5"/>' });
+      along = roomY + o.offset_cm * SCALE; wallCoord = roomX + roomWPx;
+    } else { // west
+      along = roomY + o.offset_cm * SCALE; wallCoord = roomX;
     }
+    var hingeCoord = hingeAtStart ? along : along + dw;
+    var freeCoord  = hingeAtStart ? along + dw : along;
+    var doorParts = window.renderShared.doorSvg(
+      o.face, hingeCoord, freeCoord, wallCoord, swing, o.opens_inward, 1.5);
+    elements.push({ z: 6, s: doorParts[0] });
+    elements.push({ z: 6, s: doorParts[1] });
   });
 
   // Exclusion zones — semi-transparent red rectangle, clickable
@@ -671,9 +629,11 @@ function _renderImpl(targetSvg) {
   var roomX = MARGIN;
   var roomY = MARGIN;
   var isEditor = svg.id === "canvas";
-  var wallColor = isEditor ? "#4a4640" : "#ffffff";
-  var wallWidth = isEditor ? 1.5 : 2;
-  elements.push({ z: 0.05, s: '<rect x="' + roomX + '" y="' + roomY +
+  var wallColor = "#ffffff";
+  var wallWidth = isEditor ? 0.75 : 1;
+  // Walls drawn above blocks (z=3) but below openings/doors/windows (z=6)
+  // and their erase-line (z=5.5). Dimension labels stay on top (z=9.5+).
+  elements.push({ z: 4, s: '<rect x="' + roomX + '" y="' + roomY +
     '" width="' + roomWPx + '" height="' + roomHPx +
     '" fill="none" stroke="' + wallColor + '" stroke-width="' + wallWidth + '"/>' });
   // Room dimension labels — data already in local coordinates, no swap needed
@@ -830,39 +790,18 @@ function _renderImpl(targetSvg) {
 
   // Grid: 10cm dots + 1m lines + graduated ruler (z=0: behind everything)
   if (state.gridVisible) {
-    const stepPx = GRID_STEP_CM * SCALE;
     const meterPx = 100 * SCALE;
     const vb = state.viewBox;
-    // Render grid with margin beyond viewBox to survive panning
-    var gridMargin = Math.max(vb.w, vb.h) * 0.5;
-    const gxStart = Math.floor((vb.x - gridMargin) / stepPx) * stepPx;
-    const gyStart = Math.floor((vb.y - gridMargin) / stepPx) * stepPx;
-    const gxEnd = vb.x + vb.w + gridMargin;
-    const gyEnd = vb.y + vb.h + gridMargin;
-
-    // 10cm dots (skip when zoomed out too far — dots would overlap)
-    if (vb.w / stepPx < 150) {
-      for (let gx = gxStart; gx <= gxEnd; gx += stepPx) {
-        for (let gy = gyStart; gy <= gyEnd; gy += stepPx) {
-          elements.push({ z: -0.5, s: '<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
-            '" r="0.6" fill="' + COLOR_GRID + '"/>' });
-        }
-      }
-    }
-
-    // 1m lines — start at 0 (no negative lines)
-    const mxStart = Math.max(0, Math.floor(vb.x / meterPx) * meterPx);
-    const myStart = Math.max(0, Math.floor(vb.y / meterPx) * meterPx);
-    for (let mx = mxStart; mx <= gxEnd; mx += meterPx) {
-      elements.push({ z: -0.4, s: '<line x1="' + mx.toFixed(1) + '" y1="' + gyStart.toFixed(1) +
-        '" x2="' + mx.toFixed(1) + '" y2="' + gyEnd.toFixed(1) +
-        '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
-    }
-    for (let my = myStart; my <= gyEnd; my += meterPx) {
-      elements.push({ z: -0.4, s: '<line x1="' + gxStart.toFixed(1) + '" y1="' + my.toFixed(1) +
-        '" x2="' + gxEnd.toFixed(1) + '" y2="' + my.toFixed(1) +
-        '" stroke="' + COLOR_GRID_METER + '" stroke-width="0.5"/>' });
-    }
+    var gridParts = window.renderShared.gridSvg({
+      vb: vb,
+      cmPerPx: 1 / SCALE,
+      dotColor: COLOR_GRID,
+      lineColor: COLOR_GRID_METER,
+      marginRatio: 0.5,
+      minStartAt0: true,
+    });
+    gridParts.dots.forEach(function(s) { elements.push({ z: -0.5, s: s }); });
+    gridParts.lines.forEach(function(s) { elements.push({ z: -0.4, s: s }); });
 
     // Grid meter labels (e.g. "1m", "2m") along room edges
     var gridLabelFs = (10 * zf).toFixed(1);
