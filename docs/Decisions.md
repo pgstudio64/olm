@@ -7,6 +7,36 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-95 · Échelle de dessin — l'input UI prime et écrase les deux champs JSON (2026-04-18)
+
+**Décision** : Option D. Le champ `drawing_scale` de l'UI permet à l'utilisateur d'outrepasser les valeurs présentes dans le JSON v3 préprocessé. Toute édition du champ est immédiatement propagée à `ingState.rooms` ET à `fpData.rooms` (Room/Office restent synchronisés). À la sauvegarde (Save / Export), les deux champs `drawing_scale_text` ET `drawing_scale_measured` du JSON sont écrits depuis la valeur courante de `ingState.scale` — les anciennes valeurs mesurées sont écrasées.
+
+**Justification** : D-91 avait fait primer `drawing_scale_measured` sur le texte saisi, au motif que la règle mesurée sur le plan est « plus fiable ». En pratique l'utilisateur a besoin de pouvoir corriger une mesure erronée ou imposer une échelle de référence, et de persister cette correction. Faire primer l'UI est cohérent avec le reste de l'outil (toute modification manuelle l'emporte sur les valeurs auto). L'écrasement des deux champs à la sauvegarde supprime le risque de divergence au re-import.
+
+**Impact** :
+- `ingestion.js` : `_applyDrawingScale` propage désormais les nouvelles dims à `fpData.rooms` (fix bug — Room/Office affichaient des dimensions stales après changement d'échelle).
+- `ingestion.js` : `devExportV3Json` ajoute `drawing_scale_text` et `drawing_scale_measured` au JSON exporté.
+- D-91 — priorité `measured > text` au backend (`app.py:694-720`) reste valide pour le tout premier import d'un fichier préprocessé tiers, mais ne pose plus de conflit durable : dès le premier Save, les deux champs convergent.
+
+---
+
+## D-94 · Refactoring front-end — store unifié + découpage modules (2026-04-18)
+
+**Décision** : Lancement d'un refactoring front-end en 6 phases pour consolider les fondations avant les prochaines features (R-11 round trip notamment).
+
+- **P0** (ce commit) : suppression de `matching_viewer.html` (1138 l., dead code — route `/matching` jamais référencée depuis HTML/JS) + route Flask associée.
+- **P1** : création de `olm/static/store.js` — store unifié `olmStore` remplaçant les 5 globals `ingState`, `fpData`, `fpOverlay`, `fpAmendments`, `fpRoomAmendments` (232 occurrences, 4 fichiers). Pattern `set(path, value)` + `subscribe(path, cb)`. Migration progressive via shims de compat sur `window.*`.
+- **P2** : extraction `render_shared.js` — primitives SVG communes (porte, fenêtre, ouverture, grille) dupliquées entre `editor.js`, `ingestion.js`, `floor_plan.js`.
+- **P3** : split `init.js` (1088 l.) → `init_tabs.js`, `init_rvtool.js`, `init_amend.js` + bootstrap réduit.
+- **P4** : split `ingestion.js` (1605 l.) → `ingestion_render.js`, `ingestion_import.js`, `ingestion_scale.js`.
+- **P5-P6** (optionnelles) : split `floor_plan.js` et `editor.js` selon besoin.
+
+**Justification** : 5 sources de vérité sur l'état du plan, fichiers de 1000-1850 lignes, rendu et state entremêlés. R-11 (persistance des amendements dans le JSON) exige un état sérialisable cohérent — le bon moment pour consolider. Phasage itératif (pas de big-bang), chaque phase est commitable et testable isolément.
+
+**Impact** : suppression `olm/templates/matching_viewer.html`, route `/matching` retirée de `olm/server/app.py`, arborescence `CLAUDE.md` mise à jour.
+
+---
+
 ## D-93 · Settings restructuration + poids scoring Office (2026-04-17)
 
 **Décision** : Refonte du panneau Settings et ajout des poids de scoring.

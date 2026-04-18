@@ -5,6 +5,29 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased] — D-94 refactoring front-end
+
+### Supprimé
+- `olm/templates/matching_viewer.html` (1138 lignes) et route Flask `/matching` associée — dead code, jamais référencé depuis HTML/JS (P0 du refactoring front-end, D-94).
+
+### Ajouté (P1 — store unifié)
+- `olm/static/store.js` : store unifié `olmStore` (get/set/subscribe/reset) regroupant les 5 états globaux auparavant éparpillés (`fpData`, `fpAmendments`, `fpRoomAmendments`, `fpOverlay`, `ingState`).
+- Chargé en premier dans `pattern_editor.html` pour garantir que les globals de compat (`window.fpData`, etc.) existent au moment de l'init des autres modules.
+
+### Modifié (P1)
+- `floor_plan.js` / `ingestion.js` : suppression des inits locales redondantes, `ingState`/`fpData` sont maintenant des refs vers les sections du store.
+- `init.js` : les 3 sites de reset (`Close`, `Erase All`, `Erase Layout`) appellent `olmStore.reset(...)` qui mute en place les objets — préserve l'identité des refs détenues par d'autres modules (corrige un bug latent où les refs devenaient stale après reset).
+
+### Modifié (D-95 — échelle de dessin)
+- L'input UI du champ `drawing_scale` prime désormais sur les valeurs du JSON v3 (Option D). À la sauvegarde, les deux champs `drawing_scale_text` et `drawing_scale_measured` sont écrasés par la valeur courante.
+- `_applyDrawingScale` propage les nouvelles dimensions à `fpData.rooms` — les vues Room et Office restent synchronisées (corrige un bug d'affichage où les cm restaient stales après changement d'échelle).
+- `devExportV3Json` émet désormais `drawing_scale_text` et `drawing_scale_measured` dans le JSON.
+
+### UX
+- `.sub-tab-bar` : `align-items: baseline` — les descriptions des sous-onglets (Catalogue) s'alignent sur la baseline des boutons au lieu d'être centrées verticalement.
+
+---
+
 ## [v0.3.1] — 2026-04-17 : D-91→D-93
 
 ### Modifié

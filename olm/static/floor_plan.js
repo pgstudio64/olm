@@ -3,10 +3,11 @@
 // FLOOR PLAN VIEWER
 // ========================================================================
 (function() {
-  var fpData = window.fpData = { rooms: [], currentIdx: 0 };
-  window.fpAmendments = {};      // { roomName: { candidate, pattern } }
-  window.fpRoomAmendments = {};  // { roomName: { name, width_cm, depth_cm, windows, openings, exclusion_zones } }
-  window.fpOverlay = null;       // { dataUrl, pxPerCm, imgW, imgH }
+  // D-94: state owned by olmStore; these are live refs to store sections.
+  var fpData = window.fpData;                // state.floor { rooms, currentIdx }
+  // window.fpAmendments     — state.amendments.layout
+  // window.fpRoomAmendments — state.amendments.room
+  // window.fpOverlay        — state.plan.overlay (getter/setter)
 
   function fpRooms() { return fpData.rooms; }
   function fpCurrent() { return fpData.rooms[fpData.currentIdx] || null; }

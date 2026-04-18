@@ -15,7 +15,7 @@
     "min_desks_drop_ratio": 0.3
   },
   "ingestion": {
-    "drawing_scale_text": "1 : 462",
+    "drawing_scale_text": "1 : 200",
     "render_dpi": 300,
     "scale_cm_per_px": 0.5,
     "threshold": 110,

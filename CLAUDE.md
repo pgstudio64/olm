@@ -69,7 +69,6 @@ AI-OLM/
 │   │   └── block_svg.js
 │   ├── templates/                 # HTML
 │   │   ├── pattern_editor.html
-│   │   ├── matching_viewer.html
 │   │   ├── blocks_preview.html
 │   │   ├── desk_preview.html
 │   │   └── reference_blocks_constraints.html

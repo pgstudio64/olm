@@ -801,12 +801,6 @@ def serve_specs(filename: str):
     return send_from_directory(os.path.join(os.path.dirname(BASE_DIR), "docs", "specs"), filename)
 
 
-@app.route("/matching")
-def matching_viewer():
-    """Serve the matching viewer page."""
-    return send_from_directory(os.path.join(BASE_DIR, "templates"), "matching_viewer.html")
-
-
 @app.route("/api/blocks", methods=["GET"])
 def api_blocks():
     """Return block definitions for the requested standard.
