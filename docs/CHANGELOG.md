@@ -36,6 +36,13 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - `editor.js` : contour de pièce blanc dans le Pattern editor (précédemment gris #4a4640) pour cohérence avec Review/Office. Épaisseur réduite de 50 % (1.5 → 0.75 en éditeur, 2 → 1 en Review/Office).
 - `editor.js` : murs passés de `z=0.05` à `z=4` (au-dessus des blocs, sous les ouvertures) — demande utilisateur.
 
+### Refactor (D-97 — split init.js, P3)
+- Nouveaux `olm/static/init_rvtool.js` (~300 l.) et `olm/static/init_resize.js` (~100 l.), extraits de `init.js` (1082 → 724 l.).
+- `init_rvtool.js` : outil zones d'exclusion du Room amend mode, capture-phase sur keydown pour préempter la navigation Room/Office.
+
+### UX (zones d'exclusion Room)
+- Couleur sélection rouge (au lieu de vert), poignées de resize aux 4 coins (2×2 px), clampage complet aux 4 faces (drag + resize + flèches), Enter = commit, Escape = annulation. Bouton renommé "Add exclusion zone".
+
 ---
 
 ## [v0.3.1] — 2026-04-17 : D-91→D-93

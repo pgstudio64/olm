@@ -7,6 +7,33 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-97 · Split init.js — init_rvtool + init_resize (2026-04-18)
+
+**Décision** : Phase 3 du refactoring front-end D-94. Extraction de deux modules auto-contenus depuis `init.js` (1082 l.) :
+
+- `olm/static/init_rvtool.js` (~300 l.) : outil zones d'exclusion pour le Room amend mode (placing/drawing/selected/dragging/resizing), incluant les handlers clavier (flèches = déplacer, Delete/Backspace = supprimer, Escape = désélectionner/annuler, Enter = commit). Capture-phase sur le `keydown` pour préempter la navigation Room/Office de `floor_plan.js`.
+- `olm/static/init_resize.js` (~100 l.) : les deux drag-handles de redimensionnement des panneaux gauches (Floor + Room), déjà encapsulés en IIFE avant extraction.
+
+Fixes UX associés (rvtool) :
+- Couleur sélection zone : rouge (`#c05858`) au lieu de vert.
+- Poignées de redimensionnement aux 4 coins (drag = resize, `MIN_CM = GRID_STEP_CM`). Taille 2×2 SVG units (−75 % vs proto initial).
+- Clampage complet à la pièce (drag + resize + flèches) sur les 4 faces, plus seulement W/N.
+- Enter (Retour) désélectionne (commit), complément à Escape (annulation).
+- Bouton renommé "Add exclusion zone" (au lieu de "+ Zone").
+
+`init.js` passe de 1082 → 724 l. Le reste (orchestration `init()`, onglets, amend mode global, catalogue, erase) reste dans `init.js` — couplage plus fort au flow d'init, extraction risquée sans gain net.
+
+**Justification** : les deux modules extraits étaient déjà thématiquement autonomes (rvtool seule consomme `state.roomAmendMode`, `SCALE`, `GRID_STEP_CM`, `render()` via globals ; resize ne dépend que du DOM). Les laisser dans `init.js` rendait le fichier difficile à naviguer (1000+ lignes) sans bénéfice architectural.
+
+**Impact** :
+- Nouveau `olm/static/init_rvtool.js`.
+- Nouveau `olm/static/init_resize.js`.
+- `olm/static/init.js` −358 l.
+- `olm/static/editor.js` : couleur sélection + 4 poignées SVG rendues dans `renderRoomElements`.
+- `olm/templates/pattern_editor.html` : chargement des 2 nouveaux scripts après `init.js`.
+
+---
+
 ## D-96 · render_shared.js — primitives SVG partagées (2026-04-18)
 
 **Décision** : Création de `olm/static/render_shared.js` (phase 2 du refactoring front-end D-94). Expose `renderShared.doorSvg()` et `renderShared.gridSvg()` pour centraliser la logique de rendu dupliquée entre `editor.js` et `ingestion.js`.
