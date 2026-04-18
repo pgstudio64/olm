@@ -7,6 +7,25 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-98 · Split ingestion.js — ingestion_scale + ingestion_export (2026-04-18)
+
+**Décision** : Phase 4 du refactoring front-end D-94. Extraction de deux modules auto-contenus depuis `ingestion.js` (1605 l.) :
+
+- `olm/static/ingestion_scale.js` (~90 l.) : helpers purs de parsing et conversion d'échelle (`parseDrawingScale`, `computeCmPerPx`, `getDrawingScale`, `getRenderDpi`, `suggestDrawingScale`). Exposés via `window.olmScale.*`.
+- `olm/static/ingestion_export.js` (~125 l.) : `devExportV3Json` — sérialisation `ingState.rooms` vers le format JSON v3 + téléchargement. Exposé via `window.devExportV3Json` (utilisé par le bouton Save dans `init.js`). D-95 écrit `drawing_scale_text` et `drawing_scale_measured` depuis `ingState.scale`.
+
+`ingestion.js` passe de 1605 → 1432 l. Le reste (renderIngestion, extractRooms/Preprocessed, room CRUD, toggles, init wiring) demeure couplé à `COLORS` local, `ingState` local et aux helpers mutuellement dépendants — extraire au-delà nécessiterait une exposition étendue sur `window`, pire que le couplage actuel.
+
+**Justification** : les deux extraits sont des "feuilles" du graphe de dépendance (scale : pures fonctions ; export : une fonction top-level). ROI élevé (thématisation claire, ingestion.js plus lisible) sans risque de régression.
+
+**Impact** :
+- Nouveau `olm/static/ingestion_scale.js`.
+- Nouveau `olm/static/ingestion_export.js`.
+- `olm/static/ingestion.js` −173 l.
+- `olm/templates/pattern_editor.html` : chargement des 2 nouveaux scripts avant `ingestion.js`.
+
+---
+
 ## D-97 · Split init.js — init_rvtool + init_resize (2026-04-18)
 
 **Décision** : Phase 3 du refactoring front-end D-94. Extraction de deux modules auto-contenus depuis `init.js` (1082 l.) :

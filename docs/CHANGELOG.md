@@ -43,6 +43,9 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 ### UX (zones d'exclusion Room)
 - Couleur sélection rouge (au lieu de vert), poignées de resize aux 4 coins (2×2 px), clampage complet aux 4 faces (drag + resize + flèches), Enter = commit, Escape = annulation. Bouton renommé "Add exclusion zone".
 
+### Refactor (D-98 — split ingestion.js, P4)
+- Nouveaux `olm/static/ingestion_scale.js` (~90 l., `window.olmScale.*`) et `olm/static/ingestion_export.js` (~125 l., `window.devExportV3Json`), extraits de `ingestion.js` (1605 → 1432 l.).
+
 ---
 
 ## [v0.3.1] — 2026-04-17 : D-91→D-93
