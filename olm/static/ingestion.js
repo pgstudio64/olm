@@ -584,37 +584,13 @@
 
     // Grid: 10cm dots + 1m lines (same style as pattern editor)
     if (ingState.show.grid && ingState.scale > 0) {
-      var cmPerPx = ingState.scale;
-      var step10cm = 10 / cmPerPx;    // 10cm in pixels
-      var step1m = 100 / cmPerPx;     // 1m in pixels
-      var vb = ingState.vb;
-      var margin = Math.max(vb.w, vb.h) * 0.3;
-      var gxS = Math.floor((vb.x - margin) / step10cm) * step10cm;
-      var gyS = Math.floor((vb.y - margin) / step10cm) * step10cm;
-      var gxE = vb.x + vb.w + margin;
-      var gyE = vb.y + vb.h + margin;
-      // 10cm dots (skip when zoomed out too far)
-      if (vb.w / step10cm < 150) {
-        for (var gx = gxS; gx <= gxE; gx += step10cm) {
-          for (var gy = gyS; gy <= gyE; gy += step10cm) {
-            els.push('<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
-              '" r="0.6" fill="#6e6a62"/>');
-          }
-        }
-      }
-      // 1m lines
-      var mxS = Math.floor((vb.x - margin) / step1m) * step1m;
-      var myS = Math.floor((vb.y - margin) / step1m) * step1m;
-      for (var mx = mxS; mx <= gxE; mx += step1m) {
-        els.push('<line x1="' + mx.toFixed(1) + '" y1="' + gyS.toFixed(1) +
-          '" x2="' + mx.toFixed(1) + '" y2="' + gyE.toFixed(1) +
-          '" stroke="#6e6a62" stroke-width="0.5"/>');
-      }
-      for (var my = myS; my <= gyE; my += step1m) {
-        els.push('<line x1="' + gxS.toFixed(1) + '" y1="' + my.toFixed(1) +
-          '" x2="' + gxE.toFixed(1) + '" y2="' + my.toFixed(1) +
-          '" stroke="#6e6a62" stroke-width="0.5"/>');
-      }
+      var gridParts = window.renderShared.gridSvg({
+        vb: ingState.vb,
+        cmPerPx: ingState.scale,
+        marginRatio: 0.3,
+      });
+      gridParts.dots.forEach(function (s) { els.push(s); });
+      gridParts.lines.forEach(function (s) { els.push(s); });
     }
 
     var show = ingState.show;
@@ -686,69 +662,55 @@
       // Openings (light green dashed — same as renderRoomElements)
       if (show.opening) {
         (room.openings || []).forEach(function (op) {
+          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, op.face, op.offset_px, op.width_px);
           drawWallFeature(els, x0, y0, x1, y1, op.face,
             op.offset_px, op.width_px, '#80c060', 1, '4 3', '');
         });
       }
 
-      // Doors (arc + leaf, same style as editor renderRoomElements)
+      // Doors (arc + leaf) — delegate to render_shared.
+      // Supports two door field conventions:
+      //   OCR (test_comb):   jamb_hinge_px + jamb_free_px
+      //   Preprocessed:      offset_px + width_px (same shape as openings)
       if (show.door) {
         (room.doors || []).forEach(function (d) {
-          var jh = d.jamb_hinge_px, jf = d.jamb_free_px;
-          if (jh == null || jf == null || isNaN(jh) || isNaN(jf)) return;
-          var dw = Math.abs(jf - jh);  // door width in px
+          var jh, jf, doorOffsetFromStart, doorWidth;
+          if (d.jamb_hinge_px != null && d.jamb_free_px != null &&
+              !isNaN(d.jamb_hinge_px) && !isNaN(d.jamb_free_px)) {
+            jh = d.jamb_hinge_px;
+            jf = d.jamb_free_px;
+            var along0_ocr = (d.face === 'south' || d.face === 'north') ? x0 : y0;
+            doorOffsetFromStart = Math.min(jh, jf) - along0_ocr;
+            doorWidth = Math.abs(jf - jh);
+          } else if (d.offset_px != null && d.width_px != null &&
+                     !isNaN(d.offset_px) && !isNaN(d.width_px)) {
+            var along0 = (d.face === 'south' || d.face === 'north') ? x0 : y0;
+            jh = along0 + d.offset_px;
+            jf = along0 + d.offset_px + d.width_px;
+            doorOffsetFromStart = d.offset_px;
+            doorWidth = d.width_px;
+          } else {
+            return;
+          }
+          // Erase wall under the door bay so the opening shows through the bbox
+          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, d.face, doorOffsetFromStart, doorWidth);
           var swing = d.hinge_side || 'left';
           var inward = d.opens_inward !== false;
-
-          if (d.face === 'south') {
-            var hingeX = (swing === 'left') ? jh : jf;
-            var freeX = (swing === 'left') ? jf : jh;
-            var sweepDir = (swing === 'left') ? 0 : 1;
-            if (!inward) sweepDir = 1 - sweepDir;
-            var arcEndY = inward ? y1 - dw : y1 + dw;
-            els.push('<path d="M ' + freeX + ' ' + y1 +
-              ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
-            els.push('<line x1="' + hingeX + '" y1="' + y1 +
-              '" x2="' + hingeX + '" y2="' + arcEndY +
-              '" stroke="#e4e0d8" stroke-width="1.5"/>');
-          } else if (d.face === 'north') {
-            var hingeX = (swing === 'left') ? jh : jf;
-            var freeX = (swing === 'left') ? jf : jh;
-            var sweepDir = (swing === 'left') ? 1 : 0;
-            if (!inward) sweepDir = 1 - sweepDir;
-            var arcEndY = inward ? y0 + dw : y0 - dw;
-            els.push('<path d="M ' + freeX + ' ' + y0 +
-              ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeX + ' ' + arcEndY +
-              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
-            els.push('<line x1="' + hingeX + '" y1="' + y0 +
-              '" x2="' + hingeX + '" y2="' + arcEndY +
-              '" stroke="#e4e0d8" stroke-width="1.5"/>');
-          } else if (d.face === 'west') {
-            var hingeY = (swing === 'left') ? jf : jh;
-            var freeY = (swing === 'left') ? jh : jf;
-            var sweepDir = (swing === 'left') ? 0 : 1;
-            if (!inward) sweepDir = 1 - sweepDir;
-            var arcEndX = inward ? x0 + dw : x0 - dw;
-            els.push('<path d="M ' + x0 + ' ' + freeY +
-              ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
-            els.push('<line x1="' + x0 + '" y1="' + hingeY +
-              '" x2="' + arcEndX + '" y2="' + hingeY +
-              '" stroke="#e4e0d8" stroke-width="1.5"/>');
-          } else if (d.face === 'east') {
-            var hingeY = (swing === 'left') ? jh : jf;
-            var freeY = (swing === 'left') ? jf : jh;
-            var sweepDir = (swing === 'left') ? 1 : 0;
-            if (!inward) sweepDir = 1 - sweepDir;
-            var arcEndX = inward ? x1 - dw : x1 + dw;
-            els.push('<path d="M ' + x1 + ' ' + freeY +
-              ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEndX + ' ' + hingeY +
-              '" fill="none" stroke="#6e6a62" stroke-width="1.5" stroke-dasharray="6 3"/>');
-            els.push('<line x1="' + x1 + '" y1="' + hingeY +
-              '" x2="' + arcEndX + '" y2="' + hingeY +
-              '" stroke="#e4e0d8" stroke-width="1.5"/>');
-          }
+          // Resolve hinge/free coords from jambs + swing + face convention
+          // (west wall inverts jh/jf selection, mirroring editor's logic).
+          var swingLeft = (swing === 'left');
+          var westInvert = (d.face === 'west');
+          var hingeCoord = (swingLeft !== westInvert) ? jh : jf;
+          var freeCoord  = (swingLeft !== westInvert) ? jf : jh;
+          var wallCoord;
+          if (d.face === 'south') wallCoord = y1;
+          else if (d.face === 'north') wallCoord = y0;
+          else if (d.face === 'east') wallCoord = x1;
+          else /* west */ wallCoord = x0;
+          var parts = window.renderShared.doorSvg(
+            d.face, hingeCoord, freeCoord, wallCoord, swing, inward, 0);
+          els.push(parts[0]);
+          els.push(parts[1]);
         });
       }
 
@@ -1045,6 +1007,31 @@
   }
 
   // --- Helper: draw a wall feature (line outside the bbox) ---
+  // Erase a segment of the bbox wall at the door/opening location so the
+  // gap is visible through the white rectangle. Background color matches
+  // the SVG background so it effectively "cuts" the stroke.
+  function eraseWallSegment(els, x0, y0, x1, y1, face, offset, width) {
+    var ERASE_COLOR = '#1e1e1e';
+    var ERASE_W = 2;  // slightly thicker than bbox stroke (1.5) to fully cover
+    if (face === 'north') {
+      els.push('<line x1="' + (x0 + offset) + '" y1="' + y0 +
+        '" x2="' + (x0 + offset + width) + '" y2="' + y0 +
+        '" stroke="' + ERASE_COLOR + '" stroke-width="' + ERASE_W + '"/>');
+    } else if (face === 'south') {
+      els.push('<line x1="' + (x0 + offset) + '" y1="' + y1 +
+        '" x2="' + (x0 + offset + width) + '" y2="' + y1 +
+        '" stroke="' + ERASE_COLOR + '" stroke-width="' + ERASE_W + '"/>');
+    } else if (face === 'west') {
+      els.push('<line x1="' + x0 + '" y1="' + (y0 + offset) +
+        '" x2="' + x0 + '" y2="' + (y0 + offset + width) +
+        '" stroke="' + ERASE_COLOR + '" stroke-width="' + ERASE_W + '"/>');
+    } else if (face === 'east') {
+      els.push('<line x1="' + x1 + '" y1="' + (y0 + offset) +
+        '" x2="' + x1 + '" y2="' + (y0 + offset + width) +
+        '" stroke="' + ERASE_COLOR + '" stroke-width="' + ERASE_W + '"/>');
+    }
+  }
+
   function drawWallFeature(els, x0, y0, x1, y1, face, offset, width,
                            color, strokeW, dash, extra) {
     var off = 3; // offset from bbox edge
