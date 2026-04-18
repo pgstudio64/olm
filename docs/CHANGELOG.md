@@ -46,6 +46,12 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 ### Refactor (D-98 — split ingestion.js, P4)
 - Nouveaux `olm/static/ingestion_scale.js` (~90 l., `window.olmScale.*`) et `olm/static/ingestion_export.js` (~125 l., `window.devExportV3Json`), extraits de `ingestion.js` (1605 → 1432 l.).
 
+### Feature (D-99 — Room resize, 4 poignées)
+- Room amend mode : 4 poignées rouges aux coins permettent de redimensionner ET déplacer la pièce à la souris (snap 5 cm). Contenu (fenêtres, portes, ouvertures, exclusions) translaté pour conserver ses positions absolues. Offset de rendu persistant dans la session d'amend. Clampage des ouvertures qui débordent après resize. Propagation `bbox_px` vers Floor à la sauvegarde (corridor south uniquement pour l'instant). Rationale : Floor = ajustements grossiers, Room = ajustements fins.
+
+### Décision d'architecture (D-100)
+- Abandon de R-09 (Identify merges) : le workflow resize + Add/Delete + commentaires markdown par pièce couvre le besoin "étudier la suppression de murs entre pièces" sans dette technique. TODO.md mis à jour (R-09 retiré, feature `comments_md` ajoutée).
+
 ---
 
 ## [v0.3.1] — 2026-04-17 : D-91→D-93

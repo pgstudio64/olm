@@ -643,6 +643,13 @@ function _renderImpl(targetSvg) {
   var roomHPx = state.room_depth_cm * SCALE;
   var roomX = MARGIN;
   var roomY = MARGIN;
+  // D-99: during Room amend-mode corner drag, offset the room rendering so
+  // the dragged corner visually tracks the mouse while the overlay stays
+  // fixed. The offset is set by init_rvtool.js and cleared on commit.
+  if (state.roomRenderOffset) {
+    roomX += (state.roomRenderOffset.x_cm || 0) * SCALE;
+    roomY += (state.roomRenderOffset.y_cm || 0) * SCALE;
+  }
   var isEditor = svg.id === "canvas";
   var wallColor = "#ffffff";
   var wallWidth = isEditor ? 0.75 : 1;
@@ -651,6 +658,25 @@ function _renderImpl(targetSvg) {
   elements.push({ z: 4, s: '<rect x="' + roomX + '" y="' + roomY +
     '" width="' + roomWPx + '" height="' + roomHPx +
     '" fill="none" stroke="' + wallColor + '" stroke-width="' + wallWidth + '"/>' });
+  // D-99: Room amend mode — 4 corner handles for mouse resize in Room tab.
+  // Dragging any corner shifts the room AND translates all anchored content
+  // (windows, doors, openings, exclusions) so they keep their absolute
+  // position. See init_rvtool.js roomResize handlers.
+  if (isReview && state.roomAmendMode) {
+    var rhs = 2;
+    var roomCorners = [
+      { h: 'nw', cx: roomX,           cy: roomY,           cur: 'nw-resize' },
+      { h: 'ne', cx: roomX + roomWPx, cy: roomY,           cur: 'ne-resize' },
+      { h: 'sw', cx: roomX,           cy: roomY + roomHPx, cur: 'sw-resize' },
+      { h: 'se', cx: roomX + roomWPx, cy: roomY + roomHPx, cur: 'se-resize' },
+    ];
+    roomCorners.forEach(function (c) {
+      elements.push({ z: 9.2, s: '<rect x="' + (c.cx - rhs / 2) +
+        '" y="' + (c.cy - rhs / 2) + '" width="' + rhs + '" height="' + rhs +
+        '" fill="#c05858" stroke="#ffffff" stroke-width="0.5"' +
+        ' data-room-handle="' + c.h + '" style="cursor:' + c.cur + ';"/>' });
+    });
+  }
   // Room dimension labels — data already in local coordinates, no swap needed
   var dimFs = (16.5 * zf).toFixed(1);
   var dimOff = 16 * zf;
@@ -849,17 +875,22 @@ function _renderImpl(targetSvg) {
       '" width="' + ovW.toFixed(1) + '" height="' + ovH.toFixed(1) +
       '" opacity="' + (ov.opacity / 100).toFixed(2) +
       '" preserveAspectRatio="none"/>';
-    // D-83: rotate overlay to match local coordinate system
+    // D-83: rotate overlay to match local coordinate system.
+    // D-99: in room amend mode, pin rotation center to the ORIGINAL room
+    //       dimensions so live resize doesn't drift the overlay.
     var ovAngle = _canonicalAngle(state.corridor_face);
     if (ovAngle !== 0 && !isEditor) {
-      var ocx = roomX + roomWPx / 2;
-      var ocy = roomY + roomHPx / 2;
+      var origRoom = state.roomAmendMode && state.roomAmendMode.originalRoom;
+      var refWPx = origRoom ? origRoom.width_cm * SCALE : roomWPx;
+      var refHPx = origRoom ? origRoom.depth_cm * SCALE : roomHPx;
+      var ocx = roomX + refWPx / 2;
+      var ocy = roomY + refHPx / 2;
       // Pour 90/270, la room canonicalisée a w/h swappés vs l'image originale.
       // Après rotation autour du centre room, compenser le décalage dû au swap.
       var dx = 0, dy = 0;
       if (ovAngle === 90 || ovAngle === 270) {
-        dx = (roomWPx - roomHPx) / 2;
-        dy = (roomHPx - roomWPx) / 2;
+        dx = (refWPx - refHPx) / 2;
+        dy = (refHPx - refWPx) / 2;
       }
       ovImg = '<g transform="translate(' + dx.toFixed(1) + ' ' + dy.toFixed(1) + ') rotate(' + ovAngle + ' ' + ocx.toFixed(1) + ' ' + ocy.toFixed(1) + ')">' + ovImg + '</g>';
     }
@@ -1255,7 +1286,51 @@ async function save() {
       : localRoom;
     fpRoomAmendments[ramend.roomName] = amendedRoom;
     amendedRoom.corridor_face = origCf;
+
+    // D-99: propagate the new size + NW shift back to ingState.rooms (and
+    // fpData.rooms + the stored amendment) so Floor reflects the amendment
+    // on the bbox overlay. Only handled for south-corridor rooms for now —
+    // non-south requires axis-remapping (see TODO).
+    var renderOffset = state.roomRenderOffset || { x_cm: 0, y_cm: 0 };
+    var scaleCmPerPx = (window.ingState && window.ingState.scale) || 0;
+    if (scaleCmPerPx > 0 && (!origCf || origCf === "south")) {
+      var newBbox = null;
+      var ingRooms = (window.ingState && window.ingState.rooms) || [];
+      for (var ir = 0; ir < ingRooms.length; ir++) {
+        if (ingRooms[ir].name !== ramend.roomName) continue;
+        var orig = ingRooms[ir].bbox_px;
+        if (!orig || orig.length !== 4) break;
+        var nx0 = orig[0] + renderOffset.x_cm / scaleCmPerPx;
+        var ny0 = orig[1] + renderOffset.y_cm / scaleCmPerPx;
+        var nx1 = nx0 + state.room_width_cm / scaleCmPerPx;
+        var ny1 = ny0 + state.room_depth_cm / scaleCmPerPx;
+        newBbox = [nx0, ny0, nx1, ny1];
+        ingRooms[ir].bbox_px = newBbox;
+        ingRooms[ir].width_cm = state.room_width_cm;
+        ingRooms[ir].depth_cm = state.room_depth_cm;
+        ingRooms[ir].surface_m2 = parseFloat(((state.room_width_cm * state.room_depth_cm) / 10000).toFixed(2));
+        break;
+      }
+      if (newBbox) {
+        amendedRoom.bbox_px = newBbox.slice();
+        if (window.fpData && window.fpData.rooms) {
+          for (var fr = 0; fr < window.fpData.rooms.length; fr++) {
+            if (window.fpData.rooms[fr].name !== ramend.roomName) continue;
+            window.fpData.rooms[fr].width_cm = state.room_width_cm;
+            window.fpData.rooms[fr].depth_cm = state.room_depth_cm;
+            window.fpData.rooms[fr].bbox_px = newBbox.slice();
+            break;
+          }
+        }
+        // Re-render Floor SVG + room list so the new size shows up without
+        // needing a click to trigger a redraw.
+        if (typeof window.renderIngestion === "function") window.renderIngestion();
+        if (typeof window.updateIngRoomList === "function") window.updateIngRoomList();
+      }
+    }
+
     state.roomAmendMode = null;
+    state.roomRenderOffset = null;
     exitRoomAmendUI();
     // Re-run matching then refresh Review
     fpRematchRoom(ramend.roomName, amendedRoom);
@@ -1437,6 +1512,7 @@ function switchToEditorWithPattern(data) {
   // Switch to Office Layout > Editor (triggers canvas move)
   state.amendMode = null;
   state.roomAmendMode = null;
+  state.roomRenderOffset = null;
   exitAmendUI();
   exitRoomAmendUI();
   document.querySelector('.tab-btn[data-tab="lytCatalogue"]').click();
@@ -1523,6 +1599,8 @@ function enterRoomAmendMode(room) {
     roomName: room.name,
     originalRoom: JSON.parse(JSON.stringify(room)),
   };
+  // D-99: fresh render offset for this amend session.
+  state.roomRenderOffset = { x_cm: 0, y_cm: 0 };
 
   // D-83: convert absolute data to local coordinates for editing
   var localRoom = (typeof window._canonicalizeRoom === "function")

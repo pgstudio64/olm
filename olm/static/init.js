@@ -43,7 +43,7 @@ async function init() {
   document.getElementById("btnAmendCancel").addEventListener("click", function() {
     clearDirty();
     if (state.roomAmendMode) {
-      state.roomAmendMode = null;
+      state.roomAmendMode = null; state.roomRenderOffset = null;
       exitRoomAmendUI();
       document.querySelector('.tab-btn[data-tab="fpReview"]').click();
     } else if (state.amendMode) {
@@ -92,7 +92,7 @@ async function init() {
   });
   document.getElementById("rvBtnCancelRoom").addEventListener("click", function() {
     if (!state.roomAmendMode) return;
-    state.roomAmendMode = null;
+    state.roomAmendMode = null; state.roomRenderOffset = null;
     exitRoomAmendUI();
     rvRenderCurrent();
   });
@@ -300,7 +300,7 @@ async function init() {
     }
     if (state.roomAmendMode) {
       if (!confirm("Unsaved room changes will be lost. Continue?")) return false;
-      state.roomAmendMode = null;
+      state.roomAmendMode = null; state.roomRenderOffset = null;
       exitRoomAmendUI();
     }
     return true;
@@ -453,9 +453,11 @@ async function init() {
 
   function setupPan(svg) {
     svg.addEventListener("mousedown", function(e) {
-      if (e.target.closest("[data-row]") || e.target.closest("[data-excl]")) return;
+      if (e.target.closest("[data-row]") || e.target.closest("[data-excl]") ||
+          e.target.closest("[data-excl-handle]") || e.target.closest("[data-room-handle]")) return;
       if (svg.id === "rvCanvas" && window.rvTool &&
-          (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing")) return;
+          (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing" ||
+           window.rvTool.mode === "roomResizing")) return;
       if (e.button !== 0) return;
       if (zoomSelStart(e, svg, state.viewBox, function() { updateViewBox(svg); render(svg); })) return;
       state.isPanning = true;
@@ -474,6 +476,9 @@ async function init() {
 
   document.addEventListener("mousemove", function(e) {
     if (zoomSel.active) { zoomSelMove(e); return; }
+    // D-99: during a room-corner resize, block any pan motion that could
+    // otherwise fight the resize and drift the overlay.
+    if (window.rvTool && window.rvTool.mode === "roomResizing") return;
     if (!state.isPanning || !_panSvg) return;
     const dx = e.clientX - state.panStart.x;
     const dy = e.clientY - state.panStart.y;

@@ -7,6 +7,47 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-100 · Suppression du concept de fusion de pièces — remplacement par resize + commentaires (2026-04-18)
+
+**Décision** : Abandonner R-09 (Identify merges) et toute gestion d'associations de pièces dans l'application. Le besoin — "étudier l'aménagement d'une pièce résultant de la suppression de murs entre 2+ pièces réelles" — est couvert par la combinaison :
+
+- **Resize + Add/Delete room** : l'utilisateur ajoute une pièce virtuelle (bouton Add room dans Floor), la redimensionne par-dessus deux pièces existantes (poignées D-99), travaille l'aménagement dans Office. Deux issues : soit il garde la pièce test et supprime les deux pièces d'origine, soit il abandonne et supprime la pièce test.
+- **Champ commentaires markdown** par pièce (à implémenter) : `comments_md` dans chaque entrée `rooms.{id}` du JSON v3 + section dédiée dans le rapport final. L'utilisateur y trace le raisonnement ("pièce 237+238 fusionnée suite à demande client — suppression du mur mitoyen", etc.).
+
+**Justification** : un système de merge nécessiterait : IDs composés, gestion de la géométrie de fusion (recalcul de fenêtres/portes/exclusions, validation de mitoyenneté), tag "merged" dans la liste, passage par le pipeline Review/Office/Export avec des garde-fous partout. Coût élevé pour un cas d'usage rare. Le workflow resize + delete + commentaire couvre 95 % du besoin avec zéro dette technique, et laisse le contexte métier à un humain via le champ commentaires.
+
+**Trade-off accepté** : pas de traçabilité machine-lisible des fusions (on ne peut pas générer un rapport "X rooms réelles → Y rooms effectives"). Le commentaire markdown suffit pour un audit humain.
+
+**Impact** :
+- `docs/TODO.md` : section R-09 "Identify merges" retirée.
+- `docs/TODO.md` : nouvelle feature "champ commentaires markdown par pièce + rapport".
+- `docs/TODO.md` : TODO Room→Floor sync (bug découvert en testant D-99 : le resize Room ne se reflétait pas dans Floor).
+- `docs/SRS.md` : à mettre à jour pour documenter le workflow "resize + delete = suppression de murs".
+
+---
+
+## D-99 · Room resize — poignée SE pour ajustements fins (2026-04-18)
+
+**Décision** : En Room amend mode, ajout d'une poignée de redimensionnement SE à la pièce, permettant la modification des dimensions `state.room_width_cm` / `state.room_depth_cm` à la souris.
+
+- Répartition des rôles : **Floor = ajustements grossiers** (bbox editor du plan global), **Room = ajustements fins** (4 poignées de la pièce + 4 poignées pour chaque zone d'exclusion).
+- **4 poignées** (NW/NE/SW/SE) dessinées aux coins de la pièce pendant l'amend mode. Rouge, 2×2 SVG units.
+- **Render offset** (`state.roomRenderOffset`) : pendant le drag d'un coin autre que SE, le point NW de la pièce se déplace visuellement — l'overlay reste fixe, le contenu (fenêtres, portes, ouvertures, zones d'exclusion) est translaté pour conserver sa position absolue. L'offset persiste à travers les commits dans une même session d'amend, reset à l'entrée/sortie du mode.
+- **Snap fin** : 5 cm pour le déplacement de la pièce (vs 10 cm ailleurs).
+- **Clampage** : `MIN_CM = GRID_STEP_CM`. Pas de max. À la sortie du drag, toute ouverture ou zone d'exclusion qui dépasse les nouvelles dimensions est clamped aux bords.
+- **Anti-interférence** : mousedown sur une poignée neutralise `setupPan` et `state.isPanning` ; le handler mousemove du pan globalise un early-return quand `rvTool.mode === "roomResizing"`.
+- **Propagation Floor → Room** : à la sauvegarde de l'amendement (bouton Save room), `ingState.rooms[x].bbox_px` et `fpData.rooms[x]` sont recalculés depuis les nouvelles dimensions + offset. Seul le cas `corridor_face = south` est traité ; les autres orientations nécessitent un axis-remapping (TODO).
+- À la fin du drag : régénération complète de la DSL (`_stateToDsl`) + `rvApplyDslAsync()` → backend re-parse + re-render.
+
+**Justification** : workflow en deux passes. L'utilisateur délimite d'abord grossièrement chaque pièce dans Floor (bbox editor existant), puis affine la géométrie dans Room où l'échelle de la pièce remplit le canvas et les petites corrections sont plus précises. Sans cette feature, toute correction fine passait par l'édition manuelle de la DSL `ROOM WxD`.
+
+**Impact** :
+- `olm/static/editor.js` : rendu des 4 poignées dans `_renderImpl` (z=9.2) conditionné par `isReview && state.roomAmendMode`. Application de `state.roomRenderOffset` sur `roomX/roomY`. Pinning du centre de rotation de l'overlay aux dimensions originales pour éviter le drift en présence de rotation D-83. Propagation bbox_px vers `ingState.rooms` dans `save()`.
+- `olm/static/init_rvtool.js` : mode `roomResizing` + handlers mousedown/mousemove/mouseup pour `[data-room-handle]`, helper `_clampContentsToRoom`, helper `_stateToDsl`.
+- `olm/static/init.js` : garde anti-pan pendant `roomResizing`, garde `[data-room-handle]` dans `setupPan`, reset du render offset quand le mode amend sort.
+
+---
+
 ## D-98 · Split ingestion.js — ingestion_scale + ingestion_export (2026-04-18)
 
 **Décision** : Phase 4 du refactoring front-end D-94. Extraction de deux modules auto-contenus depuis `ingestion.js` (1605 l.) :

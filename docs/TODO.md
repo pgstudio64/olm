@@ -230,24 +230,21 @@ Tâches :
 - [ ] UI : badge "Nouveau" sur les pièces sans état + warning listant les orphelines
 - [ ] Test end-to-end : import → sélection + amendement → export → re-import → vérifier réhydratation
 
-### R-09 : Identify merges — Fusion de pièces mitoyennes
+### Commentaires markdown par pièce (remplace R-09 — voir D-100)
 
-Fonctionnalité nouvelle dans l'étape ③ du workflow.
+Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièces", on utilise maintenant le workflow **resize + Add/Delete room** (D-99 + Add room existant) plutôt qu'un système de merge. Un champ commentaires libre permet à l'utilisateur de tracer son raisonnement.
 
-Principe :
-1. Afficher le plan d'étage complet (toutes les pièces positionnées) avec zoom/pan
-2. Détecter automatiquement les murs mitoyens (deux pièces partageant un segment de mur)
-3. Afficher une checkbox au milieu de chaque mur mitoyen
-4. L'utilisateur coche un mur → les deux pièces sont fusionnées en une pièce plus grande
-5. La pièce fusionnée ("Pièce A + Pièce B") est ajoutée à la liste avec le tag "merged"
-6. Les pièces merged passent par le même processus (Review → Match → Export) que les pièces réelles
+- [ ] **Champ `comments_md`** dans chaque entrée `rooms.{id}` du JSON v3 préprocessé + UI dans Room (textarea markdown associé à la pièce courante, sauvegardé avec l'amendement).
+- [ ] **Section "Commentaires"** dans le rapport final PDF/CSV : rendu markdown par pièce, inclus si non vide.
+- [ ] **SRS** : documenter le workflow officiel "suppression de murs = resize + delete + commentaire" (D-100).
 
-Pré-requis : les pièces doivent être positionnées sur le plan (données d'import avec coordonnées x,y).
+### Room → Floor propagation pour orientations non-south (D-99)
 
-Tâches :
+- [ ] Étendre la propagation `bbox_px` de `save()` (Room amend) aux rooms avec `corridor_face ∈ {north, east, west}`. Nécessite un axis-remapping (les dimensions locales après canonicalisation ne correspondent pas directement aux axes du plan).
 
-- [ ] Géométrie de fusion : suppression du mur commun entre deux pièces sélectionnées manuellement, recalcul de la pièce résultante (fenêtres/portes/exclusions)
-- [ ] Création de la pièce fusionnée dans la liste (nom composé, tag merged) + intégration dans le pipeline (Room/Office/Export)
+### Save v3 export préserve les champs inconnus
+
+- [ ] `devExportV3Json` reconstruit le JSON à partir de `ingState` mais **écrase** les champs non gérés par le frontend (notamment `orientation`). Correctif : conserver une référence au JSON d'origine (au moment de l'import) et merger les champs manquants à la sauvegarde.
 
 
 

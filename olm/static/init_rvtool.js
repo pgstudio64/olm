@@ -16,18 +16,20 @@
 
     var _rvGhostRect = null;
 
-    function rvScreenToRoomCm(evt) {
+    function rvScreenToRoomCm(evt, customSnapCm) {
       var svg = document.getElementById("rvCanvas");
       var pt = svg.createSVGPoint();
       pt.x = evt.clientX;
       pt.y = evt.clientY;
       var svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
-      var snap = GRID_STEP_CM;
+      var snap = (typeof customSnapCm === "number" && customSnapCm > 0) ? customSnapCm : GRID_STEP_CM;
       return {
         x_cm: Math.round(svgPt.x / SCALE / snap) * snap,
         y_cm: Math.round(svgPt.y / SCALE / snap) * snap,
       };
     }
+    // D-99: finer snap (5 cm) for room position handles.
+    var ROOM_RESIZE_SNAP_CM = 5;
 
     async function rvApplyDslAsync() {
       var text = document.getElementById("rvRoomDsl").value.trim();
@@ -113,6 +115,65 @@
     }
     window.rvRemoveGhostRect = rvRemoveGhostRect;
 
+    // Clamp windows/openings/doors/exclusions that overflow the current
+    // room bounds (after a shrink-direction resize). Width of a feature is
+    // preserved; its offset is nudged inward; if the feature is wider than
+    // the wall, width is shrunk too.
+    function _clampContentsToRoom() {
+      var W = state.room_width_cm || 0;
+      var D = state.room_depth_cm || 0;
+      function clampFeature(f) {
+        var wallLen = (f.face === "north" || f.face === "south") ? W : D;
+        var w = Math.min(f.width_cm || 0, wallLen);
+        var off = Math.max(0, Math.min(wallLen - w, f.offset_cm || 0));
+        f.width_cm = w;
+        f.offset_cm = off;
+      }
+      (state.room_windows || []).forEach(clampFeature);
+      (state.room_openings || []).forEach(clampFeature);
+      (state.room_exclusions || []).forEach(function (z) {
+        z.x_cm = Math.max(0, z.x_cm || 0);
+        z.y_cm = Math.max(0, z.y_cm || 0);
+        z.width_cm = Math.min(z.width_cm || 0, W - z.x_cm);
+        z.depth_cm = Math.min(z.depth_cm || 0, D - z.y_cm);
+        if (z.width_cm < 0) z.width_cm = 0;
+        if (z.depth_cm < 0) z.depth_cm = 0;
+      });
+    }
+
+    // Regenerate the full Room DSL from the current `state.room_*` arrays.
+    // Mirrors the DSL construction in floor_plan.js rvRenderCurrent.
+    function _stateToDsl() {
+      var W = state.room_width_cm || 0;
+      var D = state.room_depth_cm || 0;
+      var dsl = "ROOM " + W + "x" + D;
+      var FACE = { north: "N", south: "S", east: "E", west: "W" };
+      (state.room_windows || []).forEach(function (w) {
+        var f = FACE[w.face] || w.face || "?";
+        var wallLen = (f === "N" || f === "S") ? W : D;
+        if ((w.offset_cm || 0) === 0 && w.width_cm === wallLen) {
+          dsl += "\nWINDOW " + f;
+        } else {
+          dsl += "\nWINDOW " + f + " " + (w.offset_cm || 0) + " " + (w.width_cm || 0);
+        }
+      });
+      (state.room_openings || []).forEach(function (o) {
+        var f = FACE[o.face] || o.face || "?";
+        if (o.has_door) {
+          var dir = o.opens_inward ? "INT" : "EXT";
+          var side = (o.hinge_side === "left") ? "L" : "R";
+          dsl += "\nDOOR " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90) + " " + dir + " " + side;
+        } else {
+          dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
+        }
+      });
+      (state.room_exclusions || []).forEach(function (z) {
+        dsl += "\nEXCLUSION " + (z.x_cm || 0) + " " + (z.y_cm || 0) +
+          " " + (z.width_cm || 0) + " " + (z.depth_cm || 0);
+      });
+      return dsl;
+    }
+
     var rvCvEl = document.getElementById("rvCanvas");
     if (!rvCvEl) return;
 
@@ -141,8 +202,38 @@
       if (!state.roomAmendMode) return;
       if (e.button !== 0) return;
 
+      var roomHandleTarget = e.target.closest("[data-room-handle]");
       var handleTarget = e.target.closest("[data-excl-handle]");
       var exclTarget = e.target.closest("[data-excl]");
+
+      // Room corner handle click → start resizing the whole room (D-99).
+      // Snapshot contents deep so mousemove recomputes translations cleanly.
+      if (roomHandleTarget !== null) {
+        var roomPt = rvScreenToRoomCm(e, ROOM_RESIZE_SNAP_CM);
+        rvTool.mode = "roomResizing";
+        rvTool.selectedIndex = -1;
+        state.selectedExclusion = -1;
+        // Start from the current cumulative render offset (may be non-zero
+        // from a previous resize in the same amend session).
+        var baseOffset = state.roomRenderOffset || { x_cm: 0, y_cm: 0 };
+        // Belt-and-suspenders: cancel any leftover pan that could fight us.
+        state.isPanning = false;
+        rvTool.roomResizeStart = {
+          handle: roomHandleTarget.dataset.roomHandle,
+          mouse_x_cm: roomPt.x_cm, mouse_y_cm: roomPt.y_cm,
+          width_cm: state.room_width_cm, depth_cm: state.room_depth_cm,
+          offset_x_cm: baseOffset.x_cm, offset_y_cm: baseOffset.y_cm,
+          windows: JSON.parse(JSON.stringify(state.room_windows || [])),
+          openings: JSON.parse(JSON.stringify(state.room_openings || [])),
+          exclusions: JSON.parse(JSON.stringify(state.room_exclusions || [])),
+        };
+        e.preventDefault();
+        e.stopPropagation();
+        // Prevent any other mousedown listener on rvCanvas (e.g. setupPan)
+        // from racing us and starting a pan.
+        if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+        return;
+      }
 
       if (rvTool.mode === "placing") {
         var pt = rvScreenToRoomCm(e);
@@ -233,6 +324,69 @@
         render(rvCvEl);
         return;
       }
+      if (rvTool.mode === "roomResizing" && rvTool.roomResizeStart) {
+        var ptRoom = rvScreenToRoomCm(e, ROOM_RESIZE_SNAP_CM);
+        var rrs = rvTool.roomResizeStart;
+        // Raw mouse deltas (snapped to GRID_STEP_CM by rvScreenToRoomCm).
+        var mdx = ptRoom.x_cm - rrs.mouse_x_cm;
+        var mdy = ptRoom.y_cm - rrs.mouse_y_cm;
+        // Per-handle → (shiftX, shiftY) : origin shift in the original
+        // coord system (how far NW corner moves). dW / dD : dimension delta.
+        var shiftX = 0, shiftY = 0, dW = 0, dD = 0;
+        switch (rrs.handle) {
+          case "se": dW = mdx;   dD = mdy;   break;
+          case "ne": dW = mdx;   dD = -mdy;  shiftY = mdy; break;
+          case "sw": dW = -mdx;  dD = mdy;   shiftX = mdx; break;
+          case "nw": dW = -mdx;  dD = -mdy;  shiftX = mdx; shiftY = mdy; break;
+        }
+        // Clamp so width/depth stay ≥ MIN_CM. Adjust shifts consistently.
+        var MIN = GRID_STEP_CM;
+        var newW = rrs.width_cm + dW;
+        var newD = rrs.depth_cm + dD;
+        if (newW < MIN) {
+          var overW = MIN - newW;
+          newW = MIN;
+          if (shiftX !== 0) shiftX -= Math.sign(shiftX) * overW;
+        }
+        if (newD < MIN) {
+          var overD = MIN - newD;
+          newD = MIN;
+          if (shiftY !== 0) shiftY -= Math.sign(shiftY) * overD;
+        }
+        state.room_width_cm = newW;
+        state.room_depth_cm = newD;
+        // Render offset so the dragged corner visually tracks the mouse
+        // (the NW corner of the displayed room shifts by (shiftX, shiftY)
+        // relative to the offset at drag start — offsets accumulate across
+        // successive resizes in the same amend session).
+        state.roomRenderOffset = {
+          x_cm: rrs.offset_x_cm + shiftX,
+          y_cm: rrs.offset_y_cm + shiftY,
+        };
+        // Apply shift to contents: any element anchored to the OLD origin
+        // must stay at its absolute position → subtract the shift.
+        state.room_windows = rrs.windows.map(function (w) {
+          var c = Object.assign({}, w);
+          if (c.face === "north" || c.face === "south") c.offset_cm = (c.offset_cm || 0) - shiftX;
+          else c.offset_cm = (c.offset_cm || 0) - shiftY;
+          return c;
+        });
+        state.room_openings = rrs.openings.map(function (o) {
+          var c = Object.assign({}, o);
+          if (c.face === "north" || c.face === "south") c.offset_cm = (c.offset_cm || 0) - shiftX;
+          else c.offset_cm = (c.offset_cm || 0) - shiftY;
+          return c;
+        });
+        state.room_exclusions = rrs.exclusions.map(function (z) {
+          var c = Object.assign({}, z);
+          c.x_cm = (c.x_cm || 0) - shiftX;
+          c.y_cm = (c.y_cm || 0) - shiftY;
+          return c;
+        });
+        render(rvCvEl);
+        if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
+        return;
+      }
       if (rvTool.mode === "resizing" && rvTool.resizeStart) {
         var ptR = rvScreenToRoomCm(e);
         var rs = rvTool.resizeStart;
@@ -297,6 +451,23 @@
         if (excl4) {
           state.selectedExclusion = idx4;
           rvDslReplaceExcl(idx4, excl4.x_cm, excl4.y_cm, excl4.width_cm, excl4.depth_cm);
+          rvApplyDslAsync();
+        }
+        return;
+      }
+      if (rvTool.mode === "roomResizing") {
+        rvTool.mode = "idle";
+        rvTool.roomResizeStart = null;
+        // Keep state.roomRenderOffset persistent across the amend session:
+        // the NW corner stays where the user dropped it. It will be reset
+        // on amend mode exit (see _cancelAmendIfActive / exitRoomAmendMode).
+        // Clamp any element that ended up outside the new room bounds.
+        _clampContentsToRoom();
+        // Commit: regenerate the whole DSL from current state (since a
+        // corner drag may have shifted many content offsets) and re-apply.
+        var dslEl = document.getElementById("rvRoomDsl");
+        if (dslEl) {
+          dslEl.value = _stateToDsl();
           rvApplyDslAsync();
         }
         return;
