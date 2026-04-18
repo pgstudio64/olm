@@ -220,11 +220,26 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     elements.push({ z: 5, s: '<rect x="' + zx + '" y="' + zy +
       '" width="' + zw + '" height="' + zh +
       '" fill="#c05858" fill-opacity="0.25" stroke="#c05858" stroke-width="0.5"/>' });
-    // Highlight if selected
+    // Highlight if selected — red dashed outline + corner resize handles
     if (zi === state.selectedExclusion) {
       elements.push({ z: 8, s: '<rect x="' + zx + '" y="' + zy +
         '" width="' + zw + '" height="' + zh +
-        '" fill="none" stroke="#58c080" stroke-width="1.5" stroke-dasharray="6 3"/>' });
+        '" fill="none" stroke="#c05858" stroke-width="1.5" stroke-dasharray="6 3"/>' });
+      // Corner resize handles (centered on each corner).
+      var hs = 2;
+      var corners = [
+        { h: 'nw', cx: zx,        cy: zy,        cur: 'nw-resize' },
+        { h: 'ne', cx: zx + zw,   cy: zy,        cur: 'ne-resize' },
+        { h: 'sw', cx: zx,        cy: zy + zh,   cur: 'sw-resize' },
+        { h: 'se', cx: zx + zw,   cy: zy + zh,   cur: 'se-resize' },
+      ];
+      corners.forEach(function (c) {
+        elements.push({ z: 9.2, s: '<rect x="' + (c.cx - hs / 2) +
+          '" y="' + (c.cy - hs / 2) + '" width="' + hs + '" height="' + hs +
+          '" fill="#c05858" stroke="#ffffff" stroke-width="0.5"' +
+          ' data-excl-handle="' + c.h + '" data-excl="' + zi +
+          '" style="cursor:' + c.cur + ';"/>' });
+      });
     }
     // Clickable zone
     elements.push({ z: 9, s: '<rect x="' + zx + '" y="' + zy +
