@@ -213,13 +213,15 @@ Ajout **non-breaking** au niveau ROOT pour persister les sélections et amendeme
         "selected_pattern_id": "B2_SITE_4",
         "layout_amendments": [ ... ],
         "geometry_amendments": { ... },
-        "forbidden_zones": [ ... ]
+        "forbidden_zones": [ ... ],
+        "comments_md": "Notes libres au format markdown."
       }
-    },
-    "merges": []
+    }
   }
 }
 ```
+
+> **Note D-100** : le champ `merges` antérieurement prévu a été supprimé. Le besoin "étudier la suppression de murs entre pièces" est couvert par le workflow resize + Add/Delete + `comments_md` par pièce.
 
 Voir R-11 dans `TODO.md` et D-78 dans `Decisions.md` pour le détail du round-trip complet.
 

@@ -190,7 +190,7 @@ Objectif : garantir qu'à un re-import d'un plan déjà travaillé, l'utilisateu
 
 **Identification du plan** : par nom du fichier PNG (pas de hash, pas de contenu). Deux imports successifs de `test_floorplan3.png` sont considérés comme le même plan.
 
-**Persistance** : l'état (sélections de patterns, amendements layout, amendements géométrie, zones interdites ajoutées en Review, fusions Merge) est **sauvegardé dans le fichier JSON** accompagnant le PNG (Mode Préprocessé) ou dans un JSON sidecar (Mode OCR). L'export = la sauvegarde.
+**Persistance** : l'état (sélections de patterns, amendements layout, amendements géométrie, zones interdites ajoutées en Review, commentaires markdown) est **sauvegardé dans le fichier JSON** accompagnant le PNG (Mode Préprocessé) ou dans un JSON sidecar (Mode OCR). L'export = la sauvegarde. (Fusions de pièces retirées — voir D-100.)
 
 **Structure de l'état dans le JSON** (extension non-breaking du format v2) :
 
@@ -209,8 +209,7 @@ Objectif : garantir qu'à un re-import d'un plan déjà travaillé, l'utilisateu
         "forbidden_zones": [...]
       },
       "22K": { ... }
-    },
-    "merges": [ { "ids": ["238", "239"], "merged_name": "238+239" }, ... ]
+    }
   }
 }
 ```
@@ -265,10 +264,12 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
 
-### Refactoring architecture frontend — State unique et découplage
+### Refactoring architecture frontend — poursuite éventuelle
 
-- [ ] **State unique** : fusionner les 5 sources de vérité (`ingState.rooms`, `fpData.rooms`, `fpOverlay`, `fpAmendments`, `fpRoomAmendments`) en un seul store cohérent
-- [ ] **Découpage JS** : extraire init.js (~900 l.) et ingestion.js (~1200 l.) en modules thématiques, fonctions de rendu pures sans dépendance au state global
+- [x] **State unique** (D-94 P1) : store `olmStore` unifié.
+- [x] **Découpage JS** (D-94 P2/P3/P4) : `render_shared.js`, `init_rvtool.js`, `init_resize.js`, `ingestion_scale.js`, `ingestion_export.js`.
+- [ ] Éventuellement : extraction supplémentaire de `renderIngestion` (330 l.) depuis `ingestion.js` — demande exposition étendue de helpers locaux, ROI plus faible qu'aux phases précédentes.
+- [ ] Fonctions de rendu pures (sans dépendance au state global) — chantier long, à évaluer selon les besoins futurs.
 
 ---
 
