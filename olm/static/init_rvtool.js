@@ -316,10 +316,14 @@
             return o.has_door && o.origin !== "auto";
           });
 
-          // Canonicalisation : la re-analyze retourne des coords ABSOLUES
-          // (face = face absolue, offset = mesuré depuis le bord absolu).
-          // Le state stocke en CANONIQUE (corridor = south). On applique
-          // la transformation absolue → canonique ici.
+          // Canonicalisation : la re-analyze retourne des coords ABSOLUES.
+          // Si une porte est détectée, on met à jour corridor_face
+          // (doors[0].face) AVANT de canonicaliser — la porte principale
+          // pointe toujours vers le corridor.
+          if (data.doors && data.doors.length && data.doors[0].face) {
+            amend.originalRoom.corridor_face = data.doors[0].face;
+            state.corridor_face = data.doors[0].face;
+          }
           var cf = (amend.originalRoom && amend.originalRoom.corridor_face)
             || "";
           var _FACE_MAPS_LOCAL = {

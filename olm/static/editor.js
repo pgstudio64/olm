@@ -1493,6 +1493,7 @@ async function save() {
         ingRooms[ir].bbox_px = newBbox;
         ingRooms[ir].width_cm = absW;
         ingRooms[ir].depth_cm = absD;
+        ingRooms[ir].corridor_face = origCf;
         ingRooms[ir].surface_m2 = parseFloat(((absW * absD) / 10000).toFixed(2));
         // Portes : convertir les openings has_door=true en format
         // doors (px) pour que la Floor view les affiche.
@@ -1520,6 +1521,7 @@ async function save() {
             window.fpData.rooms[fr].depth_cm = absD;
             window.fpData.rooms[fr].bbox_px = newBbox.slice();
             window.fpData.rooms[fr].doors = doorsOut.slice();
+            window.fpData.rooms[fr].corridor_face = origCf;
             break;
           }
         }
