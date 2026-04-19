@@ -1350,6 +1350,36 @@ def _detect_face_colors(
     return {"corridor_face": corridor_face, "exterior_faces": exterior_faces}
 
 
+def _face_borders_color(
+    img_array: np.ndarray,
+    bbox_px: tuple,
+    face: str,
+    target_rgb: tuple,
+    margin_px: int = 8,
+    tolerance: int = 40,
+) -> bool:
+    """True si la bande juste à l'extérieur de `face` du bbox est dominée
+    par `target_rgb` (plus de 30% de pixels matching à ±tolerance)."""
+    h, w = img_array.shape[:2]
+    x0, y0, x1, y1 = bbox_px
+    if face == "north":
+        region = img_array[max(0, y0 - margin_px):y0, x0:x1]
+    elif face == "south":
+        region = img_array[y1:min(h, y1 + margin_px), x0:x1]
+    elif face == "west":
+        region = img_array[y0:y1, max(0, x0 - margin_px):x0]
+    elif face == "east":
+        region = img_array[y0:y1, x1:min(w, x1 + margin_px)]
+    else:
+        return False
+    if region.size == 0:
+        return False
+    pixels = region.reshape(-1, 3)
+    diffs = np.abs(pixels.astype(int) - np.array(target_rgb, dtype=int))
+    matches = np.all(diffs <= tolerance, axis=1)
+    return int(np.sum(matches)) > len(pixels) * 0.3
+
+
 def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
