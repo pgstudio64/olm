@@ -1426,8 +1426,7 @@
             validRooms.push(r);
           });
           if (statusEl) statusEl.textContent =
-            'Re-analyzing ' + validRooms.length + ' room(s)...';
-
+            'Re-analyzing ' + payload.rooms.length + ' rooms...';
           var resp = await fetch('/api/room/reanalyze_batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1436,7 +1435,6 @@
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
           var dataAll = await resp.json();
           if (dataAll.error) throw new Error(dataAll.error);
-
           var resultsByName = {};
           (dataAll.results || []).forEach(function (res) {
             resultsByName[res.name] = res;
