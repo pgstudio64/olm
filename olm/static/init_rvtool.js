@@ -338,6 +338,24 @@
               };
             });
 
+          // Propage hits + seed dans state pour V/H-rays (converti
+          // en coords room-local cm).
+          if (data.hits && ingst.scale && data.bbox_px) {
+            var hbx0 = data.bbox_px[0], hby0 = data.bbox_px[1];
+            state.room_hits = data.hits.map(function (h) {
+              return {
+                x_cm: (h[0] - hbx0) * ingst.scale,
+                y_cm: (h[1] - hby0) * ingst.scale,
+              };
+            });
+            if (data.seed_px) {
+              state.room_seed_cm = {
+                x_cm: (data.seed_px[0] - hbx0) * ingst.scale,
+                y_cm: (data.seed_px[1] - hby0) * ingst.scale,
+              };
+            }
+          }
+
           // Expose les masques auto-portes pour visualisation debug.
           if (data.auto_door_masks_px && ingst.scale) {
             var refBbox = amend.originalRoom.bbox_px || data.bbox_px;
