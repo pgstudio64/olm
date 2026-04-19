@@ -1207,14 +1207,9 @@ def api_room_reanalyze_batch():
         from PIL import Image as _PILImage
         from olm.ingestion.extract import extract_room_features
 
-        # Chargement + binarisation : 1× globalement.
-        # remove_non_ortho est volontairement SKIPPÉ ici : sur le -SD les
-        # cartouches sont déjà effacés, les arcs de porte restants ne
-        # gênent pas la classification de mur (Phase 2 pose des zones
-        # transparentes aux portes de toute façon).
+        # Chargement unique : l'image est partagée entre toutes les pièces.
         img = _PILImage.open(plan_path).convert("L")
         img_arr = _np.asarray(img)
-        binary_global = img_arr < threshold
 
         results = []
         for r in rooms:
@@ -1229,7 +1224,7 @@ def api_room_reanalyze_batch():
                     None, tuple(int(v) for v in bbox_px), scale,
                     transparent_zones_cm=r.get("transparent_zones") or [],
                     threshold=threshold,
-                    binary_global=binary_global,
+                    image_arr=img_arr,
                 )
                 results.append({"name": name, **features})
             except Exception as e:

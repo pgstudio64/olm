@@ -850,12 +850,10 @@
 
     // --- Plan view / Room view toggle ---
     window.ingShowRoomView = function() {
-      // Si déjà sur Review, juste re-render (évite de re-déclencher le
-      // handler du tab qui prompt _cancelAmendIfActive quand amend actif).
       var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
-      var alreadyOnReview = reviewBtn && reviewBtn.classList.contains("active");
-      if (!alreadyOnReview && reviewBtn) reviewBtn.click();
+      if (reviewBtn) reviewBtn.click();
       rvRenderCurrent();
+      // Update ingestion room list to highlight selected room
       if (window.updateIngRoomList) window.updateIngRoomList();
     };
     window.ingShowPlanView = function() {

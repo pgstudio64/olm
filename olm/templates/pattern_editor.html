@@ -231,6 +231,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="fp-main">
         <div id="ingPlanView" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
           <div class="fp-nav" id="ingToolbar" style="display:none;">
+            <label><input type="checkbox" id="ing_bbox" checked> Rooms</label>
+            <label><input type="checkbox" id="ing_window" checked> Windows</label>
+            <label><input type="checkbox" id="ing_door" checked> Doors</label>
+            <label><input type="checkbox" id="ing_opening" checked> Openings</label>
             <label><input type="checkbox" id="ing_vrays"> V-Rays</label>
             <label><input type="checkbox" id="ing_hrays"> H-Rays</label>
             <span style="flex:1;"></span>
@@ -281,8 +285,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           </div>
           <div class="fp-canvas-wrap" id="rvCanvasWrap">
             <div class="canvas-toolbar">
-              <label><input type="checkbox" id="rvVraysToggle"> V-Rays</label>
-              <label><input type="checkbox" id="rvHraysToggle"> H-Rays</label>
               <span style="flex:1;"></span>
               <label><input type="checkbox" id="rvOverlayToggle" onchange="window._rvRefresh && window._rvRefresh()"> Overlay</label>
               <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">

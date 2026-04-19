@@ -213,35 +213,6 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     elements.push({ z: 6, s: doorParts[1] });
   });
 
-  // V-Rays / H-Rays (Room debug) — from ingestion hits in local cm.
-  if (isReview && state.room_hits && state.room_seed_cm &&
-      (state.showVrays || state.showHrays)) {
-    var sx = roomX + state.room_seed_cm.x_cm * SCALE;
-    var sy = roomY + state.room_seed_cm.y_cm * SCALE;
-    state.room_hits.forEach(function (h) {
-      var hx = roomX + h.x_cm * SCALE;
-      var hy = roomY + h.y_cm * SCALE;
-      var isV = Math.abs(hx - sx) < 0.001;
-      var isH = Math.abs(hy - sy) < 0.001;
-      var stroke = null;
-      if (isV && state.showVrays) {
-        stroke = (hy < sy) ? "rgba(0,200,0,0.4)" : "rgba(0,150,200,0.4)";
-      } else if (isH && state.showHrays) {
-        stroke = (hx < sx) ? "rgba(200,0,0,0.4)" : "rgba(200,100,0,0.4)";
-      }
-      if (stroke) {
-        elements.push({ z: 9.6, s: '<line x1="' + sx.toFixed(1) +
-          '" y1="' + sy.toFixed(1) + '" x2="' + hx.toFixed(1) +
-          '" y2="' + hy.toFixed(1) + '" stroke="' + stroke +
-          '" stroke-width="0.8" vector-effect="non-scaling-stroke"/>' });
-        elements.push({ z: 9.7, s: '<circle cx="' + hx.toFixed(1) +
-          '" cy="' + hy.toFixed(1) + '" r="1.5" fill="#ffff00"/>' });
-      }
-    });
-    elements.push({ z: 9.8, s: '<circle cx="' + sx.toFixed(1) +
-      '" cy="' + sy.toFixed(1) + '" r="3" fill="#58c080"/>' });
-  }
-
   // Opening/window handles — only in Room amend mode (Phase A CRUD).
   if (isReview && state.roomAmendMode) {
     // zf = SVG units per CSS pixel (computed in _renderImpl, exposed here).
@@ -1748,28 +1719,6 @@ function enterRoomAmendMode(room) {
   state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
   state.room_transparents = JSON.parse(JSON.stringify(localRoom.transparent_zones || []));
   state.corridor_face = room.corridor_face || "";
-  // Hits from ingestion (if available) — used by V/H-rays debug toggles in Room.
-  // Stored in room-local cm (seed + hit positions), converted from absolute px.
-  state.room_hits = null;
-  state.room_seed_cm = null;
-  var _ing = window.ingState;
-  if (_ing && _ing.scale && room.bbox_px && _ing.rooms) {
-    var _ingRoom = _ing.rooms.find(function (x) { return x.name === room.name; });
-    if (_ingRoom && _ingRoom.hits && _ingRoom.hits.length) {
-      var bx0 = room.bbox_px[0], by0 = room.bbox_px[1];
-      var sc = _ing.scale;
-      var seedPx = _ingRoom.seed_px || _ingRoom.seed;
-      if (seedPx) {
-        state.room_seed_cm = {
-          x_cm: (seedPx[0] - bx0) * sc,
-          y_cm: (seedPx[1] - by0) * sc,
-        };
-      }
-      state.room_hits = _ingRoom.hits.map(function (h) {
-        return { x_cm: (h[0] - bx0) * sc, y_cm: (h[1] - by0) * sc };
-      });
-    }
-  }
 
   // Inject overlay for visual reference, aligned to room bbox
   if (window.fpOverlay) {
