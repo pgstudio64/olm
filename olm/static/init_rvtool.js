@@ -234,20 +234,6 @@
       }
     });
 
-    // --- V-Rays / H-Rays toggles (Room debug) ---
-    ([
-      ["rvVraysToggle", "showVrays"],
-      ["rvHraysToggle", "showHrays"],
-    ]).forEach(function (entry) {
-      var cb = document.getElementById(entry[0]);
-      if (cb) {
-        cb.addEventListener("change", function () {
-          state[entry[1]] = cb.checked;
-          render(document.getElementById("rvCanvas"));
-        });
-      }
-    });
-
     // --- Re-analyze button (R-04 Review) ---
     var reanalyzeBtn = document.getElementById("rvBtnReanalyze");
     if (reanalyzeBtn) {

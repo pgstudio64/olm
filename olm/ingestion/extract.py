@@ -1350,35 +1350,6 @@ def _detect_face_colors(
     return {"corridor_face": corridor_face, "exterior_faces": exterior_faces}
 
 
-def _face_borders_color(
-    img_array: np.ndarray,
-    bbox_px: tuple,
-    face: str,
-    target_rgb: tuple[int, int, int],
-    margin_px: int = 8,
-    tolerance: int = 40,
-) -> bool:
-    """True if the strip just outside `face` of bbox is dominated by target_rgb."""
-    h, w = img_array.shape[:2]
-    x0, y0, x1, y1 = bbox_px
-    if face == "north":
-        region = img_array[max(0, y0 - margin_px):y0, x0:x1]
-    elif face == "south":
-        region = img_array[y1:min(h, y1 + margin_px), x0:x1]
-    elif face == "west":
-        region = img_array[y0:y1, max(0, x0 - margin_px):x0]
-    elif face == "east":
-        region = img_array[y0:y1, x1:min(w, x1 + margin_px)]
-    else:
-        return False
-    if region.size == 0:
-        return False
-    pixels = region.reshape(-1, 3)
-    diffs = np.abs(pixels.astype(int) - np.array(target_rgb, dtype=int))
-    matches = np.all(diffs <= tolerance, axis=1)
-    return np.sum(matches) > len(pixels) * 0.3
-
-
 def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
@@ -1543,175 +1514,55 @@ def extract_rooms_from_preprocessed(
             "l'échelle — fallback cm_per_px=0.5 (ray-cast requis pour affiner)"
         )
 
-    # D-105 Phase 1 : si l'image -SD est disponible, on binarise une fois et
-    # on lance le ray-cast depuis chaque seed pour recalculer le bbox et la
-    # classification des murs. On ignore les windows/openings du JSON
-    # (dérivés OCR, non fiables).
-    binary_sd = None
-    binary_sd_raw = None
-    enh_rgb = None
-    if enhanced_png_path:
-        try:
-            _sd_img = Image.open(enhanced_png_path).convert("L")
-            _sd_arr = np.array(_sd_img)
-            # Skip remove_non_ortho global (coûteux, crash sur gros plan).
-            # Les arcs de porte seront gérés en Phase 2 via zones
-            # transparentes auto au seed de porte.
-            binary_sd = _sd_arr < 110
-            binary_sd_raw = binary_sd
-            enh_rgb = np.array(Image.open(enhanced_png_path).convert("RGB"))
-        except Exception as e:
-            logger.warning("Preprocessed ray-cast disabled: %s", e)
-            binary_sd = None
-
-    # D-105 Phase 1 : un seul pass de ray-cast par pièce. On collecte le
-    # bbox + walls + hits, puis on recalcule cm_per_px par médiane des bboxes.
-    ray_results: dict[str, tuple] = {}  # room_id → (bbox, walls)
-    if binary_sd is not None:
-        for p in parsed_rooms:
-            try:
-                bb_det, walls, _ = detect_room_three_phase(
-                    binary_sd, binary_sd_raw, p["seed_x"], p["seed_y"],
-                    scale_cm_per_px, text_bboxes=[],
-                )
-                ray_results[p["room_id"]] = (bb_det, walls)
-            except Exception as e:
-                logger.warning("Room %s ray-cast failed: %s", p["room_id"], e)
-        # Recalibre cm_per_px si pas calibré depuis JSON.
-        if not scale_samples and ray_results:
-            ray_scales = []
-            for p in parsed_rooms:
-                rr = ray_results.get(p["room_id"])
-                if not rr or p["surface_m2"] <= 0:
-                    continue
-                bb = rr[0]
-                area_px = max(1, bb[2] - bb[0]) * max(1, bb[3] - bb[1])
-                if area_px > 0:
-                    ray_scales.append(math.sqrt(p["surface_m2"] * 10000.0 / area_px))
-            if ray_scales:
-                ray_scales.sort()
-                scale_cm_per_px = ray_scales[len(ray_scales) // 2]
-                logger.info(
-                    "D-105 Phase 1 : cm_per_px=%.4f déduit de %d ray-cast(s)",
-                    scale_cm_per_px, len(ray_scales),
-                )
-
     result = []
     for p in parsed_rooms:
         seed_x, seed_y = p["seed_x"], p["seed_y"]
         surface_m2 = p["surface_m2"]
         area_cm2 = surface_m2 * 10_000.0
 
-        walls = None
-        hits_abs = []
-        rr = ray_results.get(p["room_id"]) if ray_results else None
-        if rr is not None:
-            bbox_px, walls = rr
-            x0, y0, x1, y1 = bbox_px
-            hits_abs = [
-                (int(seed_x), int(y0)),
-                (int(seed_x), int(y1)),
-                (int(x0), int(seed_y)),
-                (int(x1), int(seed_y)),
-            ]
-
-        if walls is None:
-            # Fallback : JSON bbox si présent, sinon carré surfacique.
-            if p["bbox_px_opt"]:
-                bbox_px = p["bbox_px_opt"]
-            else:
-                side_cm = math.sqrt(max(area_cm2, 1.0))
-                if scale_cm_per_px > 0 and side_cm > 0:
-                    half_px = (side_cm / scale_cm_per_px) / 2.0
-                    bbox_px = (
-                        int(seed_x - half_px),
-                        int(seed_y - half_px),
-                        int(seed_x + half_px),
-                        int(seed_y + half_px),
-                    )
-                else:
-                    bbox_px = (seed_x, seed_y, seed_x, seed_y)
-
-        w_px = max(1, bbox_px[2] - bbox_px[0])
-        h_px = max(1, bbox_px[3] - bbox_px[1])
-        width_cm = int(round(w_px * scale_cm_per_px))
-        depth_cm = int(round(h_px * scale_cm_per_px))
-        # Garde-fou : évite les dims dégénérées qui peuvent faire boucler
-        # le matcher de catalogue. Fallback sur dimensions depuis la surface.
-        _MIN_CM = 100
-        if width_cm < _MIN_CM or depth_cm < _MIN_CM:
-            side_cm_fallback = max(_MIN_CM,
-                int(round(math.sqrt(max(area_cm2, _MIN_CM * _MIN_CM)))))
-            width_cm = max(width_cm, side_cm_fallback)
-            depth_cm = max(depth_cm, side_cm_fallback)
-            logger.warning(
-                "Room %s : dimensions dégénérées (%d×%d cm), fallback à %d×%d",
-                p["room_id"], width_cm, depth_cm, side_cm_fallback, side_cm_fallback,
-            )
-
-        # Windows / openings depuis la classification des murs (D-105).
-        windows = []
-        openings = []
-        if walls is not None:
-            x0, y0, x1, y1 = bbox_px
-            for face in ("north", "south", "east", "west"):
-                segs = walls.get(face, [])
-                face_origin_px = x0 if face in ("north", "south") else y0
-                any_window_on_face = False
-                for seg in segs:
-                    if seg.kind not in ("window", "opening"):
-                        continue
-                    off_px = seg.start_px - face_origin_px
-                    w_seg = seg.end_px - seg.start_px
-                    if w_seg <= 0:
-                        continue
-                    entry = {
-                        "face": face,
-                        "offset_px": int(off_px),
-                        "width_px": int(w_seg),
-                        "offset_cm": int(round(off_px * scale_cm_per_px)),
-                        "width_cm": int(round(w_seg * scale_cm_per_px)),
-                    }
-                    if seg.kind == "window":
-                        windows.append(entry)
-                        any_window_on_face = True
-                    else:
-                        openings.append(entry)
-                # Fallback couleur : aucune fenêtre détectée mais la face
-                # borde du bleu extérieur → pose une fenêtre unique full-face.
-                if not any_window_on_face and enh_rgb is not None:
-                    ext_rgb = tuple(json_data.get("exterior_rgb", [135, 206, 235]))
-                    if _face_borders_color(enh_rgb, bbox_px, face, ext_rgb):
-                        if face in ("north", "south"):
-                            full_w = bbox_px[2] - bbox_px[0]
-                        else:
-                            full_w = bbox_px[3] - bbox_px[1]
-                        windows.append({
-                            "face": face,
-                            "offset_px": 0,
-                            "width_px": int(full_w),
-                            "offset_cm": 0,
-                            "width_cm": int(round(full_w * scale_cm_per_px)),
-                        })
+        # Si bbox_px fourni dans le JSON → skip ray-cast, utiliser tel quel.
+        # Sinon → bbox dégénérée (seed seul), le ray-cast s'exécutera en aval.
+        if p["bbox_px_opt"]:
+            bbox_px = p["bbox_px_opt"]
+            w_px = max(1, bbox_px[2] - bbox_px[0])
+            h_px = max(1, bbox_px[3] - bbox_px[1])
+            width_cm = int(round(w_px * scale_cm_per_px))
+            depth_cm = int(round(h_px * scale_cm_per_px))
         else:
-            # Fallback complet : lire du JSON (legacy).
-            openings = [o for o in p["openings_raw"] if isinstance(o, dict)]
-            windows = [w for w in p["windows_raw"] if isinstance(w, dict)]
+            # Dimensions estimées : pièce carrée depuis la surface
+            side_cm = math.sqrt(max(area_cm2, 1.0))
+            width_cm = int(round(side_cm))
+            depth_cm = int(round(side_cm))
+            if scale_cm_per_px > 0 and side_cm > 0:
+                half_px = (side_cm / scale_cm_per_px) / 2.0
+                bbox_px = (
+                    int(seed_x - half_px),
+                    int(seed_y - half_px),
+                    int(seed_x + half_px),
+                    int(seed_y + half_px),
+                )
+            else:
+                bbox_px = (seed_x, seed_y, seed_x, seed_y)
 
-        # Doors : transfère tels quels s'ils ont déjà les champs enrichis.
-        # Phase 2 les remplacera par des seeds + snap à la face.
+        # Doors : transfère tels quels s'ils ont déjà les champs enrichis (face,
+        # offset_px, width_px, etc.), sinon laisse la structure minimale Input.
         doors = []
         for d in p["doors_raw"]:
             if not isinstance(d, dict):
                 continue
             dd = {}
+            # Champs enrichis Save
             for k in ("face", "offset_px", "width_px", "hinge_side", "opens_inward"):
                 if k in d:
                     dd[k] = d[k]
+            # Champs Input (seed de porte)
             if "label_x" in d and "label_y" in d:
                 dd["label_x"] = int(d["label_x"])
                 dd["label_y"] = int(d["label_y"])
             doors.append(dd)
+
+        openings = [o for o in p["openings_raw"] if isinstance(o, dict)]
+        windows = [w for w in p["windows_raw"] if isinstance(w, dict)]
 
         room_dict = {
             "name": p["room_id"],
@@ -1723,7 +1574,6 @@ def extract_rooms_from_preprocessed(
             "windows": windows,
             "openings": openings,
             "doors": doors,
-            "hits": hits_abs,
             "exterior_faces": [],
             "corridor_face": (
                 doors[0]["face"] if doors and "face" in doors[0]
@@ -1774,7 +1624,6 @@ def extract_room_features(
     threshold: int = 110,
     step_px: int = 5,
     image_arr: "np.ndarray | None" = None,
-    binary_global: "np.ndarray | None" = None,
 ) -> dict:
     """Re-analyse les fenêtres et ouvertures d'une pièce dont le bbox est connu.
 
@@ -1812,67 +1661,47 @@ def extract_room_features(
     x0, y0, x1, y1 = bbox_px
     px_per_cm = 1.0 / scale_cm_per_px
 
+    # Récupère un array numpy grayscale (source de vérité).
+    if image_arr is None:
+        if image is None:
+            raise ValueError("extract_room_features: image ou image_arr requis")
+        if image.mode != "L":
+            image = image.convert("L")
+        image_arr = np.asarray(image)
+    # Si l'appelant fournit image_arr, ne pas le modifier in-place.
+
+    h_img, w_img = image_arr.shape[:2]
     # Marge de crop pour garder de la place pour le probe (profondeur du mur).
     margin = max(30, int(round(30 * px_per_cm)))
+    cx0 = max(0, x0 - margin)
+    cy0 = max(0, y0 - margin)
+    cx1 = min(w_img, x1 + margin)
+    cy1 = min(h_img, y1 + margin)
+    crop = image_arr[cy0:cy1, cx0:cx1].copy()
 
-    # Fast path : binary_global fourni → on slice, on n'appelle jamais
-    # remove_non_ortho (déjà fait globalement par l'appelant). Pas de prise
-    # en compte des zones transparentes en pre-processing ici ; l'appelant
-    # les a déjà intégrées au binary_global s'il le souhaitait.
-    if binary_global is not None:
-        h_img, w_img = binary_global.shape[:2]
-        cx0 = max(0, x0 - margin)
-        cy0 = max(0, y0 - margin)
-        cx1 = min(w_img, x1 + margin)
-        cy1 = min(h_img, y1 + margin)
-        crop_binary = binary_global[cy0:cy1, cx0:cx1].copy()
-        # Zones transparentes : zero out the mask in those regions.
-        if transparent_zones_cm:
-            for z in transparent_zones_cm:
-                zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
-                zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
-                zw = int(round(z.get("width_cm", 0) * px_per_cm))
-                zh = int(round(z.get("depth_cm", 0) * px_per_cm))
-                if zw > 0 and zh > 0:
-                    crop_binary[
-                        max(0, zy_abs - cy0):max(0, zy_abs - cy0 + zh),
-                        max(0, zx_abs - cx0):max(0, zx_abs - cx0 + zw),
-                    ] = False
-        binary = crop_binary
-        binary_raw = crop_binary
-    else:
-        # Slow path : pas de binary pré-calculé, on refait tout.
-        if image_arr is None:
-            if image is None:
-                raise ValueError("extract_room_features: image, image_arr ou binary_global requis")
-            if image.mode != "L":
-                image = image.convert("L")
-            image_arr = np.asarray(image)
-        h_img, w_img = image_arr.shape[:2]
-        cx0 = max(0, x0 - margin)
-        cy0 = max(0, y0 - margin)
-        cx1 = min(w_img, x1 + margin)
-        cy1 = min(h_img, y1 + margin)
-        crop = image_arr[cy0:cy1, cx0:cx1].copy()
-        if transparent_zones_cm:
-            from PIL import Image as _PILImage
-            crop_img = _PILImage.fromarray(crop, mode="L")
-            draw = _PILDraw.Draw(crop_img)
-            for z in transparent_zones_cm:
-                zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
-                zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
-                zw = int(round(z.get("width_cm", 0) * px_per_cm))
-                zh = int(round(z.get("depth_cm", 0) * px_per_cm))
-                if zw > 0 and zh > 0:
-                    draw.rectangle(
-                        [zx_abs - cx0, zy_abs - cy0,
-                         zx_abs - cx0 + zw, zy_abs - cy0 + zh],
-                        fill=255,
-                    )
-            crop = np.asarray(crop_img)
-        binary_raw = crop < threshold
-        binary = remove_non_ortho(binary_raw)
-        binary_raw = binary
+    # 1. Masque des zones transparentes sur le crop.
+    if transparent_zones_cm:
+        # Repasse par PIL juste pour ImageDraw.rectangle (plus lisible).
+        from PIL import Image as _PILImage
+        crop_img = _PILImage.fromarray(crop, mode="L")
+        draw = _PILDraw.Draw(crop_img)
+        for z in transparent_zones_cm:
+            zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
+            zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
+            zw = int(round(z.get("width_cm", 0) * px_per_cm))
+            zh = int(round(z.get("depth_cm", 0) * px_per_cm))
+            if zw > 0 and zh > 0:
+                draw.rectangle(
+                    [zx_abs - cx0, zy_abs - cy0,
+                     zx_abs - cx0 + zw, zy_abs - cy0 + zh],
+                    fill=255,
+                )
+        crop = np.asarray(crop_img)
+
+    # 2. Binarisation sur le crop.
+    binary_raw = crop < threshold
+    binary = remove_non_ortho(binary_raw.copy())
+    binary_raw = remove_non_ortho(binary_raw)
 
     # 3. Translate bbox to crop coordinates.
     bbox_in_crop = (x0 - cx0, y0 - cy0, x1 - cx0, y1 - cy0)
