@@ -1617,117 +1617,172 @@ def extract_rooms_from_preprocessed(
 # ---------------------------------------------------------------------------
 
 def extract_room_features(
-    image: "Image.Image | None",
-    bbox_px: tuple,
+    image: "Image.Image",
+    seed_px: tuple,
+    bbox_px: tuple | None,
     scale_cm_per_px: float,
     transparent_zones_cm: list | None = None,
+    doors_px: list | None = None,
+    door_width_cm: int = 90,
     threshold: int = 110,
     step_px: int = 5,
-    image_arr: "np.ndarray | None" = None,
 ) -> dict:
-    """Re-analyse les fenêtres et ouvertures d'une pièce dont le bbox est connu.
+    """Ré-analyse complète d'UNE pièce (D-104 / D-105).
 
-    Pensé pour la fonction "Re-analyze" de R-04 Review : on conserve le bbox
-    établi (manuellement ou précédemment), on applique un masquage blanc sur
-    les zones transparentes (artefacts à ignorer), puis on reclassifie chaque
-    mur via `_classify_wall_direct` (sans ray-cast ni OCR).
+    Pipeline :
+    1. Peint en blanc les zones transparentes utilisateur + des zones auto
+       à chaque porte (largeur=profondeur=`door_width_cm`, centrées sur le
+       milieu de la porte, débordant inside pour couvrir l'arc).
+    2. Binarise.
+    3. Ray-cast depuis `seed_px` via `detect_room_three_phase` → nouveau
+       bbox + classification murs.
+    4. Extrait windows (texture) / openings (détectées par la classif).
+    5. Fallback couleur : fenêtre unique full-face pour toute face qui
+       borde du bleu extérieur et n'a aucune fenêtre détectée.
 
     Args:
-        image: image grayscale (PIL.Image.Image, mode "L" ou convertible).
-        bbox_px: (x0, y0, x1, y1) dans le repère image (pixels).
+        image: image `-SD` (PIL, mode convertible en "L").
+        seed_px: (x, y) seed de la pièce en coords image.
+        bbox_px: (x0, y0, x1, y1) bbox initial — utilisé uniquement pour
+            positionner les masques (portes et zones transparentes). Peut
+            être None si transparent_zones_cm et doors_px sont vides.
         scale_cm_per_px: conversion cm↔px.
-        transparent_zones_cm: liste de {x_cm, y_cm, width_cm, depth_cm}
-            exprimés en coordonnées locales à la pièce (NW = 0,0). Ces zones
-            sont peintes en blanc dans la copie de travail avant binarisation.
-        threshold: seuil de binarisation (niveau de gris).
-        step_px: pas d'échantillonnage le long des murs (défaut 5 px).
+        transparent_zones_cm: liste {x_cm, y_cm, width_cm, depth_cm} en
+            coord room-local (NW = 0,0 du bbox).
+        doors_px: portes enrichies {face, offset_px, width_px} offsets
+            relatifs à bbox_px.
+        door_width_cm: largeur (et profondeur) de la zone transparente
+            auto aux portes. Défaut = `default_door_width_cm` = 90.
+        threshold: seuil binarisation.
+        step_px: pas de classify_wall_direct.
 
     Returns:
         {
-          "windows": [{face, offset_px, width_px, offset_cm, width_cm}],
-          "openings": [{face, offset_px, width_px, offset_cm, width_cm}],
+          "bbox_px": [x0, y0, x1, y1],
+          "seed_px": [sx, sy],
+          "windows": [...],
+          "openings": [...],
+          "hits": [[x,y], ...],
         }
-
-        Les doors ne sont pas redétectées ici — le swing d'une porte nécessite
-        l'analyse d'arc qui sort du périmètre de `_classify_wall_direct`. Les
-        doors existantes restent sous la responsabilité du code appelant.
     """
-    # Optimisations (80+ pièces/plan) :
-    #   - Si `image_arr` est fourni (numpy grayscale), on évite la relecture.
-    #   - On crop au bbox + une marge avant binarisation pour ne traiter
-    #     qu'une région O(bbox_size) au lieu de O(image_size).
     from PIL import ImageDraw as _PILDraw
 
-    x0, y0, x1, y1 = bbox_px
+    if image.mode != "L":
+        image = image.convert("L")
+    seed_x, seed_y = int(seed_px[0]), int(seed_px[1])
     px_per_cm = 1.0 / scale_cm_per_px
+    door_dw_px = max(1, int(round(door_width_cm * px_per_cm)))
 
-    # Récupère un array numpy grayscale (source de vérité).
-    if image_arr is None:
-        if image is None:
-            raise ValueError("extract_room_features: image ou image_arr requis")
-        if image.mode != "L":
-            image = image.convert("L")
-        image_arr = np.asarray(image)
-    # Si l'appelant fournit image_arr, ne pas le modifier in-place.
+    # --- 1. Masque zones transparentes (user + auto-portes) ---
+    working = image.copy()
+    draw = _PILDraw.Draw(working)
 
-    h_img, w_img = image_arr.shape[:2]
-    # Marge de crop pour garder de la place pour le probe (profondeur du mur).
-    margin = max(30, int(round(30 * px_per_cm)))
-    cx0 = max(0, x0 - margin)
-    cy0 = max(0, y0 - margin)
-    cx1 = min(w_img, x1 + margin)
-    cy1 = min(h_img, y1 + margin)
-    crop = image_arr[cy0:cy1, cx0:cx1].copy()
+    if bbox_px and doors_px:
+        bx0, by0, bx1, by1 = bbox_px
+        for d in doors_px:
+            face = d.get("face")
+            off_px = d.get("offset_px", 0)
+            wpx = d.get("width_px", door_dw_px)
+            if face == "south":
+                cx = bx0 + off_px + wpx / 2
+                rect = (cx - door_dw_px / 2, by1 - door_dw_px,
+                        cx + door_dw_px / 2, by1)
+            elif face == "north":
+                cx = bx0 + off_px + wpx / 2
+                rect = (cx - door_dw_px / 2, by0,
+                        cx + door_dw_px / 2, by0 + door_dw_px)
+            elif face == "west":
+                cy = by0 + off_px + wpx / 2
+                rect = (bx0, cy - door_dw_px / 2,
+                        bx0 + door_dw_px, cy + door_dw_px / 2)
+            elif face == "east":
+                cy = by0 + off_px + wpx / 2
+                rect = (bx1 - door_dw_px, cy - door_dw_px / 2,
+                        bx1, cy + door_dw_px / 2)
+            else:
+                continue
+            draw.rectangle(rect, fill=255)
 
-    # 1. Masque des zones transparentes sur le crop.
-    if transparent_zones_cm:
-        # Repasse par PIL juste pour ImageDraw.rectangle (plus lisible).
-        from PIL import Image as _PILImage
-        crop_img = _PILImage.fromarray(crop, mode="L")
-        draw = _PILDraw.Draw(crop_img)
+    if bbox_px and transparent_zones_cm:
+        bx0, by0 = bbox_px[0], bbox_px[1]
         for z in transparent_zones_cm:
-            zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
-            zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
+            zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + bx0
+            zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + by0
             zw = int(round(z.get("width_cm", 0) * px_per_cm))
             zh = int(round(z.get("depth_cm", 0) * px_per_cm))
             if zw > 0 and zh > 0:
-                draw.rectangle(
-                    [zx_abs - cx0, zy_abs - cy0,
-                     zx_abs - cx0 + zw, zy_abs - cy0 + zh],
-                    fill=255,
-                )
-        crop = np.asarray(crop_img)
+                draw.rectangle([zx_abs, zy_abs,
+                                zx_abs + zw, zy_abs + zh], fill=255)
 
-    # 2. Binarisation sur le crop.
-    binary_raw = crop < threshold
-    binary = remove_non_ortho(binary_raw.copy())
-    binary_raw = remove_non_ortho(binary_raw)
+    # --- 2. Binarisation ---
+    gray = np.asarray(working)
+    binary_raw = gray < threshold
+    binary = remove_non_ortho(binary_raw)
+    binary_raw = binary
 
-    # 3. Translate bbox to crop coordinates.
-    bbox_in_crop = (x0 - cx0, y0 - cy0, x1 - cx0, y1 - cy0)
+    # --- 3. Ray-cast depuis le seed ---
+    bbox_new, walls, _ = detect_room_three_phase(
+        binary, binary_raw, seed_x, seed_y,
+        scale_cm_per_px, text_bboxes=[],
+    )
+    nx0, ny0, nx1, ny1 = bbox_new
 
-    # 4. Classification mur par mur.
+    # --- 4. Classification murs → windows / openings ---
     windows: list[dict] = []
     openings: list[dict] = []
+    rgb_arr: np.ndarray | None = None
     for face in ("north", "south", "east", "west"):
-        segments, _mode = _classify_wall_direct(
-            binary, binary_raw, bbox_in_crop, face, step_px,
-        )
-        face_origin_px = bbox_in_crop[0] if face in ("north", "south") else bbox_in_crop[1]
-        for seg in segments:
+        segs = walls.get(face, [])
+        face_origin_px = nx0 if face in ("north", "south") else ny0
+        any_window = False
+        for seg in segs:
             if seg.kind not in ("window", "opening"):
                 continue
-            offset_px = seg.start_px - face_origin_px
-            width_px = seg.end_px - seg.start_px
-            if width_px <= 0:
+            off = seg.start_px - face_origin_px
+            w = seg.end_px - seg.start_px
+            if w <= 0:
                 continue
             entry = {
                 "face": face,
-                "offset_px": int(offset_px),
-                "width_px": int(width_px),
-                "offset_cm": int(round(offset_px * scale_cm_per_px)),
-                "width_cm": int(round(width_px * scale_cm_per_px)),
+                "offset_px": int(off),
+                "width_px": int(w),
+                "offset_cm": int(round(off * scale_cm_per_px)),
+                "width_cm": int(round(w * scale_cm_per_px)),
             }
-            (windows if seg.kind == "window" else openings).append(entry)
+            if seg.kind == "window":
+                windows.append(entry)
+                any_window = True
+            else:
+                openings.append(entry)
 
-    return {"windows": windows, "openings": openings}
+        # --- 5. Fallback couleur bleue : fenêtre unique full-face ---
+        if not any_window:
+            if rgb_arr is None:
+                try:
+                    rgb_arr = np.array(image.convert("RGB"))
+                except Exception:
+                    rgb_arr = np.zeros((1, 1, 3), dtype=np.uint8)
+            if _face_borders_color(rgb_arr, bbox_new, face, (135, 206, 235)):
+                full_w = (nx1 - nx0) if face in ("north", "south") else (ny1 - ny0)
+                windows.append({
+                    "face": face,
+                    "offset_px": 0,
+                    "width_px": int(full_w),
+                    "offset_cm": 0,
+                    "width_cm": int(round(full_w * scale_cm_per_px)),
+                })
+
+    hits = [
+        [seed_x, int(ny0)],
+        [seed_x, int(ny1)],
+        [int(nx0), seed_y],
+        [int(nx1), seed_y],
+    ]
+
+    return {
+        "bbox_px": [int(nx0), int(ny0), int(nx1), int(ny1)],
+        "seed_px": [seed_x, seed_y],
+        "windows": windows,
+        "openings": openings,
+        "hits": hits,
+    }

@@ -243,19 +243,27 @@
         var amend = state.roomAmendMode;
         var origRoom = amend.originalRoom || {};
         var bbox = origRoom.bbox_px;
-        if (!bbox || !ingst.planPathEnhanced || !ingst.scale) {
-          alert("Re-analyze unavailable: missing plan path, bbox, or scale.");
+        var seedPx = origRoom.seed_px || origRoom.seed;
+        if (!seedPx || !ingst.planPathEnhanced || !ingst.scale) {
+          alert("Re-analyze unavailable: missing plan path, seed, or scale.");
           return;
         }
-        // Corriger le bbox courant avec les éventuels amendements de taille
-        // de la pièce. Pour l'instant on utilise le bbox original (la
-        // ré-analyse se fait sur la pièce avant resize manuel).
         var transparents = (state.room_transparents || []).map(function (z) {
           return {
             x_cm: z.x_cm, y_cm: z.y_cm,
             width_cm: z.width_cm, depth_cm: z.depth_cm,
           };
         });
+        // Doors : pousser au backend pour zones transparentes auto (D-105).
+        // Utilise origRoom.doors (format OCR enrichi, offset relatif au bbox).
+        var doorsPx = (origRoom.doors || []).map(function (d) {
+          return {
+            face: d.face,
+            offset_px: d.offset_px,
+            width_px: d.width_px,
+          };
+        });
+        var doorWidthCm = ((window.APP_CONFIG || {}).default_door_width_cm) || 90;
         reanalyzeBtn.disabled = true;
         reanalyzeBtn.textContent = "Analyzing...";
         try {
@@ -264,9 +272,12 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               plan_path: ingst.planPathEnhanced,
+              seed_px: seedPx,
               bbox_px: bbox,
               scale_cm_per_px: ingst.scale,
               transparent_zones: transparents,
+              doors: doorsPx,
+              door_width_cm: doorWidthCm,
             }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);
