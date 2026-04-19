@@ -681,6 +681,7 @@ def classify_wall_segments(binary: np.ndarray, binary_raw: np.ndarray,
 def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
                           bbox: tuple, direction: str, step_px: int,
                           text_bboxes: list = None,
+                          scale_cm_per_px: float = 0.5,
                           ) -> tuple:
     """Classify a wall by probing texture directly at known wall positions.
 
@@ -691,6 +692,8 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
         (segments, wall_distance) where segments is list[WallSegment]
         and wall_distance is a nominal mode value for compatibility.
     """
+    from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+    _cfg_local = DEFAULT_DETECTION_CONFIG_CM.to_px(scale_cm_per_px)
     x0, y0, x1, y1 = bbox
     if text_bboxes is None:
         text_bboxes = []
@@ -758,7 +761,8 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
 
         # Probe texture at this wall point
         texture = _probe_wall_texture(binary_raw, wx, wy,
-                                      probe_dx, probe_dy)
+                                      probe_dx, probe_dy,
+                                      depth=_cfg_local.wall_depth_px)
         transitions = _count_transitions(texture)
         if transitions >= 2:
             ray_kinds.append("window")
@@ -802,13 +806,15 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
         if seg.kind == "short":
             seg.kind = "wall"
 
-    # Merge adjacent segments
-    segments = _merge_adjacent_segments(segments)
+    # Merge adjacent segments (absorb openings < max_absorb_cm).
+    # Seuils (réutilise le cfg calculé en tête de fonction).
+    _cfg_px = _cfg_local
+    MIN_OPENING_WIDTH_PX = _cfg_px.min_opening_width_px
+    MIN_OPENING_DEPTH_PX = _cfg_px.min_opening_depth_px
+    MIN_WINDOW_WIDTH_PX = _cfg_px.min_window_width_px
 
-    # Filter small openings and windows (min 30cm ≈ 8px at ~4cm/px)
-    MIN_OPENING_WIDTH_PX = 8
-    MIN_OPENING_DEPTH_PX = 8
-    MIN_WINDOW_WIDTH_PX = 8
+    segments = _merge_adjacent_segments(segments,
+                                        max_absorb_px=_cfg_px.max_absorb_px)
     filtered = []
     for seg in segments:
         if seg.kind == "window":
@@ -818,45 +824,12 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
             width_px = seg.end_px - seg.start_px
             if width_px < MIN_OPENING_WIDTH_PX:
                 seg.kind = "wall"
-            else:
-                # Check depth: probe beyond the wall to see if there's space
-                has_depth = False
-                mid = (seg.start_px + seg.end_px) // 2
-                if direction == "north":
-                    wx, wy = x0 + mid, y0
-                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
-                        if wy - d < 0 or binary[wy - d, wx]:
-                            break
-                    else:
-                        has_depth = True
-                elif direction == "south":
-                    wx, wy = x0 + mid, y1
-                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
-                        if wy + d >= binary.shape[0] or binary[wy + d, wx]:
-                            break
-                    else:
-                        has_depth = True
-                elif direction == "west":
-                    wx, wy = x0, y0 + mid
-                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
-                        if wx - d < 0 or binary[wy, wx - d]:
-                            break
-                    else:
-                        has_depth = True
-                elif direction == "east":
-                    wx, wy = x1, y0 + mid
-                    for d in range(1, MIN_OPENING_DEPTH_PX + 1):
-                        if wx + d >= binary.shape[1] or binary[wy, wx + d]:
-                            break
-                    else:
-                        has_depth = True
-                if not has_depth:
-                    seg.kind = "wall"
         filtered.append(seg)
     segments = filtered
 
     # Re-merge after reclassification
-    segments = _merge_adjacent_segments(segments)
+    segments = _merge_adjacent_segments(segments,
+                                        max_absorb_px=_cfg_px.max_absorb_px)
 
     return segments, 0
 
@@ -1765,6 +1738,7 @@ def extract_room_features(
     bbox_new, all_hits, _doors_detected = _comb_detect_room(
         binary, seed_x, seed_y, comb_step_px,
         door_width_px=door_px, other_seeds=None,
+        scale_cm_per_px=scale_cm_per_px,
     )
     nx0, ny0, nx1, ny1 = bbox_new
 
@@ -1773,6 +1747,7 @@ def extract_room_features(
     for face in ("north", "south", "east", "west"):
         segs, _ = _classify_wall_direct(
             binary, binary_raw, bbox_new, face, step_px,
+            scale_cm_per_px=scale_cm_per_px,
         )
         walls[face] = segs
 
@@ -1825,11 +1800,31 @@ def extract_room_features(
     # Hits issus du comb (réels, pas juste les 4 coins du bbox).
     hits = [[int(h[0]), int(h[1])] for h in (all_hits or [])]
 
+    # Portes détectées par l'expansion d'arcs du comb. On les remonte
+    # uniquement si l'appelant n'en a pas fourni — principe : à minima
+    # faire ce que fait l'import OCR. Si l'appelant a déjà des portes
+    # (JSON existant), on les préserve côté frontend.
+    doors_out: list[dict] = []
+    if not doors_px:
+        for d in (_doors_detected or []):
+            off = int(d.get("offset_px", 0))
+            wpx = int(d.get("width_px", 0))
+            doors_out.append({
+                "face": d.get("face"),
+                "offset_px": off,
+                "width_px": wpx,
+                "offset_cm": int(round(off * scale_cm_per_px)),
+                "width_cm": int(round(wpx * scale_cm_per_px)),
+                "hinge_side": d.get("hinge_side"),
+                "opens_inward": bool(d.get("opens_inward", True)),
+            })
+
     return {
         "bbox_px": [int(nx0), int(ny0), int(nx1), int(ny1)],
         "seed_px": [seed_x, seed_y],
         "windows": windows,
         "openings": openings,
+        "doors": doors_out,
         "hits": hits,
         "auto_door_masks_px": auto_door_rects_px,
     }

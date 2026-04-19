@@ -1455,7 +1455,10 @@ async function save() {
       var ingRooms = (window.ingState && window.ingState.rooms) || [];
       for (var ir = 0; ir < ingRooms.length; ir++) {
         if (ingRooms[ir].name !== ramend.roomName) continue;
-        var orig = ingRooms[ir].bbox_px;
+        // Base bbox : prefer the one updated by Re-analyze (stored on
+        // ramend.originalRoom) over the stale ingRooms copy.
+        var orig = (ramend.originalRoom && ramend.originalRoom.bbox_px)
+          || ingRooms[ir].bbox_px;
         if (!orig || orig.length !== 4) break;
         var nx0 = orig[0] + renderOffset.x_cm / scaleCmPerPx;
         var ny0 = orig[1] + renderOffset.y_cm / scaleCmPerPx;
@@ -1466,6 +1469,21 @@ async function save() {
         ingRooms[ir].width_cm = state.room_width_cm;
         ingRooms[ir].depth_cm = state.room_depth_cm;
         ingRooms[ir].surface_m2 = parseFloat(((state.room_width_cm * state.room_depth_cm) / 10000).toFixed(2));
+        // Portes : convertir les openings has_door=true en format
+        // doors (px) pour que la Floor view les affiche.
+        var pxPerCm = 1.0 / scaleCmPerPx;
+        var doorsOut = (state.room_openings || [])
+          .filter(function (o) { return o.has_door; })
+          .map(function (o) {
+            return {
+              face: o.face,
+              offset_px: Math.round((o.offset_cm || 0) * pxPerCm),
+              width_px: Math.round((o.width_cm || 0) * pxPerCm),
+              hinge_side: o.hinge_side || "left",
+              opens_inward: o.opens_inward !== false,
+            };
+          });
+        ingRooms[ir].doors = doorsOut;
         break;
       }
       if (newBbox) {
@@ -1476,6 +1494,7 @@ async function save() {
             window.fpData.rooms[fr].width_cm = state.room_width_cm;
             window.fpData.rooms[fr].depth_cm = state.room_depth_cm;
             window.fpData.rooms[fr].bbox_px = newBbox.slice();
+            window.fpData.rooms[fr].doors = doorsOut.slice();
             break;
           }
         }

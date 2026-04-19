@@ -53,6 +53,29 @@ COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
 
+
+def _apply_detection_config(scale_cm_per_px: float) -> None:
+    """Met à jour les constantes px du module depuis la detection_config.
+
+    À appeler au début d'une exécution quand le scale est connu. Modifie
+    l'état module (acceptable en contexte outil local mono-thread).
+    """
+    from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+    cfg = DEFAULT_DETECTION_CONFIG_CM.to_px(scale_cm_per_px)
+    global BINARIZE_THRESHOLD, COMB_STEP_PX, MAX_RAY_PX, CARTOUCHE_MARGIN_PX
+    global COARSE_STEP_PX, RAY_MARGIN_PX, SNAP_SEARCH_PX
+    global DOOR_PROBE_PX, DOOR_GROUP_GAP_PX, WALL_MARGIN_PX
+    BINARIZE_THRESHOLD = cfg.binarize_threshold
+    COMB_STEP_PX = cfg.comb_step_px
+    MAX_RAY_PX = cfg.max_ray_px
+    CARTOUCHE_MARGIN_PX = cfg.cartouche_margin_px
+    COARSE_STEP_PX = cfg.coarse_step_px
+    RAY_MARGIN_PX = cfg.ray_margin_px
+    SNAP_SEARCH_PX = cfg.snap_search_px
+    DOOR_PROBE_PX = cfg.door_probe_depth_px
+    DOOR_GROUP_GAP_PX = cfg.door_group_gap_px
+    WALL_MARGIN_PX = cfg.door_wall_margin_px
+
 # --- Tesseract OCR parameters ---
 # Upscale factor applied before OCR — small cartouche text (10-20 px) needs enlargement
 TESSERACT_UPSCALE = 2
@@ -1060,8 +1083,11 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
     return (x0, y0, x1, y1), doors
 
 
-def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None):
+def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
+                scale_cm_per_px: float | None = None):
     """Detect a room rectangle: comb → hits → largest rectangle → door arc expansion."""
+    if scale_cm_per_px is not None:
+        _apply_detection_config(scale_cm_per_px)
     all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
                                            other_seeds=other_seeds)
 
