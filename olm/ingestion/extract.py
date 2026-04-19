@@ -1617,12 +1617,13 @@ def extract_rooms_from_preprocessed(
 # ---------------------------------------------------------------------------
 
 def extract_room_features(
-    image: "Image.Image",
+    image: "Image.Image | None",
     bbox_px: tuple,
     scale_cm_per_px: float,
     transparent_zones_cm: list | None = None,
     threshold: int = 110,
     step_px: int = 5,
+    image_arr: "np.ndarray | None" = None,
 ) -> dict:
     """Re-analyse les fenêtres et ouvertures d'une pièce dont le bbox est connu.
 
@@ -1651,45 +1652,68 @@ def extract_room_features(
         l'analyse d'arc qui sort du périmètre de `_classify_wall_direct`. Les
         doors existantes restent sous la responsabilité du code appelant.
     """
-    from PIL import Image as _PILImage
+    # Optimisations (80+ pièces/plan) :
+    #   - Si `image_arr` est fourni (numpy grayscale), on évite la relecture.
+    #   - On crop au bbox + une marge avant binarisation pour ne traiter
+    #     qu'une région O(bbox_size) au lieu de O(image_size).
     from PIL import ImageDraw as _PILDraw
-
-    if image.mode != "L":
-        image = image.convert("L")
 
     x0, y0, x1, y1 = bbox_px
     px_per_cm = 1.0 / scale_cm_per_px
 
-    # 1. Masque des zones transparentes : peindre en blanc dans une copie.
-    working = image.copy()
+    # Récupère un array numpy grayscale (source de vérité).
+    if image_arr is None:
+        if image is None:
+            raise ValueError("extract_room_features: image ou image_arr requis")
+        if image.mode != "L":
+            image = image.convert("L")
+        image_arr = np.asarray(image)
+    # Si l'appelant fournit image_arr, ne pas le modifier in-place.
+
+    h_img, w_img = image_arr.shape[:2]
+    # Marge de crop pour garder de la place pour le probe (profondeur du mur).
+    margin = max(30, int(round(30 * px_per_cm)))
+    cx0 = max(0, x0 - margin)
+    cy0 = max(0, y0 - margin)
+    cx1 = min(w_img, x1 + margin)
+    cy1 = min(h_img, y1 + margin)
+    crop = image_arr[cy0:cy1, cx0:cx1].copy()
+
+    # 1. Masque des zones transparentes sur le crop.
     if transparent_zones_cm:
-        draw = _PILDraw.Draw(working)
+        # Repasse par PIL juste pour ImageDraw.rectangle (plus lisible).
+        from PIL import Image as _PILImage
+        crop_img = _PILImage.fromarray(crop, mode="L")
+        draw = _PILDraw.Draw(crop_img)
         for z in transparent_zones_cm:
-            zx = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
-            zy = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
+            zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
+            zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
             zw = int(round(z.get("width_cm", 0) * px_per_cm))
             zh = int(round(z.get("depth_cm", 0) * px_per_cm))
             if zw > 0 and zh > 0:
                 draw.rectangle(
-                    [zx, zy, zx + zw, zy + zh],
+                    [zx_abs - cx0, zy_abs - cy0,
+                     zx_abs - cx0 + zw, zy_abs - cy0 + zh],
                     fill=255,
                 )
+        crop = np.asarray(crop_img)
 
-    # 2. Binarisation (dilatée + brute). _classify_wall_direct utilise les deux.
-    gray_arr = np.array(working)
-    binary_raw = gray_arr < threshold
-    # Dilatation légère pour l'analyse de position (compatible avec les helpers).
+    # 2. Binarisation sur le crop.
+    binary_raw = crop < threshold
     binary = remove_non_ortho(binary_raw.copy())
     binary_raw = remove_non_ortho(binary_raw)
 
-    # 3. Classification mur par mur.
+    # 3. Translate bbox to crop coordinates.
+    bbox_in_crop = (x0 - cx0, y0 - cy0, x1 - cx0, y1 - cy0)
+
+    # 4. Classification mur par mur.
     windows: list[dict] = []
     openings: list[dict] = []
     for face in ("north", "south", "east", "west"):
         segments, _mode = _classify_wall_direct(
-            binary, binary_raw, bbox_px, face, step_px,
+            binary, binary_raw, bbox_in_crop, face, step_px,
         )
-        face_origin_px = x0 if face in ("north", "south") else y0
+        face_origin_px = bbox_in_crop[0] if face in ("north", "south") else bbox_in_crop[1]
         for seg in segments:
             if seg.kind not in ("window", "opening"):
                 continue

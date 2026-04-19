@@ -7,6 +7,50 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-105 · Pipeline Préprocessé refondu — ray-cast depuis seeds + sémantique couleurs + portes via seeds (2026-04-19)
+
+**Contexte** : l'implémentation actuelle de `extract_rooms_from_preprocessed` (et par ricochet `extract_room_features` pour D-104) suppose que le JSON v3 contient des `bbox_px` / `windows` / `openings` fiables. **C'est faux** : ces champs viennent d'une passe OCR antérieure utilisée pour bootstrapper le fichier Préprocessé et ne sont **pas** la source de vérité. En Mode Préprocessé, les **seules entrées fiables** sont :
+
+- `seed_x / seed_y` de la pièce (obligatoire)
+- `id` / `surface` de la pièce
+- `seed` de chaque porte (coordonnées pixel)
+- Couleurs du `-SD.png` : bleu ciel = extérieur, vert clair = couloir
+
+Les contours de la pièce (bbox), la position exacte des fenêtres et des ouvertures **doivent être recalculés** par un ray-cast sur le `-SD`.
+
+**Décision** : refondre le pipeline Préprocessé pour qu'il exploite ces invariants plutôt que de faire confiance au JSON. Architecture cible :
+
+1. **Ray-cast depuis le seed de la pièce** sur le `-SD` binarisé → détermine le bbox.
+2. **Zones transparentes** appliquées avant binarisation :
+   - Zones utilisateur (`transparent_zones`, D-103)
+   - **Zones transparentes auto-générées au seed de chaque porte**, côté pièce (dos au couloir), pour permettre aux rayons de traverser la porte et toucher le mur extérieur derrière. Remplace la détection d'arc de porte.
+3. **Classification des murs** via `_classify_wall_direct` sur le bbox détecté.
+4. **Fenêtres enrichies par la couleur** : un mur qui borde du bleu extérieur est promu en fenêtre même si la texture est ambiguë (dans ce cas la couleur arbitre, priorité sur texture).
+5. **Portes déterminées depuis les seeds JSON** : pas d'analyse d'arc. Chaque seed de porte est snappé à la face la plus proche du bbox, une porte de largeur nominale (cf. `default_door_width_cm`) est créée à cette position.
+6. **`corridor_face` et `exterior_faces`** via `_detect_face_colors` (existant, vert/bleu).
+
+**Avantages par rapport à OCR** :
+
+- Pas besoin d'OCR sur les cartouches (id / surface déjà dans JSON).
+- Pas besoin d'effacer les cartouches (déjà effacés dans `-SD`).
+- Détection des portes simplifiée (seeds + zone transparente auto), pas d'algo d'arc.
+- Détection des fenêtres fiabilisée via la couleur extérieure bleue.
+
+**Impact sur D-104 (Re-analyze)** : `extract_room_features` doit aussi suivre ce pipeline. L'endpoint `/api/room/reanalyze` prendra en entrée (en plus du bbox initial si disponible) les **seeds** (pièce + portes). En pratique, le re-analyze peut même se contenter du seed + door seeds et recalculer le bbox, rendant l'entrée bbox optionnelle.
+
+**Précisions complémentaires (2026-04-19)** :
+
+- **Portes — zone transparente auto** : en plus d'être déduite depuis le seed de porte (pour permettre aux rayons de traverser l'ouverture), une zone transparente est posée **automatiquement au niveau de l'arc de porte** pour que les rayons ne soient pas bloqués par le trait d'arc dessiné. Position : centrée sur le seed de porte, largeur = largeur de porte standard (paramètre général `default_door_width_cm` initialisé à 90 cm), profondeur = largeur de porte (arc = 90°). Orientation : côté pièce, dos au couloir.
+- **Largeur de porte standard** : nouveau paramètre global `default_door_width_cm` = 90 cm par défaut. Utilisé aussi bien pour l'ajout manuel (D-103) que pour la largeur automatique générée depuis le seed JSON et la géométrie de la zone transparente d'arc.
+- **Fenêtres — algo combiné** : on garde la détection par transitions de texture (D-105 pipeline) comme source primaire, parce qu'il y a souvent **plusieurs fenêtres individuelles** le long d'une façade de bureau (ne pas tout rabattre en une unique fenêtre). La couleur bleue extérieure sert de **fallback** : si la face borde du bleu mais qu'on n'a détecté aucune fenêtre (pattern de dessin complexe, vitrage masqué, etc.), on pose **une fenêtre unique couvrant toute la face**.
+- **Convention de nommage** : renommer le champ `origin: "auto" | "manual"` en un booléen `modified: true/false` (cohérence avec le reste du code qui parle d'éléments "amended" / "modified"). Semantique identique. À propager dans le frontend (state, merge logic D-104) et dans le JSON v3 lorsque la persistance sera ajoutée.
+
+**Scope** : cette refonte est un chantier à part entière, non livré dans la séquence D-104. Voir TODO `R-05` pour les sous-tâches.
+
+**Impact** : `olm/ingestion/extract.py` (nouveau pipeline), `olm/server/app.py` (endpoints), éventuellement `docs/specs/PREPROCESSED_JSON_SPEC.md` (clarifier fiabilité des champs).
+
+---
+
 ## D-104 · Re-analyze ciblée d'une pièce avec préservation des manuels (2026-04-19)
 
 **Décision** : Ajout d'une fonction de **ré-analyse** automatique des fenêtres et ouvertures d'une pièce, sans perdre les modifications manuelles de l'utilisateur ni relancer tout le plan.

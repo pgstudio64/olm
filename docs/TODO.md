@@ -255,6 +255,23 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
 
 ### Revue UX (restant)
 
+- [ ] **Pipeline Préprocessé refondu (D-105)** — gros chantier :
+  - [ ] `extract_rooms_from_preprocessed` : ray-cast depuis seed sur `-SD` binarisé au lieu de lire `bbox_px` du JSON.
+  - [ ] Zone transparente auto-générée à chaque seed de porte (côté pièce, dos au couloir) appliquée avant binarisation → les rays traversent les portes. Largeur = `default_door_width_cm` (paramètre général, défaut 90 cm), profondeur = même valeur (arc de 90°). Cette zone absorbe **aussi** le trait d'arc qui bloquerait sinon les rayons.
+  - [ ] `_classify_wall_direct` appliqué sur le bbox recalculé.
+  - [ ] Fenêtres — algo combiné :
+    - [ ] Détection par transitions de texture (primaire) pour identifier les fenêtres individuelles dans une façade (cas standard : plusieurs fenêtres séparées).
+    - [ ] Fallback couleur : si la face borde du bleu extérieur (`exterior_rgb`) et qu'aucune fenêtre n'a été détectée par texture, poser **une fenêtre unique couvrant toute la face**.
+  - [ ] Portes depuis seeds JSON, snap à la face la plus proche, largeur = `default_door_width_cm`. Pas de détection par arc.
+  - [ ] **Nouveau paramètre global `default_door_width_cm`** dans Settings (onglet General), valeur par défaut 90 cm, utilisé aussi bien pour CRUD manuel (D-103) que pour la zone transparente auto-porte et la largeur auto des portes depuis seeds.
+  - [ ] **Renommer `origin: "auto"|"manual"` en `modified: bool`** (cohérence avec "amended" existant). Propager : `state.room_windows[i].modified`, `state.room_openings[i].modified`, merge logic D-104, JSON v3 (quand persistance ajoutée).
+  - [ ] `extract_room_features` (re-analyze D-104) : aligner sur ce pipeline (seed + door seeds en entrée).
+  - [ ] Endpoints `/api/room/reanalyze` et `/api/room/reanalyze_batch` : accepter `seed_px` et `door_seeds_px` ; bbox devient optionnel.
+  - [ ] Produire `hits` (ray-cast) pour V/H-rays en Préprocessé (résolu par la refonte ci-dessus).
+  - [ ] Mettre à jour `docs/specs/PREPROCESSED_JSON_SPEC.md` : clarifier quels champs sont entrée fiable vs dérivés.
+- [ ] **Mode OCR : utiliser `-SD.png` s'il existe pour ray-cast** : `extract_rooms_from_preprocessed` ne génère pas de hits actuellement (pas de ray-cast actif). Faire un ray-cast léger sur le PNG `-SD` pour peupler `room.hits` et rendre les cases V-rays / H-rays de Floor fonctionnelles en mode Préprocessé.
+- [ ] **Mode OCR : utiliser `-SD.png` s'il existe pour ray-cast** : en Mode OCR (sans JSON), si un fichier `<plan_id>-SD.png` est présent dans `project/plans/`, l'utiliser comme source pour l'algo de détection / ray-cast (H-rays et V-rays) au lieu de supprimer les descriptions manuellement. Le `-SD` (avec cartouches effacés, extérieur bleu, couloirs verts) donne des résultats plus propres.
+- [ ] **Nettoyer handlers de couplage de pièces (Floorplan)** : D-100 a supprimé le concept de merge mais il reste des handlers dans le code Floor (couplage/association de pièces). Les retirer.
 - [ ] **Fine-tuning taille éléments graphiques** : ajuster les épaisseurs de traits (murs, fenêtres, portes, arcs), diamètre des ronds de grille, taille des poignées/badges pour un rendu visuellement agréable à tous les niveaux de zoom. Actuellement : non-scaling-stroke appliqué partout + cap sur les dots grille à 2 px.
 - [ ] **Total area en m² non rafraîchi au changement d'échelle** : quand l'utilisateur modifie l'échelle (drawing_scale), le total area affiché reste sur l'ancienne valeur. À relier au recompute scale.
 - [ ] **Édition contours au niveau Room** : ajouter la capacité de modifier les contours de la pièce dans Room (même outil que l'édition bbox dans Floor)
