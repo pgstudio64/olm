@@ -99,9 +99,8 @@ Migration de paramétrage : bouton "Upgrade to new standard" qui lit le paramét
 
 Objectif : ingestion simplifiée — rectangles + murs + fenêtres + ouvertures. Pas de zones interdites (ajoutées en Review).
 
-- [ ] **Bug overlay (post-simplification Import)** : `/api/import/ocr` renvoie `image_path=""` et unlink le temp file, l'overlay n'est plus affiché. Fix : persister le PNG uploadé (ou rasterisé depuis PDF) dans un dossier servi, renvoyer un chemin exploitable par le frontend.
-
-- [ ] **Bug Save inactif après pan/scale change/fullscreen toggle (Floor)** : pré-existant à D-94 (confirmé par test git stash 2026-04-18). Symptômes : après un pan, un changement d'échelle ou un toggle fullscreen, le bouton Save (et probablement les autres boutons header) ne répondent plus au hover/clic alors que `elementFromPoint` les retourne correctement et que `.click()` programmatique fonctionne. Un clic hors de la fenêtre du navigateur réactive le hover. Hypothèse : glitch rendu Chrome/Safari Mac lié aux innerHTML swaps lourds sur le SVG ingestion. Pistes de fix : debounce / `requestAnimationFrame` autour de `renderIngestion`, ou `will-change` / isolation CSS sur le conteneur SVG.
+- [x] ~~Bug overlay post-simplification Import~~ — corrigé : overlays persistés dans `olm_overlays/` ([app.py:594-600](../olm/server/app.py#L594-L600)).
+- [x] ~~Bug Save inactif après pan/scale/fullscreen~~ — non reproduit au 2026-04-19.
 
 - [ ] **Grille 1m côté négatif invisible (Floor)** : les lignes `-1m`, `-2m`, etc. sont bien générées par `renderShared.gridSvg` avec `marginRatio=0.3` mais restent hors du viewBox SVG `{x:0, y:0, w:planW, h:planH}`. Pour les afficher il faudrait élargir le viewBox initial (ex : décaler vb.x/vb.y de -margin au load) ou changer les conventions. Pré-existant, signalé après P2.
 

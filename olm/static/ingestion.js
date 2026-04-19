@@ -259,6 +259,9 @@
     listEl.innerHTML = html;
     if (context === 'review' || context === 'design') {
       listEl.querySelectorAll('.room-del').forEach(function(el) { el.remove(); });
+      // "All" entry (back to plan view) only makes sense in Import.
+      var allEntry = listEl.querySelector('[data-ing-room=""]');
+      if (allEntry) allEntry.remove();
     }
     // Auto-scroll to selected room
     var selected = listEl.querySelector('[style*="font-weight:bold"]');

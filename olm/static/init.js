@@ -338,6 +338,19 @@ async function init() {
       if (btn.dataset.tab === "fpReview") {
         rvRenderCurrent();
       }
+      if (btn.dataset.tab === "lytDesign" &&
+          typeof window.fpRenderCurrent === "function") {
+        window.fpRenderCurrent();
+      }
+      // Rafraîchir les rulers HTML quand l'onglet devient visible (sinon
+      // wrapRect.width = 0 au 1er render, les labels sont tous filtrés).
+      if (btn.dataset.tab === "fpReview" || btn.dataset.tab === "lytDesign") {
+        var svgId = btn.dataset.tab === "fpReview" ? "rvCanvas" : "fpCanvas";
+        requestAnimationFrame(function () {
+          var s = document.getElementById(svgId);
+          if (s && typeof window.updateRulers === "function") window.updateRulers(s);
+        });
+      }
     });
   });
 

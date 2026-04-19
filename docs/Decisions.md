@@ -7,6 +7,20 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-102 · Rulers mètres unifiés + resize colonnes persistant (2026-04-19)
+
+**Décisions UX** regroupées (canvas SVG partagé Room/Office/PatternEditor) :
+
+- **Rulers mètres** : un seul système. Les rulers HTML autour du SVG (haut/bas/gauche/droite) sont la référence unique ; les labels "1m"/"2m" dessinés dans le canvas à L.850-866 ont été supprimés (redondance). Origine (0,0) = coin NW de la pièce (`state._roomNW` stocké au render). Valeurs négatives affichées à gauche/au-dessus, positives à droite/en-dessous.
+- **Tab switch Office** : `fpRenderCurrent()` est déclenché quand l'onglet `lytDesign` devient actif — auparavant l'onglet restait sur son état précédent (ancienne pièce, overlay non rafraîchi).
+- **Rulers au 1er affichage** : `updateRulers` est appelée via un rAF au switch d'onglet `fpReview`/`lytDesign` pour éviter `wrapRect.width=0` au render initial (tab caché).
+- **Resize colonnes** : panneaux latéraux synchronisés Room ↔ Office (même clé `leftPanelWidthShared` / `rightPanelWidthShared`) pour éviter le décalage du canvas au switch. Pattern Editor a ses propres clés (`peLeftWidth`, `peRightWidth`). Persistance localStorage sur toutes les sessions.
+- **Liste des pièces** : entrée "All" (retour Floor) retirée de Room et Office (conservée uniquement dans Import où elle a du sens).
+
+**Impact** : [editor.js](../olm/static/editor.js), [init.js](../olm/static/init.js), [init_resize.js](../olm/static/init_resize.js), [ingestion.js](../olm/static/ingestion.js), [pattern_editor.html](../olm/templates/pattern_editor.html), [style.css](../olm/static/style.css).
+
+---
+
 ## D-101 · Overlay par niveau — Floor = PNG standard, Room/Office = PNG -SD (2026-04-19)
 
 **Décision** : En Mode Préprocessé, l'affichage du plan diffère selon l'onglet actif :
