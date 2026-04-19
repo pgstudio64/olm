@@ -234,6 +234,100 @@
       }
     });
 
+    // --- Re-analyze button (R-04 Review) ---
+    var reanalyzeBtn = document.getElementById("rvBtnReanalyze");
+    if (reanalyzeBtn) {
+      reanalyzeBtn.addEventListener("click", async function () {
+        if (!state.roomAmendMode) return;
+        var ingst = window.ingState || {};
+        var amend = state.roomAmendMode;
+        var origRoom = amend.originalRoom || {};
+        var bbox = origRoom.bbox_px;
+        if (!bbox || !ingst.planPathEnhanced || !ingst.scale) {
+          alert("Re-analyze unavailable: missing plan path, bbox, or scale.");
+          return;
+        }
+        // Corriger le bbox courant avec les éventuels amendements de taille
+        // de la pièce. Pour l'instant on utilise le bbox original (la
+        // ré-analyse se fait sur la pièce avant resize manuel).
+        var transparents = (state.room_transparents || []).map(function (z) {
+          return {
+            x_cm: z.x_cm, y_cm: z.y_cm,
+            width_cm: z.width_cm, depth_cm: z.depth_cm,
+          };
+        });
+        reanalyzeBtn.disabled = true;
+        reanalyzeBtn.textContent = "Analyzing...";
+        try {
+          var resp = await fetch("/api/room/reanalyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              plan_path: ingst.planPathEnhanced,
+              bbox_px: bbox,
+              scale_cm_per_px: ingst.scale,
+              transparent_zones: transparents,
+            }),
+          });
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          var data = await resp.json();
+          if (data.error) throw new Error(data.error);
+
+          // Merge : on conserve tous les manuels, on remplace les auto par
+          // les nouveaux résultats, en filtrant ceux dont la signature est
+          // dans deleted_auto_signatures.
+          var deleted = new Set(state.deleted_auto_signatures || []);
+          function sig(type, e) {
+            return type + "|" + e.face + "|" +
+              (e.offset_cm || 0) + "|" + (e.width_cm || 0);
+          }
+          var manualW = (state.room_windows || []).filter(function (w) {
+            return w.origin === "manual";
+          });
+          var manualO = (state.room_openings || []).filter(function (o) {
+            return o.origin === "manual";
+          });
+          var preservedDoors = (state.room_openings || []).filter(function (o) {
+            return o.has_door;  // les doors ne sont pas redétectées
+          });
+
+          var newWindows = (data.windows || [])
+            .filter(function (w) { return !deleted.has(sig("window", w)); })
+            .map(function (w) {
+              return {
+                face: w.face,
+                offset_cm: w.offset_cm,
+                width_cm: w.width_cm,
+                origin: "auto",
+              };
+            });
+          var newOpenings = (data.openings || [])
+            .filter(function (o) { return !deleted.has(sig("opening", o)); })
+            .map(function (o) {
+              return {
+                face: o.face,
+                offset_cm: o.offset_cm,
+                width_cm: o.width_cm,
+                has_door: false,
+                origin: "auto",
+              };
+            });
+
+          state.room_windows = newWindows.concat(manualW);
+          state.room_openings = newOpenings.concat(
+            preservedDoors.filter(function (o) { return o.origin !== "auto"; }),
+            manualO.filter(function (o) { return !o.has_door; })
+          );
+          _rvCommitFromState();
+        } catch (err) {
+          alert("Re-analyze failed: " + err.message);
+        } finally {
+          reanalyzeBtn.disabled = false;
+          reanalyzeBtn.textContent = "Re-analyze";
+        }
+      });
+    }
+
     // --- Unified "+ Add" dropdown menu (Phase C) ---
     var addMenuBtn = document.getElementById("rvAddMenuBtn");
     var addMenu = document.getElementById("rvAddMenu");
@@ -299,10 +393,35 @@
     }
 
     // Helper: rebuild full Room DSL from state and push to backend.
+    // Preserves `origin` across the DSL round-trip by caching per
+    // (type, face, offset, width) key — the DSL serializes these 3 values
+    // exactly, so the cache key is stable.
     function _rvCommitFromState() {
+      var originCache = {};
+      function _keyFor(kind, e) {
+        return kind + "|" + e.face + "|" + (e.offset_cm || 0) +
+          "|" + (e.width_cm || 0);
+      }
+      (state.room_windows || []).forEach(function (w) {
+        if (w.origin) originCache[_keyFor("w", w)] = w.origin;
+      });
+      (state.room_openings || []).forEach(function (o) {
+        if (o.origin) originCache[_keyFor("o", o)] = o.origin;
+      });
       var el = document.getElementById("rvRoomDsl");
       if (el) el.value = _stateToDsl();
-      rvApplyDslAsync();
+      rvApplyDslAsync().then(function () {
+        (state.room_windows || []).forEach(function (w) {
+          var k = _keyFor("w", w);
+          if (originCache[k]) w.origin = originCache[k];
+          else if (!w.origin) w.origin = "auto";
+        });
+        (state.room_openings || []).forEach(function (o) {
+          var k = _keyFor("o", o);
+          if (originCache[k]) o.origin = originCache[k];
+          else if (!o.origin) o.origin = "auto";
+        });
+      });
     }
 
     // rvCanvas mousedown: start drawing, drag, or resize
@@ -364,8 +483,16 @@
       if (openingDelete) {
         var dparts = openingDelete.dataset.openingDelete.split("-");
         var dtype = dparts[0], didx = parseInt(dparts[1], 10);
-        var arr = (dtype === "window") ? state.room_windows : state.room_openings;
-        if (arr && arr[didx]) arr.splice(didx, 1);
+        var darr = (dtype === "window") ? state.room_windows : state.room_openings;
+        var dRemoved = darr && darr[didx];
+        if (dRemoved && dRemoved.origin === "auto") {
+          state.deleted_auto_signatures = state.deleted_auto_signatures || [];
+          state.deleted_auto_signatures.push(
+            dtype + "|" + dRemoved.face + "|" +
+            (dRemoved.offset_cm || 0) + "|" + (dRemoved.width_cm || 0)
+          );
+        }
+        if (darr && darr[didx]) darr.splice(didx, 1);
         state.selectedOpening = null;
         _rvCommitFromState();
         e.preventDefault(); e.stopPropagation();
@@ -477,18 +604,22 @@
         offset = Math.max(0, Math.min(wallLen - width, offset));
         if (type === "window") {
           state.room_windows = state.room_windows || [];
-          state.room_windows.push({ face: fo.face, offset_cm: offset, width_cm: width });
+          state.room_windows.push({
+            face: fo.face, offset_cm: offset, width_cm: width,
+            origin: "manual",
+          });
         } else if (type === "door") {
           state.room_openings = state.room_openings || [];
           state.room_openings.push({
             face: fo.face, offset_cm: offset, width_cm: width,
             has_door: true, opens_inward: true, hinge_side: "left",
+            origin: "manual",
           });
         } else {
           state.room_openings = state.room_openings || [];
           state.room_openings.push({
             face: fo.face, offset_cm: offset, width_cm: width,
-            has_door: false,
+            has_door: false, origin: "manual",
           });
         }
         // Exit placing mode.
@@ -579,6 +710,14 @@
       var sel = state.selectedOpening;
       if (sel) {
         var arr = (sel.type === "window") ? state.room_windows : state.room_openings;
+        var removed = arr && arr[sel.index];
+        if (removed && removed.origin === "auto") {
+          state.deleted_auto_signatures = state.deleted_auto_signatures || [];
+          state.deleted_auto_signatures.push(
+            sel.type + "|" + removed.face + "|" +
+            (removed.offset_cm || 0) + "|" + (removed.width_cm || 0)
+          );
+        }
         if (arr && arr[sel.index]) arr.splice(sel.index, 1);
         state.selectedOpening = null;
         _rvCommitFromState();
@@ -609,17 +748,16 @@
           ? state.room_width_cm : state.room_depth_cm;
         var MIN = GRID_STEP_CM;
         if (or.end === "start") {
-          // Dragging start end: offset moves, width inversely.
           var newOff = Math.max(0,
             Math.min(or.startOffset + or.startWidth - MIN, or.startOffset + deltaR));
           opR.offset_cm = newOff;
           opR.width_cm = or.startOffset + or.startWidth - newOff;
         } else {
-          // Dragging end: width grows/shrinks, offset fixed.
           var newW = Math.max(MIN,
             Math.min(wallLenR - or.startOffset, or.startWidth + deltaR));
           opR.width_cm = newW;
         }
+        opR.origin = "manual";
         render(rvCvEl);
         return;
       }
@@ -680,6 +818,7 @@
           ? state.room_width_cm : state.room_depth_cm;
         var maxOff = Math.max(0, wallLen - om.widthAlong);
         op.offset_cm = Math.max(0, Math.min(maxOff, om.startOffset + delta));
+        op.origin = "manual";
         render(rvCvEl);
         return;
       }

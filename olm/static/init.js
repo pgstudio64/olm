@@ -722,6 +722,7 @@ async function init() {
     var rooms = window.ingState ? window.ingState.rooms : [];
     rooms.forEach(function(r) {
       r.exclusion_zones = [];
+      r.transparent_zones = [];
       r.amendments = null;
     });
     // Re-render and switch to Import

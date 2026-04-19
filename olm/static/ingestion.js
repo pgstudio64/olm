@@ -216,6 +216,8 @@
         ingState.planUrl = data.image_path
           ? '/api/image?path=' + encodeURIComponent(data.image_path)
           : '';
+        ingState.planPath = data.image_path || "";
+        ingState.planPathEnhanced = data.image_path || "";
         ingState.scale = data.scale_cm_per_px;
         _suggestDrawingScale(data.scale_cm_per_px);
         ingState.vb = { x: 0, y: 0, w: ingState.planW, h: ingState.planH };
@@ -1467,6 +1469,9 @@
         var overlayUrl = _toUrl(data.overlay_path || data.image_path);
         var enhancedUrl = _toUrl(data.enhanced_path);
         ingState.planUrl = overlayUrl || enhancedUrl;
+        // Chemins bruts serveur (pour /api/room/reanalyze qui lit le PNG -SD).
+        ingState.planPath = data.overlay_path || data.image_path || "";
+        ingState.planPathEnhanced = data.enhanced_path || ingState.planPath;
 
         renderIngestion();
         populateRoomsJson();
