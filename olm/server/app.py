@@ -1212,28 +1212,33 @@ def api_room_reanalyze_batch():
         if not isinstance(rooms, list) or not rooms:
             return jsonify({"error": "rooms must be non-empty list"}), 400
 
-        import numpy as _np
         from PIL import Image as _PILImage
         from olm.ingestion.extract import extract_room_features
 
         # Chargement unique : l'image est partagée entre toutes les pièces.
         img = _PILImage.open(plan_path).convert("L")
-        img_arr = _np.asarray(img)
 
         results = []
         for r in rooms:
             name = r.get("name", "")
             bbox_px = r.get("bbox_px")
+            seed_px = r.get("seed_px")
             if (not bbox_px or len(bbox_px) != 4
                 or bbox_px[2] <= bbox_px[0] or bbox_px[3] <= bbox_px[1]):
                 results.append({"name": name, "error": "invalid bbox_px"})
                 continue
+            if not seed_px or len(seed_px) != 2:
+                results.append({"name": name, "error": "missing seed_px"})
+                continue
             try:
                 features = extract_room_features(
-                    None, tuple(int(v) for v in bbox_px), scale,
+                    img,
+                    (int(seed_px[0]), int(seed_px[1])),
+                    tuple(int(v) for v in bbox_px),
+                    scale,
                     transparent_zones_cm=r.get("transparent_zones") or [],
+                    doors_px=[],
                     threshold=threshold,
-                    image_arr=img_arr,
                 )
                 results.append({"name": name, **features})
             except Exception as e:

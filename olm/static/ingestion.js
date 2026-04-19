@@ -1425,9 +1425,13 @@
               return;
             }
             var am = amendments[r.name];
+            var seedPx = r.seed_px || r.seed ||
+              (r.seed_x != null && r.seed_y != null
+                ? [r.seed_x, r.seed_y] : null);
             payload.rooms.push({
               name: r.name,
               bbox_px: r.bbox_px,
+              seed_px: seedPx,
               transparent_zones: (am && am.transparent_zones) || [],
             });
             validRooms.push(r);
