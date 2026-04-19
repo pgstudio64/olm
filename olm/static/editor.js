@@ -1050,19 +1050,6 @@ function _renderImpl(targetSvg) {
       ovImg = '<g transform="translate(' + dx.toFixed(1) + ' ' + dy.toFixed(1) + ') rotate(' + ovAngle + ' ' + ocx.toFixed(1) + ' ' + ocy.toFixed(1) + ')">' + ovImg + '</g>';
     }
     elements.push({ z: -1, s: ovImg });
-    try {
-      if (state.roomAmendMode && window._ovDbg !== ovX + ',' + ovY +
-          ',' + roomX + ',' + roomY + ',' + ovAngle) {
-        window._ovDbg = ovX + ',' + ovY + ',' + roomX + ',' + roomY +
-          ',' + ovAngle;
-        console.log("[ov-dbg]",
-          "offset=", (state.roomRenderOffset || {x_cm:0, y_cm:0}),
-          "roomXY=(", roomX.toFixed(1), ",", roomY.toFixed(1), ")",
-          "ovXY=(", ovX.toFixed(1), ",", ovY.toFixed(1), ")",
-          "ovAngle=", ovAngle,
-          "corridor=", state.corridor_face);
-      }
-    } catch (e) {}
   }
 
   // Hide canvas background when overlay is active (avoid dark veil)
@@ -1838,16 +1825,26 @@ function enterRoomAmendMode(room) {
     if (_ingRoom) {
       var bx0 = room.bbox_px[0], by0 = room.bbox_px[1];
       var sc = _ing.scale;
+      var absW2 = (room.bbox_px[2] - room.bbox_px[0]) * sc;
+      var absD2 = (room.bbox_px[3] - room.bbox_px[1]) * sc;
+      var cf2 = room.corridor_face || "";
+      function _absToCanon2(xAbs, yAbs) {
+        if (cf2 === "north") return { x: absW2 - xAbs, y: absD2 - yAbs };
+        if (cf2 === "east")  return { x: yAbs, y: absW2 - xAbs };
+        if (cf2 === "west")  return { x: absD2 - yAbs, y: xAbs };
+        return { x: xAbs, y: yAbs };
+      }
       var seedPx = _ingRoom.seed_px || _ingRoom.seed;
       if (seedPx) {
-        state.room_seed_cm = {
-          x_cm: (seedPx[0] - bx0) * sc,
-          y_cm: (seedPx[1] - by0) * sc,
-        };
+        var sA = { x: (seedPx[0] - bx0) * sc, y: (seedPx[1] - by0) * sc };
+        var sC2 = _absToCanon2(sA.x, sA.y);
+        state.room_seed_cm = { x_cm: sC2.x, y_cm: sC2.y };
       }
       if (_ingRoom.hits && _ingRoom.hits.length) {
         state.room_hits = _ingRoom.hits.map(function (h) {
-          return { x_cm: (h[0] - bx0) * sc, y_cm: (h[1] - by0) * sc };
+          var pA = { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc };
+          var pC = _absToCanon2(pA.x, pA.y);
+          return { x_cm: pC.x, y_cm: pC.y };
         });
       }
     }

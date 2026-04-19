@@ -59,8 +59,8 @@
       }
 
       // canonical_top_face: derive from the primary door's face.
-      // primary = first door in the list (OCR detects at most one main door per room).
-      // opposite face becomes the canonical top (D-83: corridor at bottom, windows at top).
+      // Recalculé à chaque export pour rester cohérent avec les portes
+      // actuelles (utile quand re-analyze a modifié les portes).
       if (Array.isArray(r.doors) && r.doors.length > 0 && r.doors[0].face) {
         var OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
         roomObj.canonical_top_face = OPPOSITE[r.doors[0].face] || 'north';

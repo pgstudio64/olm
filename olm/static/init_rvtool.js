@@ -316,81 +316,139 @@
             return o.has_door && o.origin !== "auto";
           });
 
+          // Canonicalisation : la re-analyze retourne des coords ABSOLUES
+          // (face = face absolue, offset = mesuré depuis le bord absolu).
+          // Le state stocke en CANONIQUE (corridor = south). On applique
+          // la transformation absolue → canonique ici.
+          var cf = (amend.originalRoom && amend.originalRoom.corridor_face)
+            || "";
+          var _FACE_MAPS_LOCAL = {
+            north: { north: "south", south: "north", east: "west", west: "east" },
+            east:  { north: "east",  east: "south",  south: "west", west: "north" },
+            west:  { north: "west",  west: "south",  south: "east", east: "north" },
+          };
+          var faceMap = _FACE_MAPS_LOCAL[cf];
+          var absW = data.bbox_px ? (data.bbox_px[2] - data.bbox_px[0]) *
+            (ingst.scale || 0) : 0;
+          var absD = data.bbox_px ? (data.bbox_px[3] - data.bbox_px[1]) *
+            (ingst.scale || 0) : 0;
+          function absFaceLen(face) {
+            return (face === "north" || face === "south") ? absW : absD;
+          }
+          function _toCanon(o) {
+            var r = { face: o.face, offset_cm: o.offset_cm,
+                      width_cm: o.width_cm };
+            if (!faceMap) return r;
+            r.face = faceMap[o.face] || o.face;
+            if (cf === "north" || cf === "west") {
+              r.offset_cm = absFaceLen(o.face) - (o.offset_cm || 0) -
+                (o.width_cm || 0);
+            }
+            r.offset_cm = Math.max(0, Math.round(r.offset_cm));
+            r.width_cm = Math.max(0, Math.round(r.width_cm));
+            return r;
+          }
           var newWindows = (data.windows || [])
             .filter(function (w) { return !deleted.has(sig("window", w)); })
             .map(function (w) {
-              return {
-                face: w.face,
-                offset_cm: w.offset_cm,
-                width_cm: w.width_cm,
-                origin: "auto",
-              };
+              var c = _toCanon(w);
+              return { face: c.face, offset_cm: c.offset_cm,
+                       width_cm: c.width_cm, origin: "auto" };
             });
           var newOpenings = (data.openings || [])
             .filter(function (o) { return !deleted.has(sig("opening", o)); })
             .map(function (o) {
-              return {
-                face: o.face,
-                offset_cm: o.offset_cm,
-                width_cm: o.width_cm,
-                has_door: false,
-                origin: "auto",
-              };
+              var c = _toCanon(o);
+              return { face: c.face, offset_cm: c.offset_cm,
+                       width_cm: c.width_cm, has_door: false, origin: "auto" };
             });
           // Portes détectées (seulement si aucune n'existait). Elles
           // arrivent ici sous forme d'openings avec has_door=true.
           var newDoors = [];
           if (!preservedDoors.length) {
             newDoors = (data.doors || []).map(function (d) {
+              var c = _toCanon(d);
+              var hs = d.hinge_side;
+              if ((cf === "north" || cf === "west") && hs) {
+                hs = hs === "left" ? "right" : "left";
+              }
               return {
-                face: d.face,
-                offset_cm: d.offset_cm,
-                width_cm: d.width_cm,
+                face: c.face,
+                offset_cm: c.offset_cm,
+                width_cm: c.width_cm,
                 has_door: true,
-                hinge_side: d.hinge_side,
+                hinge_side: hs,
                 opens_inward: d.opens_inward !== false,
                 origin: "auto",
               };
             });
           }
 
-          // Propage hits + seed dans state pour V/H-rays (converti
-          // en coords room-local cm).
+          // Propage hits + seed dans state pour V/H-rays. Coords room-local
+          // cm, transformées absolu → canonique selon corridor_face.
           if (data.hits && ingst.scale && data.bbox_px) {
             var hbx0 = data.bbox_px[0], hby0 = data.bbox_px[1];
+            function _pointAbsToCanon(xAbs, yAbs) {
+              if (cf === "north") return { x: absW - xAbs, y: absD - yAbs };
+              if (cf === "east")  return { x: yAbs, y: absW - xAbs };
+              if (cf === "west")  return { x: absD - yAbs, y: xAbs };
+              return { x: xAbs, y: yAbs };  // south / unset
+            }
             state.room_hits = data.hits.map(function (h) {
-              return {
-                x_cm: (h[0] - hbx0) * ingst.scale,
-                y_cm: (h[1] - hby0) * ingst.scale,
+              var pAbs = {
+                x: (h[0] - hbx0) * ingst.scale,
+                y: (h[1] - hby0) * ingst.scale,
               };
+              var p = _pointAbsToCanon(pAbs.x, pAbs.y);
+              return { x_cm: p.x, y_cm: p.y };
             });
             if (data.seed_px) {
-              state.room_seed_cm = {
-                x_cm: (data.seed_px[0] - hbx0) * ingst.scale,
-                y_cm: (data.seed_px[1] - hby0) * ingst.scale,
-              };
+              var sAbsX = (data.seed_px[0] - hbx0) * ingst.scale;
+              var sAbsY = (data.seed_px[1] - hby0) * ingst.scale;
+              var sC = _pointAbsToCanon(sAbsX, sAbsY);
+              state.room_seed_cm = { x_cm: sC.x, y_cm: sC.y };
             }
           }
 
-          // Expose les masques auto-portes pour visualisation debug.
+          // Expose les masques auto-portes (debug), canonicalisés.
           if (data.auto_door_masks_px && ingst.scale) {
             var refBbox = amend.originalRoom.bbox_px || data.bbox_px;
             var rbx0 = refBbox[0], rby0 = refBbox[1];
             state.room_auto_door_masks = data.auto_door_masks_px.map(function (r) {
-              return {
-                x_cm: (r[0] - rbx0) * ingst.scale,
-                y_cm: (r[1] - rby0) * ingst.scale,
-                width_cm: (r[2] - r[0]) * ingst.scale,
-                depth_cm: (r[3] - r[1]) * ingst.scale,
-              };
+              var ax0 = (r[0] - rbx0) * ingst.scale;
+              var ay0 = (r[1] - rby0) * ingst.scale;
+              var aw = (r[2] - r[0]) * ingst.scale;
+              var ad = (r[3] - r[1]) * ingst.scale;
+              if (cf === "north") {
+                return { x_cm: absW - ax0 - aw, y_cm: absD - ay0 - ad,
+                         width_cm: aw, depth_cm: ad };
+              }
+              if (cf === "east") {
+                return { x_cm: ay0, y_cm: absW - ax0 - aw,
+                         width_cm: ad, depth_cm: aw };
+              }
+              if (cf === "west") {
+                return { x_cm: absD - ay0 - ad, y_cm: ax0,
+                         width_cm: ad, depth_cm: aw };
+              }
+              return { x_cm: ax0, y_cm: ay0, width_cm: aw, depth_cm: ad };
             });
           }
 
-          // Adopte le nouveau bbox retourné par le ray-cast.
+          // Adopte le nouveau bbox retourné par le ray-cast. Pour east/west,
+          // la largeur canonique = profondeur absolue (et inversement).
           if (data.bbox_px && ingst.scale) {
             var nbb = data.bbox_px;
-            var newWCm = Math.round((nbb[2] - nbb[0]) * ingst.scale);
-            var newDCm = Math.round((nbb[3] - nbb[1]) * ingst.scale);
+            var absWnew = (nbb[2] - nbb[0]) * ingst.scale;
+            var absDnew = (nbb[3] - nbb[1]) * ingst.scale;
+            var newWCm, newDCm;
+            if (cf === "east" || cf === "west") {
+              newWCm = Math.round(absDnew);
+              newDCm = Math.round(absWnew);
+            } else {
+              newWCm = Math.round(absWnew);
+              newDCm = Math.round(absDnew);
+            }
             if (newWCm > 0 && newDCm > 0) {
               state.room_width_cm = newWCm;
               state.room_depth_cm = newDCm;
