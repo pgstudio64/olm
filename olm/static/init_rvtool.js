@@ -234,6 +234,20 @@
       }
     });
 
+    // --- V-Rays / H-Rays toggles ---
+    ([
+      ["rvVraysToggle", "showVrays"],
+      ["rvHraysToggle", "showHrays"],
+    ]).forEach(function (entry) {
+      var cb = document.getElementById(entry[0]);
+      if (cb) {
+        cb.addEventListener("change", function () {
+          state[entry[1]] = cb.checked;
+          render(document.getElementById("rvCanvas"));
+        });
+      }
+    });
+
     // --- Re-analyze button (R-04 Review) ---
     var reanalyzeBtn = document.getElementById("rvBtnReanalyze");
     if (reanalyzeBtn) {
@@ -324,12 +338,42 @@
               };
             });
 
+          // Expose les masques auto-portes pour visualisation debug.
+          if (data.auto_door_masks_px && ingst.scale) {
+            var refBbox = amend.originalRoom.bbox_px || data.bbox_px;
+            var rbx0 = refBbox[0], rby0 = refBbox[1];
+            state.room_auto_door_masks = data.auto_door_masks_px.map(function (r) {
+              return {
+                x_cm: (r[0] - rbx0) * ingst.scale,
+                y_cm: (r[1] - rby0) * ingst.scale,
+                width_cm: (r[2] - r[0]) * ingst.scale,
+                depth_cm: (r[3] - r[1]) * ingst.scale,
+              };
+            });
+          }
+
+          // Adopte le nouveau bbox retourné par le ray-cast.
+          if (data.bbox_px && ingst.scale) {
+            var nbb = data.bbox_px;
+            var newWCm = Math.round((nbb[2] - nbb[0]) * ingst.scale);
+            var newDCm = Math.round((nbb[3] - nbb[1]) * ingst.scale);
+            if (newWCm > 0 && newDCm > 0) {
+              state.room_width_cm = newWCm;
+              state.room_depth_cm = newDCm;
+            }
+            // Propagate new bbox to the room so the overlay stays aligned.
+            amend.originalRoom.bbox_px = nbb;
+            amend.originalRoom.width_cm = newWCm;
+            amend.originalRoom.depth_cm = newDCm;
+          }
+
           state.room_windows = newWindows.concat(manualW);
           state.room_openings = newOpenings.concat(
             preservedDoors.filter(function (o) { return o.origin !== "auto"; }),
             manualO.filter(function (o) { return !o.has_door; })
           );
           _rvCommitFromState();
+          if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
         } catch (err) {
           alert("Re-analyze failed: " + err.message);
         } finally {

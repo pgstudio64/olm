@@ -1706,6 +1706,7 @@ def extract_room_features(
     # --- 1. Masque zones transparentes (user + auto-portes) ---
     working = image.copy()
     draw = _PILDraw.Draw(working)
+    auto_door_rects_px: list[list[int]] = []
 
     if bbox_px and doors_px:
         bx0, by0, bx1, by1 = bbox_px
@@ -1732,6 +1733,9 @@ def extract_room_features(
             else:
                 continue
             draw.rectangle(rect, fill=255)
+            auto_door_rects_px.append([
+                int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])
+            ])
 
     if bbox_px and transparent_zones_cm:
         bx0, by0 = bbox_px[0], bbox_px[1]
@@ -1750,25 +1754,41 @@ def extract_room_features(
     binary = remove_non_ortho(binary_raw)
     binary_raw = binary
 
-    # --- 3. Ray-cast depuis le seed ---
-    bbox_new, walls, _ = detect_room_three_phase(
-        binary, binary_raw, seed_x, seed_y,
-        scale_cm_per_px, text_bboxes=[],
+    # --- 3. Detection du bbox via l'algo comb (test_comb.detect_room,
+    # même algo que l'import OCR — éprouvé et plus robuste que
+    # detect_room_three_phase).
+    from olm.ingestion.test_comb import detect_room as _comb_detect_room
+    px_per_cm_f = 1.0 / scale_cm_per_px
+    step_cm = 10
+    comb_step_px = max(1, int(round(step_cm * px_per_cm_f)))
+    door_px = max(1, int(round(door_width_cm * px_per_cm_f)))
+    bbox_new, all_hits, _doors_detected = _comb_detect_room(
+        binary, seed_x, seed_y, comb_step_px,
+        door_width_px=door_px, other_seeds=None,
     )
     nx0, ny0, nx1, ny1 = bbox_new
 
+    # --- Classification murs sur le bbox détecté ---
+    walls: dict[str, list] = {}
+    for face in ("north", "south", "east", "west"):
+        segs, _ = _classify_wall_direct(
+            binary, binary_raw, bbox_new, face, step_px,
+        )
+        walls[face] = segs
+
     # --- 4. Classification murs → windows / openings ---
+    # seg.start_px / end_px sont DÉJÀ relatifs au début de la face
+    # (index_in_positions × step_px). Pas de soustraction de face_origin.
     windows: list[dict] = []
     openings: list[dict] = []
     rgb_arr: np.ndarray | None = None
     for face in ("north", "south", "east", "west"):
         segs = walls.get(face, [])
-        face_origin_px = nx0 if face in ("north", "south") else ny0
         any_window = False
         for seg in segs:
             if seg.kind not in ("window", "opening"):
                 continue
-            off = seg.start_px - face_origin_px
+            off = seg.start_px
             w = seg.end_px - seg.start_px
             if w <= 0:
                 continue
@@ -1802,12 +1822,8 @@ def extract_room_features(
                     "width_cm": int(round(full_w * scale_cm_per_px)),
                 })
 
-    hits = [
-        [seed_x, int(ny0)],
-        [seed_x, int(ny1)],
-        [int(nx0), seed_y],
-        [int(nx1), seed_y],
-    ]
+    # Hits issus du comb (réels, pas juste les 4 coins du bbox).
+    hits = [[int(h[0]), int(h[1])] for h in (all_hits or [])]
 
     return {
         "bbox_px": [int(nx0), int(ny0), int(nx1), int(ny1)],
@@ -1815,4 +1831,5 @@ def extract_room_features(
         "windows": windows,
         "openings": openings,
         "hits": hits,
+        "auto_door_masks_px": auto_door_rects_px,
     }
