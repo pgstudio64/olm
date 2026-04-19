@@ -1390,13 +1390,14 @@
           ingState.vb = { x: 0, y: 0, w: ingState.planW || 1000, h: ingState.planH || 1000 };
         }
 
-        // Overlay par défaut = le PNG enhanced s'il est disponible, sinon l'overlay standard.
-        // (le toggle enhanced/plain sera ajouté plus tard — cf TODO)
-        var overlaySrc = data.enhanced_path || data.image_path || data.overlay_path;
-        if (overlaySrc) {
-          ingState.planUrl = '/api/image?path=' +
-            encodeURIComponent(overlaySrc);
-        }
+        // Floor = PNG standard (overlay_path avec cartouches).
+        // Room/Office = PNG -SD (enhanced_path sans description). Fallback croisé si l'un manque.
+        var _toUrl = function (p) {
+          return p ? '/api/image?path=' + encodeURIComponent(p) : '';
+        };
+        var overlayUrl = _toUrl(data.overlay_path || data.image_path);
+        var enhancedUrl = _toUrl(data.enhanced_path);
+        ingState.planUrl = overlayUrl || enhancedUrl;
 
         renderIngestion();
         populateRoomsJson();
@@ -1408,9 +1409,9 @@
           window.fpLoadAndMatch(json);
         }
 
-        // fpOverlay pour Review/Design (même mécanique que flux OCR)
+        // fpOverlay pour Review/Design = PNG -SD si disponible, sinon fallback overlay standard.
         window.fpOverlay = {
-          dataUrl: ingState.planUrl,
+          dataUrl: enhancedUrl || overlayUrl,
           pxPerCm: ingState.scale ? 1.0 / ingState.scale : 1.0,
           imgW: ingState.planW,
           imgH: ingState.planH,

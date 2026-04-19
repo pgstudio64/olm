@@ -7,6 +7,21 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-101 · Overlay par niveau — Floor = PNG standard, Room/Office = PNG -SD (2026-04-19)
+
+**Décision** : En Mode Préprocessé, l'affichage du plan diffère selon l'onglet actif :
+
+- **Floor** (fpImport) : PNG `<plan_id>.png` — version lisible par l'humain avec cartouches, labels, cotes.
+- **Room** (fpReview) et **Office** (lytDesign) : PNG `<plan_id>-SD.png` — version sans description (cartouches effacés, extérieur bleu ciel, couloirs verts) utilisée aussi par l'algo d'extraction.
+
+**Implémentation** : `ingState.planUrl` (consommé par `renderIngestion` pour Floor) reçoit `overlay_path` ; `window.fpOverlay.dataUrl` (consommé par `floor_plan.js` pour Room et `editor.js` pour Office) reçoit `enhanced_path`. Fallback croisé si l'un des deux manque. Mode OCR inchangé (un seul PNG partout).
+
+**Justification** : respecte la convention D-74 / D-84 — l'utilisateur voit le plan métier au niveau Floor, la version algorithmique aux niveaux détaillés où les cartouches parasiteraient la lecture des pièces et aménagements.
+
+**Impact** : [ingestion.js:1393-1413](../olm/static/ingestion.js#L1393-L1413). Pas de changement backend (l'API renvoyait déjà les deux chemins séparément).
+
+---
+
 ## D-100 · Suppression du concept de fusion de pièces — remplacement par resize + commentaires (2026-04-18)
 
 **Décision** : Abandonner R-09 (Identify merges) et toute gestion d'associations de pièces dans l'application. Le besoin — "étudier l'aménagement d'une pièce résultant de la suppression de murs entre 2+ pièces réelles" — est couvert par la combinaison :

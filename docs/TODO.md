@@ -159,8 +159,7 @@ Un jeu Mode Préprocessé est composé de **deux PNG** + le JSON :
 Règle : l'utilisateur fournit `<plan_id>.png` à l'import, OLM résout automatiquement `<plan_id>-SD.png` et `<plan_id>.json` dans le même dossier. Erreur explicite si l'un des deux est absent. Jamais de fichier -SD affiché à l'utilisateur sauf mode debug.
 
 Tâches :
-- [ ] **Overlay par niveau** : Floor affiche `<plan_id>.png` (standard), Room et Office affichent `<plan_id>-SD.png` (sans description)
-- [ ] Générateur de plan de test : produire les deux PNG avec cette convention de nommage
+- [x] **Overlay par niveau** : Floor affiche `<plan_id>.png` (standard), Room et Office affichent `<plan_id>-SD.png` (sans description)
 
 ---
 
