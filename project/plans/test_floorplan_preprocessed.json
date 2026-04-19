@@ -665,7 +665,9 @@
           "offset_px": 6,
           "width_px": 27,
           "hinge_side": "left",
-          "opens_inward": true
+          "opens_inward": true,
+          "seed_x": 272,
+          "seed_y": 305
         }
       ],
       "openings": [

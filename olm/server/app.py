@@ -1142,28 +1142,37 @@ def api_room_reanalyze():
     try:
         data = request.json or {}
         plan_path = data.get("plan_path", "")
+        seed_px = data.get("seed_px")
         bbox_px = data.get("bbox_px")
         scale = float(data.get("scale_cm_per_px", 0.5))
         transparents = data.get("transparent_zones", []) or []
+        doors = data.get("doors", []) or []
+        door_width_cm = int(data.get("door_width_cm", 90))
         threshold = int(data.get("threshold", 110))
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
-        if not bbox_px or len(bbox_px) != 4:
-            return jsonify({"error": "bbox_px must be [x0,y0,x1,y1]"}), 400
-        try:
-            bbox_px = [int(v) for v in bbox_px]
-        except (TypeError, ValueError):
-            return jsonify({"error": "bbox_px must contain integers"}), 400
-        if bbox_px[2] <= bbox_px[0] or bbox_px[3] <= bbox_px[1]:
-            return jsonify({"error": "bbox_px degenerate (empty)"}), 400
+        if not seed_px or len(seed_px) != 2:
+            return jsonify({"error": "seed_px must be [x, y]"}), 400
+        if bbox_px:
+            try:
+                bbox_px = [int(v) for v in bbox_px]
+            except (TypeError, ValueError):
+                return jsonify({"error": "bbox_px must contain integers"}), 400
+            if bbox_px[2] <= bbox_px[0] or bbox_px[3] <= bbox_px[1]:
+                bbox_px = None
 
         from PIL import Image as _PILImage
         from olm.ingestion.extract import extract_room_features
         img = _PILImage.open(plan_path).convert("L")
         result = extract_room_features(
-            img, tuple(bbox_px), scale,
+            img,
+            (int(seed_px[0]), int(seed_px[1])),
+            tuple(bbox_px) if bbox_px else None,
+            scale,
             transparent_zones_cm=transparents,
+            doors_px=doors,
+            door_width_cm=door_width_cm,
             threshold=threshold,
         )
         return jsonify(result)
