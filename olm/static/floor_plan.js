@@ -50,21 +50,25 @@
     copy.windows = (room.windows || []).map(xformOpening);
     copy.openings = (room.openings || []).map(xformOpening);
 
+    function xformZone(e) {
+      var ex = Object.assign({}, e);
+      if (cf === "north") {
+        ex.x_cm = W - e.x_cm - e.width_cm;
+        ex.y_cm = D - e.y_cm - e.depth_cm;
+      } else if (cf === "east") {
+        ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
+        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+      } else if (cf === "west") {
+        ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
+        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+      }
+      return ex;
+    }
     if (room.exclusion_zones && room.exclusion_zones.length) {
-      copy.exclusion_zones = room.exclusion_zones.map(function(e) {
-        var ex = Object.assign({}, e);
-        if (cf === "north") {
-          ex.x_cm = W - e.x_cm - e.width_cm;
-          ex.y_cm = D - e.y_cm - e.depth_cm;
-        } else if (cf === "east") {
-          ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
-          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-        } else if (cf === "west") {
-          ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
-          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-        }
-        return ex;
-      });
+      copy.exclusion_zones = room.exclusion_zones.map(xformZone);
+    }
+    if (room.transparent_zones && room.transparent_zones.length) {
+      copy.transparent_zones = room.transparent_zones.map(xformZone);
     }
 
     copy.corridor_face = "south";
@@ -109,22 +113,26 @@
     copy.windows = (room.windows || []).map(xformBack);
     copy.openings = (room.openings || []).map(xformBack);
 
+    function xformZoneBack(e) {
+      var ex = Object.assign({}, e);
+      if (originalCorridorFace === "north") {
+        var absW = swap ? D : W, absD = swap ? W : D;
+        ex.x_cm = absW - e.x_cm - e.width_cm;
+        ex.y_cm = absD - e.y_cm - e.depth_cm;
+      } else if (originalCorridorFace === "east") {
+        ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
+        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+      } else if (originalCorridorFace === "west") {
+        ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
+        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
+      }
+      return ex;
+    }
     if (room.exclusion_zones && room.exclusion_zones.length) {
-      copy.exclusion_zones = room.exclusion_zones.map(function(e) {
-        var ex = Object.assign({}, e);
-        if (originalCorridorFace === "north") {
-          var absW = swap ? D : W, absD = swap ? W : D;
-          ex.x_cm = absW - e.x_cm - e.width_cm;
-          ex.y_cm = absD - e.y_cm - e.depth_cm;
-        } else if (originalCorridorFace === "east") {
-          ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
-          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-        } else if (originalCorridorFace === "west") {
-          ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
-          ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-        }
-        return ex;
-      });
+      copy.exclusion_zones = room.exclusion_zones.map(xformZoneBack);
+    }
+    if (room.transparent_zones && room.transparent_zones.length) {
+      copy.transparent_zones = room.transparent_zones.map(xformZoneBack);
     }
 
     copy.corridor_face = originalCorridorFace;

@@ -467,10 +467,18 @@ async function init() {
   function setupPan(svg) {
     svg.addEventListener("mousedown", function(e) {
       if (e.target.closest("[data-row]") || e.target.closest("[data-excl]") ||
-          e.target.closest("[data-excl-handle]") || e.target.closest("[data-room-handle]")) return;
+          e.target.closest("[data-excl-handle]") || e.target.closest("[data-room-handle]") ||
+          e.target.closest("[data-transp]") || e.target.closest("[data-transp-handle]") ||
+          e.target.closest("[data-opening-handle]") || e.target.closest("[data-opening-delete]") ||
+          e.target.closest("[data-opening-resize]")) return;
       if (svg.id === "rvCanvas" && window.rvTool &&
           (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing" ||
-           window.rvTool.mode === "roomResizing")) return;
+           window.rvTool.mode === "roomResizing" ||
+           window.rvTool.mode === "transpDragging" ||
+           window.rvTool.mode === "transpResizing" ||
+           window.rvTool.mode === "transpSelected" ||
+           window.rvTool.mode === "openingMoving" ||
+           window.rvTool.mode === "openingResizing")) return;
       if (e.button !== 0) return;
       if (zoomSelStart(e, svg, state.viewBox, function() { updateViewBox(svg); render(svg); })) return;
       state.isPanning = true;

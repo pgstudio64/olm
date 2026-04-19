@@ -1382,6 +1382,7 @@ async function save() {
       windows: JSON.parse(JSON.stringify(state.room_windows)),
       openings: JSON.parse(JSON.stringify(state.room_openings)),
       exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions)),
+      transparent_zones: JSON.parse(JSON.stringify(state.room_transparents || [])),
       bbox_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : undefined,
       corridor_face: origCf,
     };
