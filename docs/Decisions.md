@@ -7,6 +7,141 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-114 · canonical_top_face explicite écrase la détection couleur (2026-04-19)
+
+**Décision** : si `canonical_top_face` est explicitement présent dans le JSON
+d'une pièce, `corridor_face` est dérivé comme son opposé et écrase la
+détection automatique par couleur (`_detect_face_colors`).
+
+**Justification** : la détection couleur (pixels verts corridor sur les bords
+de la bbox) peut se tromper — par exemple pour une pièce mitoyenne à un
+couloir coloré qui n'est pas son corridor d'accès réel. `canonical_top_face`
+manuel devient le mécanisme d'override propre.
+
+**Impact** : fix propre pour les pièces mal orientées (929, 900, 902…).
+Écriture du champ recalculée à chaque export JSON (`ingestion_export.js`)
+depuis `doors[0].face`. Lecture fait foi.
+
+---
+
+## D-113 · Auto-mise à jour corridor_face à la re-analyze (2026-04-19)
+
+**Décision** : à la fin d'une re-analyze, si au moins une porte est détectée,
+`corridor_face` est mis à jour avec `doors[0].face` AVANT la canonicalisation
+des autres features. La porte principale pointe par convention vers le
+corridor.
+
+**Justification** : permettait aux pièces sans doors/canonical_top_face au
+JSON de se corriger toute seule après re-analyze. Avant, elles restaient
+mal orientées.
+
+**Impact** : la canonicalisation (windows/openings/doors/hits/seed) utilise
+la bonne face dès sa mise à jour. Propagé à `ingState.rooms` et `fpData.rooms`
+au save pour que Floor reflète l'orientation à jour.
+
+---
+
+## D-112 · Canonicalisation cohérente re-analyze → state (2026-04-19)
+
+**Décision** : la re-analyze retourne des coordonnées **absolues** (dans le
+repère image brut). Le state frontend stocke en **canoniques** (corridor
+toujours au sud). La transformation absolu → canonique est appliquée dans
+le handler de re-analyze avant merge dans le state.
+
+**Éléments canonicalisés** : `face`, `offset_cm`, `hinge_side` pour
+openings/windows/doors, points (hits + seed), rectangles
+(auto_door_masks_px), dimensions (swap width/depth pour east/west corridor).
+
+**Justification** : avant, pour corridor ≠ south, la re-analyze injectait
+des coords absolues dans le state canonique → features affichées tournées
+de 90° / 180° / 270° (symétrie pure observée).
+
+**Impact** : pour toute pièce non-south corridor, la re-analyze produit
+maintenant un rendu cohérent avec l'affichage canonique. Également
+appliqué au chargement depuis `ingState.rooms` à l'entrée d'amendment.
+
+---
+
+## D-111 · Règle métier fenêtre ↔ opening exclusives par face (2026-04-19)
+
+**Décision** : dans `extract_room_features`, si une face possède au moins
+une fenêtre détectée, toutes les openings de cette face sont supprimées
+(considérées comme artefacts du double trait de fenêtre).
+
+**Justification** : le dessin d'une fenêtre (double trait parallèle avec
+petit décalage du mur) génère souvent de faux "openings" à cause de la
+discontinuité perçue par `_classify_wall_direct`. Règle simple : une face
+ne peut pas avoir les deux à la fois.
+
+**Impact** : pipeline plus propre. L'utilisateur peut ajouter manuellement
+une opening sur une face vitrée via le CRUD si un cas limite se présente.
+
+---
+
+## D-110 · Re-analyze redétecte les portes à chaque run (2026-04-19)
+
+**Décision** : le handler `/api/room/reanalyze` reçoit `doors_px = []` (vide)
+depuis le frontend. Les anciennes portes ne sont plus envoyées pour
+masquage préventif. `expand_door_arcs` tourne toujours et redétecte.
+
+**Justification** : l'ancien comportement (préservation des auto doors)
+masquait les arcs de porte avec des zones transparentes → la redétection
+ne pouvait plus les trouver. Les erreurs de détection initiales étaient
+alors figées.
+
+**Impact** : redétection fraîche à chaque re-analyze. Les portes manuelles
+(origin="manual") restent préservées dans le state, mais pas envoyées au
+backend pour masquage.
+
+---
+
+## D-109 · Re-analyze expose les portes détectées (2026-04-19)
+
+**Décision** : `extract_room_features` retourne le champ `doors` (liste
+des portes détectées par `expand_door_arcs`) quand l'appelant n'a pas
+fourni `doors_px`.
+
+**Justification** : à minima, la re-analyze doit faire ce que l'import
+OCR fait. Avant, les portes trouvées par le comb étaient discardées.
+
+**Impact** : le frontend merge les doors détectées comme
+`openings[has_door=true, origin=auto]`. Réutilisé par la règle D-113 pour
+mettre à jour `corridor_face`.
+
+---
+
+## D-108 · DetectionConfigCm — paramètres de détection centralisés en cm (2026-04-19)
+
+**Décision** : nouveau module `olm/core/detection_config.py` avec dataclass
+`DetectionConfigCm` regroupant 18 seuils d'ingestion en cm (ou unités
+naturelles : degrés, niveaux gris). Méthode `to_px(scale_cm_per_px)` pour
+conversion en px au runtime.
+
+**Paramètres migrés** : min_opening_width, min_opening_depth, min_window_width,
+min_obstacle_width, max_absorb, wall_depth, snap_search, mode_tolerance,
+morph_dilate, comb_step, coarse_step, ray_margin, max_ray, door_probe_depth,
+door_group_gap, door_wall_margin, default_door_width, cartouche_margin.
+
+**Consommation** :
+- `extract.py` : `_classify_wall_direct` + `_merge_adjacent_segments` lisent
+  `cfg.to_px(scale)` à chaque appel.
+- `test_comb.py` : `_apply_detection_config(scale)` met à jour les
+  constantes module au début de `detect_room`.
+
+**Justification** : les constantes hardcodées en px étaient incohérentes
+d'une échelle à l'autre. Le bug fatal `max_absorb_px=120` (= 355 cm à
+scale 2.96 cm/px, absorbait toute porte < 3 m) n'aurait jamais existé
+avec des seuils en cm. Base de règles normatives en cm, source unique
+de vérité, surchargeable via `project/config.json` (section `room_detection`,
+wire-up UI à faire).
+
+**Impact** : comportement stable à toutes les échelles. Défauts calibrés
+pour scale ~3 cm/px (usage courant). À l'avenir, exposer les 4 seuils
+métier (binarize threshold, min opening/window, default door width) dans
+Settings UI, garder les 14 autres comme paramètres fichier.
+
+---
+
 ## D-107 · Re-analyze pièce par pièce avec ray-cast — version fonctionnelle (2026-04-19)
 
 **Décision** : livrer d'abord la **ré-analyse par pièce** (D-104 étendu) avec un vrai ray-cast, plutôt que le refactor global de l'import Préprocessé (D-105 Phase 1+2). Avantage : scope circonscrit, résultat visible immédiatement sur une pièce à la fois, pas de régression de l'import.

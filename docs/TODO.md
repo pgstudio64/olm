@@ -280,6 +280,8 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
 - [ ] **Bug orientation pièce 922** : la pièce 922 (`canonical_top_face: "west"`) est positionnée comme si elle était à l'est alors qu'elle est au nord. Vérifier la logique de rotation canonique pour les pièces en orientation non standard.
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
+- [ ] **Ajout manuel d'un seed** dans Floor/Room : besoin pour les pièces ajoutées à la main (nouveau contour sans cartouche OCR détecté) — permettre de placer le seed avec un clic pour que la re-analyze puisse partir.
+- [ ] **Afficher le seed (disque vert) dès l'activation V-Rays ou H-Rays** : aujourd'hui le seed est affiché en même temps que les rays. Le montrer dès qu'une des deux cases est cochée, même sans hits.
 
 ### Refactoring architecture frontend — poursuite éventuelle
 

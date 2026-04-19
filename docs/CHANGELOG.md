@@ -5,6 +5,52 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased] — D-108 à D-114 (2026-04-19)
+
+### Ajouté
+
+- **D-108** : `olm/core/detection_config.py` — paramètres de détection en cm,
+  conversion px runtime via `DetectionConfigCm.to_px(scale)`. Regroupe 18 seuils
+  auparavant hardcodés (min_opening_width, min_window_width, max_absorb, comb_step,
+  door_*, snap_search, wall_depth, ray_margin…). Consommé par `extract.py` et
+  `test_comb.py` (via `_apply_detection_config`).
+- **D-109** : re-analyze expose les portes détectées (expand_door_arcs) quand
+  l'appelant n'en fournit pas. À minima égalise l'import OCR.
+- **D-110** : re-analyze redétecte les portes à chaque run — plus de
+  préservation des auto doors (qui masquaient les arcs et empêchaient la
+  redétection). Les portes manuelles (origin="manual") restent préservées.
+- **D-111** : règle métier — une face ne peut pas avoir à la fois fenêtres et
+  openings. Si coexistants, les openings sont des artefacts du double trait
+  de fenêtre → supprimés.
+- **D-112** : canonicalisation cohérente — la re-analyze retourne des coords
+  ABSOLUES, le state frontend stocke en CANONIQUES. Transformation
+  absolu → canonique appliquée à : openings/windows/doors (face, offset,
+  hinge_side), hits + seed, auto_door_masks_px, width/depth (swap east/west).
+  Idem au chargement depuis JSON.
+- **D-113** : `corridor_face` auto-mis à jour à la re-analyze depuis
+  `doors[0].face` — une pièce sans doors ni canonical_top_face au JSON
+  se corrige toute seule après une re-analyze.
+- **D-114** : `canonical_top_face` explicite dans le JSON prend priorité sur
+  la détection couleur pour `corridor_face` (override manuel).
+
+### Modifié
+
+- `_merge_adjacent_segments` prend désormais `max_absorb_px` (avant hardcodé
+  à 120 px = 355 cm à scale 2.96 → absorbait toute porte < 3 m). Défaut
+  `max_absorb_cm = 30`.
+- Save room : transformation canonique → absolu du shift + dims pour
+  tous les corridor_face (auparavant seulement south/unset).
+- Centre de rotation overlay figé sur le NW original pendant drag (évitait
+  la rotation visuelle de l'overlay avec le shift).
+- `save()` préserve `seed_px` dans `localRoom` / `amendedRoom` (sinon
+  l'amendment stocké perd le seed et empêche la re-analyze suivante).
+- Batch `reanalyze_batch` : signature `extract_room_features` corrigée,
+  `seed_px` propagé depuis le frontend.
+- Suppression du depth check openings (min_opening_depth) — rejetait à
+  tort les portes mitoyennes quand le mur voisin était proche.
+
+---
+
 ## [Unreleased] — D-101 à D-107 (2026-04-19)
 
 ### Ajouté

@@ -1430,6 +1430,12 @@ async function save() {
     var ramend = state.roomAmendMode;
     // State contains local coordinates (D-83) — convert back to absolute for storage
     var origCf = ramend.originalRoom.corridor_face || "";
+    var _origSeed = ramend.originalRoom.seed_px ||
+      ramend.originalRoom.seed ||
+      (ramend.originalRoom.seed_x != null &&
+       ramend.originalRoom.seed_y != null
+        ? [ramend.originalRoom.seed_x, ramend.originalRoom.seed_y]
+        : null);
     var localRoom = {
       name: ramend.roomName,
       width_cm: state.room_width_cm,
@@ -1440,6 +1446,7 @@ async function save() {
       transparent_zones: JSON.parse(JSON.stringify(state.room_transparents || [])),
       bbox_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : undefined,
       corridor_face: origCf,
+      seed_px: _origSeed ? _origSeed.slice() : undefined,
     };
     var amendedRoom = (origCf && origCf !== "south" && typeof window._decanonicalizeRoom === "function")
       ? window._decanonicalizeRoom(localRoom, origCf)
