@@ -1602,8 +1602,8 @@ def extract_rooms_from_preprocessed(
                     colors = _detect_face_colors(
                         _enh_img, bb, _corridor_rgb, _exterior_rgb,
                     )
-                    # canonical_top_face explicitly set in JSON → override
-                    # color detection (corridor_face = opposite).
+                    # canonical_top_face in JSON → override color detection
+                    # (corridor_face = opposite).
                     manual_top = room_dict.get("canonical_top_face")
                     if manual_top:
                         room_dict["corridor_face"] = _OPPOSITE.get(
@@ -1805,6 +1805,12 @@ def extract_room_features(
                     "offset_cm": 0,
                     "width_cm": int(round(full_w * scale_cm_per_px)),
                 })
+
+    # Règle métier : une face ne peut pas avoir à la fois fenêtres et
+    # openings. Si les deux coexistent, les openings sont des artefacts du
+    # dessin de fenêtre (double trait + décalage au mur). On les supprime.
+    faces_with_windows = {w["face"] for w in windows}
+    openings = [o for o in openings if o["face"] not in faces_with_windows]
 
     # Hits issus du comb (réels, pas juste les 4 coins du bbox).
     hits = [[int(h[0]), int(h[1])] for h in (all_hits or [])]
