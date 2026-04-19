@@ -292,7 +292,21 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
               <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
               <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
-              <button class="btn btn-toolbar" id="rvBtnAddExcl" style="display:none;" title="Add exclusion zone">Add exclusion zone</button>
+              <div id="rvAddMenuWrap" style="display:none;position:relative;">
+                <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add room items &#9662;</button>
+                <div id="rvAddMenu" style="display:none;position:absolute;top:100%;right:0;z-index:20;background:var(--surface);border:1px solid var(--border);font-size:11px;min-width:160px;">
+                  <div class="rv-add-item" data-add="window" style="padding:6px 10px;cursor:pointer;">Window</div>
+                  <div class="rv-add-item" data-add="door" style="padding:6px 10px;cursor:pointer;">Door</div>
+                  <div class="rv-add-item" data-add="opening" style="padding:6px 10px;cursor:pointer;">Opening</div>
+                  <div class="rv-add-item" data-add="exclusion" style="padding:6px 10px;cursor:pointer;border-top:1px solid var(--border);">Exclusion zone (red)</div>
+                  <div class="rv-add-item" data-add="transparent" style="padding:6px 10px;cursor:pointer;">Transparent zone (green)</div>
+                </div>
+              </div>
+              <!-- Legacy individual buttons kept hidden for backward compat with existing handlers -->
+              <button class="btn btn-toolbar" id="rvBtnAddWindow" style="display:none;">+ Window</button>
+              <button class="btn btn-toolbar" id="rvBtnAddDoor" style="display:none;">+ Door</button>
+              <button class="btn btn-toolbar" id="rvBtnAddOpening" style="display:none;">+ Opening</button>
+              <button class="btn btn-toolbar" id="rvBtnAddExcl" style="display:none;">+ Exclusion</button>
               <span style="flex:1;"></span>
             </div>
             <svg id="rvCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>

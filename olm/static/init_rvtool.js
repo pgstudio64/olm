@@ -47,6 +47,7 @@
         state.room_windows = data.windows || [];
         state.room_openings = data.openings || [];
         state.room_exclusions = data.exclusion_zones || [];
+        state.room_transparents = data.transparent_zones || [];
         render(document.getElementById("rvCanvas"));
         if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
       } catch (err) { console.error("rvApplyDslAsync:", err); }
@@ -55,6 +56,11 @@
     function rvDslAppendExcl(x_cm, y_cm, w_cm, h_cm) {
       var el = document.getElementById("rvRoomDsl");
       var line = "EXCLUSION " + x_cm + " " + y_cm + " " + w_cm + " " + h_cm;
+      el.value = el.value.trimEnd() + "\n" + line;
+    }
+    function rvDslAppendTransparent(x_cm, y_cm, w_cm, h_cm) {
+      var el = document.getElementById("rvRoomDsl");
+      var line = "TRANSPARENT " + x_cm + " " + y_cm + " " + w_cm + " " + h_cm;
       el.value = el.value.trimEnd() + "\n" + line;
     }
 
@@ -171,11 +177,106 @@
         dsl += "\nEXCLUSION " + (z.x_cm || 0) + " " + (z.y_cm || 0) +
           " " + (z.width_cm || 0) + " " + (z.depth_cm || 0);
       });
+      (state.room_transparents || []).forEach(function (z) {
+        dsl += "\nTRANSPARENT " + (z.x_cm || 0) + " " + (z.y_cm || 0) +
+          " " + (z.width_cm || 0) + " " + (z.depth_cm || 0);
+      });
       return dsl;
     }
 
     var rvCvEl = document.getElementById("rvCanvas");
     if (!rvCvEl) return;
+
+    // --- Opening placement buttons (Add Window / Door / Opening) ---
+    // Click a button → enter placingOpening mode; next click on a wall
+    // inserts the opening at that position.
+    var WALL_SNAP_CM = 10;
+    function _nearestFaceAndOffset(x_cm, y_cm) {
+      var W = state.room_width_cm, D = state.room_depth_cm;
+      // Distance to each wall (clamped pt inside room).
+      var cx = Math.max(0, Math.min(W, x_cm));
+      var cy = Math.max(0, Math.min(D, y_cm));
+      var dN = cy, dS = D - cy, dW = cx, dE = W - cx;
+      var m = Math.min(dN, dS, dW, dE);
+      if (m === dN) return { face: "north", offset_cm: cx };
+      if (m === dS) return { face: "south", offset_cm: cx };
+      if (m === dW) return { face: "west", offset_cm: cy };
+      return { face: "east", offset_cm: cy };
+    }
+    function _setPlacingOpening(type, btn) {
+      var ids = ["rvBtnAddWindow", "rvBtnAddDoor", "rvBtnAddOpening"];
+      ids.forEach(function (id) {
+        var b = document.getElementById(id);
+        if (b) b.classList.remove("active");
+      });
+      if (rvTool.mode === "placingOpening" && rvTool.placingOpeningType === type) {
+        rvTool.mode = "idle";
+        rvTool.placingOpeningType = null;
+        rvCvEl.style.cursor = "";
+        return;
+      }
+      rvTool.mode = "placingOpening";
+      rvTool.placingOpeningType = type;
+      if (btn) btn.classList.add("active");
+      rvCvEl.style.cursor = "crosshair";
+    }
+    ([
+      ["rvBtnAddWindow", "window"],
+      ["rvBtnAddDoor", "door"],
+      ["rvBtnAddOpening", "opening"],
+    ]).forEach(function (entry) {
+      var el = document.getElementById(entry[0]);
+      if (el) {
+        el.addEventListener("click", function () {
+          if (!state.roomAmendMode) return;
+          _setPlacingOpening(entry[1], el);
+        });
+      }
+    });
+
+    // --- Unified "+ Add" dropdown menu (Phase C) ---
+    var addMenuBtn = document.getElementById("rvAddMenuBtn");
+    var addMenu = document.getElementById("rvAddMenu");
+    if (addMenuBtn && addMenu) {
+      addMenuBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        addMenu.style.display = addMenu.style.display === "none" ? "" : "none";
+      });
+      document.addEventListener("click", function (e) {
+        var wrap = document.getElementById("rvAddMenuWrap");
+        if (wrap && !wrap.contains(e.target)) addMenu.style.display = "none";
+      });
+      addMenu.querySelectorAll(".rv-add-item").forEach(function (el) {
+        el.addEventListener("mouseover", function () {
+          this.style.background = "var(--surface2)";
+        });
+        el.addEventListener("mouseout", function () {
+          this.style.background = "";
+        });
+        el.addEventListener("click", function () {
+          addMenu.style.display = "none";
+          if (!state.roomAmendMode) return;
+          var kind = this.dataset.add;
+          if (kind === "window" || kind === "door" || kind === "opening") {
+            _setPlacingOpening(kind, null);
+          } else if (kind === "exclusion") {
+            rvTool.mode = "placing";
+            rvTool.selectedIndex = -1;
+            state.selectedExclusion = -1;
+            rvCvEl.style.cursor = "crosshair";
+            rvTool.placingZoneKind = "exclusion";
+            render(rvCvEl);
+          } else if (kind === "transparent") {
+            rvTool.mode = "placing";
+            rvTool.selectedIndex = -1;
+            state.selectedExclusion = -1;
+            rvCvEl.style.cursor = "crosshair";
+            rvTool.placingZoneKind = "transparent";
+            render(rvCvEl);
+          }
+        });
+      });
+    }
 
     // Button toggle: placing mode on/off
     var rvBtnAddExclEl = document.getElementById("rvBtnAddExcl");
@@ -197,14 +298,130 @@
       });
     }
 
+    // Helper: rebuild full Room DSL from state and push to backend.
+    function _rvCommitFromState() {
+      var el = document.getElementById("rvRoomDsl");
+      if (el) el.value = _stateToDsl();
+      rvApplyDslAsync();
+    }
+
     // rvCanvas mousedown: start drawing, drag, or resize
     rvCvEl.addEventListener("mousedown", function (e) {
       if (!state.roomAmendMode) return;
       if (e.button !== 0) return;
 
+      var openingDelete = e.target.closest("[data-opening-delete]");
+      var openingResize = e.target.closest("[data-opening-resize]");
+      var openingHandle = e.target.closest("[data-opening-handle]");
       var roomHandleTarget = e.target.closest("[data-room-handle]");
       var handleTarget = e.target.closest("[data-excl-handle]");
       var exclTarget = e.target.closest("[data-excl]");
+      var transpHandleTarget = e.target.closest("[data-transp-handle]");
+      var transpTarget = e.target.closest("[data-transp]");
+
+      // Transparent zone corner → resize (mirrors exclusion resize).
+      if (transpHandleTarget !== null) {
+        var thIdx = parseInt(transpHandleTarget.dataset.transp);
+        var thT = state.room_transparents[thIdx];
+        if (!thT) return;
+        var thPt = rvScreenToRoomCm(e);
+        rvTool.selectedIndex = thIdx;
+        rvTool.mode = "transpResizing";
+        rvTool.resizeHandle = transpHandleTarget.dataset.transpHandle;
+        rvTool.resizeStart = {
+          mouse_x_cm: thPt.x_cm, mouse_y_cm: thPt.y_cm,
+          x_cm: thT.x_cm, y_cm: thT.y_cm,
+          width_cm: thT.width_cm, depth_cm: thT.depth_cm,
+        };
+        e.preventDefault(); e.stopPropagation();
+        return;
+      }
+      // Transparent zone body → select / start drag.
+      if (transpTarget !== null) {
+        var tIdx = parseInt(transpTarget.dataset.transp);
+        var tT = state.room_transparents[tIdx];
+        if (!tT) return;
+        if (rvTool.mode === "transpSelected" && rvTool.selectedIndex === tIdx) {
+          var tpt = rvScreenToRoomCm(e);
+          rvTool.dragOffset = {
+            dx_cm: tpt.x_cm - tT.x_cm,
+            dy_cm: tpt.y_cm - tT.y_cm,
+          };
+          rvTool.mode = "transpDragging";
+        } else {
+          rvTool.selectedIndex = tIdx;
+          rvTool.mode = "transpSelected";
+          state.selectedTransparent = tIdx;
+          state.selectedExclusion = -1;
+          state.selectedOpening = null;
+          render(rvCvEl);
+        }
+        e.preventDefault(); e.stopPropagation();
+        return;
+      }
+
+      // Opening delete badge → remove the opening from state and commit.
+      if (openingDelete) {
+        var dparts = openingDelete.dataset.openingDelete.split("-");
+        var dtype = dparts[0], didx = parseInt(dparts[1], 10);
+        var arr = (dtype === "window") ? state.room_windows : state.room_openings;
+        if (arr && arr[didx]) arr.splice(didx, 1);
+        state.selectedOpening = null;
+        _rvCommitFromState();
+        e.preventDefault(); e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+        return;
+      }
+
+      // Opening resize handle (square) → start width resize.
+      if (openingResize) {
+        var rparts = openingResize.dataset.openingResize.split("-");
+        var rtype = rparts[0], ridx = parseInt(rparts[1], 10), rend = rparts[2];
+        var rarr = (rtype === "window") ? state.room_windows : state.room_openings;
+        var rop = rarr && rarr[ridx];
+        if (!rop) return;
+        state.selectedOpening = { type: rtype, index: ridx };
+        state.selectedExclusion = -1;
+        rvTool.selectedIndex = -1;
+        var rpt0 = rvScreenToRoomCm(e);
+        rvTool.mode = "openingResizing";
+        rvTool.openingResize = {
+          type: rtype, index: ridx, end: rend, face: rop.face,
+          startOffset: rop.offset_cm || 0,
+          startWidth: rop.width_cm || 0,
+          mouseStart: rpt0,
+        };
+        state.isPanning = false;
+        render(rvCvEl);
+        e.preventDefault(); e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+        return;
+      }
+
+      // Opening handle → select + start move along its wall.
+      if (openingHandle) {
+        var parts = openingHandle.dataset.openingHandle.split("-");
+        var otype = parts[0], oidx = parseInt(parts[1], 10);
+        var oarr = (otype === "window") ? state.room_windows : state.room_openings;
+        var op = oarr && oarr[oidx];
+        if (!op) return;
+        state.selectedOpening = { type: otype, index: oidx };
+        state.selectedExclusion = -1;
+        rvTool.selectedIndex = -1;
+        var pt0 = rvScreenToRoomCm(e);
+        rvTool.mode = "openingMoving";
+        rvTool.openingMove = {
+          type: otype, index: oidx, face: op.face,
+          startOffset: op.offset_cm || 0,
+          widthAlong: op.width_cm || 0,
+          mouseStart: pt0,
+        };
+        state.isPanning = false;
+        render(rvCvEl);
+        e.preventDefault(); e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+        return;
+      }
 
       // Room corner handle click → start resizing the whole room (D-99).
       // Snapshot contents deep so mousemove recomputes translations cleanly.
@@ -239,6 +456,50 @@
         var pt = rvScreenToRoomCm(e);
         rvTool.drawStart = pt;
         rvTool.mode = "drawing";
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (rvTool.mode === "placingOpening") {
+        var ptO = rvScreenToRoomCm(e, WALL_SNAP_CM);
+        var fo = _nearestFaceAndOffset(ptO.x_cm, ptO.y_cm);
+        var type = rvTool.placingOpeningType;
+        var defaultW = (type === "window")
+          ? 100
+          : ((window.APP_CONFIG && window.APP_CONFIG.default_door_width_cm) || 90);
+        var wallLen = (fo.face === "north" || fo.face === "south")
+          ? state.room_width_cm : state.room_depth_cm;
+        var width = Math.min(defaultW, wallLen);
+        var offset = Math.max(0, Math.min(wallLen - width, fo.offset_cm - width / 2));
+        // Snap offset to WALL_SNAP_CM.
+        offset = Math.round(offset / WALL_SNAP_CM) * WALL_SNAP_CM;
+        offset = Math.max(0, Math.min(wallLen - width, offset));
+        if (type === "window") {
+          state.room_windows = state.room_windows || [];
+          state.room_windows.push({ face: fo.face, offset_cm: offset, width_cm: width });
+        } else if (type === "door") {
+          state.room_openings = state.room_openings || [];
+          state.room_openings.push({
+            face: fo.face, offset_cm: offset, width_cm: width,
+            has_door: true, opens_inward: true, hinge_side: "left",
+          });
+        } else {
+          state.room_openings = state.room_openings || [];
+          state.room_openings.push({
+            face: fo.face, offset_cm: offset, width_cm: width,
+            has_door: false,
+          });
+        }
+        // Exit placing mode.
+        rvTool.mode = "idle";
+        rvTool.placingOpeningType = null;
+        rvCvEl.style.cursor = "";
+        ["rvBtnAddWindow", "rvBtnAddDoor", "rvBtnAddOpening"].forEach(function (id) {
+          var b = document.getElementById(id);
+          if (b) b.classList.remove("active");
+        });
+        _rvCommitFromState();
         e.preventDefault();
         e.stopPropagation();
         return;
@@ -292,16 +553,136 @@
       if (!state.roomAmendMode) return;
       if (rvTool.mode === "placing" || rvTool.mode === "drawing") return;
       var exclTarget = e.target.closest("[data-excl]");
-      if (!exclTarget && (rvTool.mode === "selected" || rvTool.mode === "idle")) {
+      var openingTarget = e.target.closest("[data-opening-handle]") ||
+        e.target.closest("[data-opening-delete]");
+      var transpTarget2 = e.target.closest("[data-transp]") ||
+        e.target.closest("[data-transp-handle]");
+      if (!exclTarget && !openingTarget && !transpTarget2 &&
+          (rvTool.mode === "selected" || rvTool.mode === "transpSelected" ||
+           rvTool.mode === "idle")) {
         rvTool.selectedIndex = -1;
         rvTool.mode = "idle";
         state.selectedExclusion = -1;
+        state.selectedOpening = null;
+        state.selectedTransparent = -1;
         render(rvCvEl);
+      }
+    });
+
+    // Delete key → remove selected opening.
+    document.addEventListener("keydown", function (e) {
+      if (!state.roomAmendMode) return;
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (document.activeElement &&
+          (document.activeElement.tagName === "INPUT" ||
+           document.activeElement.tagName === "TEXTAREA")) return;
+      var sel = state.selectedOpening;
+      if (sel) {
+        var arr = (sel.type === "window") ? state.room_windows : state.room_openings;
+        if (arr && arr[sel.index]) arr.splice(sel.index, 1);
+        state.selectedOpening = null;
+        _rvCommitFromState();
+        e.preventDefault();
+        return;
+      }
+      if (typeof state.selectedTransparent === "number" &&
+          state.selectedTransparent >= 0) {
+        state.room_transparents.splice(state.selectedTransparent, 1);
+        state.selectedTransparent = -1;
+        rvTool.mode = "idle";
+        _rvCommitFromState();
+        e.preventDefault();
       }
     });
 
     // document mousemove: drawing ghost rect and drag feedback
     document.addEventListener("mousemove", function (e) {
+      if (rvTool.mode === "openingResizing" && rvTool.openingResize) {
+        var or = rvTool.openingResize;
+        var arrR = (or.type === "window") ? state.room_windows : state.room_openings;
+        var opR = arrR[or.index];
+        if (!opR) return;
+        var ptR = rvScreenToRoomCm(e);
+        var axisR = (or.face === "north" || or.face === "south") ? "x_cm" : "y_cm";
+        var deltaR = ptR[axisR] - or.mouseStart[axisR];
+        var wallLenR = (or.face === "north" || or.face === "south")
+          ? state.room_width_cm : state.room_depth_cm;
+        var MIN = GRID_STEP_CM;
+        if (or.end === "start") {
+          // Dragging start end: offset moves, width inversely.
+          var newOff = Math.max(0,
+            Math.min(or.startOffset + or.startWidth - MIN, or.startOffset + deltaR));
+          opR.offset_cm = newOff;
+          opR.width_cm = or.startOffset + or.startWidth - newOff;
+        } else {
+          // Dragging end: width grows/shrinks, offset fixed.
+          var newW = Math.max(MIN,
+            Math.min(wallLenR - or.startOffset, or.startWidth + deltaR));
+          opR.width_cm = newW;
+        }
+        render(rvCvEl);
+        return;
+      }
+      if (rvTool.mode === "transpDragging" && rvTool.dragOffset) {
+        var tpt2 = rvScreenToRoomCm(e);
+        var tiDrag = rvTool.selectedIndex;
+        var tzDrag = state.room_transparents[tiDrag];
+        if (!tzDrag) return;
+        var tMaxX = state.room_width_cm - tzDrag.width_cm;
+        var tMaxY = state.room_depth_cm - tzDrag.depth_cm;
+        tzDrag.x_cm = Math.max(0, Math.min(tMaxX, tpt2.x_cm - rvTool.dragOffset.dx_cm));
+        tzDrag.y_cm = Math.max(0, Math.min(tMaxY, tpt2.y_cm - rvTool.dragOffset.dy_cm));
+        render(rvCvEl);
+        return;
+      }
+      if (rvTool.mode === "transpResizing" && rvTool.resizeStart) {
+        var tpt3 = rvScreenToRoomCm(e);
+        var trs = rvTool.resizeStart;
+        var tzRes = state.room_transparents[rvTool.selectedIndex];
+        if (!tzRes) return;
+        var tdx = tpt3.x_cm - trs.mouse_x_cm;
+        var tdy = tpt3.y_cm - trs.mouse_y_cm;
+        var TMIN = GRID_STEP_CM;
+        var tH = rvTool.resizeHandle;
+        var tRoomW = state.room_width_cm, tRoomD = state.room_depth_cm;
+        if (tH === "nw") {
+          var tnx = Math.max(0, Math.min(trs.x_cm + trs.width_cm - TMIN, trs.x_cm + tdx));
+          var tny = Math.max(0, Math.min(trs.y_cm + trs.depth_cm - TMIN, trs.y_cm + tdy));
+          tzRes.x_cm = tnx; tzRes.y_cm = tny;
+          tzRes.width_cm = trs.x_cm + trs.width_cm - tnx;
+          tzRes.depth_cm = trs.y_cm + trs.depth_cm - tny;
+        } else if (tH === "ne") {
+          var tny2 = Math.max(0, Math.min(trs.y_cm + trs.depth_cm - TMIN, trs.y_cm + tdy));
+          tzRes.y_cm = tny2;
+          tzRes.width_cm = Math.max(TMIN, Math.min(tRoomW - trs.x_cm, trs.width_cm + tdx));
+          tzRes.depth_cm = trs.y_cm + trs.depth_cm - tny2;
+        } else if (tH === "sw") {
+          var tnx3 = Math.max(0, Math.min(trs.x_cm + trs.width_cm - TMIN, trs.x_cm + tdx));
+          tzRes.x_cm = tnx3;
+          tzRes.width_cm = trs.x_cm + trs.width_cm - tnx3;
+          tzRes.depth_cm = Math.max(TMIN, Math.min(tRoomD - trs.y_cm, trs.depth_cm + tdy));
+        } else if (tH === "se") {
+          tzRes.width_cm = Math.max(TMIN, Math.min(tRoomW - trs.x_cm, trs.width_cm + tdx));
+          tzRes.depth_cm = Math.max(TMIN, Math.min(tRoomD - trs.y_cm, trs.depth_cm + tdy));
+        }
+        render(rvCvEl);
+        return;
+      }
+      if (rvTool.mode === "openingMoving" && rvTool.openingMove) {
+        var om = rvTool.openingMove;
+        var arr = (om.type === "window") ? state.room_windows : state.room_openings;
+        var op = arr[om.index];
+        if (!op) return;
+        var pt = rvScreenToRoomCm(e);
+        var axis = (om.face === "north" || om.face === "south") ? "x_cm" : "y_cm";
+        var delta = pt[axis] - om.mouseStart[axis];
+        var wallLen = (om.face === "north" || om.face === "south")
+          ? state.room_width_cm : state.room_depth_cm;
+        var maxOff = Math.max(0, wallLen - om.widthAlong);
+        op.offset_cm = Math.max(0, Math.min(maxOff, om.startOffset + delta));
+        render(rvCvEl);
+        return;
+      }
       if (rvTool.mode === "drawing" && rvTool.drawStart) {
         var pt = rvScreenToRoomCm(e);
         var ds = rvTool.drawStart;
@@ -425,6 +806,25 @@
 
     // document mouseup: commit drawing or drag
     document.addEventListener("mouseup", function (e) {
+      if (rvTool.mode === "transpDragging" || rvTool.mode === "transpResizing") {
+        rvTool.mode = "transpSelected";
+        rvTool.dragOffset = null;
+        rvTool.resizeStart = null;
+        _rvCommitFromState();
+        return;
+      }
+      if (rvTool.mode === "openingMoving") {
+        rvTool.mode = "idle";
+        rvTool.openingMove = null;
+        _rvCommitFromState();
+        return;
+      }
+      if (rvTool.mode === "openingResizing") {
+        rvTool.mode = "idle";
+        rvTool.openingResize = null;
+        _rvCommitFromState();
+        return;
+      }
       if (rvTool.mode === "drawing") {
         rvRemoveGhostRect();
         var pt = rvScreenToRoomCm(e);
@@ -438,9 +838,14 @@
         if (rvBtnAddExclEl) rvBtnAddExclEl.classList.remove("active");
         rvCvEl.style.cursor = "";
         if (w_cm >= GRID_STEP_CM && h_cm >= GRID_STEP_CM) {
-          rvDslAppendExcl(x_cm, y_cm, w_cm, h_cm);
+          if (rvTool.placingZoneKind === "transparent") {
+            rvDslAppendTransparent(x_cm, y_cm, w_cm, h_cm);
+          } else {
+            rvDslAppendExcl(x_cm, y_cm, w_cm, h_cm);
+          }
           rvApplyDslAsync();
         }
+        rvTool.placingZoneKind = null;
         return;
       }
       if (rvTool.mode === "dragging") {

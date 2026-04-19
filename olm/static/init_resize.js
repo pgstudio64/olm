@@ -57,7 +57,7 @@
     // partagent la même largeur via localStorage pour éviter le décalage du
     // canvas au switch entre les onglets. Deux handles, une seule largeur.
     (function () {
-      var MIN_W = 120, MAX_W = 350;
+      var MIN_W = 180, MAX_W = 350;
       var KEY = "leftPanelWidthShared";
       var panels = [
         document.getElementById("rvRoomSidebar"),
@@ -107,7 +107,7 @@
 
     // ---- Room + Office: shared right info-col width ----
     (function () {
-      var MIN_W = 150, MAX_W = 520;
+      var MIN_W = 263, MAX_W = 520;
       var KEY = "rightPanelWidthShared";
       var panels = [
         document.getElementById("rvRightInfoCol"),

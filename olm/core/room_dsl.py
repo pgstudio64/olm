@@ -6,6 +6,7 @@ Grammar:
     DOOR <face> <offset> <width> INT|EXT L|R
     OPENING <face> <offset> <width>
     EXCLUSION <x> <y> <width> <depth>
+    TRANSPARENT <x> <y> <width> <depth>
 
 Comments: ``--`` until end of line.
 """
@@ -81,6 +82,7 @@ def parse_room_dsl(text: str) -> RoomSpec:
     windows: list[WindowSpec] = []
     openings: list[OpeningSpec] = []
     exclusions: list[ExclusionZone] = []
+    transparents: list[ExclusionZone] = []
 
     for line_no, raw_line in enumerate(text.splitlines(), start=1):
         line = strip_comment(raw_line)
@@ -216,6 +218,25 @@ def parse_room_dsl(text: str) -> RoomSpec:
                 x_cm=x, y_cm=y, width_cm=w, depth_cm=d, physical=True,
             ))
 
+        elif keyword == "TRANSPARENT":
+            if room is None:
+                raise RoomDSLError(
+                    f"Line {line_no}: ROOM must appear "
+                    f"before TRANSPARENT"
+                )
+            if len(tokens) != 5:
+                raise RoomDSLError(
+                    f"Line {line_no}: TRANSPARENT expects "
+                    f"<x> <y> <width> <depth>"
+                )
+            x = _parse_int(tokens[1], "x", line_no)
+            y = _parse_int(tokens[2], "y", line_no)
+            w = _parse_int(tokens[3], "width", line_no)
+            d = _parse_int(tokens[4], "depth", line_no)
+            transparents.append(ExclusionZone(
+                x_cm=x, y_cm=y, width_cm=w, depth_cm=d, physical=False,
+            ))
+
         else:
             raise RoomDSLError(
                 f"Line {line_no}: unknown keyword '{tokens[0]}'"
@@ -227,6 +248,7 @@ def parse_room_dsl(text: str) -> RoomSpec:
     room.windows = windows
     room.openings = openings
     room.exclusion_zones = exclusions
+    room.transparent_zones = transparents
     return room
 
 
@@ -269,6 +291,11 @@ def to_room_dsl(room: RoomSpec) -> str:
     for z in room.exclusion_zones:
         lines.append(
             f"EXCLUSION {z.x_cm} {z.y_cm} {z.width_cm} {z.depth_cm}"
+        )
+
+    for z in getattr(room, "transparent_zones", []) or []:
+        lines.append(
+            f"TRANSPARENT {z.x_cm} {z.y_cm} {z.width_cm} {z.depth_cm}"
         )
 
     return "\n".join(lines) + "\n"

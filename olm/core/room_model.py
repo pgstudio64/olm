@@ -105,6 +105,7 @@ class RoomSpec:
     windows: list[WindowSpec] = field(default_factory=list)
     openings: list[OpeningSpec] = field(default_factory=list)
     exclusion_zones: list[ExclusionZone] = field(default_factory=list)
+    transparent_zones: list[ExclusionZone] = field(default_factory=list)
     name: str = ""
     code: str = "14"
     direction: Face | None = None

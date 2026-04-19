@@ -1105,6 +1105,11 @@ def api_room_dsl_parse():
                  "width_cm": z.width_cm, "depth_cm": z.depth_cm}
                 for z in room.exclusion_zones
             ],
+            "transparent_zones": [
+                {"x_cm": z.x_cm, "y_cm": z.y_cm,
+                 "width_cm": z.width_cm, "depth_cm": z.depth_cm}
+                for z in (room.transparent_zones or [])
+            ],
         })
     except RoomDSLError as e:
         return jsonify({"error": str(e)}), 400

@@ -1178,6 +1178,13 @@
           updateIngRoomList();
           renderIngestion();
           populateRoomsJson();
+          // Re-parse le JSON pour propager les offsets re-scalés (windows /
+          // openings) dans fpData.rooms — sans quoi Room et Office gardent
+          // les anciennes valeurs cm.
+          var json = document.getElementById('fpRoomsJson');
+          if (json && json.value && typeof window.fpLoadAndMatch === 'function') {
+            window.fpLoadAndMatch(json.value);
+          }
           var info = document.getElementById('ingScaleInfo');
           if (info) info.textContent = scaleNum +
             ' → ' + ingState.scale.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';

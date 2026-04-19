@@ -167,7 +167,8 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     var pos = wallSegment(w.face, w.offset_cm, w.width_cm, roomX, roomY, roomWPx, roomHPx, wallThick);
     elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#50b8d0" stroke-width="' + winStroke + '" stroke-linecap="round"/>' });
+      '" stroke="#50b8d0" stroke-width="' + (winStroke * 2) +
+      '" vector-effect="non-scaling-stroke" stroke-linecap="round"/>' });
   });
 
   // Doors and open bays
@@ -178,13 +179,14 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     // Erase wall under opening (background-colored line)
     elements.push({ z: 5.5, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#1e1e1e" stroke-width="3"/>' });
+      '" stroke="#1e1e1e" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
 
     if (!o.has_door) {
       // Open bay — green line
       elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
         '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-        '" stroke="#80c060" stroke-width="1" stroke-dasharray="4 3"/>' });
+        '" stroke="#80c060" stroke-width="2" vector-effect="non-scaling-stroke"' +
+        ' stroke-dasharray="4 3"/>' });
       return;
     }
 
@@ -209,6 +211,112 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       o.face, hingeCoord, freeCoord, wallCoord, swing, o.opens_inward, 1.5);
     elements.push({ z: 6, s: doorParts[0] });
     elements.push({ z: 6, s: doorParts[1] });
+  });
+
+  // Opening/window handles — only in Room amend mode (Phase A CRUD).
+  if (isReview && state.roomAmendMode) {
+    // zf = SVG units per CSS pixel (computed in _renderImpl, exposed here).
+    var hzf = window._currentZf || 1;
+    var handleR = 6 * hzf;       // ~6 px constant
+    var clickW = 14 * hzf;       // click zone thickness ~14 px
+    var delR = 6 * hzf;
+    var delOff = 14 * hzf;
+    var delFs = 10 * hzf;
+    function _emitOpeningHandle(type, index, face, offset_cm, width_cm) {
+      var pos = wallSegment(face, offset_cm, width_cm,
+        roomX, roomY, roomWPx, roomHPx);
+      var cx = (pos.x1 + pos.x2) / 2;
+      var cy = (pos.y1 + pos.y2) / 2;
+      var sel = state.selectedOpening &&
+        state.selectedOpening.type === type &&
+        state.selectedOpening.index === index;
+      var fill = type === "window" ? "#50b8d0" : "#c8a050";
+      elements.push({ z: 9.2, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
+        '" x2="' + pos.x2 + '" y2="' + pos.y2 +
+        '" stroke="transparent" stroke-width="' + clickW.toFixed(1) + '"' +
+        ' data-opening-handle="' + type + '-' + index +
+        '" style="cursor:pointer;"/>' });
+      if (sel) {
+        elements.push({ z: 9.3, s: '<circle cx="' + cx.toFixed(1) +
+          '" cy="' + cy.toFixed(1) + '" r="' + handleR.toFixed(1) + '"' +
+          ' fill="' + fill + '" stroke="#ffffff" stroke-width="' +
+          (1.5 * hzf).toFixed(2) + '"' +
+          ' data-opening-handle="' + type + '-' + index +
+          '" style="cursor:move;"/>' });
+        // Square resize handles at both extremities of the opening.
+        var sz = 5 * hzf;
+        var horiz = (face === "north" || face === "south");
+        var cur = horiz ? "ew-resize" : "ns-resize";
+        [{ ex: "start", x: pos.x1, y: pos.y1 },
+         { ex: "end",   x: pos.x2, y: pos.y2 }].forEach(function (h) {
+          elements.push({ z: 9.35, s: '<rect x="' + (h.x - sz / 2).toFixed(1) +
+            '" y="' + (h.y - sz / 2).toFixed(1) +
+            '" width="' + sz.toFixed(1) + '" height="' + sz.toFixed(1) + '"' +
+            ' fill="' + fill + '" stroke="#ffffff" stroke-width="' +
+            (1 * hzf).toFixed(2) + '"' +
+            ' data-opening-resize="' + type + '-' + index + '-' + h.ex +
+            '" style="cursor:' + cur + ';"/>' });
+        });
+        var bx = cx + delOff, by = cy - delOff;
+        elements.push({ z: 9.4, s: '<circle cx="' + bx.toFixed(1) +
+          '" cy="' + by.toFixed(1) + '" r="' + delR.toFixed(1) + '"' +
+          ' fill="#c05858" stroke="#ffffff" stroke-width="' +
+          (0.5 * hzf).toFixed(2) + '"' +
+          ' data-opening-delete="' + type + '-' + index +
+          '" style="cursor:pointer;"/>' });
+        elements.push({ z: 9.5, s: '<text x="' + bx.toFixed(1) +
+          '" y="' + (by + 3 * hzf).toFixed(1) +
+          '" text-anchor="middle" fill="#ffffff" font-size="' +
+          delFs.toFixed(1) + '" font-weight="bold"' +
+          ' style="pointer-events:none;">×</text>' });
+      }
+    }
+    (state.room_windows || []).forEach(function (w, i) {
+      _emitOpeningHandle("window", i, w.face, w.offset_cm, w.width_cm);
+    });
+    (state.room_openings || []).forEach(function (o, i) {
+      _emitOpeningHandle("opening", i, o.face, o.offset_cm, o.width_cm);
+    });
+  }
+
+  // Transparent zones — semi-transparent green rectangle (ignored artefacts).
+  (state.room_transparents || []).forEach(function (z, zi) {
+    var zx = roomX + z.x_cm * SCALE;
+    var zy = roomY + z.y_cm * SCALE;
+    var zw = z.width_cm * SCALE;
+    var zh = z.depth_cm * SCALE;
+    elements.push({ z: 5, s: '<rect x="' + zx + '" y="' + zy +
+      '" width="' + zw + '" height="' + zh +
+      '" fill="#58c080" fill-opacity="0.25" stroke="#58c080"' +
+      ' stroke-width="0.5" vector-effect="non-scaling-stroke"/>' });
+    if (isReview && state.roomAmendMode) {
+      if (zi === state.selectedTransparent) {
+        elements.push({ z: 8, s: '<rect x="' + zx + '" y="' + zy +
+          '" width="' + zw + '" height="' + zh +
+          '" fill="none" stroke="#58c080" stroke-width="1.5"' +
+          ' vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>' });
+        var ths = 5 * (window._currentZf || 1);
+        [{ h: 'nw', cx: zx, cy: zy, cur: 'nw-resize' },
+         { h: 'ne', cx: zx + zw, cy: zy, cur: 'ne-resize' },
+         { h: 'sw', cx: zx, cy: zy + zh, cur: 'sw-resize' },
+         { h: 'se', cx: zx + zw, cy: zy + zh, cur: 'se-resize' }]
+          .forEach(function (c) {
+            elements.push({ z: 9.2, s: '<rect x="' + (c.cx - ths / 2).toFixed(1) +
+              '" y="' + (c.cy - ths / 2).toFixed(1) +
+              '" width="' + ths.toFixed(1) + '" height="' + ths.toFixed(1) + '"' +
+              ' fill="#58c080" stroke="#ffffff" stroke-width="' +
+              (0.5 * (window._currentZf || 1)).toFixed(2) + '"' +
+              ' data-transp-handle="' + c.h + '" data-transp="' + zi +
+              '" style="cursor:' + c.cur + ';"/>' });
+          });
+      }
+      if (isReview && state.roomAmendMode) {
+        elements.push({ z: 9, s: '<rect x="' + zx + '" y="' + zy +
+          '" width="' + zw + '" height="' + zh +
+          '" fill="transparent" data-transp="' + zi +
+          '" style="cursor:pointer;"/>' });
+      }
+    }
   });
 
   // Exclusion zones — semi-transparent red rectangle, clickable
@@ -656,15 +764,19 @@ function _renderImpl(targetSvg) {
   var wallWidth = isEditor ? 0.75 : 1;
   // Walls drawn above blocks (z=3) but below openings/doors/windows (z=6)
   // and their erase-line (z=5.5). Dimension labels stay on top (z=9.5+).
+  // vector-effect="non-scaling-stroke" → stroke-width en pixels CSS, taille
+  // constante indépendamment du zoom.
   elements.push({ z: 4, s: '<rect x="' + roomX + '" y="' + roomY +
     '" width="' + roomWPx + '" height="' + roomHPx +
-    '" fill="none" stroke="' + wallColor + '" stroke-width="' + wallWidth + '"/>' });
+    '" fill="none" stroke="' + wallColor + '" stroke-width="' + (wallWidth * 2) +
+    '" vector-effect="non-scaling-stroke"/>' });
   // D-99: Room amend mode — 4 corner handles for mouse resize in Room tab.
   // Dragging any corner shifts the room AND translates all anchored content
   // (windows, doors, openings, exclusions) so they keep their absolute
   // position. See init_rvtool.js roomResize handlers.
   if (isReview && state.roomAmendMode) {
-    var rhs = 2;
+    var rhs = 10 * zf;   // ~10 px constant visual size
+    var rhsStroke = 1 * zf;
     var roomCorners = [
       { h: 'nw', cx: roomX,           cy: roomY,           cur: 'nw-resize' },
       { h: 'ne', cx: roomX + roomWPx, cy: roomY,           cur: 'ne-resize' },
@@ -672,23 +784,24 @@ function _renderImpl(targetSvg) {
       { h: 'se', cx: roomX + roomWPx, cy: roomY + roomHPx, cur: 'se-resize' },
     ];
     roomCorners.forEach(function (c) {
-      elements.push({ z: 9.2, s: '<rect x="' + (c.cx - rhs / 2) +
-        '" y="' + (c.cy - rhs / 2) + '" width="' + rhs + '" height="' + rhs +
-        '" fill="#c05858" stroke="#ffffff" stroke-width="0.5"' +
+      elements.push({ z: 9.2, s: '<rect x="' + (c.cx - rhs / 2).toFixed(1) +
+        '" y="' + (c.cy - rhs / 2).toFixed(1) +
+        '" width="' + rhs.toFixed(1) + '" height="' + rhs.toFixed(1) + '"' +
+        ' fill="#c05858" stroke="#ffffff" stroke-width="' + rhsStroke.toFixed(2) + '"' +
         ' data-room-handle="' + c.h + '" style="cursor:' + c.cur + ';"/>' });
     });
   }
   // Room dimension labels — data already in local coordinates, no swap needed
   var dimFs = (16.5 * zf).toFixed(1);
-  var dimOff = 16 * zf;
+  var dimOff = 48 * zf;
   var dimBgColor = "#0e0e0d";
   var dimCharW = dimFs * 0.62;  // approximate monospace char width
   var dimPadX = dimFs * 0.3, dimPadY = dimFs * 0.2;
-  // Width label (top)
+  // Width label (bottom)
   var wLabel = state.room_width_cm + ' cm';
   var wLabelW = wLabel.length * dimCharW;
   var wLabelX = roomX + roomWPx / 2;
-  var wLabelY = roomY - dimOff;
+  var wLabelY = roomY + roomHPx + dimOff;
   elements.push({ z: 9.5, s: '<rect x="' + (wLabelX - wLabelW / 2 - dimPadX).toFixed(1) +
     '" y="' + (wLabelY - dimFs * 0.75 - dimPadY).toFixed(1) +
     '" width="' + (wLabelW + dimPadX * 2).toFixed(1) +
@@ -1603,6 +1716,7 @@ function enterRoomAmendMode(room) {
   state.room_windows = JSON.parse(JSON.stringify(localRoom.windows || []));
   state.room_openings = JSON.parse(JSON.stringify(localRoom.openings || []));
   state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
+  state.room_transparents = JSON.parse(JSON.stringify(localRoom.transparent_zones || []));
   state.corridor_face = room.corridor_face || "";
 
   // Inject overlay for visual reference, aligned to room bbox
@@ -1622,7 +1736,7 @@ function enterRoomAmendMode(room) {
   }
 
   render(document.getElementById("rvCanvas"));
-  zoomFit(document.getElementById("rvCanvas"));
+  // Ne pas zoomFit ici — conserver le zoom courant de l'utilisateur.
 
   // Enable editing in Review sidebar
   var dslEl = document.getElementById("rvRoomDsl");
@@ -1635,7 +1749,8 @@ function enterRoomAmendMode(room) {
   document.getElementById("rvBtnAdjustRoom").style.display = "none";
   document.getElementById("rvBtnSaveRoom").style.display = "";
   document.getElementById("rvBtnCancelRoom").style.display = "";
-  document.getElementById("rvBtnAddExcl").style.display = "";
+  var rvAddMenuWrap = document.getElementById("rvAddMenuWrap");
+  if (rvAddMenuWrap) rvAddMenuWrap.style.display = "";
 
   // Disable navigation during edit
   document.getElementById("rvBtnPrev").disabled = true;
@@ -1658,7 +1773,10 @@ function exitRoomAmendUI() {
   document.getElementById("rvBtnAdjustRoom").style.display = "";
   document.getElementById("rvBtnSaveRoom").style.display = "none";
   document.getElementById("rvBtnCancelRoom").style.display = "none";
-  document.getElementById("rvBtnAddExcl").style.display = "none";
+  var rvAddMenuWrap2 = document.getElementById("rvAddMenuWrap");
+  if (rvAddMenuWrap2) rvAddMenuWrap2.style.display = "none";
+  var rvAddMenu2 = document.getElementById("rvAddMenu");
+  if (rvAddMenu2) rvAddMenu2.style.display = "none";
 
   // Reset rvTool and clean up any drawing in progress
   if (window.rvTool) {
@@ -1766,9 +1884,10 @@ function zoomIn(targetSvg) {
 }
 
 function zoomOut(targetSvg) {
-  // Clamp: don't zoom out beyond the fitViewBox (content fully visible)
+  // Clamp: allow zoom out jusqu'à 3x la vue fitée par défaut (suffisant pour
+  // voir labels + handles autour de la pièce en amend mode).
   if (state._fitViewBox) {
-    if (state.viewBox.w * 1.25 > state._fitViewBox.w * 1.1) return;
+    if (state.viewBox.w * 1.25 > state._fitViewBox.w * 3) return;
   }
   const vb = state.viewBox;
   const factor = 1.25;
@@ -1783,34 +1902,28 @@ function zoomOut(targetSvg) {
 }
 
 function fitViewBoxToContent(svg, totalW, totalH, minX) {
-  // Review/Design canvases get extra breathing room
+  // Review/Design : zoom par défaut = pièce + 20% de sa hauteur en haut et
+  // en bas, 20% de sa largeur à gauche et à droite. preserveAspectRatio="meet"
+  // gère le letterboxing si le SVG a une autre aspect ratio.
   var isRoomView = svg && (svg.id === "rvCanvas" || svg.id === "fpCanvas");
-  var extraPad = isRoomView ? 25 : 0;
-  var padLeft = 35 + extraPad;
-  var padTop = 50 + extraPad;
-  var padRight = 15 + extraPad;
-  var padBottom = 30 + extraPad;
-  var x = minX - padLeft;
-  var y = -padTop;
-  var w = totalW - minX + padLeft + padRight;
-  var h = totalH + padTop + padBottom;
-
-  // Match viewBox aspect ratio to SVG element to avoid wasted space
-  var rect = svg.getBoundingClientRect();
-  var svgW = rect.width || 1;
-  var svgH = rect.height || 1;
-  var svgRatio = svgW / svgH;
-  var vbRatio = w / h;
-  if (vbRatio < svgRatio) {
-    // Content is taller than SVG — widen viewBox
-    var newW = h * svgRatio;
-    x -= (newW - w) / 2;
-    w = newW;
+  var x, y, w, h;
+  if (isRoomView) {
+    var contentW = totalW - minX;
+    var padY = 0.2 * totalH;
+    var padX = 0.2 * contentW;
+    x = minX - padX;
+    y = -padY;
+    w = contentW + 2 * padX;
+    h = totalH + 2 * padY;
   } else {
-    // Content is wider than SVG — heighten viewBox
-    var newH = w / svgRatio;
-    y -= (newH - h) / 2;
-    h = newH;
+    var padLeft = 35;
+    var padTop = 50;
+    var padRight = 15;
+    var padBottom = 30;
+    x = minX - padLeft;
+    y = -padTop;
+    w = totalW - minX + padLeft + padRight;
+    h = totalH + padTop + padBottom;
   }
 
   state.viewBox = { x: x, y: y, w: w, h: h };
