@@ -540,6 +540,8 @@
         exterior_faces: r.exterior_faces,
         corridor_face: r.corridor_face,
         bbox_px: r.bbox_px,
+        seed_px: r.seed_px || r.seed,
+        doors: r.doors || [],
       };
     });
     textarea.value = JSON.stringify({ rooms: rooms }, null, 2);

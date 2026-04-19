@@ -162,9 +162,13 @@
     // Preserve fields from input (not returned by matching API)
     var bboxByName = {};
     var corridorByName = {};
+    var seedByName = {};
+    var doorsByName = {};
     parsed.rooms.forEach(function(r) {
       if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
       if (r.corridor_face) corridorByName[r.name] = r.corridor_face;
+      if (r.seed_px) seedByName[r.name] = r.seed_px;
+      if (r.doors) doorsByName[r.name] = r.doors;
     });
 
     document.getElementById("fpCandidatesList").innerHTML =
@@ -184,6 +188,8 @@
       data.rooms.forEach(function(r) {
         if (bboxByName[r.name]) r.bbox_px = bboxByName[r.name];
         if (corridorByName[r.name]) r.corridor_face = corridorByName[r.name];
+        if (seedByName[r.name]) r.seed_px = seedByName[r.name];
+        if (doorsByName[r.name]) r.doors = doorsByName[r.name];
       });
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;
