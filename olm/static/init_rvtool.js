@@ -257,7 +257,9 @@
         var amend = state.roomAmendMode;
         var origRoom = amend.originalRoom || {};
         var bbox = origRoom.bbox_px;
-        var seedPx = origRoom.seed_px || origRoom.seed;
+        var seedPx = origRoom.seed_px || origRoom.seed ||
+          (origRoom.seed_x != null && origRoom.seed_y != null
+            ? [origRoom.seed_x, origRoom.seed_y] : null);
         if (!seedPx || !ingst.planPathEnhanced || !ingst.scale) {
           alert("Re-analyze unavailable: missing plan path, seed, or scale.");
           return;
@@ -337,6 +339,22 @@
                 origin: "auto",
               };
             });
+          // Portes détectées (seulement si aucune n'existait). Elles
+          // arrivent ici sous forme d'openings avec has_door=true.
+          var newDoors = [];
+          if (!preservedDoors.length) {
+            newDoors = (data.doors || []).map(function (d) {
+              return {
+                face: d.face,
+                offset_cm: d.offset_cm,
+                width_cm: d.width_cm,
+                has_door: true,
+                hinge_side: d.hinge_side,
+                opens_inward: d.opens_inward !== false,
+                origin: "auto",
+              };
+            });
+          }
 
           // Propage hits + seed dans state pour V/H-rays (converti
           // en coords room-local cm).
@@ -383,10 +401,17 @@
             amend.originalRoom.bbox_px = nbb;
             amend.originalRoom.width_cm = newWCm;
             amend.originalRoom.depth_cm = newDCm;
+            // Recalage live de l'overlay avec le nouveau bbox.
+            if (window.fpOverlay && state.overlay) {
+              var ov2 = window.fpOverlay;
+              state.overlay.offsetX = nbb[0] / ov2.pxPerCm;
+              state.overlay.offsetY = nbb[1] / ov2.pxPerCm;
+            }
           }
 
           state.room_windows = newWindows.concat(manualW);
           state.room_openings = newOpenings.concat(
+            newDoors,
             preservedDoors.filter(function (o) { return o.origin !== "auto"; }),
             manualO.filter(function (o) { return !o.has_door; })
           );

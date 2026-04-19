@@ -1,8 +1,5 @@
 {
   "file": "test_floorplan_preprocessed.png",
-  "drawing_scale_text": "1 : 462",
-  "drawing_scale_measured": "1.33 cm/px",
-  "orientation": 263.97,
   "page_width_px": 1920,
   "page_height_px": 1080,
   "rooms": {
@@ -581,13 +578,13 @@
       ]
     },
     "915": {
-      "surface": "15.66 m2",
+      "surface": "9.97 m2",
       "seed_x": 111,
       "seed_y": 249,
       "bbox_px": [
         80,
-        186,
-        141,
+        147,
+        152,
         305
       ],
       "openings": [
@@ -609,14 +606,14 @@
       ]
     },
     "916": {
-      "surface": "44.98 m2",
+      "surface": "9.25 m2",
       "seed_x": 193,
       "seed_y": 215,
       "bbox_px": [
-        157,
+        156,
         147,
         249,
-        270
+        260
       ],
       "openings": [
         {
@@ -665,9 +662,7 @@
           "offset_px": 6,
           "width_px": 27,
           "hinge_side": "left",
-          "opens_inward": true,
-          "seed_x": 272,
-          "seed_y": 305
+          "opens_inward": true
         }
       ],
       "openings": [
@@ -799,13 +794,13 @@
       ]
     },
     "921": {
-      "surface": "17.40 m2",
+      "surface": "11.37 m2",
       "seed_x": 760,
       "seed_y": 223,
       "bbox_px": [
         723,
         147,
-        791,
+        805,
         305
       ],
       "openings": [
@@ -1157,5 +1152,7 @@
         618
       ]
     }
-  }
+  },
+  "drawing_scale_text": "1 : 350",
+  "drawing_scale_measured": "2.9633 cm/px"
 }
