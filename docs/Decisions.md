@@ -7,6 +7,42 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-107 · Re-analyze pièce par pièce avec ray-cast — version fonctionnelle (2026-04-19)
+
+**Décision** : livrer d'abord la **ré-analyse par pièce** (D-104 étendu) avec un vrai ray-cast, plutôt que le refactor global de l'import Préprocessé (D-105 Phase 1+2). Avantage : scope circonscrit, résultat visible immédiatement sur une pièce à la fois, pas de régression de l'import.
+
+**Implémentation livrée** :
+
+- `extract_room_features(image, seed_px, bbox_px, scale, transparent_zones_cm, doors_px, door_width_cm, threshold, step_px)` :
+  - Peint des zones transparentes utilisateur + **zones transparentes automatiques aux portes** (rect `door_width_cm × door_width_cm` centré sur le milieu de la porte, débordant inside pour couvrir l'arc).
+  - Binarise.
+  - Utilise **`test_comb.detect_room`** (même algo éprouvé que l'import OCR) depuis le seed → nouveau bbox + hits (comb complet).
+  - Classifie les murs avec `_classify_wall_direct` sur le nouveau bbox.
+  - Fallback couleur : fenêtre unique full-face si une face borde du bleu extérieur et qu'aucune fenêtre n'est détectée.
+  - Retourne : `bbox_px`, `seed_px`, `windows`, `openings`, `hits`, `auto_door_masks_px` (pour debug).
+
+- **Endpoint `/api/room/reanalyze`** : accepte `seed_px`, `bbox_px`, `scale_cm_per_px`, `transparent_zones`, `doors`, `door_width_cm`, `threshold`.
+
+- **Frontend (Re-analyze en Room amend mode)** :
+  - Envoie `seed` + `bbox` + `doors` (enrichies depuis le JSON) + `transparent_zones` (user) + `door_width_cm`.
+  - Adopte le nouveau bbox retourné → met à jour `state.room_width_cm/depth_cm` et `originalRoom.bbox_px`.
+  - Préserve les éléments `origin: "manual"` (D-104), filtre via `deleted_auto_signatures`.
+  - Stocke `room_hits` et `room_seed_cm` en coords room-local pour visualisation V/H-rays.
+
+- **V-Rays / H-Rays toggles** en Room toolbar. Render axis-aligned parallèle (pas un éventail depuis le seed) : pour chaque hit, la V-ray part de `(hit.x, seed.y)` au `hit` ; la H-ray part de `(seed.x, hit.y)` au `hit`. Couleur par direction (N vert, S bleu, W rouge, E orange).
+
+- **Masques auto-portes visualisés** : rect orange hachuré sur la pièce quand `state.room_auto_door_masks` est rempli. Utile pour debug l'effet du masquage sur le ray-cast.
+
+- **Propagation scale** : lorsque l'utilisateur change `drawing_scale`, `fpOverlay.pxPerCm` est recalculé en plus de `ingState.scale` — sinon l'overlay ne suit pas au resize.
+
+- **Test plan** : `project/plans/test_floorplan_preprocessed.json` — room 917 a reçu `seed_x/seed_y` sur sa porte (272, 305) pour valider le pipeline.
+
+**Bug important résolu** : `_classify_wall_direct` retourne des segments dont `start_px/end_px` sont DÉJÀ relatifs au début de la face (pas en coords absolues image). Le code calculait un offset erroné en soustrayant `face_origin_px`, résultant en offsets négatifs/hors bbox.
+
+**Scope restant (D-105 global import)** : le refactor de `extract_rooms_from_preprocessed` pour que l'import produise aussi les hits + bboxes recalculés reste à faire. La re-analyze par pièce donne déjà un chemin propre pour l'utilisateur : importer (garde JSON tel quel) → ouvrir chaque pièce → re-analyze.
+
+---
+
 ## D-106 · Leçons tirées d'une tentative d'implémentation Phase 1 de D-105 (2026-04-19)
 
 **Contexte** : tentative d'implémenter D-105 Phase 1 (ray-cast depuis seeds + classification murs + fenêtres combinées) sans traiter encore les portes (Phase 2). Le commit WIP a été **reverted** (`9f3d6a9` → `edb3fb9`) après constat que l'approche en deux phases produit un résultat cassé intermédiaire.

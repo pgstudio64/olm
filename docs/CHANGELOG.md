@@ -5,6 +5,32 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased] — D-101 à D-107 (2026-04-19)
+
+### Ajouté
+
+- **D-101** : overlay par niveau (Floor = PNG standard, Room/Office = PNG `-SD`).
+- **D-102** : rulers mètres HTML unifiés (origine NW pièce) ; resize synchronisé panneaux Room/Office.
+- **D-103** : CRUD graphique ouvertures ; zones exclusion rouge + transparentes verte (DSL `TRANSPARENT`) ; dropdown "Add room items" ; traits à taille constante.
+- **D-104** : Re-analyze ciblée avec `origin: auto|manual` + `deleted_auto_signatures`.
+- **D-105** (doc) : pipeline Préprocessé refondu — spec complète.
+- **D-106** (doc) : leçons d'une Phase 1 tentative (revert).
+- **D-107** : Re-analyze par pièce **fonctionnelle** : ray-cast `test_comb.detect_room` depuis seed, masquage auto portes, V/H-rays debug visualisation, masques debug, préservation manuels.
+
+### Modifié
+
+- `<select>` plans → liste filtrable inline.
+- Zoom fit Room/Office : pièce + 20% padding. Clamp zoom-out à 3× vue fitée.
+- Labels dimensions : width sous, depth à gauche, offset 48 px.
+- fpOverlay.pxPerCm mis à jour sur scale change.
+
+### Supprimé
+
+- R-09 merges (D-100).
+- Entrée "All" des listes Room/Office.
+
+---
+
 ## [Unreleased] — D-94 refactoring front-end
 
 ### Supprimé
