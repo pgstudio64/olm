@@ -179,9 +179,16 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <!-- Left panel: all plan info in one column -->
       <div class="fp-info-col" id="fpLeftInfoCol" style="border-left:none;border-right:1px solid var(--border);order:-2;">
         <div class="section-title">Current floorplan</div>
-        <select id="ingPlanIdSelect" style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:1px solid var(--border);color:var(--text);margin-bottom:var(--sp-sm);">
-          <option value="">— Select a plan —</option>
-        </select>
+        <div id="ingPlanSelector" style="position:relative;margin-bottom:var(--sp-lg);">
+          <div id="ingPlanDisplay" style="width:100%;font-size:11px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+            <span id="ingPlanDisplayText">— Select a plan —</span>
+            <span style="color:var(--text-dim);font-size:9px;">&#9660;</span>
+          </div>
+          <div id="ingPlanPopup" style="display:none;background:var(--surface);border:1px solid var(--border);border-top:none;">
+            <input type="text" id="ingPlanSearch" placeholder="Filter plans..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
+            <div id="ingPlanList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+          </div>
+        </div>
         <div id="ingFormOcr"></div>
 
         <div id="ingPlanSections" style="display:none;">
