@@ -21,9 +21,14 @@
    */
   function updatePlanDependentUI() {
     var hasRooms = ingState.rooms && ingState.rooms.length > 0;
-    // Import panel sections
+    // Import panel sections — skip while the plan popup is open (it owns
+    // the display state of these elements while active).
+    var popupOpen = (function () {
+      var pop = document.getElementById('ingPlanPopup');
+      return pop && pop.style.display !== 'none';
+    })();
     var sections = document.getElementById('ingPlanSections');
-    if (sections) sections.style.display = hasRooms ? '' : 'none';
+    if (sections && !popupOpen) sections.style.display = hasRooms ? '' : 'none';
     // Review and Design tabs: hidden when no plan loaded
     ['fpReview', 'lytDesign'].forEach(function(tab) {
       var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
@@ -64,40 +69,84 @@
     return pt.matrixTransform(ctm.inverse());
   }
 
-  // --- Populate plan dropdown (flat list, sorted alphabetically) ---
-  function populateDropdown(plans) {
-    var sel = document.getElementById('ingPlanIdSelect');
-    if (!sel) return;
+  // --- Populate plan list (scrollable clickable items, filterable) ---
+  var _plansCache = [];
 
-    sel.innerHTML = '';
+  function _getSelectedPlan() {
+    return ingState._selectedPlan || { id: '', mode: '' };
+  }
+  function _setSelectedPlan(id, mode) {
+    ingState._selectedPlan = { id: id || '', mode: mode || '' };
+    var disp = document.getElementById('ingPlanDisplayText');
+    if (disp) disp.textContent = id || '— Select a plan —';
+    _renderPlanList();
+  }
+  var _HIDE_IDS = ['ingPlanSections'];
+  function _openPlanPopup() {
+    var pop = document.getElementById('ingPlanPopup');
+    if (!pop || pop.style.display !== 'none') return;
+    pop.style.display = '';
+    _HIDE_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (el._prevDisplay === undefined) el._prevDisplay = el.style.display;
+      el.style.display = 'none';
+    });
+    var searchEl = document.getElementById('ingPlanSearch');
+    if (searchEl) { searchEl.value = ''; _renderPlanList(); searchEl.focus(); }
+  }
+  function _closePlanPopup() {
+    var pop = document.getElementById('ingPlanPopup');
+    if (!pop || pop.style.display === 'none') return;
+    pop.style.display = 'none';
+    _HIDE_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el._prevDisplay = undefined;
+    });
+    // Reconsolider l'affichage selon l'état courant (rooms chargées ou non).
+    updatePlanDependentUI();
+  }
 
-    if (!plans || plans.length === 0) {
-      var none = document.createElement('option');
-      none.value = '';
-      none.disabled = true;
-      none.selected = true;
-      none.textContent = 'No plans available';
-      sel.appendChild(none);
-      sel.disabled = true;
+  function _renderPlanList() {
+    var listEl = document.getElementById('ingPlanList');
+    if (!listEl) return;
+    var searchEl = document.getElementById('ingPlanSearch');
+    var filter = (searchEl && searchEl.value || '').toLowerCase().trim();
+    var selId = _getSelectedPlan().id;
+
+    if (!_plansCache.length) {
+      listEl.innerHTML =
+        '<div style="padding:6px;color:var(--text-dim);">No plans available</div>';
       return;
     }
+    var html = '';
+    _plansCache.forEach(function (p) {
+      if (filter && p.id.toLowerCase().indexOf(filter) === -1) return;
+      var active = (p.id === selId);
+      var style = 'padding:4px 6px;cursor:pointer;border-bottom:1px solid var(--border);';
+      if (active) style += 'background:var(--accent);color:var(--bg);font-weight:bold;';
+      html += '<div class="plan-item" data-plan-id="' + p.id + '" data-plan-mode="' +
+        (p.effective_mode || 'ocr') + '" style="' + style + '">' +
+        p.id + '</div>';
+    });
+    if (!html) {
+      html = '<div style="padding:6px;color:var(--text-dim);">No match</div>';
+    }
+    listEl.innerHTML = html;
+    listEl.querySelectorAll('.plan-item').forEach(function (el) {
+      el.addEventListener('click', function () {
+        _setSelectedPlan(this.dataset.planId, this.dataset.planMode);
+        _closePlanPopup();
+        extractRooms();
+      });
+    });
+  }
 
-    sel.disabled = false;
-    var placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '— Select a plan —';
-    sel.appendChild(placeholder);
-
-    var sorted = plans.slice().sort(function(a, b) {
+  function populateDropdown(plans) {
+    _plansCache = (plans || []).slice().sort(function (a, b) {
       return a.id.localeCompare(b.id, undefined, { sensitivity: 'base' });
     });
-    sorted.forEach(function(p) {
-      var opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.id;
-      opt.dataset.mode = p.effective_mode || 'ocr';
-      sel.appendChild(opt);
-    });
+    _renderPlanList();
   }
 
   function loadPlansDropdown() {
@@ -114,17 +163,15 @@
 
   // --- Extract rooms via plan_id (OCR mode) ---
   function extractRooms() {
-    var sel = document.getElementById('ingPlanIdSelect');
-    var planId = sel ? sel.value : '';
+    var sel = _getSelectedPlan();
+    var planId = sel.id;
     var debugLog = document.getElementById('ingDebugLog');
     if (!planId) {
       if (debugLog) debugLog.textContent = '[ERROR] No plan selected.';
       return;
     }
 
-    // Route by effective_mode stored in the selected option's data-mode attribute
-    var selectedOpt = sel ? sel.options[sel.selectedIndex] : null;
-    var mode = selectedOpt ? (selectedOpt.dataset.mode || 'ocr') : 'ocr';
+    var mode = sel.mode || 'ocr';
     if (mode === 'preprocessed') {
       extractRoomsPreprocessed();
       return;
@@ -136,7 +183,7 @@
       'Recognition \u2014 this may take a few seconds. Continue?'
     );
     if (!ok) {
-      if (sel) sel.value = '';
+      _setSelectedPlan('', '');
       return;
     }
 
@@ -1292,14 +1339,27 @@
       renderIngestion();
     });
 
-    // Peuplement du dropdown et auto-import au changement de sélection
+    // Peuplement de la liste + filtre de recherche + toggle popup.
     loadPlansDropdown();
-    var planSel = document.getElementById('ingPlanIdSelect');
-    if (planSel) {
-      planSel.addEventListener('change', function () {
-        if (planSel.value) extractRooms();
+    var searchEl = document.getElementById('ingPlanSearch');
+    if (searchEl) {
+      searchEl.addEventListener('input', _renderPlanList);
+    }
+    var displayEl = document.getElementById('ingPlanDisplay');
+    if (displayEl) {
+      displayEl.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var pop = document.getElementById('ingPlanPopup');
+        if (pop && pop.style.display === 'none') _openPlanPopup();
+        else _closePlanPopup();
       });
     }
+    // Escape pour fermer la popup.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') _closePlanPopup();
+    });
+    window._ingSetSelectedPlan = _setSelectedPlan;
+    window._ingGetSelectedPlan = _getSelectedPlan;
 
     var btnAddRoom = document.getElementById('ingBtnAddRoom');
     if (btnAddRoom) btnAddRoom.addEventListener('click', addIngRoom);
@@ -1322,8 +1382,7 @@
 
   // --- Import préprocessé (plan_id ou upload fichiers) ---
   function extractRoomsPreprocessed() {
-    var sel = document.getElementById('ingPlanIdSelect');
-    var planId = sel ? sel.value : '';
+    var planId = _getSelectedPlan().id;
     var status = document.getElementById('ingStatus');
     var debugLog = document.getElementById('ingDebugLog');
 

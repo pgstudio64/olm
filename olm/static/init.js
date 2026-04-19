@@ -666,9 +666,12 @@ async function init() {
     if (fpTog) fpTog.checked = false;
     var rvTog = document.getElementById("rvOverlayToggle");
     if (rvTog) rvTog.checked = false;
-    // Reset plan dropdown to placeholder
-    var planSel = document.getElementById("ingPlanIdSelect");
-    if (planSel) planSel.selectedIndex = 0;
+    // Reset plan selection (new list-based selector)
+    if (typeof window._ingSetSelectedPlan === "function") {
+      window._ingSetSelectedPlan("", "");
+    }
+    var searchEl = document.getElementById("ingPlanSearch");
+    if (searchEl) searchEl.value = "";
     // Reset ingestion state rooms (keeps ingState identity; only rooms cleared)
     window.ingState.rooms = [];
     // Hide plan-dependent sections, disable Review/Design
