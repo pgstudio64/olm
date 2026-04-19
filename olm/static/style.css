@@ -115,7 +115,7 @@
 
   .main {
     display: grid;
-    grid-template-columns: 220px 1fr 260px;
+    grid-template-columns: 220px 8px 1fr 8px 260px;
     flex: 1;
     overflow: hidden;
     min-height: 0;

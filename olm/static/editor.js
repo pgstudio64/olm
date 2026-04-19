@@ -650,6 +650,7 @@ function _renderImpl(targetSvg) {
     roomX += (state.roomRenderOffset.x_cm || 0) * SCALE;
     roomY += (state.roomRenderOffset.y_cm || 0) * SCALE;
   }
+  state._roomNW = { x: roomX, y: roomY };
   var isEditor = svg.id === "canvas";
   var wallColor = "#ffffff";
   var wallWidth = isEditor ? 0.75 : 1;
@@ -844,21 +845,7 @@ function _renderImpl(targetSvg) {
     gridParts.dots.forEach(function(s) { elements.push({ z: -0.5, s: s }); });
     gridParts.lines.forEach(function(s) { elements.push({ z: -0.4, s: s }); });
 
-    // Grid meter labels (e.g. "1m", "2m") along room edges
-    var gridLabelFs = (10 * zf).toFixed(1);
-    var gridLabelColor = COLOR_RULER;  // same as dimension labels for consistency
-    for (let mx = roomX + meterPx; mx < roomX + roomWPx; mx += meterPx) {
-      var mVal = Math.round((mx - roomX) / meterPx);
-      elements.push({ z: 8, s: '<text x="' + mx.toFixed(1) + '" y="' + (roomY + roomHPx + 8 * zf).toFixed(1) +
-        '" text-anchor="middle" fill="' + gridLabelColor + '" font-size="' + gridLabelFs +
-        '" font-family="monospace" opacity="0.5">' + mVal + 'm</text>' });
-    }
-    for (let my = roomY + meterPx; my < roomY + roomHPx; my += meterPx) {
-      var mValY = Math.round((my - roomY) / meterPx);
-      elements.push({ z: 8, s: '<text x="' + (roomX + roomWPx + 4 * zf).toFixed(1) + '" y="' + (my + 3 * zf).toFixed(1) +
-        '" text-anchor="start" fill="' + gridLabelColor + '" font-size="' + gridLabelFs +
-        '" font-family="monospace" opacity="0.5">' + mValY + 'm</text>' });
-    }
+    // Meter labels rendered by updateRulers() around the SVG (rulers HTML).
   }
 
   // Overlay raster background (only for Review/Design canvases, not the Pattern Editor)
@@ -943,6 +930,7 @@ function _ensureRulers(svg) {
   svg._rulerBox = rulerBox;
 }
 
+window.updateRulers = updateRulers;
 function updateRulers(targetSvg) {
   var svg = targetSvg || document.getElementById("canvas");
   _ensureRulers(svg);
@@ -970,23 +958,26 @@ function updateRulers(targetSvg) {
     };
   }
 
-  // Horizontal labels (top + bottom)
-  var mxStart = Math.max(0, Math.floor(vb.x / meterPx) * meterPx);
+  // Origine (0,0) = coin NW de la pièce (fallback SVG origin si non défini).
+  var nw = state._roomNW || { x: 0, y: 0 };
+
+  // Horizontal labels (top + bottom) — couvrent toute la vb visible, valeurs négatives incluses
+  var mxStart = Math.floor((vb.x - nw.x) / meterPx) * meterPx + nw.x;
   var mxEnd = vb.x + vb.w;
   for (var mx = mxStart; mx <= mxEnd; mx += meterPx) {
     var p = svgToWrap(mx, 0);
     if (p.x < 22 || p.x > wrapRect.width - 22) continue;
-    var m = Math.round(mx / meterPx);
+    var m = Math.round((mx - nw.x) / meterPx);
     htmlH += '<span style="left:' + p.x.toFixed(0) + 'px;">' + m + 'm</span>';
   }
 
   // Vertical labels (left + right)
-  var myStart = Math.max(0, Math.floor(vb.y / meterPx) * meterPx);
+  var myStart = Math.floor((vb.y - nw.y) / meterPx) * meterPx + nw.y;
   var myEnd = vb.y + vb.h;
   for (var my = myStart; my <= myEnd; my += meterPx) {
     var p = svgToWrap(0, my);
     if (p.y < 0 || p.y > wrapRect.height - 36) continue;
-    var m = Math.round(my / meterPx);
+    var m = Math.round((my - nw.y) / meterPx);
     htmlV += '<span style="top:' + p.y.toFixed(0) + 'px;">' + m + 'm</span>';
   }
 

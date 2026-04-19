@@ -294,6 +294,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </div>
 
       <!-- Right panel: room detail -->
+      <div class="fp-resize-handle" id="rvRightResize"></div>
       <div class="fp-info-col" id="rvRightInfoCol">
         <div class="section-title">Room</div>
         <table>
@@ -345,7 +346,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <svg id="fpCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
         </div>
       </div>
-      <div class="fp-sidebar">
+      <div class="fp-sidebar" id="fpDesignSidebar" style="width:170px;min-width:120px;max-width:350px;">
         <div class="section-title">Room list</div>
         <div id="fpDesignRoomList" style="height:150px;min-height:60px;max-height:400px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);margin-bottom:var(--sp-sm);"></div>
         <div class="fp-standard-filter" id="fpStandardFilter">
@@ -354,6 +355,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div class="section-title">Candidate solutions</div>
         <div id="fpCandidatesList"></div>
       </div>
+      <div class="fp-resize-handle" id="fpDesignLeftResize" style="order:-1;"></div>
+      <div class="fp-resize-handle" id="fpRightResize"></div>
       <div class="fp-info-col" id="fpInfoCol">
         <div class="section-title">Room</div>
         <table>
@@ -386,7 +389,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
 <!-- SUB-TAB: PATTERN EDITOR -->
 <div class="sub-tab-content" id="subtabCatEditor">
-<div class="main">
+<div class="main" id="peMain">
 
   <!-- LEFT COLUMN -->
   <div class="col">
@@ -451,6 +454,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     </div>
   </div>
 
+  <div class="fp-resize-handle" id="peLeftResize"></div>
   <!-- CENTER COLUMN -->
   <div class="col canvas-col">
     <div class="ol-header">
@@ -491,6 +495,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="status-bar" id="statusBar">Ready.</div>
   </div>
 
+  <div class="fp-resize-handle" id="peRightResize"></div>
   <!-- RIGHT COLUMN -->
   <div class="col right-col">
     <div class="col-inner">
