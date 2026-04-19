@@ -229,7 +229,10 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     });
   }
 
-  // V-Rays / H-Rays debug (Room) — seed → hits en coords room-local.
+  // V-Rays / H-Rays debug (Room) — rayons axis-aligned depuis la ligne
+  // (axe) du seed. Chaque hit est classé V (y ≠ seed.y) ou H (x ≠ seed.x).
+  // Le ray part du POINT DE DEPART ALIGNÉ (hx, seed.y pour V ; seed.x, hy
+  // pour H) jusqu'au hit — pas du seed. Évite l'éventail.
   if (isReview && state.room_hits && state.room_seed_cm &&
       (state.showVrays || state.showHrays)) {
     var sx = roomX + state.room_seed_cm.x_cm * SCALE;
@@ -237,17 +240,22 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     state.room_hits.forEach(function (h) {
       var hx = roomX + h.x_cm * SCALE;
       var hy = roomY + h.y_cm * SCALE;
-      var isV = Math.abs(hx - sx) < Math.abs(hy - sy);
-      var stroke = null;
-      if (isV && state.showVrays) {
-        stroke = (hy < sy) ? "rgba(0,200,0,0.4)" : "rgba(0,150,200,0.4)";
-      } else if (!isV && state.showHrays) {
-        stroke = (hx < sx) ? "rgba(200,0,0,0.4)" : "rgba(200,100,0,0.4)";
+      var dx = hx - sx;
+      var dy = hy - sy;
+      var x1, y1, x2, y2, stroke = null;
+      if (state.showVrays && Math.abs(dy) > Math.abs(dx)) {
+        // V-ray : vertical depuis (hx, sy) jusqu'à (hx, hy).
+        x1 = hx; y1 = sy; x2 = hx; y2 = hy;
+        stroke = (dy < 0) ? "rgba(0,200,0,0.4)" : "rgba(0,150,200,0.4)";
+      } else if (state.showHrays && Math.abs(dx) > Math.abs(dy)) {
+        // H-ray : horizontal depuis (sx, hy) jusqu'à (hx, hy).
+        x1 = sx; y1 = hy; x2 = hx; y2 = hy;
+        stroke = (dx < 0) ? "rgba(200,0,0,0.4)" : "rgba(200,100,0,0.4)";
       }
       if (stroke) {
-        elements.push({ z: 9.6, s: '<line x1="' + sx.toFixed(1) +
-          '" y1="' + sy.toFixed(1) + '" x2="' + hx.toFixed(1) +
-          '" y2="' + hy.toFixed(1) + '" stroke="' + stroke +
+        elements.push({ z: 9.6, s: '<line x1="' + x1.toFixed(1) +
+          '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) +
+          '" y2="' + y2.toFixed(1) + '" stroke="' + stroke +
           '" stroke-width="0.8" vector-effect="non-scaling-stroke"/>' });
         elements.push({ z: 9.7, s: '<circle cx="' + hx.toFixed(1) +
           '" cy="' + hy.toFixed(1) + '" r="1.5" fill="#ffff00"/>' });
