@@ -1117,6 +1117,55 @@ def api_room_dsl_parse():
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
+@app.route("/api/room/reanalyze", methods=["POST"])
+def api_room_reanalyze():
+    """Re-analyse les fenêtres et ouvertures d'une seule pièce (R-04 Review).
+
+    Body JSON attendu :
+        {
+          "plan_path": "/chemin/vers/plan.png",  (-SD pour Mode Préprocessé)
+          "bbox_px": [x0, y0, x1, y1],
+          "scale_cm_per_px": 0.5,
+          "transparent_zones": [{x_cm, y_cm, width_cm, depth_cm}, ...],
+          "threshold": 110  (optionnel)
+        }
+
+    Retour :
+        {
+          "windows": [{face, offset_px, width_px, offset_cm, width_cm}],
+          "openings": [...]
+        }
+
+    Les doors ne sont PAS redétectées (swing d'arc hors périmètre de la
+    classification directe). Le frontend est responsable de les préserver.
+    """
+    try:
+        data = request.json or {}
+        plan_path = data.get("plan_path", "")
+        bbox_px = data.get("bbox_px")
+        scale = float(data.get("scale_cm_per_px", 0.5))
+        transparents = data.get("transparent_zones", []) or []
+        threshold = int(data.get("threshold", 110))
+
+        if not plan_path or not os.path.exists(plan_path):
+            return jsonify({"error": "plan_path missing or invalid"}), 400
+        if not bbox_px or len(bbox_px) != 4:
+            return jsonify({"error": "bbox_px must be [x0,y0,x1,y1]"}), 400
+
+        from PIL import Image as _PILImage
+        from olm.ingestion.extract import extract_room_features
+        img = _PILImage.open(plan_path).convert("L")
+        result = extract_room_features(
+            img, tuple(bbox_px), scale,
+            transparent_zones_cm=transparents,
+            threshold=threshold,
+        )
+        return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
 MOCK_ROOM = {
     "eo_cm": 300,
     "ns_cm": 480,

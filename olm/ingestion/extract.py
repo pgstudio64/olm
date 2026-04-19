@@ -1610,3 +1610,100 @@ def extract_rooms_from_preprocessed(
         len(result), scale_cm_per_px,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Targeted single-room feature re-analysis (R-04 Review — re-analyze)
+# ---------------------------------------------------------------------------
+
+def extract_room_features(
+    image: "Image.Image",
+    bbox_px: tuple,
+    scale_cm_per_px: float,
+    transparent_zones_cm: list | None = None,
+    threshold: int = 110,
+    step_px: int = 5,
+) -> dict:
+    """Re-analyse les fenêtres et ouvertures d'une pièce dont le bbox est connu.
+
+    Pensé pour la fonction "Re-analyze" de R-04 Review : on conserve le bbox
+    établi (manuellement ou précédemment), on applique un masquage blanc sur
+    les zones transparentes (artefacts à ignorer), puis on reclassifie chaque
+    mur via `_classify_wall_direct` (sans ray-cast ni OCR).
+
+    Args:
+        image: image grayscale (PIL.Image.Image, mode "L" ou convertible).
+        bbox_px: (x0, y0, x1, y1) dans le repère image (pixels).
+        scale_cm_per_px: conversion cm↔px.
+        transparent_zones_cm: liste de {x_cm, y_cm, width_cm, depth_cm}
+            exprimés en coordonnées locales à la pièce (NW = 0,0). Ces zones
+            sont peintes en blanc dans la copie de travail avant binarisation.
+        threshold: seuil de binarisation (niveau de gris).
+        step_px: pas d'échantillonnage le long des murs (défaut 5 px).
+
+    Returns:
+        {
+          "windows": [{face, offset_px, width_px, offset_cm, width_cm}],
+          "openings": [{face, offset_px, width_px, offset_cm, width_cm}],
+        }
+
+        Les doors ne sont pas redétectées ici — le swing d'une porte nécessite
+        l'analyse d'arc qui sort du périmètre de `_classify_wall_direct`. Les
+        doors existantes restent sous la responsabilité du code appelant.
+    """
+    from PIL import Image as _PILImage
+    from PIL import ImageDraw as _PILDraw
+
+    if image.mode != "L":
+        image = image.convert("L")
+
+    x0, y0, x1, y1 = bbox_px
+    px_per_cm = 1.0 / scale_cm_per_px
+
+    # 1. Masque des zones transparentes : peindre en blanc dans une copie.
+    working = image.copy()
+    if transparent_zones_cm:
+        draw = _PILDraw.Draw(working)
+        for z in transparent_zones_cm:
+            zx = int(round(z.get("x_cm", 0) * px_per_cm)) + x0
+            zy = int(round(z.get("y_cm", 0) * px_per_cm)) + y0
+            zw = int(round(z.get("width_cm", 0) * px_per_cm))
+            zh = int(round(z.get("depth_cm", 0) * px_per_cm))
+            if zw > 0 and zh > 0:
+                draw.rectangle(
+                    [zx, zy, zx + zw, zy + zh],
+                    fill=255,
+                )
+
+    # 2. Binarisation (dilatée + brute). _classify_wall_direct utilise les deux.
+    gray_arr = np.array(working)
+    binary_raw = gray_arr < threshold
+    # Dilatation légère pour l'analyse de position (compatible avec les helpers).
+    binary = remove_non_ortho(binary_raw.copy())
+    binary_raw = remove_non_ortho(binary_raw)
+
+    # 3. Classification mur par mur.
+    windows: list[dict] = []
+    openings: list[dict] = []
+    for face in ("north", "south", "east", "west"):
+        segments, _mode = _classify_wall_direct(
+            binary, binary_raw, bbox_px, face, step_px,
+        )
+        face_origin_px = x0 if face in ("north", "south") else y0
+        for seg in segments:
+            if seg.kind not in ("window", "opening"):
+                continue
+            offset_px = seg.start_px - face_origin_px
+            width_px = seg.end_px - seg.start_px
+            if width_px <= 0:
+                continue
+            entry = {
+                "face": face,
+                "offset_px": int(offset_px),
+                "width_px": int(width_px),
+                "offset_cm": int(round(offset_px * scale_cm_per_px)),
+                "width_cm": int(round(width_px * scale_cm_per_px)),
+            }
+            (windows if seg.kind == "window" else openings).append(entry)
+
+    return {"windows": windows, "openings": openings}

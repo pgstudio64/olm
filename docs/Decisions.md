@@ -7,6 +7,34 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-104 · Re-analyze ciblée d'une pièce avec préservation des manuels (2026-04-19)
+
+**Décision** : Ajout d'une fonction de **ré-analyse** automatique des fenêtres et ouvertures d'une pièce, sans perdre les modifications manuelles de l'utilisateur ni relancer tout le plan.
+
+**Workflow cible (R-04 Review)** : l'utilisateur importe un plan, constate des pièces mal analysées à cause d'artefacts ou de zones à ignorer. Il place manuellement des zones interdites (rouge) et des zones transparentes (vert, artefacts à ignorer). Il clique "Re-analyze" → l'algo rejoue la détection windows/openings pour cette pièce en tenant compte des zones transparentes. Il ajuste ensuite manuellement.
+
+**Séparation auto / manuel** : chaque fenêtre / porte / ouverture porte un champ `origin: "auto" | "manual"` :
+- Initialement, l'extraction produit des éléments `origin: "auto"`.
+- Toute création, drag ou resize via l'UI bascule l'élément en `origin: "manual"`.
+- La ré-analyse remplace uniquement les `origin: "auto"` ; les manuels sont réinjectés tels quels.
+- Un élément `auto` supprimé par l'utilisateur est enregistré dans `state.deleted_auto_signatures` (signature `type|face|offset|width`) pour être filtré aux ré-analyses suivantes et ne pas réapparaître.
+
+**Invisible à l'utilisateur dans la DSL** : le champ `origin` n'est **pas** serialisé dans la DSL (qui reste user-friendly). Il est préservé à travers le round-trip DSL via un cache par clé `(type, face, offset_cm, width_cm)` dans `_rvCommitFromState`. Pour la persistance inter-sessions, `origin` devra être inclus dans le JSON v3 (`olm_state`) — à faire.
+
+**Architecture backend** : nouvelle fonction `extract_room_features(image, bbox, scale, transparent_zones)` dans `olm/ingestion/extract.py`. Implémentation **ciblée B2** (pas un filtre sur une extraction complète) :
+- Copie l'image, peint les zones transparentes en blanc (255).
+- Binarise.
+- Appelle `_classify_wall_direct` pour chaque face (N/S/E/W) sur le bbox donné — pas de ray-cast, pas d'OCR, pas de détection de bbox (déjà connu).
+- Les doors ne sont **pas** redétectées (la détection d'arc sort du périmètre de la classification directe). Le frontend préserve les doors existantes.
+
+**Route Flask** : `POST /api/room/reanalyze` prend `{plan_path, bbox_px, scale_cm_per_px, transparent_zones, threshold}` et renvoie `{windows, openings}`.
+
+**Trade-off accepté** : les doors ne peuvent pas être re-détectées par ce flux. Workflow pour l'utilisateur : supprimer et redessiner la porte si besoin (cohérent avec D-103 : pas de toggle de type, suppression + re-création).
+
+**Impact** : [extract.py](../olm/ingestion/extract.py), [app.py](../olm/server/app.py), [init_rvtool.js](../olm/static/init_rvtool.js), [editor.js](../olm/static/editor.js), [ingestion.js](../olm/static/ingestion.js), [pattern_editor.html](../olm/templates/pattern_editor.html).
+
+---
+
 ## D-103 · Room amend mode — CRUD ouvertures + zones (exclusion rouge / transparent vert) (2026-04-19)
 
 **Décisions** :

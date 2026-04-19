@@ -112,12 +112,12 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 
 - [x] CRUD ouvertures : ajout, suppression, déplacement, redimensionnement (D-103). Changement de type non implémenté (on supprime et on redessine).
 - [x] **Zones interdites et transparentes (Room)** : zones interdites (rouge, `EXCLUSION`) et zones transparentes (vert, `TRANSPARENT`) définissables dans Room amend mode via le dropdown "Add room items" (D-103).
-- [ ] **Relance analyse pièce (Room)** : bouton pour relancer l'identification automatique des fenêtres, portes et ouvertures sur la pièce courante. Permet de placer d'abord les zones interdites/transparentes, puis de relancer l'analyse qui en tiendra compte.
-- [ ] **Préserver les modifications manuelles** : lorsque l'utilisateur a redéfini manuellement la taille ou les contours d'une pièce, la relance de l'analyse automatique ne doit pas remettre en cause ces modifications. Les données manuelles ont priorité sur la détection auto.
-- [ ] **Bouton Close** : ferme le projet courant. Si des modifications non sauvegardées existent, émettre un warning de confirmation avant de fermer.
-- [ ] **Bouton Erase** avec deux options :
-  - **All** : supprime toutes les données chargées (floorplan + layouts)
-  - **Layout only** : supprime uniquement les descriptions de layout (bureaux/postes) mais conserve les amendements éventuels du floorplan (bbox, ouvertures, zones interdites). Nettoie le JSON des informations de layout associées.
+- [x] **Relance analyse pièce (Room)** (D-104) : bouton "Re-analyze" en Room amend mode, appelle `/api/room/reanalyze` avec bbox + zones transparentes + manuels préservés.
+- [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
+- [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
+- [ ] **Re-analyze + resize pièce** : la ré-analyse utilise le bbox original. Si l'utilisateur a déjà redimensionné la pièce en amend mode, propager le nouveau bbox avant l'appel.
+- [x] **Bouton Close** : ferme le projet courant avec confirmation (warning unsaved changes implicite).
+- [x] **Bouton Erase** (All / Layout only) avec confirmation.
 
 #### Office (ex-Match/Design)
 
