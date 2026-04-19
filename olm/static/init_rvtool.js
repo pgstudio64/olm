@@ -270,15 +270,10 @@
             width_cm: z.width_cm, depth_cm: z.depth_cm,
           };
         });
-        // Doors : pousser au backend pour zones transparentes auto (D-105).
-        // Utilise origRoom.doors (format OCR enrichi, offset relatif au bbox).
-        var doorsPx = (origRoom.doors || []).map(function (d) {
-          return {
-            face: d.face,
-            offset_px: d.offset_px,
-            width_px: d.width_px,
-          };
-        });
+        // Re-analyze = redétection complète : on ne préserve PAS les
+        // anciennes portes (sinon leurs masques empêchent la détection
+        // de fraîches portes via l'arc).
+        var doorsPx = [];
         var doorWidthCm = ((window.APP_CONFIG || {}).default_door_width_cm) || 90;
         reanalyzeBtn.disabled = true;
         reanalyzeBtn.textContent = "Analyzing...";
@@ -314,8 +309,11 @@
           var manualO = (state.room_openings || []).filter(function (o) {
             return o.origin === "manual";
           });
+          // Re-analyze redétecte TOUT : pas de préservation des portes
+          // auto (elles seront remplacées par les nouvelles données).
+          // Seules les portes manuelles (origin!="auto") sont conservées.
           var preservedDoors = (state.room_openings || []).filter(function (o) {
-            return o.has_door;  // les doors ne sont pas redétectées
+            return o.has_door && o.origin !== "auto";
           });
 
           var newWindows = (data.windows || [])

@@ -1035,8 +1035,11 @@ function _renderImpl(targetSvg) {
       var origRoom = state.roomAmendMode && state.roomAmendMode.originalRoom;
       var refWPx = origRoom ? origRoom.width_cm * SCALE : roomWPx;
       var refHPx = origRoom ? origRoom.depth_cm * SCALE : roomHPx;
-      var ocx = roomX + refWPx / 2;
-      var ocy = roomY + refHPx / 2;
+      // Centre de rotation figé sur le NW ORIGINAL (MARGIN), pas sur
+      // roomX/roomY courants qui bougent via roomRenderOffset — sinon
+      // l'overlay pivote visuellement pendant le drag.
+      var ocx = MARGIN + refWPx / 2;
+      var ocy = MARGIN + refHPx / 2;
       // Pour 90/270, la room canonicalisée a w/h swappés vs l'image originale.
       // Après rotation autour du centre room, compenser le décalage dû au swap.
       var dx = 0, dy = 0;
@@ -1047,6 +1050,19 @@ function _renderImpl(targetSvg) {
       ovImg = '<g transform="translate(' + dx.toFixed(1) + ' ' + dy.toFixed(1) + ') rotate(' + ovAngle + ' ' + ocx.toFixed(1) + ' ' + ocy.toFixed(1) + ')">' + ovImg + '</g>';
     }
     elements.push({ z: -1, s: ovImg });
+    try {
+      if (state.roomAmendMode && window._ovDbg !== ovX + ',' + ovY +
+          ',' + roomX + ',' + roomY + ',' + ovAngle) {
+        window._ovDbg = ovX + ',' + ovY + ',' + roomX + ',' + roomY +
+          ',' + ovAngle;
+        console.log("[ov-dbg]",
+          "offset=", (state.roomRenderOffset || {x_cm:0, y_cm:0}),
+          "roomXY=(", roomX.toFixed(1), ",", roomY.toFixed(1), ")",
+          "ovXY=(", ovX.toFixed(1), ",", ovY.toFixed(1), ")",
+          "ovAngle=", ovAngle,
+          "corridor=", state.corridor_face);
+      }
+    } catch (e) {}
   }
 
   // Hide canvas background when overlay is active (avoid dark veil)
@@ -1444,13 +1460,35 @@ async function save() {
     fpRoomAmendments[ramend.roomName] = amendedRoom;
     amendedRoom.corridor_face = origCf;
 
-    // D-99: propagate the new size + NW shift back to ingState.rooms (and
-    // fpData.rooms + the stored amendment) so Floor reflects the amendment
-    // on the bbox overlay. Only handled for south-corridor rooms for now —
-    // non-south requires axis-remapping (see TODO).
+    // Propagate new size + NW shift back to ingState.rooms (and
+    // fpData.rooms) so Floor reflects the amendment on the bbox overlay.
+    // Le shift est exprimé en coords CANONIQUES (corridor=south) ;
+    // on le transforme en absolu selon corridor_face, puis on ajoute
+    // au bbox_px existant.
     var renderOffset = state.roomRenderOffset || { x_cm: 0, y_cm: 0 };
     var scaleCmPerPx = (window.ingState && window.ingState.scale) || 0;
-    if (scaleCmPerPx > 0 && (!origCf || origCf === "south")) {
+    // Transformation canonique → absolu du vecteur shift et des dims :
+    //   south (0°)  : abs = (cx, cy) ; absW=cW, absD=cD
+    //   east  (90°) : abs = (cy, -cx) ; absW=cD, absD=cW
+    //   north (180°): abs = (-cx, -cy) ; absW=cW, absD=cD
+    //   west  (270°): abs = (-cy, cx) ; absW=cD, absD=cW
+    var cShiftX = renderOffset.x_cm, cShiftY = renderOffset.y_cm;
+    var cW = state.room_width_cm, cD = state.room_depth_cm;
+    var absShiftX, absShiftY, absW, absD;
+    if (origCf === "east") {
+      absShiftX = -cShiftY; absShiftY = cShiftX;
+      absW = cD;            absD = cW;
+    } else if (origCf === "north") {
+      absShiftX = -cShiftX; absShiftY = -cShiftY;
+      absW = cW;            absD = cD;
+    } else if (origCf === "west") {
+      absShiftX = cShiftY;  absShiftY = -cShiftX;
+      absW = cD;            absD = cW;
+    } else {  // south / unset
+      absShiftX = cShiftX;  absShiftY = cShiftY;
+      absW = cW;            absD = cD;
+    }
+    if (scaleCmPerPx > 0) {
       var newBbox = null;
       var ingRooms = (window.ingState && window.ingState.rooms) || [];
       for (var ir = 0; ir < ingRooms.length; ir++) {
@@ -1460,15 +1498,15 @@ async function save() {
         var orig = (ramend.originalRoom && ramend.originalRoom.bbox_px)
           || ingRooms[ir].bbox_px;
         if (!orig || orig.length !== 4) break;
-        var nx0 = orig[0] + renderOffset.x_cm / scaleCmPerPx;
-        var ny0 = orig[1] + renderOffset.y_cm / scaleCmPerPx;
-        var nx1 = nx0 + state.room_width_cm / scaleCmPerPx;
-        var ny1 = ny0 + state.room_depth_cm / scaleCmPerPx;
+        var nx0 = orig[0] + absShiftX / scaleCmPerPx;
+        var ny0 = orig[1] + absShiftY / scaleCmPerPx;
+        var nx1 = nx0 + absW / scaleCmPerPx;
+        var ny1 = ny0 + absD / scaleCmPerPx;
         newBbox = [nx0, ny0, nx1, ny1];
         ingRooms[ir].bbox_px = newBbox;
-        ingRooms[ir].width_cm = state.room_width_cm;
-        ingRooms[ir].depth_cm = state.room_depth_cm;
-        ingRooms[ir].surface_m2 = parseFloat(((state.room_width_cm * state.room_depth_cm) / 10000).toFixed(2));
+        ingRooms[ir].width_cm = absW;
+        ingRooms[ir].depth_cm = absD;
+        ingRooms[ir].surface_m2 = parseFloat(((absW * absD) / 10000).toFixed(2));
         // Portes : convertir les openings has_door=true en format
         // doors (px) pour que la Floor view les affiche.
         var pxPerCm = 1.0 / scaleCmPerPx;
@@ -1491,8 +1529,8 @@ async function save() {
         if (window.fpData && window.fpData.rooms) {
           for (var fr = 0; fr < window.fpData.rooms.length; fr++) {
             if (window.fpData.rooms[fr].name !== ramend.roomName) continue;
-            window.fpData.rooms[fr].width_cm = state.room_width_cm;
-            window.fpData.rooms[fr].depth_cm = state.room_depth_cm;
+            window.fpData.rooms[fr].width_cm = absW;
+            window.fpData.rooms[fr].depth_cm = absD;
             window.fpData.rooms[fr].bbox_px = newBbox.slice();
             window.fpData.rooms[fr].doors = doorsOut.slice();
             break;

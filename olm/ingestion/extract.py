@@ -1594,13 +1594,22 @@ def extract_rooms_from_preprocessed(
             _enh_img = np.array(Image.open(enhanced_png_path).convert("RGB"))
             _corridor_rgb = tuple(json_data.get("corridor_rgb", [193, 247, 179]))
             _exterior_rgb = tuple(json_data.get("exterior_rgb", [135, 206, 235]))
+            _OPPOSITE = {"north": "south", "south": "north",
+                         "east": "west", "west": "east"}
             for room_dict in result:
                 bb = room_dict["bbox_px"]
                 if bb and bb[2] > bb[0] and bb[3] > bb[1]:
                     colors = _detect_face_colors(
                         _enh_img, bb, _corridor_rgb, _exterior_rgb,
                     )
-                    if colors["corridor_face"]:
+                    # canonical_top_face explicitly set in JSON → override
+                    # color detection (corridor_face = opposite).
+                    manual_top = room_dict.get("canonical_top_face")
+                    if manual_top:
+                        room_dict["corridor_face"] = _OPPOSITE.get(
+                            manual_top, room_dict.get("corridor_face", "")
+                        )
+                    elif colors["corridor_face"]:
                         room_dict["corridor_face"] = colors["corridor_face"]
                     if colors["exterior_faces"]:
                         room_dict["exterior_faces"] = colors["exterior_faces"]
