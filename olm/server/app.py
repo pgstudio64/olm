@@ -1151,6 +1151,12 @@ def api_room_reanalyze():
             return jsonify({"error": "plan_path missing or invalid"}), 400
         if not bbox_px or len(bbox_px) != 4:
             return jsonify({"error": "bbox_px must be [x0,y0,x1,y1]"}), 400
+        try:
+            bbox_px = [int(v) for v in bbox_px]
+        except (TypeError, ValueError):
+            return jsonify({"error": "bbox_px must contain integers"}), 400
+        if bbox_px[2] <= bbox_px[0] or bbox_px[3] <= bbox_px[1]:
+            return jsonify({"error": "bbox_px degenerate (empty)"}), 400
 
         from PIL import Image as _PILImage
         from olm.ingestion.extract import extract_room_features
@@ -1161,6 +1167,70 @@ def api_room_reanalyze():
             threshold=threshold,
         )
         return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/room/reanalyze_batch", methods=["POST"])
+def api_room_reanalyze_batch():
+    """Batch re-analyse : traite N pièces en partageant le chargement de l'image.
+
+    Body JSON attendu :
+        {
+          "plan_path": "/chemin/vers/plan-SD.png",
+          "scale_cm_per_px": 0.5,
+          "threshold": 110,
+          "rooms": [
+            {"name": "237", "bbox_px": [x0,y0,x1,y1], "transparent_zones": [...]},
+            ...
+          ]
+        }
+
+    Retour :
+        {"results": [{"name": "237", "windows": [...], "openings": [...]},
+                     {"name": "238", "error": "..."}, ...]}
+    """
+    try:
+        data = request.json or {}
+        plan_path = data.get("plan_path", "")
+        scale = float(data.get("scale_cm_per_px", 0.5))
+        threshold = int(data.get("threshold", 110))
+        rooms = data.get("rooms") or []
+
+        if not plan_path or not os.path.exists(plan_path):
+            return jsonify({"error": "plan_path missing or invalid"}), 400
+        if not isinstance(rooms, list) or not rooms:
+            return jsonify({"error": "rooms must be non-empty list"}), 400
+
+        import numpy as _np
+        from PIL import Image as _PILImage
+        from olm.ingestion.extract import extract_room_features
+
+        # Chargement unique : l'image est partagée entre toutes les pièces.
+        img = _PILImage.open(plan_path).convert("L")
+        img_arr = _np.asarray(img)
+
+        results = []
+        for r in rooms:
+            name = r.get("name", "")
+            bbox_px = r.get("bbox_px")
+            if (not bbox_px or len(bbox_px) != 4
+                or bbox_px[2] <= bbox_px[0] or bbox_px[3] <= bbox_px[1]):
+                results.append({"name": name, "error": "invalid bbox_px"})
+                continue
+            try:
+                features = extract_room_features(
+                    None, tuple(int(v) for v in bbox_px), scale,
+                    transparent_zones_cm=r.get("transparent_zones") or [],
+                    threshold=threshold,
+                    image_arr=img_arr,
+                )
+                results.append({"name": name, **features})
+            except Exception as e:
+                results.append({"name": name, "error": str(e)})
+
+        return jsonify({"results": results})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500

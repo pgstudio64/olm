@@ -1382,6 +1382,126 @@
 
     var btnDevExport = document.getElementById('ingBtnDevExportV3');
     if (btnDevExport) btnDevExport.addEventListener('click', devExportV3Json);
+
+    // --- Batch re-analyze (Floor level) ---
+    var btnReanAll = document.getElementById('ingBtnReanalyzeAll');
+    if (btnReanAll) {
+      btnReanAll.addEventListener('click', async function () {
+        if (!ingState.rooms || !ingState.rooms.length) return;
+        if (!ingState.planPathEnhanced || !ingState.scale) {
+          alert('Re-analyze unavailable: missing plan path or scale.');
+          return;
+        }
+        if (!confirm('Re-analyze ' + ingState.rooms.length +
+          ' room(s)? Auto windows/openings will be replaced; manual edits ' +
+          'and deleted-auto signatures are preserved.')) return;
+        var statusEl = document.getElementById('ingStatus');
+        btnReanAll.disabled = true;
+        var origLabel = btnReanAll.textContent;
+        var amendments = (window.fpRoomAmendments = window.fpRoomAmendments || {});
+        var ok = 0, fail = 0;
+        function _sig(k, e) {
+          return k + '|' + e.face + '|' +
+            (e.offset_cm || 0) + '|' + (e.width_cm || 0);
+        }
+        try {
+          var payload = {
+            plan_path: ingState.planPathEnhanced,
+            scale_cm_per_px: ingState.scale,
+            rooms: [],
+          };
+          var validRooms = [];
+          ingState.rooms.forEach(function (r) {
+            if (!r.bbox_px || r.bbox_px.length !== 4 ||
+                r.bbox_px[2] <= r.bbox_px[0] || r.bbox_px[3] <= r.bbox_px[1]) {
+              fail++;
+              return;
+            }
+            var am = amendments[r.name];
+            payload.rooms.push({
+              name: r.name,
+              bbox_px: r.bbox_px,
+              transparent_zones: (am && am.transparent_zones) || [],
+            });
+            validRooms.push(r);
+          });
+          if (statusEl) statusEl.textContent =
+            'Re-analyzing ' + validRooms.length + ' room(s)...';
+
+          var resp = await fetch('/api/room/reanalyze_batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          var dataAll = await resp.json();
+          if (dataAll.error) throw new Error(dataAll.error);
+
+          var resultsByName = {};
+          (dataAll.results || []).forEach(function (res) {
+            resultsByName[res.name] = res;
+          });
+
+          validRooms.forEach(function (r) {
+            var res = resultsByName[r.name];
+            if (!res || res.error) { fail++; return; }
+            var am = amendments[r.name];
+            var deleted = new Set((am && am.deleted_auto_signatures) || []);
+            var prevW = (am && am.windows) || r.windows || [];
+            var prevO = (am && am.openings) || r.openings || [];
+            var manualW = prevW.filter(function (w) { return w.origin === 'manual'; });
+            var manualO = prevO.filter(function (o) { return o.origin === 'manual' && !o.has_door; });
+            var preservedDoors = prevO.filter(function (o) { return o.has_door; });
+
+            var newW = (res.windows || [])
+              .filter(function (w) { return !deleted.has(_sig('window', w)); })
+              .map(function (w) {
+                return {
+                  face: w.face,
+                  offset_cm: w.offset_cm, width_cm: w.width_cm,
+                  offset_px: w.offset_px, width_px: w.width_px,
+                  origin: 'auto',
+                };
+              });
+            var newO = (res.openings || [])
+              .filter(function (o) { return !deleted.has(_sig('opening', o)); })
+              .map(function (o) {
+                return {
+                  face: o.face,
+                  offset_cm: o.offset_cm, width_cm: o.width_cm,
+                  offset_px: o.offset_px, width_px: o.width_px,
+                  has_door: false, origin: 'auto',
+                };
+              });
+
+            var mergedW = newW.concat(manualW);
+            var mergedO = newO.concat(preservedDoors, manualO);
+            r.windows = mergedW;
+            r.openings = mergedO;
+            if (am) { am.windows = mergedW; am.openings = mergedO; }
+            if (window.fpData && window.fpData.rooms) {
+              var fr = window.fpData.rooms.find(function (x) { return x.name === r.name; });
+              if (fr) { fr.windows = mergedW; fr.openings = mergedO; }
+            }
+            ok++;
+          });
+          renderIngestion();
+          populateRoomsJson();
+          var json = document.getElementById('fpRoomsJson');
+          if (json && json.value && typeof window.fpLoadAndMatch === 'function') {
+            window.fpLoadAndMatch(json.value);
+          }
+          if (statusEl) statusEl.textContent =
+            'Re-analyze done: ' + ok + ' OK, ' + fail + ' failed.';
+        } catch (err) {
+          console.error(err);
+          if (statusEl) statusEl.textContent = 'Error: ' + err.message;
+        } finally {
+          btnReanAll.disabled = false;
+          btnReanAll.textContent = origLabel;
+        }
+      });
+    }
   });
 
   // devExportV3Json extracted to olm/static/ingestion_export.js (D-94 P4).
