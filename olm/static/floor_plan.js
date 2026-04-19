@@ -344,6 +344,7 @@
     state.room_windows = localRoom.windows || [];
     state.room_openings = localRoom.openings || [];
     state.room_exclusions = localRoom.exclusion_zones || [];
+    state.room_transparents = localRoom.transparent_zones || [];
     state.corridor_face = room.corridor_face || "";
     state.selectedRow = 0;
     state.selectedBlock = -1;

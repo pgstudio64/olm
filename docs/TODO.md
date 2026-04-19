@@ -110,8 +110,8 @@ Abandonné (inutile) : saisie manuelle d'échelle (cm/px ou points de calage) et
 
 Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adjust room" (D-63).
 
-- [ ] CRUD ouvertures : ajout, suppression, déplacement, type (porte/baie)
-- [ ] **Zones interdites et transparentes (Room)** : permettre de définir des zones interdites (obstacles réels, rouge) et des zones transparentes (artefacts graphiques à ignorer, vert) par pièce au niveau Room. Même ergonomie que la création/redimensionnement des pièces au niveau Floor.
+- [x] CRUD ouvertures : ajout, suppression, déplacement, redimensionnement (D-103). Changement de type non implémenté (on supprime et on redessine).
+- [x] **Zones interdites et transparentes (Room)** : zones interdites (rouge, `EXCLUSION`) et zones transparentes (vert, `TRANSPARENT`) définissables dans Room amend mode via le dropdown "Add room items" (D-103).
 - [ ] **Relance analyse pièce (Room)** : bouton pour relancer l'identification automatique des fenêtres, portes et ouvertures sur la pièce courante. Permet de placer d'abord les zones interdites/transparentes, puis de relancer l'analyse qui en tiendra compte.
 - [ ] **Préserver les modifications manuelles** : lorsque l'utilisateur a redéfini manuellement la taille ou les contours d'une pièce, la relance de l'analyse automatique ne doit pas remettre en cause ces modifications. Les données manuelles ont priorité sur la détection auto.
 - [ ] **Bouton Close** : ferme le projet courant. Si des modifications non sauvegardées existent, émettre un warning de confirmation avant de fermer.
@@ -255,6 +255,8 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
 
 ### Revue UX (restant)
 
+- [ ] **Fine-tuning taille éléments graphiques** : ajuster les épaisseurs de traits (murs, fenêtres, portes, arcs), diamètre des ronds de grille, taille des poignées/badges pour un rendu visuellement agréable à tous les niveaux de zoom. Actuellement : non-scaling-stroke appliqué partout + cap sur les dots grille à 2 px.
+- [ ] **Total area en m² non rafraîchi au changement d'échelle** : quand l'utilisateur modifie l'échelle (drawing_scale), le total area affiché reste sur l'ancienne valeur. À relier au recompute scale.
 - [ ] **Édition contours au niveau Room** : ajouter la capacité de modifier les contours de la pièce dans Room (même outil que l'édition bbox dans Floor)
 
 - [ ] **Bug position pièce 305 dans Office** : la pièce 305 est positionnée en (0,0) dans Office alors qu'elle est correctement placée dans Floor et Room. Semble arriver lorsqu'il y a un match automatique.

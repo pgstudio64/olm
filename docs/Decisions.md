@@ -7,6 +7,36 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-103 · Room amend mode — CRUD ouvertures + zones (exclusion rouge / transparent vert) (2026-04-19)
+
+**Décisions** :
+
+- **CRUD graphique ouvertures** en Room amend mode (fenêtres, portes, ouvertures simples) :
+  - Ligne de clic transparente large sur chaque ouverture → sélection sans poignée pré-affichée (évite la confusion "toutes actives").
+  - Poignée circulaire + badge × (suppression) sur l'élément sélectionné uniquement.
+  - Drag de la poignée → déplacement le long du mur (snap GRID_STEP_CM, clamp).
+  - Poignées carrées aux extrémités → redimensionnement par le début/la fin du mur (snap, MIN=GRID_STEP_CM).
+  - Suppression via badge × ou touche Delete/Backspace.
+  - Changement de type non supporté (supprimer + redessiner couvre le besoin — décidé avec l'utilisateur).
+
+- **Zones transparentes** : artefacts graphiques à ignorer sur le plan, rendu vert semi-transparent (`#58c080`). Backend DSL : nouveau keyword `TRANSPARENT x y w h` stocké dans `RoomSpec.transparent_zones: list[ExclusionZone]` (réutilise la même dataclass, `physical=False`). Frontend : `state.room_transparents`, interactions identiques aux `room_exclusions` (sélection, drag, 4 poignées de resize NW/NE/SW/SE, delete).
+
+- **UI unifiée d'ajout** : dropdown **"Add room items ▾"** dans la toolbar Room amend mode, remplace les 4 boutons individuels. Items : Window, Door, Opening, Exclusion zone (red), Transparent zone (green).
+
+- **Rendu — traits à taille constante** : `vector-effect="non-scaling-stroke"` sur murs / fenêtres / portes / ouvertures / effacement mur sous ouverture, et cap de taille des points de grille à 2 px via `_currentZf`. Les poignées et badges sont dimensionnés en pixels CSS via `_currentZf`.
+
+- **Zoom fit par défaut** : pièce + 20% de sa hauteur en haut/bas et 20% de sa largeur à gauche/droite (anciennement pixels absolus + correction d'aspect-ratio qui rapetissait le rendu). Zoom out clamp assoupli à 3× la vue fitée par défaut.
+
+- **Labels dimension pièce** : déplacés sous la pièce (width) et à gauche (depth), offset augmenté à 48 px pour ne plus masquer les poignées d'ouvertures.
+
+- **Poignées de coin pièce** : taille portée à ~10 px CSS constants (auparavant 2 unités SVG qui devenaient invisibles au zoom arrière).
+
+- **UX divers** : entrée "All" retirée des listes Room et Office (conservée en Import), largeur min panneau gauche Room/Office 180 px, panneau droit 263 px, Pattern Editor min left 216 / min right 259.
+
+**Impact** : [editor.js](../olm/static/editor.js), [init_rvtool.js](../olm/static/init_rvtool.js), [render_shared.js](../olm/static/render_shared.js), [room_dsl.py](../olm/core/room_dsl.py), [room_model.py](../olm/core/room_model.py), [app.py](../olm/server/app.py), [pattern_editor.html](../olm/templates/pattern_editor.html), [init_resize.js](../olm/static/init_resize.js).
+
+---
+
 ## D-102 · Rulers mètres unifiés + resize colonnes persistant (2026-04-19)
 
 **Décisions UX** regroupées (canvas SVG partagé Room/Office/PatternEditor) :

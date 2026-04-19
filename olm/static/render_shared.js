@@ -59,10 +59,10 @@
       leafOff = swingLeft ? mag : -mag;
       arcPath = '<path d="M ' + freeCoord + ' ' + wallCoord +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeCoord + ' ' + arcEnd +
-        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="1.5" stroke-dasharray="6 3"/>';
+        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>';
       leafLine = '<line x1="' + (hingeCoord + leafOff) + '" y1="' + wallCoord +
         '" x2="' + (hingeCoord + leafOff) + '" y2="' + arcEnd +
-        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="1.5"/>';
+        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
     } else if (face === 'north') {
       sweepDir = swingLeft ? 1 : 0;
       if (!opensInward) sweepDir = 1 - sweepDir;
@@ -70,10 +70,10 @@
       leafOff = swingLeft ? mag : -mag;
       arcPath = '<path d="M ' + freeCoord + ' ' + wallCoord +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + hingeCoord + ' ' + arcEnd +
-        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="1.5" stroke-dasharray="6 3"/>';
+        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>';
       leafLine = '<line x1="' + (hingeCoord + leafOff) + '" y1="' + wallCoord +
         '" x2="' + (hingeCoord + leafOff) + '" y2="' + arcEnd +
-        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="1.5"/>';
+        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
     } else if (face === 'west') {
       sweepDir = swingLeft ? 0 : 1;
       if (!opensInward) sweepDir = 1 - sweepDir;
@@ -81,10 +81,10 @@
       leafOff = swingLeft ? -mag : mag;
       arcPath = '<path d="M ' + wallCoord + ' ' + freeCoord +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEnd + ' ' + hingeCoord +
-        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="1.5" stroke-dasharray="6 3"/>';
+        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>';
       leafLine = '<line x1="' + wallCoord + '" y1="' + (hingeCoord + leafOff) +
         '" x2="' + arcEnd + '" y2="' + (hingeCoord + leafOff) +
-        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="1.5"/>';
+        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
     } else { // east
       sweepDir = swingLeft ? 1 : 0;
       if (!opensInward) sweepDir = 1 - sweepDir;
@@ -92,10 +92,10 @@
       leafOff = swingLeft ? mag : -mag;
       arcPath = '<path d="M ' + wallCoord + ' ' + freeCoord +
         ' A ' + dw + ' ' + dw + ' 0 0 ' + sweepDir + ' ' + arcEnd + ' ' + hingeCoord +
-        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="1.5" stroke-dasharray="6 3"/>';
+        '" fill="none" stroke="' + COLOR_DOOR_ARC + '" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>';
       leafLine = '<line x1="' + wallCoord + '" y1="' + (hingeCoord + leafOff) +
         '" x2="' + arcEnd + '" y2="' + (hingeCoord + leafOff) +
-        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="1.5"/>';
+        '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
     }
 
     return [arcPath, leafLine];
@@ -138,12 +138,15 @@
     var dots = [];
     var lines = [];
 
-    // 10 cm dots — skip when zoomed out too far (would overlap)
+    // 10 cm dots — skip when zoomed out too far (would overlap).
+    // Cap max visual size: r ne dépasse pas 1.5 px (via _currentZf).
     if (vb.w / step10cm < 150) {
+      var zf = window._currentZf || 1;
+      var r = Math.min(0.6, 2 * zf);
       for (var gx = gxS; gx <= gxE; gx += step10cm) {
         for (var gy = gyS; gy <= gyE; gy += step10cm) {
           dots.push('<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
-            '" r="0.6" fill="' + dotColor + '"/>');
+            '" r="' + r.toFixed(2) + '" fill="' + dotColor + '"/>');
         }
       }
     }
