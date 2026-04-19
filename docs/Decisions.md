@@ -7,6 +7,47 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-106 · Leçons tirées d'une tentative d'implémentation Phase 1 de D-105 (2026-04-19)
+
+**Contexte** : tentative d'implémenter D-105 Phase 1 (ray-cast depuis seeds + classification murs + fenêtres combinées) sans traiter encore les portes (Phase 2). Le commit WIP a été **reverted** (`9f3d6a9` → `edb3fb9`) après constat que l'approche en deux phases produit un résultat cassé intermédiaire.
+
+**Ce qui ne marchait pas** :
+
+1. **Ray-cast qui s'échappe par les portes** : pour les pièces avec portes ouvrant sur un couloir, les rayons traversent la porte et trouvent un mur très lointain (autre pièce, extérieur). Résultat : bboxes gigantesques qui chevauchent plusieurs pièces réelles. Impact visuel : rooms de couloir (WC, cuisine, escaliers, archives…) qui prennent la moitié de l'étage.
+2. **Match endpoint qui hang** : les dimensions dégénérées (ou démesurées) font boucler ou ralentir drastiquement `match_room` qui itère le catalogue pour chaque pièce. Sur 30 pièces avec certaines à 30m × 30m, le match ne renvoyait jamais. fpData restait sur les données d'une session précédente → impression que "rien ne se passe".
+3. **Hot-reload Flask en mode debug** tue les requêtes en cours dès qu'on sauvegarde un `.py`. Conseil : tester avec `FLASK_DEBUG=0` pendant les phases d'intégration.
+4. **`remove_non_ortho` sur l'image entière est coûteux / crashe sur gros plan** : la boucle Python sur les connected components + `cv2.minAreaRect` ne passe pas à l'échelle. Pour les re-analyses batch, skip l'appel ou l'appliquer uniquement sur le crop.
+
+**Enseignements** :
+
+- **Phase 1 et Phase 2 sont indissociables** : sans masquage des portes (Phase 2), le ray-cast (Phase 1) donne des bboxes inutilisables pour les pièces ayant des portes larges ou des ouvertures non-triviales. Il faut livrer les deux phases ensemble.
+- **Besoin de seeds de porte dans le JSON v3** : la spec actuelle (`doors: [{seed_x, seed_y}]`) n'est pas respectée par le fichier `test_floorplan_preprocessed.json` qui a des doors en format OCR enrichi (`face`, `offset_px`, `width_px`). Régénérer ce fichier avec seeds est un pré-requis à Phase 2.
+- **Tests end-to-end sur gros plan dès le début** : les effets d'échelle (80 pièces, image 5000+ px, catalogue de centaines de patterns) font émerger des bugs absents sur les petits jeux de test. Tester tôt avec le test_floorplan_preprocessed (30 pièces) est utile.
+- **Alternative envisagée** : détection d'échappée par couleur (arrêter les rayons à la transition vers vert couloir / bleu extérieur). Rejetée au profit du plan original D-105 (seeds de porte + zones transparentes), plus robuste et plus fidèle à la sémantique des plans.
+
+**État actuel** : code revert à `edb3fb9`. Pipeline Préprocessé lit toujours le JSON directement (windows/openings OCR-enrichies non recalculées). À reprendre en session dédiée avec les deux phases ensemble.
+
+**Décisions de conception prises pendant la session (à ne pas redécouvrir)** :
+
+1. **Point d'entrée fiable Préprocessé** = `seed_x/seed_y` pièce + `seed_x/seed_y` portes + `id` + `surface` + couleurs `-SD` (bleu extérieur, vert couloir). Tout le reste (`bbox_px`, `windows`, `openings`) doit être **recalculé**, même si le JSON en contient (bootstrap OCR non fiable).
+2. **Fenêtres** : algo combiné = texture (primaire) + fallback couleur bleue pour fenêtre full-face si rien détecté. Ne PAS basculer en "full-face" par défaut dès que la face borde du bleu — les bureaux ont souvent plusieurs fenêtres séparées à détecter finement.
+3. **Portes** : pas de détection d'arc. Seeds JSON → snap à la face la plus proche, largeur = `default_door_width_cm`. Zone transparente auto au seed, couvrant l'ouverture + l'arc, largeur = profondeur = `default_door_width_cm`.
+4. **`default_door_width_cm`** : paramètre global Settings General, 90 cm par défaut. Utilisé partout (CRUD manuel D-103, genération auto portes D-105, zone transparente d'arc).
+5. **`origin` → `modified: bool`** : renommage décidé (cohérent avec "amended"). Préservé via cache par clé `(type, face, offset_cm, width_cm)` dans `_rvCommitFromState` à travers le round-trip DSL. **Absent de la DSL** (transparent pour l'utilisateur), présent dans le JSON v3 au save.
+6. **Suppressions manuelles d'auto-détectés** : `deleted_auto_signatures` (liste de clés) par pièce → filtrés aux ré-analyses suivantes, évite la réapparition. Persisté dans `olm_state` (TODO).
+7. **Batch re-analyze** : un seul POST `/api/room/reanalyze_batch` avec tous les rooms (pas de chunks), image + binary chargés **1× côté serveur**, sliced per-room. `remove_non_ortho` **skippé** (trop coûteux par crop, trop coûteux global). Compromis accepté : les arcs non filtrés dans re-analyze → Phase 2 y remédie via zones transparentes auto au seed de porte.
+8. **`extract_room_features`** : paramètre `binary_global` optionnel → fast path sans remove_non_ortho quand l'appelant a déjà le binary. Zones transparentes appliquées au slice via zéro-out du mask (pas de peinture PIL).
+9. **Recalibration de `cm_per_px`** à l'import Préprocessé : médiane des `sqrt(surface_m2 * 10000 / area_px)` sur les bboxes ray-cast valides. Remplace le `plan_scale`/JSON legacy.
+10. **Garde-fou min/max dimensions** : rooms avec `width_cm < 100` ou `depth_cm < 100` → fallback surfacique. Rooms démesurées (`> 15 m`) → à implémenter en Phase 2 via masquage portes.
+11. **Phase 1 et Phase 2 doivent être livrées ensemble** : l'échec de cette session montre qu'une Phase 1 seule donne des bboxes cassées inutilisables (ray-cast s'échappe). Ne pas redémarrer sans le masquage des portes.
+12. **Développement / tests** : `FLASK_DEBUG=0` pendant les intégrations pour éviter que le hot-reload tue les requêtes en cours. Tester **tôt** sur le gros plan (30 pièces) pour détecter les problèmes d'échelle.
+13. **Alternative "détection par couleur"** (stopper les rayons à la transition vers vert/bleu) : **rejetée**. Moins robuste, ne respecte pas la sémantique architecturale (un rayon qui traverse une porte devrait s'arrêter au mur opposé masqué, pas à la peinture du couloir).
+14. **Pré-requis Phase 2** : régénérer `test_floorplan_preprocessed.json` avec `doors: [{seed_x, seed_y}]`. Actuellement les doors sont au format OCR enrichi (`face`, `offset_px`, `width_px`). Les seeds peuvent être dérivés par un outil séparé depuis les enriched data + bbox OCR, **mais** ça doit être fait avant le développement du pipeline D-105.
+15. **V/H-rays en Room** : toggles à gauche du canvas toolbar (comme en Floor). Les hits sont exposés par le pipeline préprocessé via `room.hits` (4 points seed → bords du bbox), convertis en coords room-local cm au chargement de la pièce. Colors : N=vert, S=bleu, W=rouge, E=orange. Seed = cercle vert, hits = disques jaunes.
+16. **Style I/O disque** : **une seule ouverture** de l'image par pipeline. Jamais `PIL.Image.open()` dans une boucle par pièce. Charger 1× globalement, passer `image_arr` ou `binary_global` en paramètre aux fonctions per-room. Règle qui a divisé le temps de re-analyze par ~N (avec N = nombre de pièces).
+
+---
+
 ## D-105 · Pipeline Préprocessé refondu — ray-cast depuis seeds + sémantique couleurs + portes via seeds (2026-04-19)
 
 **Contexte** : l'implémentation actuelle de `extract_rooms_from_preprocessed` (et par ricochet `extract_room_features` pour D-104) suppose que le JSON v3 contient des `bbox_px` / `windows` / `openings` fiables. **C'est faux** : ces champs viennent d'une passe OCR antérieure utilisée pour bootstrapper le fichier Préprocessé et ne sont **pas** la source de vérité. En Mode Préprocessé, les **seules entrées fiables** sont :
