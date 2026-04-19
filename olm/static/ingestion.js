@@ -1161,6 +1161,11 @@
         var dpi = getRenderDpi();
         if (scaleNum > 0 && dpi > 0 && ingState.rooms.length > 0) {
           ingState.scale = computeCmPerPx(scaleNum, dpi);
+          // Propage aussi la nouvelle échelle dans fpOverlay (utilisé par
+          // Room / Office pour positionner l'overlay du plan).
+          if (window.fpOverlay && ingState.scale > 0) {
+            window.fpOverlay.pxPerCm = 1.0 / ingState.scale;
+          }
           ingState.rooms.forEach(function(r) {
             if (r.bbox_px) _updateRoomDims(r);
           });
