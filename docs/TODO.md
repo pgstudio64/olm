@@ -126,6 +126,52 @@ Livrée en 2026-04-20 (D-120). Quatre étapes réalisées :
 - Bouton **Check orient.** ajouté dans Room toolbar (handler prêt,
   R-13 étape 2) : à tester visuellement maintenant que C1-C4 sont livrés.
 
+### R-14 : Refactor canonique unifié (D-121) — PRIORITÉ HAUTE
+
+Plan complet : `docs/specs/CANONICAL_REFACTOR_PLAN.md`.
+
+Origine : 4 sessions de fixes sur le repère canonique (D-117, D-120, +
+3 commits même journée) révèlent l'absence d'une frontière unique, de
+structures uniformes, et d'un contrat front/back explicite. Les 6
+symptômes observés (902/915/922/906/...) partagent la même cause
+racine. Refactor structurel en 7 phases.
+
+- [ ] **P1 — Rotation `offset_px` intégrée à canonicalIO** : étendre
+  `fromStorage` / `toStorage` avec `scale` dans la signature, roter
+  offset_px en interne. Supprimer recalcul ad-hoc dans
+  `ingestion_serialize.js:serializeForStorage` et `ingestion.js:_renderRoom`.
+  Tests round-trip étendus.
+- [ ] **P2 — Fusion `bbox_abs_px` / `seed_abs_px`** : supprimer ces
+  champs, garder seulement `bbox_px` / `seed_px` (image coords, jamais
+  rotés). Adapter tous les call sites identifiés (canonical_io,
+  editor.js save, init_rvtool re-analyze, ingestion batch re-analyze).
+- [ ] **P3 — Renommage `original_corridor_face` → `corridor_face_abs`** :
+  clarification sémantique. Suppression du `corridor_face` canonique
+  stocké (dérivable = "south" par construction). Nettoyage des
+  lectures ambiguës `room.original_corridor_face || room.corridor_face`.
+- [ ] **P4 — Séparation openings/doors uniforme dans state** :
+  introduire `state.room_doors`, supprimer `has_door:true` dans
+  `state.room_openings`. Adapter `buildRoomDSL`, `_stateToDsl`,
+  `renderRoomElements`, CRUD (add window/door/opening),
+  `_rvCommitFromState`. Supprimer les combine/split aux frontières.
+- [ ] **P5 — Contrat front/back `/api/floor-plan/match`** : frontend
+  envoie canonique. Backend canonicalise via `canonical.py` (actuellement
+  orphelin) avant matching. Tests front/back.
+- [ ] **P6 — Suppression des conversions ad-hoc** : `pointAbsToCanon`,
+  `_absToCanon2`, `_canonicalAngle` (local), FACE_MAPS éparpillées.
+  Tout passe par canonicalIO public (ajout helpers `rotatePoint` /
+  `rotateRect` si besoin).
+- [ ] **P7 — Tests round-trip complets + spec** : tests Node sur rooms
+  complètes (pas juste fragments). Nouvelle spec `CANONICAL_STATE.md`
+  remplaçant `CANONICAL_STATE_REFACTOR.md` : structure unique
+  documentée, contrats explicites, antipatterns interdits.
+
+Points ouverts à arbitrer avant démarrage :
+- Backend `/api/room/reanalyze` reste en absolu (pragmatique).
+- JSON v3 sur disque reste en absolu (évite migration), seul le
+  renommage `original_corridor_face` → `corridor_face_abs` impacte.
+- `scale` toujours disponible aux call sites canonicalIO (confirmé).
+
 ### R-13 : Auto-test d'orientation canonique (D-119)
 
 Objectif : valider automatiquement l'invariant « posture humaine » R-12
@@ -198,6 +244,12 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
   ingestion.js). Utilisait `o.origin !== "auto"` → capturait les doors
   initiales (origin:undefined) et bloquait la redétection au 1er appel.
   Passé à `o.origin === "manual"`, cohérent avec `manualW` / `manualO`.
+- [ ] **Perf Re-analyze All** : ~1s/pièce sur MacBook M4 (CPU 10× la
+  machine cible). Extrapolation : ~10s/pièce sur cible, 28 pièces →
+  280s. Piste la plus évidente : serialiser les appels `extract_room_features`
+  depuis un endpoint batch côté backend et mutualiser le chargement
+  / binarisation de l'image (actuellement refait par pièce). À
+  creuser : profiling `detect_room_three_phase` + `_classify_wall_direct`.
 - [ ] **Toggle « lock bbox » sur Re-analyze (D-118)** : checkbox dans la Room toolbar. Quand coché, le re-analyze ne modifie pas `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Utile pour raffiner les ouvertures après repositionnement manuel ou dépose d'un mur modélisée via zone transparente.
 - [x] **Bouton Close** : ferme le projet courant avec confirmation (warning unsaved changes implicite).
 - [x] **Bouton Erase** (All / Layout only) avec confirmation.

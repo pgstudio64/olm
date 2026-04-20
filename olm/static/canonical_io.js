@@ -174,11 +174,14 @@
     var copy = JSON.parse(JSON.stringify(roomCanon));
     var ocf = roomCanon.original_corridor_face || "";
 
-    // Restaure bbox_px / seed_px
-    if (roomCanon.bbox_abs_px) {
+    // Restaure bbox_px / seed_px depuis bbox_abs_px / seed_abs_px UNIQUEMENT
+    // si pas déjà présents dans roomCanon. bbox_px est absolu en canonique
+    // (fromStorage ne rote pas les coords image) ; il peut être plus à jour
+    // que bbox_abs_px après un re-analyze qui écrit seulement bbox_px.
+    if (!copy.bbox_px && roomCanon.bbox_abs_px) {
       copy.bbox_px = roomCanon.bbox_abs_px;
     }
-    if (roomCanon.seed_abs_px) {
+    if (!copy.seed_px && roomCanon.seed_abs_px) {
       copy.seed_px = roomCanon.seed_abs_px;
     }
 

@@ -5,6 +5,44 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased] — D-115 à D-121 (2026-04-20)
+
+### Fixes session post-D-120
+
+- **Pièce 902 door mauvais côté en Floor** : `renderIngestion` appliquait
+  le rendu sur face canonique alors que le raster est en absolu. Fix :
+  helper `_renderRoom` applique `toStorage()` + recompute `offset_px /
+  width_px` par pièce à l'entrée du forEach.
+- **Pièce 915 NaN flood SVG** : windows/openings sans `offset_px` →
+  `<line x1="NaN">`. Fix : guards `!isNaN` cohérents avec doors.
+- **Pièce 915 door rendue comme opening** : batch re-analyze écrivait
+  `r.openings = mergedO` combiné, laissait `r.doors` stale. Fix : split
+  `mergedO` → `mergedOpenings` + `mergedDoors` à l'injection dans
+  ingState.rooms / fpData.rooms. bbox_abs_px synchronisé avec bbox_px.
+- **Pièce 922 bbox trop basse sans clic** : `toStorage` écrasait
+  systématiquement `bbox_px` par `bbox_abs_px`, même si bbox_px était
+  plus à jour (post-re-analyze). Fix : bbox_abs_px / seed_abs_px
+  deviennent fallback (utilisés uniquement si bbox_px / seed_px
+  absents). Dette reportée à R-14 P2 (fusion des champs redondants).
+- **Pièce 906 door invisible DSL/visu Review** : `fpRenderEmptyRoom` et
+  `enterRoomAmendMode` écrivaient `state.room_openings = localRoom.openings`
+  sans inclure `localRoom.doors` séparées. DSL (`rvRenderCurrent`)
+  n'itérait que openings. Fix : combiner openings+doors (has_door:true)
+  dans state + itérer les deux dans rvRenderCurrent DSL emission.
+- **Pièce 906 180° flip post Save Room** : `fpRoomAmendments[name]`
+  stockait `amendedRoom` (absolu post-toStorage) alors que consumers
+  (fpRenderEmptyRoom) attendent canonique. Fix : stocker deep copy de
+  `fpData.rooms[fr]` après propagation (canonique, cohérent avec
+  invariant). `amendedRoom` (absolu) reste local pour `fpRematchRoom`.
+
+### Planifié
+
+- **D-121 / R-14 — Refactor canonique unifié** (plan complet :
+  `docs/specs/CANONICAL_REFACTOR_PLAN.md`). 7 phases pour éliminer les
+  causes racines des fixes récurrents : frontière unique canonicalIO,
+  structures uniformes, champs redondants supprimés, contrat front/back
+  explicite. ~6 jours de travail concentré.
+
 ## [Unreleased] — D-115 à D-120 (2026-04-20)
 
 ### Ajouté

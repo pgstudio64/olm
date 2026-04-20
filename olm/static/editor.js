@@ -1456,8 +1456,14 @@ async function save() {
       bbox_abs_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : null,
       seed_abs_px: _origSeed ? _origSeed.slice() : null,
     };
+    // amendedRoom = version ABSOLUE pour le backend /api/floor-plan/match.
     var amendedRoom = window.canonicalIO.toStorage(canonRoom);
-    fpRoomAmendments[ramend.roomName] = amendedRoom;
+    // fpRoomAmendments stocke la version CANONIQUE — même convention que
+    // fpData.rooms (post-fromStorage au load). Les consommateurs du rendu
+    // (rvRenderCurrent, fpRenderEmptyRoom) s'attendent à du canonique et
+    // rendent buggé si on leur passe de l'absolu (bug 180° sur pièces
+    // non-south détectées).
+    fpRoomAmendments[ramend.roomName] = JSON.parse(JSON.stringify(canonRoom));
 
     // Propagate new size + NW shift back to ingState.rooms (and
     // fpData.rooms) so Floor reflects the amendment on the bbox overlay.
@@ -1581,6 +1587,9 @@ async function save() {
               JSON.parse(JSON.stringify(state.room_exclusions || []));
             window.fpData.rooms[fr].transparent_zones =
               JSON.parse(JSON.stringify(state.room_transparents || []));
+            // fpRoomAmendments mirror la version canonique de fpData.rooms[fr].
+            fpRoomAmendments[ramend.roomName] =
+              JSON.parse(JSON.stringify(window.fpData.rooms[fr]));
             break;
           }
         }
@@ -1872,7 +1881,15 @@ function enterRoomAmendMode(room) {
   state.room_width_cm = localRoom.width_cm;
   state.room_depth_cm = localRoom.depth_cm;
   state.room_windows = JSON.parse(JSON.stringify(localRoom.windows || []));
-  state.room_openings = JSON.parse(JSON.stringify(localRoom.openings || []));
+  // state.room_openings est COMBINÉ (openings non-door + doors has_door=true),
+  // convention pour Room amend (buildRoomDSL distingue via o.has_door).
+  // ingState / fpData gardent openings et doors séparés (invariant fromStorage) ;
+  // on recombine ici pour que les doors apparaissent dans le rendu Room.
+  var _lrOpenings = JSON.parse(JSON.stringify(localRoom.openings || []));
+  var _lrDoors = (localRoom.doors || []).map(function (d) {
+    return Object.assign(JSON.parse(JSON.stringify(d)), { has_door: true });
+  });
+  state.room_openings = _lrOpenings.concat(_lrDoors);
   state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
   state.room_transparents = JSON.parse(JSON.stringify(localRoom.transparent_zones || []));
   state.corridor_face = room.corridor_face || "";

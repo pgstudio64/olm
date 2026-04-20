@@ -7,6 +7,70 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-121 · Plan de refactor canonique unifié — R-14 (2026-04-20)
+
+**Décision** : après 4 sessions successives de fixes sur le repère canonique
+(D-117, D-120, + 3 commits même journée), acter que l'architecture R-12 a
+atteint sa limite de viabilité et planifier un refactor structurel en 7
+phases. Spec complète dans `docs/specs/CANONICAL_REFACTOR_PLAN.md`.
+
+**Justification** :
+
+Symptômes récurrents liés à la même cause racine (**absence de frontière
+unique et de structures uniformes**) :
+- Pièce 902 door mauvais côté (Floor render canonique face ≠ absolu).
+- Pièce 915 NaN flood + door→opening (séparation openings/doors cassée au
+  batch re-analyze ; guards !isNaN manquants).
+- Pièce 922 bbox mal dessinée (bbox_abs_px stale écrase bbox_px à jour
+  dans toStorage).
+- Pièce 906 door invisible DSL/visu Review (state.room_openings non
+  combiné avec doors séparées à l'entrée amend).
+- Pièce 906 180° flip post-Save (fpRoomAmendments stockait absolu
+  alors que consumers attendent canonique).
+- Contrat /api/floor-plan/match faussé silencieusement (front envoie
+  absolu, backend matcher suppose canonique, résultats corrects par
+  accident seulement pour pièces south).
+
+**Causes identifiées** :
+1. Conversions éparpillées : 8-12 sites font leur propre rotation
+   ad-hoc (pointAbsToCanon, _absToCanon2, _canonicalAngle, _pxFromCm,
+   FACE_MAPS locales dupliquées).
+2. Champs redondants désynchronisables : `bbox_px`/`bbox_abs_px`,
+   `seed_px`/`seed_abs_px`, `corridor_face`/`original_corridor_face`.
+3. Structures non uniformes : `state.room_openings` combine les doors
+   via `has_door:true`, alors que `ingState.rooms[i].openings` et
+   `.doors` sont séparés. Re-combine / re-split à chaque frontière,
+   avec oublis systémiques.
+4. `toStorage` ne rote pas `offset_px` — recalcul ad-hoc à la
+   sérialisation, oubli possible dans d'autres chemins.
+5. Contrat front/back implicite et non documenté.
+
+**Plan R-14** (7 phases) :
+- P1 Rotation `offset_px` intégrée à canonicalIO (supprime ad-hoc).
+- P2 Fusion `bbox_abs_px` / `seed_abs_px` (suppression redondance).
+- P3 Renommage `original_corridor_face` → `corridor_face_abs`, retrait
+  du `corridor_face` canonique stocké (dérivable).
+- P4 Séparation openings/doors uniforme dans `state.room_*`
+  (introduction `state.room_doors`, fini `has_door:true` dans state).
+- P5 Contrat front/back : /api/floor-plan/match canonicalise via
+  `canonical.py` backend (actuellement orphelin).
+- P6 Suppression des conversions ad-hoc.
+- P7 Tests round-trip étendus + spec CANONICAL_STATE.md.
+
+**Impact** :
+- ~6 jours de travail concentré, découpé en commits isolés et testables.
+- Disparition par construction des 6 symptômes actuels + leakage latents.
+- Simplification : une seule forme canonique partout, une seule frontière.
+
+**Points ouverts à arbitrer** (avant exécution) :
+- Backend `/api/room/reanalyze` reste en absolu (pragmatique, travaille
+  sur coords image).
+- JSON v3 sur disque reste en absolu (évite migration). Seul le
+  renommage `original_corridor_face` → `corridor_face_abs` impacte.
+- `scale` toujours disponible aux call sites canonicalIO (confirmé).
+
+---
+
 ## D-120 · Consolidation R-12 C1 → C4 : canonical_io source unique (2026-04-20)
 
 **Décision** : finaliser le refactor R-12 (D-117) en éliminant toute la

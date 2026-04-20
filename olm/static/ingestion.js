@@ -668,7 +668,40 @@
     var show = ingState.show;
     var zoomRoom = ingState.zoomRoom;
 
-    ingState.rooms.forEach(function (room) {
+    // R-12 : ingState.rooms est en repère canonique (corridor_face="south"
+    // via fromStorage). Le Floor overlay doit rendre dans le repère ABSOLU
+    // (le raster). On applique toStorage() par pièce puis on recalcule les
+    // offset_px / width_px depuis offset_cm × pxPerCm (toStorage ne roter
+    // pas les px). Guard contre offset_px undefined / NaN pour éviter les
+    // <line x1="NaN"> côté SVG.
+    var _renderPxPerCm = (ingState.scale && ingState.scale > 0)
+      ? (1.0 / ingState.scale) : 0;
+    function _renderFeat(e) {
+      if (!e) return e;
+      var out = Object.assign({}, e);
+      if (e.offset_cm != null && _renderPxPerCm > 0) {
+        out.offset_px = Math.round(e.offset_cm * _renderPxPerCm);
+      }
+      if (e.width_cm != null && _renderPxPerCm > 0) {
+        out.width_px = Math.round(e.width_cm * _renderPxPerCm);
+      }
+      return out;
+    }
+    function _renderRoom(roomCanon) {
+      var abs = (roomCanon.original_corridor_face !== undefined &&
+                 window.canonicalIO)
+        ? window.canonicalIO.toStorage(roomCanon)
+        : roomCanon;
+      // Copie superficielle pour ne pas muter ingState.rooms[i]
+      var out = Object.assign({}, abs);
+      out.windows  = (abs.windows  || []).map(_renderFeat);
+      out.openings = (abs.openings || []).map(_renderFeat);
+      out.doors    = (abs.doors    || []).map(_renderFeat);
+      return out;
+    }
+
+    ingState.rooms.forEach(function (roomCanon) {
+      var room = _renderRoom(roomCanon);
       if (zoomRoom && room.name !== zoomRoom) return;
       // When focused on a room, hide all others
       if (ingState.focusedRoom && room.name !== ingState.focusedRoom) return;
@@ -726,6 +759,8 @@
       // Windows (cyan, round linecap — same as renderRoomElements)
       if (show.window) {
         (room.windows || []).forEach(function (win) {
+          if (win.offset_px == null || win.width_px == null ||
+              isNaN(win.offset_px) || isNaN(win.width_px)) return;
           drawWallFeature(els, x0, y0, x1, y1, win.face,
             win.offset_px, win.width_px, '#50b8d0', 1.5, '', ' stroke-linecap="round"');
         });
@@ -734,6 +769,8 @@
       // Openings (light green dashed — same as renderRoomElements)
       if (show.opening) {
         (room.openings || []).forEach(function (op) {
+          if (op.offset_px == null || op.width_px == null ||
+              isNaN(op.offset_px) || isNaN(op.width_px)) return;
           if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, op.face, op.offset_px, op.width_px);
           drawWallFeature(els, x0, y0, x1, y1, op.face,
             op.offset_px, op.width_px, '#80c060', 1, '4 3', '');
@@ -1572,12 +1609,21 @@
 
             var mergedW = newW.concat(manualW);
             var mergedO = newO.concat(newDoors, preservedDoors, manualO);
+            // ingState / fpData doivent garder r.openings ET r.doors SÉPARÉS
+            // (invariant posé par fromStorage au load ; le Floor renderer
+            // lit r.doors séparément). mergedO reste combiné pour les
+            // amendments (nécessaire pour les préservations au prochain
+            // re-analyze), mais on split à l'injection dans ingState/fpData.
+            var mergedOpenings = mergedO.filter(function (o) { return !o.has_door; });
+            var mergedDoors = mergedO.filter(function (o) { return o.has_door; });
 
             r.windows = mergedW;
-            r.openings = mergedO;
+            r.openings = mergedOpenings;
+            r.doors = mergedDoors;
             // Adopter le nouveau bbox + dims + corridor_face (D-113).
             if (canon.bbox_px) {
               r.bbox_px = canon.bbox_px;
+              r.bbox_abs_px = canon.bbox_px.slice();
               r.width_cm = canon.width_cm;
               r.depth_cm = canon.depth_cm;
               r.width_px = canon.bbox_px[2] - canon.bbox_px[0];
@@ -1594,6 +1640,8 @@
             }
 
             if (am) {
+              // amendments garde openings combiné (source pour les
+              // préservations au prochain re-analyze via prevO).
               am.windows = mergedW;
               am.openings = mergedO;
               if (canon.corridor_face) {
@@ -1605,9 +1653,11 @@
               var fr = window.fpData.rooms.find(function (x) { return x.name === r.name; });
               if (fr) {
                 fr.windows = mergedW;
-                fr.openings = mergedO;
+                fr.openings = mergedOpenings;
+                fr.doors = mergedDoors;
                 if (canon.bbox_px) {
                   fr.bbox_px = canon.bbox_px;
+                  fr.bbox_abs_px = canon.bbox_px.slice();
                   fr.width_cm = canon.width_cm;
                   fr.depth_cm = canon.depth_cm;
                 }

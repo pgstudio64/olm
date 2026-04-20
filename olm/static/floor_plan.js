@@ -184,12 +184,20 @@
     (localRoom.openings || []).forEach(function(o) {
       var f = faceMap[o.face] || o.face || "?";
       if (o.has_door) {
+        // Compat : certaines entrées legacy ont has_door=true dans openings.
         var dir = o.opens_inward ? "INT" : "EXT";
         var side = (o.hinge_side === "left") ? "L" : "R";
         dsl += "\nDOOR " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90) + " " + dir + " " + side;
       } else {
         dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
       }
+    });
+    // Doors séparées (convention fromStorage / v3 JSON).
+    (localRoom.doors || []).forEach(function(d) {
+      var f = faceMap[d.face] || d.face || "?";
+      var dir = d.opens_inward !== false ? "INT" : "EXT";
+      var side = (d.hinge_side === "left") ? "L" : "R";
+      dsl += "\nDOOR " + f + " " + (d.offset_cm || 0) + " " + (d.width_cm || 90) + " " + dir + " " + side;
     });
     (localRoom.exclusion_zones || []).forEach(function(e) {
       dsl += "\nEXCLUSION " + (e.x_cm || 0) + " " + (e.y_cm || 0) + " " + (e.width_cm || 0) + " " + (e.depth_cm || 0);
@@ -265,7 +273,14 @@
     state.room_width_cm = localRoom.width_cm;
     state.room_depth_cm = localRoom.depth_cm;
     state.room_windows = localRoom.windows || [];
-    state.room_openings = localRoom.openings || [];
+    // state.room_openings est COMBINÉ (openings non-door + doors has_door=true).
+    // localRoom (fpData) garde les deux séparés (invariant fromStorage) ;
+    // on recombine ici pour que le rendu state-based voie les doors.
+    var _lrOpenings = (localRoom.openings || []).slice();
+    var _lrDoors = (localRoom.doors || []).map(function (d) {
+      return Object.assign({}, d, { has_door: true });
+    });
+    state.room_openings = _lrOpenings.concat(_lrDoors);
     state.room_exclusions = localRoom.exclusion_zones || [];
     state.room_transparents = localRoom.transparent_zones || [];
     state.corridor_face = room.corridor_face || "";
