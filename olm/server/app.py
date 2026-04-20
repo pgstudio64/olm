@@ -1205,6 +1205,7 @@ def api_room_reanalyze_batch():
         plan_path = data.get("plan_path", "")
         scale = float(data.get("scale_cm_per_px", 0.5))
         threshold = int(data.get("threshold", 110))
+        door_width_cm = int(data.get("door_width_cm", 90))
         rooms = data.get("rooms") or []
 
         if not plan_path or not os.path.exists(plan_path):
@@ -1238,6 +1239,7 @@ def api_room_reanalyze_batch():
                     scale,
                     transparent_zones_cm=r.get("transparent_zones") or [],
                     doors_px=[],
+                    door_width_cm=door_width_cm,
                     threshold=threshold,
                 )
                 results.append({"name": name, **features})

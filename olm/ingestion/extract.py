@@ -1567,6 +1567,12 @@ def extract_rooms_from_preprocessed(
         openings = [o for o in p["openings_raw"] if isinstance(o, dict)]
         windows = [w for w in p["windows_raw"] if isinstance(w, dict)]
 
+        # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
+        # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
+        # change). Les deux coexistent pour gérer les pièces non-rectangulaires
+        # où cartouche ≠ bbox (D-115).
+        surface_m2_bbox = round((width_cm * depth_cm) / 10_000.0, 2)
+
         room_dict = {
             "name": p["room_id"],
             "seed_px": (seed_x, seed_y),
@@ -1574,6 +1580,7 @@ def extract_rooms_from_preprocessed(
             "width_cm": width_cm,
             "depth_cm": depth_cm,
             "surface_m2": surface_m2,
+            "surface_m2_bbox": surface_m2_bbox,
             "windows": windows,
             "openings": openings,
             "doors": doors,

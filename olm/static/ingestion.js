@@ -8,6 +8,127 @@
 (function () {
   'use strict';
 
+  // --- Shared re-analyze canonicalisation (D-112/D-113) ---------------------
+  // Used by both the unitary room re-analyze (init_rvtool.js) and the batch
+  // floor re-analyze below. Takes the absolute-coord backend payload and
+  // returns canonical-space (corridor always south) features + dims + debug
+  // geometry. The caller handles merge with manual/preserved items.
+  function computeCanonicalReanalyzeResult(data, prevCorridorFace, scale) {
+    var FACE_MAPS = {
+      north: { north: 'south', south: 'north', east: 'west',  west: 'east'  },
+      east:  { north: 'east',  east:  'south', south: 'west', west: 'north' },
+      west:  { north: 'west',  west:  'south', south: 'east', east: 'north' },
+    };
+    var corridor = (data.doors && data.doors.length && data.doors[0].face)
+      ? data.doors[0].face : (prevCorridorFace || '');
+    var bbox = data.bbox_px || null;
+    var absW = bbox ? (bbox[2] - bbox[0]) * scale : 0;
+    var absD = bbox ? (bbox[3] - bbox[1]) * scale : 0;
+    function absFaceLen(face) {
+      return (face === 'north' || face === 'south') ? absW : absD;
+    }
+    var faceMap = FACE_MAPS[corridor];
+    function toCanonFeat(o) {
+      var r = { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
+      if (!faceMap) return r;
+      r.face = faceMap[o.face] || o.face;
+      if (corridor === 'north' || corridor === 'west') {
+        r.offset_cm = absFaceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
+      }
+      r.offset_cm = Math.max(0, Math.round(r.offset_cm));
+      r.width_cm = Math.max(0, Math.round(r.width_cm));
+      return r;
+    }
+    function pointAbsToCanon(xAbs, yAbs) {
+      if (corridor === 'north') return { x: absW - xAbs, y: absD - yAbs };
+      if (corridor === 'east')  return { x: yAbs,         y: absW - xAbs };
+      if (corridor === 'west')  return { x: absD - yAbs,  y: xAbs };
+      return { x: xAbs, y: yAbs };
+    }
+    var windows = (data.windows || []).map(function (w) {
+      var c = toCanonFeat(w);
+      return { face: c.face, offset_cm: c.offset_cm, width_cm: c.width_cm,
+               origin: 'auto' };
+    });
+    var openings = (data.openings || []).map(function (o) {
+      var c = toCanonFeat(o);
+      return { face: c.face, offset_cm: c.offset_cm, width_cm: c.width_cm,
+               has_door: false, origin: 'auto' };
+    });
+    var doors = (data.doors || []).map(function (d) {
+      var c = toCanonFeat(d);
+      var hs = d.hinge_side;
+      if ((corridor === 'north' || corridor === 'west') && hs) {
+        hs = hs === 'left' ? 'right' : 'left';
+      }
+      return {
+        face: c.face, offset_cm: c.offset_cm, width_cm: c.width_cm,
+        has_door: true, hinge_side: hs,
+        opens_inward: d.opens_inward !== false,
+        origin: 'auto',
+      };
+    });
+    var width_cm, depth_cm;
+    if (corridor === 'east' || corridor === 'west') {
+      width_cm = Math.round(absD);
+      depth_cm = Math.round(absW);
+    } else {
+      width_cm = Math.round(absW);
+      depth_cm = Math.round(absD);
+    }
+    var hits = null, seed_cm = null;
+    if (data.hits && bbox) {
+      var hbx0 = bbox[0], hby0 = bbox[1];
+      hits = data.hits.map(function (h) {
+        var pAbs = { x: (h[0] - hbx0) * scale, y: (h[1] - hby0) * scale };
+        var p = pointAbsToCanon(pAbs.x, pAbs.y);
+        return { x_cm: p.x, y_cm: p.y };
+      });
+      if (data.seed_px) {
+        var sAbsX = (data.seed_px[0] - hbx0) * scale;
+        var sAbsY = (data.seed_px[1] - hby0) * scale;
+        var sC = pointAbsToCanon(sAbsX, sAbsY);
+        seed_cm = { x_cm: sC.x, y_cm: sC.y };
+      }
+    }
+    var masks = null;
+    if (data.auto_door_masks_px && bbox) {
+      var rbx0 = bbox[0], rby0 = bbox[1];
+      masks = data.auto_door_masks_px.map(function (rc) {
+        var ax0 = (rc[0] - rbx0) * scale;
+        var ay0 = (rc[1] - rby0) * scale;
+        var aw = (rc[2] - rc[0]) * scale;
+        var ad = (rc[3] - rc[1]) * scale;
+        if (corridor === 'north') {
+          return { x_cm: absW - ax0 - aw, y_cm: absD - ay0 - ad,
+                   width_cm: aw, depth_cm: ad };
+        }
+        if (corridor === 'east') {
+          return { x_cm: ay0, y_cm: absW - ax0 - aw,
+                   width_cm: ad, depth_cm: aw };
+        }
+        if (corridor === 'west') {
+          return { x_cm: absD - ay0 - ad, y_cm: ax0,
+                   width_cm: ad, depth_cm: aw };
+        }
+        return { x_cm: ax0, y_cm: ay0, width_cm: aw, depth_cm: ad };
+      });
+    }
+    return {
+      corridor_face: corridor,
+      bbox_px: bbox,
+      width_cm: width_cm,
+      depth_cm: depth_cm,
+      windows: windows,
+      openings: openings,
+      doors: doors,
+      hits: hits,
+      seed_cm: seed_cm,
+      auto_door_masks: masks,
+    };
+  }
+  window.computeCanonicalReanalyzeResult = computeCanonicalReanalyzeResult;
+
   // --- Drawing scale helpers (extracted to ingestion_scale.js, D-94 P4) ---
   var parseDrawingScale     = window.olmScale.parseDrawingScale;
   var computeCmPerPx        = window.olmScale.computeCmPerPx;
@@ -1411,10 +1532,12 @@
           return k + '|' + e.face + '|' +
             (e.offset_cm || 0) + '|' + (e.width_cm || 0);
         }
+        var doorWidthCm = ((window.APP_CONFIG || {}).default_door_width_cm) || 90;
         try {
           var payload = {
             plan_path: ingState.planPathEnhanced,
             scale_cm_per_px: ingState.scale,
+            door_width_cm: doorWidthCm,
             rooms: [],
           };
           var validRooms = [];
@@ -1462,37 +1585,61 @@
             var prevO = (am && am.openings) || r.openings || [];
             var manualW = prevW.filter(function (w) { return w.origin === 'manual'; });
             var manualO = prevO.filter(function (o) { return o.origin === 'manual' && !o.has_door; });
-            var preservedDoors = prevO.filter(function (o) { return o.has_door; });
+            // Portes préservées : seulement les non-auto (D-110). Les portes
+            // auto sont entièrement redétectées par le backend.
+            var preservedDoors = prevO.filter(function (o) {
+              return o.has_door && o.origin !== 'auto';
+            });
 
-            var newW = (res.windows || [])
-              .filter(function (w) { return !deleted.has(_sig('window', w)); })
-              .map(function (w) {
-                return {
-                  face: w.face,
-                  offset_cm: w.offset_cm, width_cm: w.width_cm,
-                  offset_px: w.offset_px, width_px: w.width_px,
-                  origin: 'auto',
-                };
-              });
-            var newO = (res.openings || [])
-              .filter(function (o) { return !deleted.has(_sig('opening', o)); })
-              .map(function (o) {
-                return {
-                  face: o.face,
-                  offset_cm: o.offset_cm, width_cm: o.width_cm,
-                  offset_px: o.offset_px, width_px: o.width_px,
-                  has_door: false, origin: 'auto',
-                };
-              });
+            // Canonicalise abs → canon en respectant le corridor_face courant
+            // ET en le mettant à jour si une porte est détectée (D-112/D-113).
+            var canon = window.computeCanonicalReanalyzeResult(
+              res, r.corridor_face || '', ingState.scale);
+
+            var newW = canon.windows.filter(function (w) {
+              return !deleted.has(_sig('window', w));
+            });
+            var newO = canon.openings.filter(function (o) {
+              return !deleted.has(_sig('opening', o));
+            });
+            // Portes auto redétectées (déjà canonicalisées) seulement si
+            // aucune porte manuelle n'existe.
+            var newDoors = preservedDoors.length ? [] : canon.doors;
 
             var mergedW = newW.concat(manualW);
-            var mergedO = newO.concat(preservedDoors, manualO);
+            var mergedO = newO.concat(newDoors, preservedDoors, manualO);
+
             r.windows = mergedW;
             r.openings = mergedO;
-            if (am) { am.windows = mergedW; am.openings = mergedO; }
+            // Adopter le nouveau bbox + dims + corridor_face (D-113).
+            if (canon.bbox_px) {
+              r.bbox_px = canon.bbox_px;
+              r.width_cm = canon.width_cm;
+              r.depth_cm = canon.depth_cm;
+              r.width_px = canon.bbox_px[2] - canon.bbox_px[0];
+              r.height_px = canon.bbox_px[3] - canon.bbox_px[1];
+              r.surface_m2_bbox = parseFloat(
+                ((canon.width_cm * canon.depth_cm) / 10000).toFixed(2));
+            }
+            if (canon.corridor_face) r.corridor_face = canon.corridor_face;
+
+            if (am) {
+              am.windows = mergedW;
+              am.openings = mergedO;
+              if (canon.corridor_face) am.corridor_face = canon.corridor_face;
+            }
             if (window.fpData && window.fpData.rooms) {
               var fr = window.fpData.rooms.find(function (x) { return x.name === r.name; });
-              if (fr) { fr.windows = mergedW; fr.openings = mergedO; }
+              if (fr) {
+                fr.windows = mergedW;
+                fr.openings = mergedO;
+                if (canon.bbox_px) {
+                  fr.bbox_px = canon.bbox_px;
+                  fr.width_cm = canon.width_cm;
+                  fr.depth_cm = canon.depth_cm;
+                }
+                if (canon.corridor_face) fr.corridor_face = canon.corridor_face;
+              }
             }
             ok++;
           });
