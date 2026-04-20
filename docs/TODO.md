@@ -140,6 +140,7 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
 - [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
 - [ ] **Re-analyze + resize pièce** : la ré-analyse utilise le bbox original. Si l'utilisateur a déjà redimensionné la pièce en amend mode, propager le nouveau bbox avant l'appel.
+- [ ] **Toggle « lock bbox » sur Re-analyze (D-118)** : checkbox dans la Room toolbar. Quand coché, le re-analyze ne modifie pas `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Utile pour raffiner les ouvertures après repositionnement manuel ou dépose d'un mur modélisée via zone transparente.
 - [x] **Bouton Close** : ferme le projet courant avec confirmation (warning unsaved changes implicite).
 - [x] **Bouton Erase** (All / Layout only) avec confirmation.
 

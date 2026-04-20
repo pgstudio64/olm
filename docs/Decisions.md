@@ -7,6 +7,56 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-118 · Re-analyze uniforme + zone transparente comme primitive de modélisation (2026-04-20)
+
+**Décision** : le re-analyze conserve un comportement unique
+indépendant de l'origine de la pièce (ingestion auto, ajout manuel
+Floor, fusion de pièces). Toute modification structurelle (mur à
+déposer, ouverture à créer à travers un mur existant) passe par la
+**zone transparente** posée sur le mur concerné — pas de cas
+particulier dans l'algo re-analyze.
+
+En complément, un **toggle « lock bbox »** (checkbox ou bouton
+secondaire « Re-analyze openings only ») permet à l'utilisateur de
+faire tourner le ray-cast sans adopter le nouveau bbox/dimensions
+retournés. Même pipeline backend ; seule la branche finale du merge
+côté frontend est conditionnelle.
+
+**Justification** :
+
+La tentation de traiter différemment les pièces manuelles (pas de
+seed robuste → ne pas redétecter le bbox) conduit à deux algorithmes
+divergents, difficiles à maintenir et à tester. La zone transparente
+est une abstraction propre :
+
+1. **Expression d'intention explicite** : poser une zone sur un mur =
+   « ce mur n'existe plus pour l'analyse géométrique ». Acte de
+   conception, pas de magie implicite.
+2. **Réversibilité** : l'utilisateur peut activer/désactiver la zone
+   pour comparer avant/après une dépose. Un cas particulier figé dans
+   le code empêche cette expérimentation.
+3. **Cohérence métier** : modéliser une modification structurelle =
+   modéliser la modification. Le modèle reflète la réalité.
+4. **Pas de bugs silencieux** : si une pièce manuelle a un seed
+   problématique, un mode « ne touche pas au bbox » masque le problème
+   au lieu de le révéler.
+
+Le toggle lock bbox couvre les deux besoins légitimes (raffiner
+uniquement les portes post-repositionnement manuel OU voir la
+proposition de bbox unifié du ray-cast) sans scission d'algo.
+
+**Impact** :
+- Aucun changement backend (même endpoint `/api/room/reanalyze`).
+- Frontend Room toolbar : ajouter un toggle à côté de « Re-analyze »
+  (ex: checkbox « lock size »). Quand coché, les champs
+  `state.room_width_cm / depth_cm`, `originalRoom.bbox_px / width_cm /
+  depth_cm`, `state.overlay.offsetX / offsetY` ne sont pas mis à jour
+  depuis `canon.bbox_px` ; seuls windows/openings/doors/hits/seed_cm
+  sont adoptés.
+- Tâche à ajouter dans R-04 Review (TODO.md).
+
+---
+
 ## D-117 · Refactor repère canonique unifié — posture humaine invariante (2026-04-20)
 
 **Décision** : refondre le state frontend pour qu'il vive dans un unique
