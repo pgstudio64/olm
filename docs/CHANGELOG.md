@@ -83,6 +83,21 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   (via has_door), exclusion_zones, transparent_zones. Avant : seuls
   bbox + dims + doors étaient propagés ; les édits manuels de fenêtres
   /ouvertures étaient perdus dans l'export v3.
+- **Re-analyze nécessitant 2 passes** (bug utilisateur confirmé
+  2026-04-20) : cause = filtre `preservedDoors` incohérent dans
+  `init_rvtool.js` et `ingestion.js`. Utilisait `o.origin !== "auto"`
+  qui capturait les doors initiales (origin:undefined depuis le backend
+  match) comme "à préserver" → la 1re re-analyze ignorait les doors
+  détectées. `_rvCommitFromState` retaguait ensuite en "auto" d'où le
+  succès de la 2e passe. Fix : `o.origin === "manual"` (cohérent avec
+  `manualW` / `manualO`).
+- **Save button inactif en fullscreen** : header en `<table>` débordait
+  le viewport en vue étroite, laissant les boutons Save/Export/Close
+  hors-écran ou sous la zone de révélation du Chrome Mac fullscreen
+  (top ~40px). Converti en flexbox avec `flex:1; min-width:0` à gauche
+  (tab-description tronque en ellipsis) et `flex-shrink:0` à droite.
+  Padding-top:30px sur la colonne droite pour décaler les boutons
+  sous la zone de révélation.
 
 ### En cours
 

@@ -365,8 +365,13 @@
           var manualO = (state.room_openings || []).filter(function (o) {
             return o.origin === "manual" && !o.has_door;
           });
+          // D-110 fix : ne préserver QUE les doors explicitement "manual".
+          // Les doors initiales issues du match /api/floor-plan/match ont
+          // origin=undefined ; `!== "auto"` les aurait préservées à tort,
+          // bloquant la redétection à la 1ère re-analyze. Cohérent avec
+          // manualW / manualO ci-dessus qui utilisent `=== "manual"`.
           var preservedDoors = (state.room_openings || []).filter(function (o) {
-            return o.has_door && o.origin !== "auto";
+            return o.has_door && o.origin === "manual";
           });
 
           // R-12 : le helper travaille en repère ABSOLU (entrée backend).

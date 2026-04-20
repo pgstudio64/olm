@@ -17,45 +17,39 @@ document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
 document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 </script>
 
-<table class="tab-row" style="width:100%;border-collapse:collapse;border-bottom:1px solid var(--border);">
-<tr>
-  <td style="vertical-align:bottom;padding:21px 0 0 0;">
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <div class="tab-bar">
-        <div class="tab-group tab-group-floorplan">
-          <span class="tab-group-label">FLOORPLAN</span>
-          <button class="tab-btn active" data-tab="fpImport">Floor</button>
-          <button class="tab-btn" data-tab="fpReview">Room</button>
-        </div>
-        <div class="tab-group tab-group-layout">
-          <span class="tab-group-label">LAYOUT</span>
-          <button class="tab-btn" data-tab="lytDesign">Office</button>
-          <button class="tab-btn" data-tab="lytCatalogue">Catalogue</button>
+<div class="tab-row" style="display:flex;border-bottom:1px solid var(--border);gap:8px;">
+  <div style="flex:1;min-width:0;padding-top:21px;display:flex;align-items:baseline;gap:8px;">
+    <div class="tab-bar">
+      <div class="tab-group tab-group-floorplan">
+        <span class="tab-group-label">FLOORPLAN</span>
+        <button class="tab-btn active" data-tab="fpImport">Floor</button>
+        <button class="tab-btn" data-tab="fpReview">Room</button>
+      </div>
+      <div class="tab-group tab-group-layout">
+        <span class="tab-group-label">LAYOUT</span>
+        <button class="tab-btn" data-tab="lytDesign">Office</button>
+        <button class="tab-btn" data-tab="lytCatalogue">Catalogue</button>
+      </div>
+    </div>
+    <span id="tabDescription" class="tab-description"></span>
+  </div>
+  <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:30px 8px 4px 0;white-space:nowrap;">
+    <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan"></div>
+    <div id="planActions" style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
+      <button class="btn" id="btnExportPlan" title="Export floor plan data" style="display:none;flex-shrink:0;">Export</button>
+      <button class="btn" id="btnClosePlan" title="Close current floor plan" style="display:none;flex-shrink:0;">Close</button>
+      <div id="eraseWrapper" style="display:none;position:relative;flex-shrink:0;">
+        <button class="btn" id="btnErasePlan" title="Erase data">Erase ▾</button>
+        <div id="eraseMenu" style="display:none;position:absolute;top:100%;left:0;z-index:100;min-width:140px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
+          <button class="btn" id="btnEraseAll" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">All</button>
+          <button class="btn" id="btnEraseLayout" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Layout only</button>
         </div>
       </div>
-      <span id="tabDescription" class="tab-description"></span>
     </div>
-  </td>
-  <td style="vertical-align:middle;text-align:right;padding:0 8px 0 0;white-space:nowrap;">
-    <div style="display:inline-flex;align-items:center;gap:8px;">
-      <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan"></div>
-      <div id="planActions" style="display:flex;gap:8px;align-items:center;">
-        <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
-        <button class="btn" id="btnExportPlan" title="Export floor plan data" style="display:none;flex-shrink:0;">Export</button>
-        <button class="btn" id="btnClosePlan" title="Close current floor plan" style="display:none;flex-shrink:0;">Close</button>
-        <div id="eraseWrapper" style="display:none;position:relative;flex-shrink:0;">
-          <button class="btn" id="btnErasePlan" title="Erase data">Erase ▾</button>
-          <div id="eraseMenu" style="display:none;position:absolute;top:100%;left:0;z-index:100;min-width:140px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
-            <button class="btn" id="btnEraseAll" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">All</button>
-            <button class="btn" id="btnEraseLayout" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Layout only</button>
-          </div>
-        </div>
-      </div>
-      <button class="settings-btn" id="btnOpenSettings" title="Settings">&#9881;</button>
-    </div>
-  </td>
-</tr>
-</table>
+    <button class="settings-btn" id="btnOpenSettings" title="Settings">&#9881;</button>
+  </div>
+</div>
 <!-- Settings drawer overlay -->
 <div class="settings-overlay-backdrop" id="settingsBackdrop"></div>
 <div class="settings-overlay" id="settingsDrawer">

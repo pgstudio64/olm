@@ -193,10 +193,23 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 - [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
 - [ ] **Re-analyze + resize pièce** : la ré-analyse utilise le bbox original. Si l'utilisateur a déjà redimensionné la pièce en amend mode, propager le nouveau bbox avant l'appel.
 - [ ] **Zoom arrière bloqué trop tôt (Review / Room)** : la limite max de dézoom se déclenche avant que l'utilisateur puisse voir toute la pièce + marge confortable. Ajuster le clamp `maxW` (actuellement `planW × 1.1` dans ingestion.js). À revoir aussi pour Room amend mode.
-- [ ] **Re-analyze instable — 2 passes pour trouver certaines portes (P2)** : `detect_room` / `expand_door_arcs` peut échouer au 1er appel selon le bbox d'entrée ; au 2ème, avec le bbox rétréci adopté, la porte est trouvée. Options : 2e passage automatique backend, ou fallback avec seed+bbox plus large. Chantier orthogonal à R-12.
+- [x] ~~**Re-analyze instable — 2 passes quasi systématiques**~~ ✅ fixé
+  2026-04-20 : bug dans le filtre `preservedDoors` (init_rvtool.js /
+  ingestion.js). Utilisait `o.origin !== "auto"` → capturait les doors
+  initiales (origin:undefined) et bloquait la redétection au 1er appel.
+  Passé à `o.origin === "manual"`, cohérent avec `manualW` / `manualO`.
 - [ ] **Toggle « lock bbox » sur Re-analyze (D-118)** : checkbox dans la Room toolbar. Quand coché, le re-analyze ne modifie pas `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Utile pour raffiner les ouvertures après repositionnement manuel ou dépose d'un mur modélisée via zone transparente.
 - [x] **Bouton Close** : ferme le projet courant avec confirmation (warning unsaved changes implicite).
 - [x] **Bouton Erase** (All / Layout only) avec confirmation.
+
+#### Layout général
+
+- [ ] **Taille minimale de la zone centrale (plan / pièce)** : définir un
+  seuil min raisonnable pour la zone d'affichage du plan (Floor) ou de
+  la pièce (Room / Office). En-dessous, soit scroll horizontal/vertical
+  sur la zone, soit empêcher que les panneaux latéraux ne la rabotent
+  jusqu'à l'invisibilité. Cas d'usage : fenêtre rétrécie ou écrans
+  étroits.
 
 #### Office (ex-Match/Design)
 
