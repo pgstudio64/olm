@@ -187,10 +187,19 @@
       if (data.error) { alert("Error: " + data.error); return; }
       // Sort results by name
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
-      // Re-attach canonical fields not returned by matching API
+      // Re-attach canonical fields not returned by matching API.
+      // bbox_px / seed_px dupliquent bbox_abs_px / seed_abs_px : les
+      // consommateurs de rendu (overlay, re-analyze) lisent encore bbox_px
+      // pour le positionnement absolu. À consolider en étape B.
       data.rooms.forEach(function(r) {
-        if (bboxByName[r.name])    r.bbox_abs_px = bboxByName[r.name];
-        if (seedByName[r.name])    r.seed_abs_px = seedByName[r.name];
+        if (bboxByName[r.name]) {
+          r.bbox_abs_px = bboxByName[r.name];
+          r.bbox_px     = bboxByName[r.name];
+        }
+        if (seedByName[r.name]) {
+          r.seed_abs_px = seedByName[r.name];
+          r.seed_px     = seedByName[r.name];
+        }
         if (doorsByName[r.name])   r.doors = doorsByName[r.name];
         r.original_corridor_face = corridorByName[r.name] || "";
         r.corridor_face = "south";
