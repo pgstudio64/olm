@@ -315,7 +315,13 @@
             return o.has_door && o.origin !== "auto";
           });
 
-          var prevCf = (amend.originalRoom && amend.originalRoom.corridor_face) || "";
+          // R-12 : le helper travaille en repère ABSOLU (entrée backend).
+          // prevCf doit donc être le corridor_face absolu mémorisé
+          // (original_corridor_face). corridor_face en state vaut "south"
+          // canonique, à ne pas passer ici.
+          var prevCf = (amend.originalRoom &&
+            (amend.originalRoom.original_corridor_face ||
+             amend.originalRoom.corridor_face)) || "";
           var canon = window.computeCanonicalReanalyzeResult(
             data, prevCf, ingst.scale || 0);
 
