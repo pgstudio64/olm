@@ -1898,6 +1898,8 @@ function enterRoomAmendMode(room) {
   if (rvAddMenuWrap) rvAddMenuWrap.style.display = "";
   var rvBtnReanalyze = document.getElementById("rvBtnReanalyze");
   if (rvBtnReanalyze) rvBtnReanalyze.style.display = "";
+  var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
+  if (rvBtnCheck) rvBtnCheck.style.display = "";
 
   // Disable navigation during edit
   document.getElementById("rvBtnPrev").disabled = true;
@@ -1926,6 +1928,10 @@ function exitRoomAmendUI() {
   if (rvAddMenu2) rvAddMenu2.style.display = "none";
   var rvBtnReanalyze2 = document.getElementById("rvBtnReanalyze");
   if (rvBtnReanalyze2) rvBtnReanalyze2.style.display = "none";
+  var rvBtnCheck2 = document.getElementById("rvBtnCheckOrient");
+  if (rvBtnCheck2) rvBtnCheck2.style.display = "none";
+  var rvBadge = document.getElementById("rvOrientBadge");
+  if (rvBadge) rvBadge.style.display = "none";
 
   // Reset rvTool and clean up any drawing in progress
   if (window.rvTool) {
