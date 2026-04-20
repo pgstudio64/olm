@@ -1694,7 +1694,7 @@
           if (status) status.textContent = 'Error: ' + data.error;
           return;
         }
-        ingState.rooms = data.rooms || [];
+        ingState.rooms = (data.rooms || []).map(window.canonicalIO.fromStorage);
         if (status) status.textContent = ingState.rooms.length + ' room(s) imported';
 
         // Header badge

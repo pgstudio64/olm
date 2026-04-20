@@ -182,7 +182,7 @@
     delete copy.bbox_canon_cm;
     delete copy.surface_m2_bbox;
 
-    copy.corridor_face = ocf || "south";
+    copy.corridor_face = ocf;
 
     if (!ocf || ocf === "south") {
       return copy;
