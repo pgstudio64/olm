@@ -7,6 +7,117 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-117 · Refactor repère canonique unifié — posture humaine invariante (2026-04-20)
+
+**Décision** : refondre le state frontend pour qu'il vive dans un unique
+repère canonique (`corridor_face = "south"`), avec deux frontières uniques
+de rotation abs ↔ canon : une à l'entrée (chargement JSON, retour
+re-analyze), une à la sortie (save, re-analyze outbound). Voir
+`docs/specs/CANONICAL_STATE_REFACTOR.md` pour le plan détaillé en 3 étapes
+(A introduction frontières, B retrait rotations dans consommateurs, C
+rotation CSS de l'overlay plan).
+
+**Principe directeur** : « devant chaque porte, la même posture humaine ».
+Quelle que soit l'aile du bâtiment (N, E, O, S), la pièce est présentée
+avec son corridor d'accès en bas. L'utilisateur se place mentalement sur
+le pas de la porte, face à l'intérieur — contexte invariant pour le
+raisonnement d'aménagement, quelle que soit la pièce examinée.
+
+**Justification** : l'architecture actuelle applique les rotations à
+plusieurs endroits (rendu Review, éditeur, save, re-analyze) avec des
+cas particuliers multipliés (swap W/H ou pas, flip des offsets, inversion
+hinge_side). La pièce 922 a révélé un désalignement structurel entre
+dimensions canoniques et position overlay absolue : le rectangle dessiné
+(723×204 canonique) ne recouvrait pas la pièce physique (204×723 absolu).
+Les fix ponctuels empilent la complexité ; un seul pivot d'I/O élimine
+toute la classe de bugs.
+
+**Impact** :
+- Introduction de `fromStorage(room)` / `toStorage(room)` remplaçant
+  progressivement `_canonicalizeRoom` / `_decanonicalizeRoom`.
+- State mémoire unifié : `corridor_face === "south"` partout,
+  `original_corridor_face` mémorise le repère de sauvegarde.
+- Overlay plan : rotation CSS de l'image de fond selon
+  `original_corridor_face` (seul endroit où la rotation persiste au
+  rendu).
+- Fichiers impactés : `floor_plan.js`, `editor.js`, `init_rvtool.js`,
+  `ingestion.js`, `ingestion_export.js`.
+- Chantier R-12 (TODO.md) à créer.
+
+---
+
+## D-116 · Helper reanalyze partagé batch + unitaire (2026-04-20)
+
+**Décision** : factoriser la canonicalisation abs → canon de la re-analyze
+dans une fonction unique `computeCanonicalReanalyzeResult(data,
+corridorFace, scale)` consommée par le re-analyze unitaire
+(`init_rvtool.js`) et le batch floor (`ingestion.js`). Les deux
+appliquent le même pipeline : canonicalisation des features,
+mise à jour de corridor_face depuis doors[0] (D-113), adoption du
+nouveau bbox, consommation des portes redétectées.
+
+**Justification** : le batch re-analyze (`ingBtnReanalyzeAll`)
+appliquait le résultat en coords absolues sans canonicalisation, avec :
+- features tournées (90/180/270°) pour toute pièce non-south corridor ;
+- portes détectées ignorées ;
+- nouveau bbox jamais adopté ;
+- corridor_face jamais mis à jour.
+
+Les deux appelants divergeaient mécaniquement alors qu'ils ont la même
+responsabilité logique. Le helper partagé élimine la divergence et
+facilite les évolutions futures (le refactor canonical D-117 le
+réécrira en `fromStorage`).
+
+**Impact** :
+- `olm/static/ingestion.js` : helper `computeCanonicalReanalyzeResult`
+  exposé sur `window`.
+- `olm/static/init_rvtool.js` : bloc re-analyze unitaire réduit (~100
+  lignes → ~40) et délégué au helper.
+- `olm/server/app.py` : endpoint batch accepte `door_width_cm`.
+
+---
+
+## D-115 · Surface cartouche vs surface bbox — pièces non-rectangulaires (2026-04-20)
+
+**Décision** : découpler la surface issue du cartouche PDF (vérité
+terrain figée) de la surface dérivée du bbox (calculée à chaque
+resize/re-analyze). Deux champs distincts en state et en JSON :
+
+| Champ | Source | Mutation | Usage |
+|---|---|---|---|
+| `surface_m2` (state) / `surface` (JSON) | Cartouche PDF, parsé à l'import | Jamais écrit après l'import | Affichage UI, scoring, export |
+| `surface_m2_bbox` (state) / `surface_bbox` (JSON) | `width_cm × depth_cm / 10000` | Recalculé à chaque mutation du bbox | Matching (géométrie physique) |
+
+**Justification** : aujourd'hui, chaque mutation du bbox (bbox editor,
+re-analyze) écrasait `room.surface_m2` avec la valeur dérivée. Le
+champ cartouche (44.28 m² pour une pièce non-rectangulaire, ex. pièce
+305) était perdu au premier save — remplacé par la surface du
+rectangle bbox inscrit (~9 m²). **L'information métier officielle
+disparaissait à chaque itération.**
+
+Justification du split :
+- Les pièces physiques ne sont pas toutes rectangulaires (décrochés,
+  alcôves, formes en L). Le cartouche donne la surface vraie ; le
+  bbox donne le rectangle inscrit exploitable par l'algo.
+- Le **matching** travaille sur le rectangle (placement de blocs) →
+  consomme `surface_m2_bbox`.
+- Le **scoring, l'affichage, l'export** communiquent la réalité
+  physique → consomment `surface_m2` (cartouche).
+- Les pièces créées ex nihilo (sans cartouche) ont `surface_m2 = 0` →
+  fallback affichage sur `surface_m2_bbox`.
+
+**Impact** :
+- `olm/ingestion/extract.py` : `extract_rooms_from_preprocessed`
+  retourne désormais les deux champs.
+- Frontend : `_updateRoomDims`, bbox editor, helper reanalyze écrivent
+  dans `surface_m2_bbox` (plus jamais dans `surface_m2`).
+- `ingestion_export.js` : écrit `surface` (cartouche) + `surface_bbox`
+  (bbox).
+- `PREPROCESSED_JSON_SPEC.md` : champ `surface_bbox` ajouté (Save-only,
+  optionnel).
+
+---
+
 ## D-114 · canonical_top_face explicite écrase la détection couleur (2026-04-19)
 
 **Décision** : si `canonical_top_face` est explicitement présent dans le JSON

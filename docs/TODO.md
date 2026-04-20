@@ -93,6 +93,30 @@ Migration de paramétrage : bouton "Upgrade to new standard" qui lit le paramét
 
 ## Chantiers actifs — Refonte OLM
 
+### R-12 : Repère canonique unifié — posture humaine invariante (D-117)
+
+Objectif : déplacer toutes les rotations abs ↔ canon à deux frontières I/O
+uniques (`fromStorage` / `toStorage`), de sorte que tout le state
+frontend vit en repère canonique (corridor_face constant = "south"). Voir
+`docs/specs/CANONICAL_STATE_REFACTOR.md`.
+
+Principe : « devant chaque porte, la même posture humaine » — toute
+pièce est présentée avec son corridor d'accès en bas, quelle que soit
+son orientation dans le bâtiment.
+
+- [ ] **Étape A** : introduire `fromStorage` / `toStorage` en
+  coexistence. `fpLoadAndMatch` applique `fromStorage` ; l'export
+  applique `toStorage`. `_canonicalizeRoom` reste appelé (no-op car
+  `corridor_face === "south"`). Round-trip JSON identique avant/après.
+- [ ] **Étape B** : retirer les appels à `_canonicalizeRoom` /
+  `_decanonicalizeRoom` des consommateurs (rendu Review, éditeur, save
+  editor, matching). Tests visuels inchangés sur pièces 917, 922, 929.
+- [ ] **Étape C** : rotation CSS de l'overlay plan selon
+  `original_corridor_face`. Fix visuel attendu sur pièces 922, 929, 900.
+- [ ] Après stabilisation : renommer `corridor_face` (state) →
+  `_canonical_south`, mutualiser les matrices de rotation dans un module
+  `olm/static/canonical_io.js`.
+
 ### R-04 : Floor Plan — 4 sous-onglets (Import / Review / Match / Export)
 
 #### Import
