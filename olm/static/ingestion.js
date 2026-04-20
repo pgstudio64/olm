@@ -624,19 +624,28 @@
   function populateRoomsJson() {
     var textarea = document.getElementById('fpRoomsJson');
     if (!textarea) return;
+    // R-12: privilégie offset_cm / width_cm (canonique via fromStorage) et
+    // ne retombe sur offset_px × scale qu'en dernier recours. Garantit que
+    // face (canon) et offset (canon) restent cohérents pour les pièces rotées.
+    function _offCm(e) {
+      return (e && e.offset_cm != null)
+        ? Math.round(e.offset_cm)
+        : Math.round((e.offset_px || 0) * ingState.scale);
+    }
+    function _widCm(e) {
+      return (e && e.width_cm != null)
+        ? Math.round(e.width_cm)
+        : Math.round((e.width_px || 0) * ingState.scale);
+    }
     var rooms = ingState.rooms.map(function (r) {
       var windows = (r.windows || []).map(function (w) {
-        return {
-          face: w.face,
-          offset_cm: Math.round(w.offset_px * ingState.scale),
-          width_cm: Math.round(w.width_px * ingState.scale),
-        };
+        return { face: w.face, offset_cm: _offCm(w), width_cm: _widCm(w) };
       });
       var openings = (r.openings || []).map(function (o) {
         return {
           face: o.face,
-          offset_cm: Math.round(o.offset_px * ingState.scale),
-          width_cm: Math.round(o.width_px * ingState.scale),
+          offset_cm: _offCm(o),
+          width_cm: _widCm(o),
           has_door: false,
         };
       });
@@ -644,8 +653,8 @@
       (r.doors || []).forEach(function (d) {
         openings.push({
           face: d.face,
-          offset_cm: Math.round(d.offset_px * ingState.scale),
-          width_cm: Math.round(d.width_px * ingState.scale),
+          offset_cm: _offCm(d),
+          width_cm: _widCm(d),
           has_door: true,
           opens_inward: d.opens_inward || true,
           hinge_side: d.hinge_side || 'left',
