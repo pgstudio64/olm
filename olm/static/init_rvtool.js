@@ -248,6 +248,60 @@
       }
     });
 
+    // --- Check orientation button (R-13 / D-119) ---
+    var checkBtn = document.getElementById("rvBtnCheckOrient");
+    var badge = document.getElementById("rvOrientBadge");
+    if (checkBtn && badge) {
+      checkBtn.addEventListener("click", async function () {
+        if (!state.roomAmendMode) return;
+        var ingst = window.ingState || {};
+        var orig = state.roomAmendMode.originalRoom || {};
+        var bbox = orig.bbox_px || orig.bbox_abs_px;
+        if (!bbox || !ingst.planPathEnhanced) {
+          alert("Orientation check: missing bbox or plan path.");
+          return;
+        }
+        badge.style.display = "";
+        badge.textContent = "Checking…";
+        badge.style.background = "var(--surface2)";
+        badge.style.color = "var(--text-dim)";
+        try {
+          var resp = await fetch("/api/room/orientation-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              plan_path: ingst.planPathEnhanced,
+              bbox_px: bbox,
+              original_corridor_face:
+                orig.original_corridor_face || orig.corridor_face || "",
+            }),
+          });
+          var data = await resp.json();
+          if (data.error) throw new Error(data.error);
+          var gs = data.corridor_south || {};
+          var gn = data.exterior_north || {};
+          var ok = gs.ok;
+          var rg = (gs.ratio_green || 0).toFixed(2);
+          var rb = (gn.ratio_blue || 0).toFixed(2);
+          badge.textContent = (ok ? "OK" : "WARN") +
+            " — corridor south " + rg + "g · exterior north " + rb + "b";
+          badge.style.background = ok ? "#2a4d2a" : "#7a3a1a";
+          badge.style.color = "#fff";
+          badge.title = "ocf=" + (data.original_corridor_face || "-") +
+            "\nFaces canon → ratio green / blue:\n" +
+            Object.entries(data.faces || {}).map(function (e) {
+              return "  " + e[0] + " (abs " + e[1].face_abs + "): " +
+                e[1].ratio_green.toFixed(2) + "g " +
+                e[1].ratio_blue.toFixed(2) + "b";
+            }).join("\n");
+        } catch (err) {
+          badge.textContent = "Error: " + err.message;
+          badge.style.background = "#7a1a1a";
+          badge.style.color = "#fff";
+        }
+      });
+    }
+
     // --- Re-analyze button (R-04 Review) ---
     var reanalyzeBtn = document.getElementById("rvBtnReanalyze");
     if (reanalyzeBtn) {

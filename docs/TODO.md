@@ -93,6 +93,44 @@ Migration de paramétrage : bouton "Upgrade to new standard" qui lit le paramét
 
 ## Chantiers actifs — Refonte OLM
 
+### R-12 consolidation — réduction de dette (C1 → C4)
+
+Validée par l'utilisateur : aller au bout du refactor en éliminant la
+duplication et les chemins morts avant d'attaquer les bugs résiduels.
+La simplification est attendue pour résoudre par ricochet plusieurs
+symptômes (bug Save physique notamment).
+
+- [ ] **C1 — Supprimer `_canonicalizeRoom` / `_decanonicalizeRoom`**
+  (code mort après étape B, définitions dans `floor_plan.js:22-142`,
+  plus aucune consommation active). Commit petit, sans risque.
+- [ ] **C2 — Unifier re-analyze autour de `fromStorage`** : supprimer
+  `computeCanonicalReanalyzeResult` (ingestion.js). Le helper re-analyze
+  wrap le payload backend en room-like puis délègue à `fromStorage`.
+  Disparition par construction du bug prevCf (un seul chemin de
+  canonicalisation, pas deux à garder synchrones).
+- [ ] **C3 — Fusionner `populateRoomsJson` et `devExportV3Json`** en
+  un seul sérialiseur. Arguments : destination (textarea / download),
+  logique `toStorage` centralisée.
+- [ ] **C4 — Éliminer le round-trip `textarea` pour le matching** :
+  `fpLoadAndMatch` lit `ingState.rooms` directement (pas de parse JSON
+  intermédiaire). Textarea devient informatif (debug). Suppression du
+  `fromStorage` en double (ingState est déjà canon).
+
+**Dette différée (non bloquante)** :
+- Fusion `bbox_px` / `bbox_abs_px` et `seed_px` / `seed_abs_px` en un
+  seul champ : refactor plus lourd des consommateurs overlay, à faire
+  en bloc plus tard.
+- `corridor_face` / `original_corridor_face` : idem, l'invariant
+  "south" demande de la discipline côté consommateurs. Consolidation
+  envisageable après C1-C4.
+- Bug **bouton Save** : clic programmatique fonctionne, clic physique
+  non intercepté (`document.elementFromPoint` retourne undefined à
+  la position du bouton). Le bouton est hors viewport ou masqué par
+  un autre élément. À investiguer APRÈS C1-C4 — la simplification
+  peut faire disparaître le symptôme.
+- Bouton **Check orient.** ajouté dans Room toolbar (handler prêt,
+  R-13 étape 2) : à tester visuellement après C1-C4.
+
 ### R-13 : Auto-test d'orientation canonique (D-119)
 
 Objectif : valider automatiquement l'invariant « posture humaine » R-12

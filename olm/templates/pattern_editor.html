@@ -296,6 +296,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
               <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
               <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Re-analyze windows & openings (keeps manual edits)">Re-analyze</button>
+              <button class="btn btn-toolbar" id="rvBtnCheckOrient" style="display:none;" title="Check canonical orientation: corridor south, exterior north (D-119)">Check orient.</button>
+              <span id="rvOrientBadge" style="display:none;font-size:11px;padding:2px 6px;border-radius:3px;"></span>
               <div id="rvAddMenuWrap" style="display:none;position:relative;">
                 <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add room items &#9662;</button>
                 <div id="rvAddMenu" style="display:none;position:absolute;top:100%;right:0;z-index:20;background:var(--surface);border:1px solid var(--border);font-size:11px;min-width:160px;">

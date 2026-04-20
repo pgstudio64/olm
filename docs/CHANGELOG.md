@@ -5,6 +5,62 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased] — D-115 à D-119 (2026-04-20)
+
+### Ajouté
+
+- **D-115** : séparation `surface_m2` (cartouche PDF, figée) vs
+  `surface_m2_bbox` (calculée depuis bbox, dérive). Backend
+  `extract.py` produit les deux. Frontend : consolidation du split
+  partielle (encore des points d'écrasement côté JS à traiter en C3).
+- **D-116** : helper partagé `computeCanonicalReanalyzeResult` pour
+  le re-analyze unitaire (init_rvtool.js) et batch (ingestion.js).
+  Endpoint batch accepte `door_width_cm`. **À remplacer par
+  `fromStorage` en C2** (dette identifiée).
+- **D-117** : refactor repère canonique unifié (R-12). Étapes A/B/C
+  livrées : module `canonical_io.js` (fromStorage/toStorage avec 4
+  round-trips testés), intégration aux frontières (fpLoadAndMatch,
+  extractRoomsPreprocessed, devExportV3Json, populateRoomsJson),
+  retrait `_canonicalizeRoom` des rendus, rotation overlay via
+  `state.original_corridor_face`.
+- **D-118** : re-analyze uniforme + zone transparente comme primitive
+  de modélisation des modifications structurelles. Toggle "lock bbox"
+  prévu pour préserver dimensions lors du raffinement d'ouvertures.
+- **D-119** : auto-test d'orientation canonique via couleurs
+  sémantiques du PNG -SD. Module `olm/ingestion/orientation_check.py`
+  (check_corridor_south / check_exterior_north / check_all_faces),
+  endpoint `/api/room/orientation-check`, bouton UI "Check orient."
+  dans la Room toolbar (handler prêt, à tester après C1-C4).
+
+### Corrigé
+
+- Backend `extract_rooms_from_preprocessed` : ne dérive plus
+  `corridor_face` depuis `openings[0].face` (arbitraire). Fallback
+  via `_detect_face_colors` sur PNG enhanced (plus fiable).
+- Enrichissement `offset_cm` / `width_cm` depuis `offset_px × scale`
+  à l'import v3, pour que fromStorage trouve toujours des valeurs cm
+  cohérentes à canonicaliser.
+- `populateRoomsJson` repasse par `toStorage` avant sérialisation
+  (symétrie avec devExportV3Json).
+- Re-analyze (unitaire + batch) : `prevCf` passé au helper =
+  `original_corridor_face` (repère absolu) au lieu de `corridor_face`
+  (canon "south"). Résout la régression orientation post-re-analyze
+  pour pièces non-south.
+- Invariant `state.corridor_face === "south"` maintenu dans les flux
+  re-analyze : `canon.corridor_face` alimente `original_corridor_face`
+  partout (state, amendments, fpData.rooms, ingState.rooms).
+
+### En cours
+
+- **R-12 consolidation C1 → C4** (réduction de dette, planifiée).
+- **Bug Save physique** : `document.elementFromPoint` undefined à la
+  position du bouton ; clic programmatique OK. Hors viewport ou masqué.
+  À investiguer après consolidation.
+- Bugs P2 connus hors R-12 : re-analyze nécessite parfois 2 passes
+  pour détecter les portes, zoom arrière bloqué trop tôt.
+
+---
+
 ## [Unreleased] — D-108 à D-114 (2026-04-19)
 
 ### Ajouté
