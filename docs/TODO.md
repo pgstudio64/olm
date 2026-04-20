@@ -114,9 +114,10 @@ Livrée en 2026-04-20 (D-120). Quatre étapes réalisées :
 - Fusion `bbox_px` / `bbox_abs_px` et `seed_px` / `seed_abs_px` en un
   seul champ : refactor plus lourd des consommateurs overlay, à faire
   en bloc plus tard.
-- `offset_px` / `width_px` non rotés par `toStorage` : incohérence
-  offset_cm / offset_px dans l'export v3 pour les pièces non-south.
-  Non-bloquant (populateRoomsJson préfère offset_cm pour le matching).
+- ~~`offset_px` non rotés par `toStorage`~~ ✅ livré : recalculé à la
+  sérialisation dans `serializeForStorage`.
+- ~~Amendements Room perdus à l'export v3~~ ✅ livré : `editor.js save()`
+  propage windows/openings/doors/zones vers `ingState.rooms`.
 - Bug **bouton Save** : clic programmatique fonctionne, clic physique
   non intercepté (`document.elementFromPoint` retourne undefined à
   la position du bouton). Confirmé non-lié à C1-C4 après consolidation.

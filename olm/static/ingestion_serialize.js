@@ -105,6 +105,17 @@
     var planName = hdr ? hdr.textContent.trim() : '';
     var fileHint = planName ? (planName + '.png') : 'plan.png';
 
+    // R-12 dette : toStorage rote offset_cm / face mais pas offset_px.
+    // On recalcule donc offset_px / width_px depuis offset_cm × pxPerCm
+    // à la sérialisation. Fallback sur l'offset_px existant si offset_cm
+    // est absent (rétrocompat rooms OCR legacy).
+    var pxPerCm = (ingState.scale && ingState.scale > 0)
+      ? (1.0 / ingState.scale) : 0;
+    function _pxFromCm(cm, fallbackPx) {
+      if (cm != null && pxPerCm > 0) return Math.round(cm * pxPerCm);
+      return (fallbackPx != null) ? fallbackPx : 0;
+    }
+
     var roomsDict = {};
     _toAbsRooms().forEach(function (r) {
       var roomId = r.name || '';
@@ -146,7 +157,11 @@
 
       if (Array.isArray(r.doors) && r.doors.length > 0) {
         roomObj.doors = r.doors.map(function (d) {
-          var o = { face: d.face, offset_px: d.offset_px, width_px: d.width_px };
+          var o = {
+            face: d.face,
+            offset_px: _pxFromCm(d.offset_cm, d.offset_px),
+            width_px:  _pxFromCm(d.width_cm,  d.width_px),
+          };
           if (d.hinge_side) o.hinge_side = d.hinge_side;
           if (typeof d.opens_inward === 'boolean') o.opens_inward = d.opens_inward;
           return o;
@@ -154,12 +169,20 @@
       }
       if (Array.isArray(r.openings) && r.openings.length > 0) {
         roomObj.openings = r.openings.map(function (o) {
-          return { face: o.face, offset_px: o.offset_px, width_px: o.width_px };
+          return {
+            face: o.face,
+            offset_px: _pxFromCm(o.offset_cm, o.offset_px),
+            width_px:  _pxFromCm(o.width_cm,  o.width_px),
+          };
         });
       }
       if (Array.isArray(r.windows) && r.windows.length > 0) {
         roomObj.windows = r.windows.map(function (w) {
-          return { face: w.face, offset_px: w.offset_px, width_px: w.width_px };
+          return {
+            face: w.face,
+            offset_px: _pxFromCm(w.offset_cm, w.offset_px),
+            width_px:  _pxFromCm(w.width_cm,  w.width_px),
+          };
         });
       }
       roomsDict[roomId] = roomObj;

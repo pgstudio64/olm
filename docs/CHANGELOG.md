@@ -74,16 +74,23 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Invariant `state.corridor_face === "south"` maintenu dans les flux
   re-analyze : `canon.corridor_face` alimente `original_corridor_face`
   partout (state, amendments, fpData.rooms, ingState.rooms).
+- **Export v3 `offset_px` cohérent après rotation** : `serializeForStorage`
+  recalcule `offset_px` / `width_px` depuis `offset_cm × pxPerCm` après
+  le `toStorage` (toStorage ne touchait pas les px). Fallback sur px
+  existants si offset_cm absent (rétrocompat OCR).
+- **Amendements Room → `ingState.rooms` complétés** : la propagation
+  dans `editor.js save()` inclut désormais windows, openings, doors
+  (via has_door), exclusion_zones, transparent_zones. Avant : seuls
+  bbox + dims + doors étaient propagés ; les édits manuels de fenêtres
+  /ouvertures étaient perdus dans l'export v3.
 
 ### En cours
 
 - **Bug Save physique** : `document.elementFromPoint` undefined à la
   position du bouton ; clic programmatique OK. Confirmé non-lié à
   C1-C4 (réglage indépendant à venir).
-- **Dette R-12 différée** : `offset_px` non rotés par `toStorage`
-  (incohérence offset_cm / offset_px dans l'export v3 pour pièces
-  non-south), fusion `bbox_px` / `bbox_abs_px` et `seed_px` /
-  `seed_abs_px`.
+- **Dette R-12 différée** : fusion `bbox_px` / `bbox_abs_px` et
+  `seed_px` / `seed_abs_px` (les deux couples restent en parallèle).
 - Bugs P2 connus hors R-12 : re-analyze nécessite parfois 2 passes
   pour détecter les portes, zoom arrière bloqué trop tôt.
 
