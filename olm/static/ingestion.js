@@ -637,7 +637,14 @@
         ? Math.round(e.width_cm)
         : Math.round((e.width_px || 0) * ingState.scale);
     }
-    var rooms = ingState.rooms.map(function (r) {
+    var rooms = ingState.rooms.map(function (rC) {
+      // R-12: si la pièce est en repère canonique (marquée par
+      // original_corridor_face), on repasse en absolu via toStorage avant
+      // sérialisation. Le consommateur (fpLoadAndMatch) réappliquera
+      // fromStorage pour récupérer le repère canonique. Round-trip symétrique.
+      var r = (rC.original_corridor_face !== undefined && window.canonicalIO)
+        ? window.canonicalIO.toStorage(rC)
+        : rC;
       var windows = (r.windows || []).map(function (w) {
         return { face: w.face, offset_cm: _offCm(w), width_cm: _widCm(w) };
       });
