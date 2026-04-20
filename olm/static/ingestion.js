@@ -1637,12 +1637,21 @@
               r.surface_m2_bbox = parseFloat(
                 ((canon.width_cm * canon.depth_cm) / 10000).toFixed(2));
             }
-            if (canon.corridor_face) r.corridor_face = canon.corridor_face;
+            // D-113 + R-12 : canon.corridor_face est le repère ABSOLU
+            // détecté. En state canonique, corridor_face reste "south" ;
+            // original_corridor_face pilote la rotation overlay.
+            if (canon.corridor_face) {
+              r.original_corridor_face = canon.corridor_face;
+              r.corridor_face = "south";
+            }
 
             if (am) {
               am.windows = mergedW;
               am.openings = mergedO;
-              if (canon.corridor_face) am.corridor_face = canon.corridor_face;
+              if (canon.corridor_face) {
+                am.original_corridor_face = canon.corridor_face;
+                am.corridor_face = "south";
+              }
             }
             if (window.fpData && window.fpData.rooms) {
               var fr = window.fpData.rooms.find(function (x) { return x.name === r.name; });
@@ -1654,7 +1663,10 @@
                   fr.width_cm = canon.width_cm;
                   fr.depth_cm = canon.depth_cm;
                 }
-                if (canon.corridor_face) fr.corridor_face = canon.corridor_face;
+                if (canon.corridor_face) {
+                  fr.original_corridor_face = canon.corridor_face;
+                  fr.corridor_face = "south";
+                }
               }
             }
             ok++;

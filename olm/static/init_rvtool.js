@@ -320,8 +320,14 @@
             data, prevCf, ingst.scale || 0);
 
           if (canon.corridor_face) {
-            amend.originalRoom.corridor_face = canon.corridor_face;
-            state.corridor_face = canon.corridor_face;
+            // D-113 + R-12 : la porte détectée met à jour le REPÈRE ABSOLU
+            // mémorisé (original_corridor_face). En state canonique R-12,
+            // corridor_face reste "south" constant ; c'est
+            // original_corridor_face qui pilote la rotation d'overlay.
+            amend.originalRoom.original_corridor_face = canon.corridor_face;
+            amend.originalRoom.corridor_face = "south";
+            state.original_corridor_face = canon.corridor_face;
+            state.corridor_face = "south";
           }
           var newWindows = canon.windows.filter(function (w) {
             return !deleted.has(sig("window", w));
