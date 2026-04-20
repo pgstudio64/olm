@@ -201,6 +201,38 @@ Tâches :
 
 ---
 
+#### Topologies de bâtiment — Mode Préprocessé
+
+Le preprocessing et les règles de détection (fenêtres, corridor, extérieur)
+doivent tenir compte de la variété des topologies réelles. À passer en revue
+et documenter avant d'industrialiser le Mode Préprocessé.
+
+- [ ] **Bâtiment classique (barre, plot, L)** : fenêtres vers l'extérieur
+  périphérique (bleu ciel), corridor central (vert). Cas de référence.
+- [ ] **Cours intérieures** : zones extérieures enclavées dans le bâtiment,
+  non atteintes par le flood fill depuis les bords. Doivent être peintes en
+  bleu comme l'extérieur périphérique pour que la détection fenêtres
+  fonctionne côté cour.
+- [ ] **Patios / atriums vitrés** : zones intérieures traversées par la
+  lumière mais entourées de surfaces vitrées. Choix de coloration à
+  arbitrer (bleu extérieur, vert corridor, ou statut dédié ?).
+- [ ] **Mezzanines / demi-niveaux** : pièces sur plusieurs niveaux sur le
+  même plan. Impact sur l'unicité du `plan_id` et les bbox si elles se
+  chevauchent.
+- [ ] **Bâtiments mitoyens / parties communes** : murs mitoyens à
+  distinguer des murs pleins internes ; absence de façade sur certaines
+  faces. Règle de détection fenêtre à adapter.
+- [ ] **Parking / techniques / circulations non occupables** : exclure du
+  matching. Marquage à définir (room_code dédié, filtre par surface, ou
+  coloration spéciale).
+- [ ] **… cas à collecter au fil des plans réels** — ouvrir la liste à
+  mesure que des topologies nouvelles apparaissent.
+
+Pour chaque topologie, documenter dans
+`docs/specs/RASTER_EXTRACTION_SPEC.md` ou une spec dédiée : règle de
+coloration attendue dans le PNG -SD, comportement du ray-cast, règle de
+détection fenêtre / corridor.
+
 #### Robustesse ingestion
 
 - [ ] **Arcs de porte** : le preprocessing génère des artefacts aux arcs de porte → post-traitement par consensus médian sur les hits du ray-cast (filtrer les encoches causées par les arcs)
