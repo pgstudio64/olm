@@ -1600,10 +1600,14 @@ def extract_rooms_from_preprocessed(
             "openings": openings,
             "doors": doors,
             "exterior_faces": [],
+            # corridor_face : dérivé uniquement d'une porte explicite
+            # (source fiable). Les openings ne permettent pas d'inférer le
+            # corridor de façon fiable (openings[0] peut être n'importe
+            # quelle ouverture — ex: pièce 903 avec openings[north] alors
+            # que le corridor est au sud). Sans porte, laisser vide ; la
+            # détection couleur par _detect_face_colors prendra le relai.
             "corridor_face": (
-                doors[0]["face"] if doors and "face" in doors[0]
-                else openings[0]["face"] if openings and "face" in openings[0]
-                else ""
+                doors[0]["face"] if doors and "face" in doors[0] else ""
             ),
         }
         if p["canonical_top_face"]:
