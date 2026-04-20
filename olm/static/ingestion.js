@@ -1607,10 +1607,13 @@
               return o.has_door && o.origin !== 'auto';
             });
 
-            // Canonicalise abs → canon en respectant le corridor_face courant
-            // ET en le mettant à jour si une porte est détectée (D-112/D-113).
+            // Canonicalise abs → canon. R-12 : le helper attend le
+            // corridor_face ABSOLU (res vient du backend en absolu).
+            // original_corridor_face mémorise ce repère ; corridor_face
+            // est "south" canonique et ne doit pas être passé ici.
+            var prevCfAbs = r.original_corridor_face || r.corridor_face || '';
             var canon = window.computeCanonicalReanalyzeResult(
-              res, r.corridor_face || '', ingState.scale);
+              res, prevCfAbs, ingState.scale);
 
             var newW = canon.windows.filter(function (w) {
               return !deleted.has(_sig('window', w));
