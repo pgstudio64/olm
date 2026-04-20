@@ -159,15 +159,18 @@
     // Sort by alphanumeric name
     parsed.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
 
+    // R-12 A.2: canonicalise input rooms before matching
+    parsed.rooms = parsed.rooms.map(window.canonicalIO.fromStorage);
+
     // Preserve fields from input (not returned by matching API)
     var bboxByName = {};
     var corridorByName = {};
     var seedByName = {};
     var doorsByName = {};
     parsed.rooms.forEach(function(r) {
-      if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
-      if (r.corridor_face) corridorByName[r.name] = r.corridor_face;
-      if (r.seed_px) seedByName[r.name] = r.seed_px;
+      if (r.bbox_abs_px) bboxByName[r.name] = r.bbox_abs_px;
+      corridorByName[r.name] = r.original_corridor_face || "";
+      if (r.seed_abs_px) seedByName[r.name] = r.seed_abs_px;
       if (r.doors) doorsByName[r.name] = r.doors;
     });
 
@@ -184,12 +187,13 @@
       if (data.error) { alert("Error: " + data.error); return; }
       // Sort results by name
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
-      // Re-attach bbox_px from input
+      // Re-attach canonical fields not returned by matching API
       data.rooms.forEach(function(r) {
-        if (bboxByName[r.name]) r.bbox_px = bboxByName[r.name];
-        if (corridorByName[r.name]) r.corridor_face = corridorByName[r.name];
-        if (seedByName[r.name]) r.seed_px = seedByName[r.name];
-        if (doorsByName[r.name]) r.doors = doorsByName[r.name];
+        if (bboxByName[r.name])    r.bbox_abs_px = bboxByName[r.name];
+        if (seedByName[r.name])    r.seed_abs_px = seedByName[r.name];
+        if (doorsByName[r.name])   r.doors = doorsByName[r.name];
+        r.original_corridor_face = corridorByName[r.name] || "";
+        r.corridor_face = "south";
       });
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;

@@ -30,6 +30,14 @@
       var roomId = r.name || '';
       if (!roomId) return;
 
+      // R-12 A.2: if room is in canonical state, restore absolute repère before serialisation
+      var rAbs = (r.original_corridor_face !== undefined)
+        ? window.canonicalIO.toStorage(r)
+        : r;
+
+      // Shadow r with rAbs for all reads below
+      r = rAbs;
+
       // Cartouche seed: prefer seed_px, else seed, else bbox center
       var seed;
       if (Array.isArray(r.seed_px) && r.seed_px.length === 2) {
