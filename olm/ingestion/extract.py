@@ -1564,8 +1564,23 @@ def extract_rooms_from_preprocessed(
                 dd["label_y"] = int(d["label_y"])
             doors.append(dd)
 
-        openings = [o for o in p["openings_raw"] if isinstance(o, dict)]
-        windows = [w for w in p["windows_raw"] if isinstance(w, dict)]
+        def _enrich_px_cm(e: dict) -> dict:
+            """Enrichit {offset_px, width_px} avec {offset_cm, width_cm} si absents.
+
+            Nécessaire pour que fromStorage frontend trouve toujours offset_cm
+            cohérent (R-12). Le JSON v3 source ne porte que les _px ; la
+            version cm permet une canonicalisation propre côté consommateur.
+            """
+            out = dict(e)
+            if "offset_cm" not in out and "offset_px" in out:
+                out["offset_cm"] = int(round(out["offset_px"] * scale_cm_per_px))
+            if "width_cm" not in out and "width_px" in out:
+                out["width_cm"] = int(round(out["width_px"] * scale_cm_per_px))
+            return out
+
+        openings = [_enrich_px_cm(o) for o in p["openings_raw"] if isinstance(o, dict)]
+        windows = [_enrich_px_cm(w) for w in p["windows_raw"] if isinstance(w, dict)]
+        doors = [_enrich_px_cm(d) for d in doors]
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
