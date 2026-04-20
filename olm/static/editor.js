@@ -1432,15 +1432,18 @@ async function save() {
   // Room amend mode: store amended room geometry and re-run matching
   if (state.roomAmendMode) {
     var ramend = state.roomAmendMode;
-    // State contains local coordinates (D-83) — convert back to absolute for storage
-    var origCf = ramend.originalRoom.corridor_face || "";
+    // State is canonical (D-117). originalRoom est aussi canonique
+    // (corridor_face === "south") ; le vrai repère absolu est mémorisé dans
+    // original_corridor_face — c'est lui qu'on passe à toStorage.
+    var origCf = ramend.originalRoom.original_corridor_face ||
+                 ramend.originalRoom.corridor_face || "";
     var _origSeed = ramend.originalRoom.seed_px ||
       ramend.originalRoom.seed ||
       (ramend.originalRoom.seed_x != null &&
        ramend.originalRoom.seed_y != null
         ? [ramend.originalRoom.seed_x, ramend.originalRoom.seed_y]
         : null);
-    var localRoom = {
+    var canonRoom = {
       name: ramend.roomName,
       width_cm: state.room_width_cm,
       depth_cm: state.room_depth_cm,
@@ -1448,15 +1451,13 @@ async function save() {
       openings: JSON.parse(JSON.stringify(state.room_openings)),
       exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions)),
       transparent_zones: JSON.parse(JSON.stringify(state.room_transparents || [])),
-      bbox_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : undefined,
-      corridor_face: origCf,
-      seed_px: _origSeed ? _origSeed.slice() : undefined,
+      corridor_face: "south",
+      original_corridor_face: origCf,
+      bbox_abs_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : null,
+      seed_abs_px: _origSeed ? _origSeed.slice() : null,
     };
-    var amendedRoom = (origCf && origCf !== "south" && typeof window._decanonicalizeRoom === "function")
-      ? window._decanonicalizeRoom(localRoom, origCf)
-      : localRoom;
+    var amendedRoom = window.canonicalIO.toStorage(canonRoom);
     fpRoomAmendments[ramend.roomName] = amendedRoom;
-    amendedRoom.corridor_face = origCf;
 
     // Propagate new size + NW shift back to ingState.rooms (and
     // fpData.rooms) so Floor reflects the amendment on the bbox overlay.
@@ -1489,6 +1490,20 @@ async function save() {
     if (scaleCmPerPx > 0) {
       var newBbox = null;
       var ingRooms = (window.ingState && window.ingState.rooms) || [];
+      var pxPerCm = 1.0 / scaleCmPerPx;
+      var doorsOut = (state.room_openings || [])
+        .filter(function (o) { return o.has_door; })
+        .map(function (o) {
+          return {
+            face: o.face,
+            offset_cm: o.offset_cm,
+            width_cm: o.width_cm,
+            offset_px: Math.round((o.offset_cm || 0) * pxPerCm),
+            width_px: Math.round((o.width_cm || 0) * pxPerCm),
+            hinge_side: o.hinge_side || "left",
+            opens_inward: o.opens_inward !== false,
+          };
+        });
       for (var ir = 0; ir < ingRooms.length; ir++) {
         if (ingRooms[ir].name !== ramend.roomName) continue;
         // Base bbox : prefer the one updated by Re-analyze (stored on
@@ -1501,25 +1516,17 @@ async function save() {
         var nx1 = nx0 + absW / scaleCmPerPx;
         var ny1 = ny0 + absD / scaleCmPerPx;
         newBbox = [nx0, ny0, nx1, ny1];
+        // ingRooms reste en repère CANONIQUE (R-12) : on ne met à jour
+        // ici que ce qui change suite à un resize / shift de la pièce.
+        // Le corridor_face reste "south" et le repère absolu est porté
+        // par original_corridor_face + bbox_abs_px.
         ingRooms[ir].bbox_px = newBbox;
-        ingRooms[ir].width_cm = absW;
-        ingRooms[ir].depth_cm = absD;
-        ingRooms[ir].corridor_face = origCf;
-        ingRooms[ir].surface_m2 = parseFloat(((absW * absD) / 10000).toFixed(2));
-        // Portes : convertir les openings has_door=true en format
-        // doors (px) pour que la Floor view les affiche.
-        var pxPerCm = 1.0 / scaleCmPerPx;
-        var doorsOut = (state.room_openings || [])
-          .filter(function (o) { return o.has_door; })
-          .map(function (o) {
-            return {
-              face: o.face,
-              offset_px: Math.round((o.offset_cm || 0) * pxPerCm),
-              width_px: Math.round((o.width_cm || 0) * pxPerCm),
-              hinge_side: o.hinge_side || "left",
-              opens_inward: o.opens_inward !== false,
-            };
-          });
+        ingRooms[ir].bbox_abs_px = newBbox.slice();
+        ingRooms[ir].width_cm = cW;
+        ingRooms[ir].depth_cm = cD;
+        ingRooms[ir].corridor_face = "south";
+        ingRooms[ir].original_corridor_face = origCf;
+        ingRooms[ir].surface_m2 = parseFloat(((cW * cD) / 10000).toFixed(2));
         ingRooms[ir].doors = doorsOut;
         break;
       }
@@ -1528,11 +1535,14 @@ async function save() {
         if (window.fpData && window.fpData.rooms) {
           for (var fr = 0; fr < window.fpData.rooms.length; fr++) {
             if (window.fpData.rooms[fr].name !== ramend.roomName) continue;
-            window.fpData.rooms[fr].width_cm = absW;
-            window.fpData.rooms[fr].depth_cm = absD;
+            // fpData vit en repère canonique (même invariant que ingRooms).
+            window.fpData.rooms[fr].width_cm = cW;
+            window.fpData.rooms[fr].depth_cm = cD;
             window.fpData.rooms[fr].bbox_px = newBbox.slice();
+            window.fpData.rooms[fr].bbox_abs_px = newBbox.slice();
             window.fpData.rooms[fr].doors = doorsOut.slice();
-            window.fpData.rooms[fr].corridor_face = origCf;
+            window.fpData.rooms[fr].corridor_face = "south";
+            window.fpData.rooms[fr].original_corridor_face = origCf;
             break;
           }
         }

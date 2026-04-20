@@ -13,68 +13,74 @@
   // floor re-analyze below. Takes the absolute-coord backend payload and
   // returns canonical-space (corridor always south) features + dims + debug
   // geometry. The caller handles merge with manual/preserved items.
+  // R-12 C2 : la rotation abs → canon est déléguée à canonicalIO.fromStorage
+  // (source unique). Ce helper encapsule :
+  //   1) détection du corridor (porte principale ou prevCorridorFace),
+  //   2) construction d'un room-like absolu à partir du payload backend,
+  //   3) passage par fromStorage pour obtenir la géométrie canonique,
+  //   4) post-traitement des points / rectangles relatifs au bbox
+  //      (hits / seed / auto_door_masks — non gérés par fromStorage).
   function computeCanonicalReanalyzeResult(data, prevCorridorFace, scale) {
-    var FACE_MAPS = {
-      north: { north: 'south', south: 'north', east: 'west',  west: 'east'  },
-      east:  { north: 'east',  east:  'south', south: 'west', west: 'north' },
-      west:  { north: 'west',  west:  'south', south: 'east', east: 'north' },
-    };
     var corridor = (data.doors && data.doors.length && data.doors[0].face)
       ? data.doors[0].face : (prevCorridorFace || '');
     var bbox = data.bbox_px || null;
     var absW = bbox ? (bbox[2] - bbox[0]) * scale : 0;
     var absD = bbox ? (bbox[3] - bbox[1]) * scale : 0;
-    function absFaceLen(face) {
-      return (face === 'north' || face === 'south') ? absW : absD;
+
+    // --- 1) Construction du room-like absolu + canonicalisation ---
+    function slim(o) {
+      return { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
     }
-    var faceMap = FACE_MAPS[corridor];
-    function toCanonFeat(o) {
-      var r = { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
-      if (!faceMap) return r;
-      r.face = faceMap[o.face] || o.face;
-      if (corridor === 'north' || corridor === 'west') {
-        r.offset_cm = absFaceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
-      }
-      r.offset_cm = Math.max(0, Math.round(r.offset_cm));
-      r.width_cm = Math.max(0, Math.round(r.width_cm));
-      return r;
+    function slimDoor(d) {
+      return {
+        face: d.face, offset_cm: d.offset_cm, width_cm: d.width_cm,
+        hinge_side: d.hinge_side, opens_inward: d.opens_inward !== false,
+      };
     }
+    var roomAbs = {
+      corridor_face: corridor,
+      width_cm: Math.round(absW),
+      depth_cm: Math.round(absD),
+      bbox_px: bbox,
+      seed_px: data.seed_px,
+      windows: (data.windows || []).map(slim),
+      openings: (data.openings || []).map(slim),
+      doors: (data.doors || []).map(slimDoor),
+    };
+    var canon = (window.canonicalIO && window.canonicalIO.fromStorage)
+      ? window.canonicalIO.fromStorage(roomAbs)
+      : { width_cm: roomAbs.width_cm, depth_cm: roomAbs.depth_cm,
+          windows: [], openings: [], doors: [] };
+
+    function feat(e, extra) {
+      return Object.assign({
+        face: e.face,
+        offset_cm: Math.max(0, Math.round(e.offset_cm || 0)),
+        width_cm: Math.max(0, Math.round(e.width_cm || 0)),
+        origin: 'auto',
+      }, extra || {});
+    }
+    var windowsCanon = (canon.windows || []).map(function (w) { return feat(w); });
+    var openingsCanon = (canon.openings || []).map(function (o) {
+      return feat(o, { has_door: false });
+    });
+    var doorsCanon = (canon.doors || []).map(function (d) {
+      return feat(d, {
+        has_door: true,
+        hinge_side: d.hinge_side,
+        opens_inward: d.opens_inward !== false,
+      });
+    });
+
+    // --- 2) Post-traitement points / rectangles relatifs au bbox ---
+    // fromStorage ne touche pas hits / seed / auto_door_masks_px (ils sont
+    // exprimés en px image, pas en cm room-local). Rotation via les mêmes
+    // matrices que canonicalIO, conservées ici sous forme fonctionnelle.
     function pointAbsToCanon(xAbs, yAbs) {
       if (corridor === 'north') return { x: absW - xAbs, y: absD - yAbs };
       if (corridor === 'east')  return { x: yAbs,         y: absW - xAbs };
       if (corridor === 'west')  return { x: absD - yAbs,  y: xAbs };
       return { x: xAbs, y: yAbs };
-    }
-    var windows = (data.windows || []).map(function (w) {
-      var c = toCanonFeat(w);
-      return { face: c.face, offset_cm: c.offset_cm, width_cm: c.width_cm,
-               origin: 'auto' };
-    });
-    var openings = (data.openings || []).map(function (o) {
-      var c = toCanonFeat(o);
-      return { face: c.face, offset_cm: c.offset_cm, width_cm: c.width_cm,
-               has_door: false, origin: 'auto' };
-    });
-    var doors = (data.doors || []).map(function (d) {
-      var c = toCanonFeat(d);
-      var hs = d.hinge_side;
-      if ((corridor === 'north' || corridor === 'west') && hs) {
-        hs = hs === 'left' ? 'right' : 'left';
-      }
-      return {
-        face: c.face, offset_cm: c.offset_cm, width_cm: c.width_cm,
-        has_door: true, hinge_side: hs,
-        opens_inward: d.opens_inward !== false,
-        origin: 'auto',
-      };
-    });
-    var width_cm, depth_cm;
-    if (corridor === 'east' || corridor === 'west') {
-      width_cm = Math.round(absD);
-      depth_cm = Math.round(absW);
-    } else {
-      width_cm = Math.round(absW);
-      depth_cm = Math.round(absD);
     }
     var hits = null, seed_cm = null;
     if (data.hits && bbox) {
@@ -117,11 +123,11 @@
     return {
       corridor_face: corridor,
       bbox_px: bbox,
-      width_cm: width_cm,
-      depth_cm: depth_cm,
-      windows: windows,
-      openings: openings,
-      doors: doors,
+      width_cm: Math.round(canon.width_cm || 0),
+      depth_cm: Math.round(canon.depth_cm || 0),
+      windows: windowsCanon,
+      openings: openingsCanon,
+      doors: doorsCanon,
       hits: hits,
       seed_cm: seed_cm,
       auto_door_masks: masks,
@@ -363,9 +369,8 @@
         updatePlanDependentUI();
 
         // Feed rooms into the floor plan pipeline (Review + Design)
-        var json = document.getElementById('fpRoomsJson').value;
-        if (json && typeof window.fpLoadAndMatch === 'function') {
-          window.fpLoadAndMatch(json);
+        if (typeof window.fpLoadAndMatch === 'function') {
+          window.fpLoadAndMatch(ingState.rooms);
         }
 
         // Set overlay for Review/Design from the ingestion plan
@@ -595,9 +600,8 @@
     renderIngestion();
 
     // Re-trigger matching so the new room appears in Review/Design
-    var json = document.getElementById('fpRoomsJson').value;
-    if (json && typeof window.fpLoadAndMatch === 'function') {
-      window.fpLoadAndMatch(json);
+    if (typeof window.fpLoadAndMatch === 'function') {
+      window.fpLoadAndMatch(ingState.rooms);
     }
   }
   window.addIngRoom = addIngRoom;
@@ -613,76 +617,16 @@
     updateIngRoomList();
     renderIngestion();
 
-    var json = document.getElementById('fpRoomsJson').value;
-    if (json && typeof window.fpLoadAndMatch === 'function') {
-      window.fpLoadAndMatch(json);
+    if (typeof window.fpLoadAndMatch === 'function') {
+      window.fpLoadAndMatch(ingState.rooms);
     }
   }
   window.deleteIngRoom = deleteIngRoom;
 
-  // --- Populate the rooms JSON textarea for matching ---
-  function populateRoomsJson() {
-    var textarea = document.getElementById('fpRoomsJson');
-    if (!textarea) return;
-    // R-12: privilégie offset_cm / width_cm (canonique via fromStorage) et
-    // ne retombe sur offset_px × scale qu'en dernier recours. Garantit que
-    // face (canon) et offset (canon) restent cohérents pour les pièces rotées.
-    function _offCm(e) {
-      return (e && e.offset_cm != null)
-        ? Math.round(e.offset_cm)
-        : Math.round((e.offset_px || 0) * ingState.scale);
-    }
-    function _widCm(e) {
-      return (e && e.width_cm != null)
-        ? Math.round(e.width_cm)
-        : Math.round((e.width_px || 0) * ingState.scale);
-    }
-    var rooms = ingState.rooms.map(function (rC) {
-      // R-12: si la pièce est en repère canonique (marquée par
-      // original_corridor_face), on repasse en absolu via toStorage avant
-      // sérialisation. Le consommateur (fpLoadAndMatch) réappliquera
-      // fromStorage pour récupérer le repère canonique. Round-trip symétrique.
-      var r = (rC.original_corridor_face !== undefined && window.canonicalIO)
-        ? window.canonicalIO.toStorage(rC)
-        : rC;
-      var windows = (r.windows || []).map(function (w) {
-        return { face: w.face, offset_cm: _offCm(w), width_cm: _widCm(w) };
-      });
-      var openings = (r.openings || []).map(function (o) {
-        return {
-          face: o.face,
-          offset_cm: _offCm(o),
-          width_cm: _widCm(o),
-          has_door: false,
-        };
-      });
-      // Add doors as openings with has_door=true
-      (r.doors || []).forEach(function (d) {
-        openings.push({
-          face: d.face,
-          offset_cm: _offCm(d),
-          width_cm: _widCm(d),
-          has_door: true,
-          opens_inward: d.opens_inward || true,
-          hinge_side: d.hinge_side || 'left',
-        });
-      });
-      return {
-        name: r.name,
-        width_cm: r.width_cm,
-        depth_cm: r.depth_cm,
-        windows: windows,
-        openings: openings,
-        exclusion_zones: [],
-        exterior_faces: r.exterior_faces,
-        corridor_face: r.corridor_face,
-        bbox_px: r.bbox_px,
-        seed_px: r.seed_px || r.seed,
-        doors: r.doors || [],
-      };
-    });
-    textarea.value = JSON.stringify({ rooms: rooms }, null, 2);
-  }
+  // populateRoomsJson (matching textarea) lives in ingestion_serialize.js
+  // (R-12 C3). Exposé sur window, on récupère une référence locale pour les
+  // nombreux call sites de ce module.
+  var populateRoomsJson = window.populateRoomsJson;
 
   // --- Render the ingestion results as SVG ---
   function renderIngestion() {
@@ -1324,12 +1268,11 @@
           updateIngRoomList();
           renderIngestion();
           populateRoomsJson();
-          // Re-parse le JSON pour propager les offsets re-scalés (windows /
-          // openings) dans fpData.rooms — sans quoi Room et Office gardent
-          // les anciennes valeurs cm.
-          var json = document.getElementById('fpRoomsJson');
-          if (json && json.value && typeof window.fpLoadAndMatch === 'function') {
-            window.fpLoadAndMatch(json.value);
+          // Propager les offsets re-scalés (windows / openings) dans
+          // fpData.rooms — sans quoi Room et Office gardent les anciennes
+          // valeurs cm.
+          if (typeof window.fpLoadAndMatch === 'function') {
+            window.fpLoadAndMatch(ingState.rooms);
           }
           var info = document.getElementById('ingScaleInfo');
           if (info) info.textContent = scaleNum +
@@ -1676,9 +1619,8 @@
           });
           renderIngestion();
           populateRoomsJson();
-          var json = document.getElementById('fpRoomsJson');
-          if (json && json.value && typeof window.fpLoadAndMatch === 'function') {
-            window.fpLoadAndMatch(json.value);
+          if (typeof window.fpLoadAndMatch === 'function') {
+            window.fpLoadAndMatch(ingState.rooms);
           }
           if (statusEl) statusEl.textContent =
             'Re-analyze done: ' + ok + ' OK, ' + fail + ' failed.';
@@ -1693,8 +1635,9 @@
     }
   });
 
-  // devExportV3Json extracted to olm/static/ingestion_export.js (D-94 P4).
-  // Still exposed as window.devExportV3Json for init.js Save/Export buttons.
+  // devExportV3Json + populateRoomsJson vivent dans ingestion_serialize.js
+  // (D-94 P4, R-12 C3). Exposés sur window pour init.js (Save/Export) et
+  // conservés en variables locales pour les call sites de ce module.
   var devExportV3Json = window.devExportV3Json;
 
 
@@ -1787,9 +1730,8 @@
         updateIngRoomList();
         updatePlanDependentUI();
 
-        var json = document.getElementById('fpRoomsJson').value;
-        if (json && typeof window.fpLoadAndMatch === 'function') {
-          window.fpLoadAndMatch(json);
+        if (typeof window.fpLoadAndMatch === 'function') {
+          window.fpLoadAndMatch(ingState.rooms);
         }
 
         // fpOverlay pour Review/Design = PNG -SD si disponible, sinon fallback overlay standard.

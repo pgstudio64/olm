@@ -12,134 +12,7 @@
   function fpRooms() { return fpData.rooms; }
   function fpCurrent() { return fpData.rooms[fpData.currentIdx] || null; }
 
-  // ── D-83: Canonical room orientation (corridor at bottom) ─────────────
-  var _FACE_MAPS = {
-    north: { north: "south", south: "north", east: "west", west: "east" },
-    east:  { north: "east",  east: "south",  south: "west", west: "north" },
-    west:  { north: "west",  west: "south",  south: "east", east: "north" },
-  };
-
-  function _canonicalizeRoom(room) {
-    var cf = room.corridor_face || "";
-    if (!cf || cf === "south") return room;
-    var faceMap = _FACE_MAPS[cf];
-    if (!faceMap) return room;
-
-    var copy = JSON.parse(JSON.stringify(room));
-    var W = room.width_cm, D = room.depth_cm;
-    var swap = (cf === "east" || cf === "west");
-    if (swap) { copy.width_cm = D; copy.depth_cm = W; }
-
-    function faceLen(face) {
-      return (face === "north" || face === "south") ? W : D;
-    }
-    function xformOpening(o) {
-      var r = Object.assign({}, o);
-      r.face = faceMap[o.face] || o.face;
-      if (cf === "north") {
-        r.offset_cm = faceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
-      } else if (cf === "west") {
-        r.offset_cm = faceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
-      }
-      if ((cf === "north" || cf === "west") && o.hinge_side) {
-        r.hinge_side = o.hinge_side === "left" ? "right" : "left";
-      }
-      return r;
-    }
-
-    copy.windows = (room.windows || []).map(xformOpening);
-    copy.openings = (room.openings || []).map(xformOpening);
-
-    function xformZone(e) {
-      var ex = Object.assign({}, e);
-      if (cf === "north") {
-        ex.x_cm = W - e.x_cm - e.width_cm;
-        ex.y_cm = D - e.y_cm - e.depth_cm;
-      } else if (cf === "east") {
-        ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
-        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-      } else if (cf === "west") {
-        ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
-        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-      }
-      return ex;
-    }
-    if (room.exclusion_zones && room.exclusion_zones.length) {
-      copy.exclusion_zones = room.exclusion_zones.map(xformZone);
-    }
-    if (room.transparent_zones && room.transparent_zones.length) {
-      copy.transparent_zones = room.transparent_zones.map(xformZone);
-    }
-
-    copy.corridor_face = "south";
-    copy._originalCorridorFace = cf;
-    return copy;
-  }
-
-  // Inverse face maps: local face → absolute face
-  var _INV_FACE_MAPS = {
-    north: { north: "south", south: "north", east: "west", west: "east" },
-    east:  { north: "west",  east: "north",  south: "east", west: "south" },
-    west:  { north: "east",  east: "south",  south: "west", west: "north" },
-  };
-
-  function _decanonicalizeRoom(room, originalCorridorFace) {
-    if (!originalCorridorFace || originalCorridorFace === "south") return room;
-    var invMap = _INV_FACE_MAPS[originalCorridorFace];
-    if (!invMap) return room;
-
-    var copy = JSON.parse(JSON.stringify(room));
-    var W = room.width_cm, D = room.depth_cm;
-    var swap = (originalCorridorFace === "east" || originalCorridorFace === "west");
-    if (swap) { copy.width_cm = D; copy.depth_cm = W; }
-
-    function localFaceLen(face) {
-      return (face === "north" || face === "south") ? W : D;
-    }
-    function xformBack(o) {
-      var r = Object.assign({}, o);
-      r.face = invMap[o.face] || o.face;
-      if (originalCorridorFace === "north") {
-        r.offset_cm = localFaceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
-        if (o.hinge_side) r.hinge_side = o.hinge_side === "left" ? "right" : "left";
-      } else if (originalCorridorFace === "west") {
-        r.offset_cm = localFaceLen(o.face) - (o.offset_cm || 0) - (o.width_cm || 0);
-        if (o.hinge_side) r.hinge_side = o.hinge_side === "left" ? "right" : "left";
-      }
-      // east (90° CW): offset and hinge stay the same
-      return r;
-    }
-
-    copy.windows = (room.windows || []).map(xformBack);
-    copy.openings = (room.openings || []).map(xformBack);
-
-    function xformZoneBack(e) {
-      var ex = Object.assign({}, e);
-      if (originalCorridorFace === "north") {
-        var absW = swap ? D : W, absD = swap ? W : D;
-        ex.x_cm = absW - e.x_cm - e.width_cm;
-        ex.y_cm = absD - e.y_cm - e.depth_cm;
-      } else if (originalCorridorFace === "east") {
-        ex.x_cm = D - e.y_cm - e.depth_cm; ex.y_cm = e.x_cm;
-        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-      } else if (originalCorridorFace === "west") {
-        ex.x_cm = e.y_cm; ex.y_cm = W - e.x_cm - e.width_cm;
-        ex.width_cm = e.depth_cm; ex.depth_cm = e.width_cm;
-      }
-      return ex;
-    }
-    if (room.exclusion_zones && room.exclusion_zones.length) {
-      copy.exclusion_zones = room.exclusion_zones.map(xformZoneBack);
-    }
-    if (room.transparent_zones && room.transparent_zones.length) {
-      copy.transparent_zones = room.transparent_zones.map(xformZoneBack);
-    }
-
-    copy.corridor_face = originalCorridorFace;
-    return copy;
-  }
-  window._canonicalizeRoom = _canonicalizeRoom;
-  window._decanonicalizeRoom = _decanonicalizeRoom;
+  // Canonical abs ↔ south rotation lives in canonical_io.js (window.canonicalIO).
 
   // ── Natural alphanumeric sort ─────────────────────────────────────────
   function natSort(a, b) {
@@ -147,27 +20,50 @@
   }
 
   // ── Loading and matching ──────────────────────────────────────────────
-  function fpLoadAndMatch(roomsJson) {
-    var parsed;
-    try { parsed = JSON.parse(roomsJson); } catch(e) {
-      alert("Invalid JSON: " + e.message); return;
-    }
-    if (!parsed.rooms || !parsed.rooms.length) {
-      alert("No rooms found in JSON"); return;
+  // R-12 C4 : bimode. Accepte soit :
+  //   - un Array de pièces (appel interne depuis ingState.rooms) — pas de
+  //     stringify / parse, pas de fromStorage redondant pour les pièces déjà
+  //     canoniques (Préprocessé). Les pièces non-canoniques (mode OCR, sans
+  //     original_corridor_face) sont canonicalisées au vol.
+  //   - une string JSON (legacy : file upload, reload button, auto-dev) —
+  //     parse + fromStorage sur chaque pièce.
+  function fpLoadAndMatch(arg) {
+    var rooms;
+    if (typeof arg === "string") {
+      var parsed;
+      try { parsed = JSON.parse(arg); } catch(e) {
+        alert("Invalid JSON: " + e.message); return;
+      }
+      if (!parsed.rooms || !parsed.rooms.length) {
+        alert("No rooms found in JSON"); return;
+      }
+      rooms = parsed.rooms.map(function (r) {
+        return (r.original_corridor_face !== undefined)
+          ? r
+          : window.canonicalIO.fromStorage(r);
+      });
+    } else if (Array.isArray(arg)) {
+      if (!arg.length) { alert("No rooms to match"); return; }
+      rooms = arg.map(function (r) {
+        return (r.original_corridor_face !== undefined)
+          ? r
+          : window.canonicalIO.fromStorage(r);
+      });
+    } else {
+      console.warn("fpLoadAndMatch: invalid argument", arg); return;
     }
 
-    // Sort by alphanumeric name
-    parsed.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
-
-    // R-12 A.2: canonicalise input rooms before matching
-    parsed.rooms = parsed.rooms.map(window.canonicalIO.fromStorage);
+    // Sort by alphanumeric name (non-mutating)
+    rooms = rooms.slice().sort(function (a, b) {
+      return natSort(a.name || "", b.name || "");
+    });
 
     // Preserve fields from input (not returned by matching API)
     var bboxByName = {};
     var corridorByName = {};
     var seedByName = {};
     var doorsByName = {};
-    parsed.rooms.forEach(function(r) {
+    rooms.forEach(function(r) {
       if (r.bbox_abs_px) bboxByName[r.name] = r.bbox_abs_px;
       corridorByName[r.name] = r.original_corridor_face || "";
       if (r.seed_abs_px) seedByName[r.name] = r.seed_abs_px;
@@ -180,7 +76,7 @@
     fetch("/api/floor-plan/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rooms: parsed.rooms }),
+      body: JSON.stringify({ rooms: rooms }),
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -190,7 +86,7 @@
       // Re-attach canonical fields not returned by matching API.
       // bbox_px / seed_px dupliquent bbox_abs_px / seed_abs_px : les
       // consommateurs de rendu (overlay, re-analyze) lisent encore bbox_px
-      // pour le positionnement absolu. À consolider en étape B.
+      // pour le positionnement absolu.
       data.rooms.forEach(function(r) {
         if (bboxByName[r.name]) {
           r.bbox_abs_px = bboxByName[r.name];
