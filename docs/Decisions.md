@@ -7,6 +7,77 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-120 · Consolidation R-12 C1 → C4 : canonical_io source unique (2026-04-20)
+
+**Décision** : finaliser le refactor R-12 (D-117) en éliminant toute la
+duplication de la rotation abs ↔ canon et le round-trip inutile du
+matching. `canonical_io.js` devient la seule source pour les matrices de
+rotation ; le textarea `fpRoomsJson` perd son rôle de pivot d'échange.
+
+**C1** · suppression du code mort `_canonicalizeRoom` / `_decanonicalizeRoom`
++ matrices `_FACE_MAPS` / `_INV_FACE_MAPS` de `floor_plan.js`. L'unique
+consommateur restant (`editor.js:save()` en Room amend) bascule sur
+`canonicalIO.toStorage`. Correction du bug latent sur `origCf` : après
+R-12, `ramend.originalRoom.corridor_face === "south"` (canon), il faut
+lire `original_corridor_face` en priorité — sans quoi toutes les
+rotations de save étaient annulées pour les pièces non-south. La
+propagation vers `ingRooms` / `fpData` est rendue cohérente avec
+l'invariant canonique (dims canoniques, `corridor_face:"south"`,
+`bbox_abs_px` mis à jour — plus d'écrasement en repère absolu qui
+provoquait une double rotation à l'export).
+
+**C2** · réécriture de `computeCanonicalReanalyzeResult` en wrapper
+mince autour de `canonicalIO.fromStorage`. La matrice `FACE_MAPS`
+locale et la fonction `toCanonFeat` (doublons de la frontière canonique)
+disparaissent. Seul le post-traitement des points / rectangles relatifs
+au bbox (`hits`, `seed_cm`, `auto_door_masks`) reste local car hors
+scope de `fromStorage`. Bug prevCf éliminé par construction : un seul
+chemin de canonicalisation.
+
+**C3** · fusion des deux sérialiseurs de pièces dans un module unique
+`ingestion_serialize.js` (renommé depuis `ingestion_export.js`). Nouvelle
+API : `window.olmSerialize.{serializeForMatching, serializeForStorage}`
+retourne la structure pure ; `populateRoomsJson` et `devExportV3Json`
+deviennent de minces wrappers UI. La ligne `toStorage(r)` n'apparaît
+plus qu'à un seul endroit (`_toAbsRooms()`).
+
+**C4** · bimode `fpLoadAndMatch(arg)` : accepte un `Array` de pièces
+(appel interne depuis `ingState.rooms`) ou une string JSON (legacy :
+file upload, reload button, auto-dev). Pour le path Array, la
+canonicalisation est idempotente — appliquée seulement aux pièces sans
+`original_corridor_face` (OCR). Les 6 call sites internes dans
+`ingestion.js` passent désormais `ingState.rooms` au lieu de la valeur
+du textarea. Plus de stringify / parse / fromStorage redondant dans
+le chemin de matching interne.
+
+**Justification** :
+
+Le refactor R-12 (D-117) a posé les frontières `fromStorage` /
+`toStorage` mais laissé vivre en parallèle : (1) le code mort
+`_canonicalizeRoom` / `_decanonicalizeRoom` ; (2) la matrice locale
+dans `computeCanonicalReanalyzeResult` ; (3) un sérialiseur dédoublé ;
+(4) un round-trip textarea systématique. Chaque chemin dupliqué est
+une fenêtre de divergence (bug prevCf D-116, bug origCf mis à jour en
+C1). Réduire à une source unique élimine ces bugs par construction.
+
+**Impact** :
+- Suppression de ~180 lignes de code (matrices dupliquées, helpers morts).
+- Fichier `ingestion_export.js` renommé en `ingestion_serialize.js`.
+- Bimode `fpLoadAndMatch` : path string legacy préservé pour les appels
+  externes (file upload, reload, dev auto-load).
+- Le textarea `fpRoomsJson` garde un rôle informatif (debug visibility).
+
+**Dette restante** (hors C1-C4) :
+- `offset_px` / `width_px` non rotés par `toStorage` : incohérence
+  offset_cm / offset_px dans l'export v3 pour les pièces non-south.
+  Non-bloquant (populateRoomsJson préfère offset_cm pour le matching).
+- Fusion `bbox_px` / `bbox_abs_px`, `seed_px` / `seed_abs_px` : refactor
+  plus lourd des consommateurs overlay, à faire en bloc ultérieurement.
+- Bug Save physique (élément fantôme intercepte les clics) : confirmé
+  non-lié à C1-C4 ; à investiguer séparément.
+
+---
+
 ## D-119 · Auto-test d'orientation canonique via couleurs sémantiques (2026-04-20)
 
 **Décision** : introduire un test runtime qui vérifie automatiquement

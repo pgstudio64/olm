@@ -93,43 +93,37 @@ Migration de paramétrage : bouton "Upgrade to new standard" qui lit le paramét
 
 ## Chantiers actifs — Refonte OLM
 
-### R-12 consolidation — réduction de dette (C1 → C4)
+### R-12 consolidation — réduction de dette (C1 → C4) ✅ D-120
 
-Validée par l'utilisateur : aller au bout du refactor en éliminant la
-duplication et les chemins morts avant d'attaquer les bugs résiduels.
-La simplification est attendue pour résoudre par ricochet plusieurs
-symptômes (bug Save physique notamment).
+Livrée en 2026-04-20 (D-120). Quatre étapes réalisées :
 
-- [ ] **C1 — Supprimer `_canonicalizeRoom` / `_decanonicalizeRoom`**
-  (code mort après étape B, définitions dans `floor_plan.js:22-142`,
-  plus aucune consommation active). Commit petit, sans risque.
-- [ ] **C2 — Unifier re-analyze autour de `fromStorage`** : supprimer
-  `computeCanonicalReanalyzeResult` (ingestion.js). Le helper re-analyze
-  wrap le payload backend en room-like puis délègue à `fromStorage`.
-  Disparition par construction du bug prevCf (un seul chemin de
-  canonicalisation, pas deux à garder synchrones).
-- [ ] **C3 — Fusionner `populateRoomsJson` et `devExportV3Json`** en
-  un seul sérialiseur. Arguments : destination (textarea / download),
-  logique `toStorage` centralisée.
-- [ ] **C4 — Éliminer le round-trip `textarea` pour le matching** :
-  `fpLoadAndMatch` lit `ingState.rooms` directement (pas de parse JSON
-  intermédiaire). Textarea devient informatif (debug). Suppression du
-  `fromStorage` en double (ingState est déjà canon).
+- [x] **C1** — `_canonicalizeRoom` / `_decanonicalizeRoom` +
+  `_FACE_MAPS` / `_INV_FACE_MAPS` supprimés de `floor_plan.js`.
+  `editor.js save()` (Room amend) bascule sur `canonicalIO.toStorage`.
+  Bug latent corrigé : `origCf` lu depuis `original_corridor_face` en
+  priorité (corridor_face est toujours "south" en canon R-12).
+- [x] **C2** — `computeCanonicalReanalyzeResult` réécrit en wrapper
+  mince autour de `fromStorage`. Matrice `FACE_MAPS` locale disparue.
+- [x] **C3** — Fusion des sérialiseurs dans `ingestion_serialize.js`
+  (renommé). Nouvelle API `window.olmSerialize`.
+- [x] **C4** — `fpLoadAndMatch` bimode (string legacy / Array direct).
+  Call sites internes (ingestion.js) passent `ingState.rooms`. Textarea
+  devient informatif.
 
 **Dette différée (non bloquante)** :
 - Fusion `bbox_px` / `bbox_abs_px` et `seed_px` / `seed_abs_px` en un
   seul champ : refactor plus lourd des consommateurs overlay, à faire
   en bloc plus tard.
-- `corridor_face` / `original_corridor_face` : idem, l'invariant
-  "south" demande de la discipline côté consommateurs. Consolidation
-  envisageable après C1-C4.
+- `offset_px` / `width_px` non rotés par `toStorage` : incohérence
+  offset_cm / offset_px dans l'export v3 pour les pièces non-south.
+  Non-bloquant (populateRoomsJson préfère offset_cm pour le matching).
 - Bug **bouton Save** : clic programmatique fonctionne, clic physique
   non intercepté (`document.elementFromPoint` retourne undefined à
-  la position du bouton). Le bouton est hors viewport ou masqué par
-  un autre élément. À investiguer APRÈS C1-C4 — la simplification
-  peut faire disparaître le symptôme.
+  la position du bouton). Confirmé non-lié à C1-C4 après consolidation.
+  À investiguer séparément — probablement un overlay transparent qui
+  capture les events (pas de liseré `:hover`, pas de click).
 - Bouton **Check orient.** ajouté dans Room toolbar (handler prêt,
-  R-13 étape 2) : à tester visuellement après C1-C4.
+  R-13 étape 2) : à tester visuellement maintenant que C1-C4 sont livrés.
 
 ### R-13 : Auto-test d'orientation canonique (D-119)
 

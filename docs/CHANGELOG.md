@@ -5,10 +5,35 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-119 (2026-04-20)
+## [Unreleased] — D-115 à D-120 (2026-04-20)
 
 ### Ajouté
 
+- **D-120** : consolidation R-12 C1 → C4. `canonical_io.js` devient la
+  source unique pour la rotation abs ↔ canon ; le textarea perd son
+  rôle de pivot du matching.
+  - **C1** : suppression de `_canonicalizeRoom` / `_decanonicalizeRoom`
+    + `_FACE_MAPS` / `_INV_FACE_MAPS` dans `floor_plan.js`. `editor.js
+    save()` (Room amend) bascule sur `canonicalIO.toStorage`. Correction
+    du bug `origCf` latent depuis D-117 : lecture de
+    `original_corridor_face` en priorité, sans quoi toutes les rotations
+    de save étaient annulées pour les pièces non-south. Propagation
+    vers `ingRooms` / `fpData` cohérente avec l'invariant canonique
+    (dims canoniques, `corridor_face:"south"`, `bbox_abs_px` mis à
+    jour) — plus d'écrasement qui causait une double rotation à l'export.
+  - **C2** : `computeCanonicalReanalyzeResult` réécrit en wrapper mince
+    autour de `fromStorage`. Matrice `FACE_MAPS` locale et fonction
+    `toCanonFeat` supprimées. Bug prevCf (D-116) éliminé par
+    construction : un seul chemin de canonicalisation.
+  - **C3** : fusion `populateRoomsJson` + `devExportV3Json` dans
+    `ingestion_serialize.js` (renommé depuis `ingestion_export.js`).
+    Nouvelle API `window.olmSerialize.{serializeForMatching,
+    serializeForStorage}`. Logique `toStorage` centralisée dans
+    `_toAbsRooms()`.
+  - **C4** : `fpLoadAndMatch` bimode (string legacy ou Array direct).
+    Les 6 call sites internes dans `ingestion.js` passent désormais
+    `ingState.rooms`. Plus de round-trip stringify / parse / fromStorage
+    redondant dans le chemin de matching interne.
 - **D-115** : séparation `surface_m2` (cartouche PDF, figée) vs
   `surface_m2_bbox` (calculée depuis bbox, dérive). Backend
   `extract.py` produit les deux. Frontend : consolidation du split
@@ -52,10 +77,13 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### En cours
 
-- **R-12 consolidation C1 → C4** (réduction de dette, planifiée).
 - **Bug Save physique** : `document.elementFromPoint` undefined à la
-  position du bouton ; clic programmatique OK. Hors viewport ou masqué.
-  À investiguer après consolidation.
+  position du bouton ; clic programmatique OK. Confirmé non-lié à
+  C1-C4 (réglage indépendant à venir).
+- **Dette R-12 différée** : `offset_px` non rotés par `toStorage`
+  (incohérence offset_cm / offset_px dans l'export v3 pour pièces
+  non-south), fusion `bbox_px` / `bbox_abs_px` et `seed_px` /
+  `seed_abs_px`.
 - Bugs P2 connus hors R-12 : re-analyze nécessite parfois 2 passes
   pour détecter les portes, zoom arrière bloqué trop tôt.
 
