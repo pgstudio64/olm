@@ -1812,9 +1812,8 @@ function enterRoomAmendMode(room) {
   // D-99: fresh render offset for this amend session.
   state.roomRenderOffset = { x_cm: 0, y_cm: 0 };
 
-  // D-83: convert absolute data to local coordinates for editing
-  var localRoom = (typeof window._canonicalizeRoom === "function")
-    ? window._canonicalizeRoom(room) : room;
+  // R-12 B: room already canonical in fpData (via fromStorage at load).
+  var localRoom = room;
   state.rows = [];
   state.row_gaps_cm = [];
   state.room_width_cm = localRoom.width_cm;

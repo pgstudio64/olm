@@ -273,8 +273,8 @@
     var area = ((roomData.width_cm || 0) * (roomData.depth_cm || 0) / 10000).toFixed(1);
     document.getElementById("rvRoomArea").textContent = area;
 
-    // Room definition in local coordinates (D-83: canonicalized from absolute)
-    var localRoom = _canonicalizeRoom(roomData);
+    // R-12 B: room already canonical in fpData (via fromStorage at load).
+    var localRoom = roomData;
     var dsl = "ROOM " + (localRoom.width_cm || 0) + "x" + (localRoom.depth_cm || 0);
     var faceMap = { north: "N", south: "S", east: "E", west: "W" };
     (localRoom.windows || []).forEach(function(w) {
@@ -361,9 +361,9 @@
   }
 
   function fpRenderEmptyRoom(room, targetSvg) {
-    // D-83: convert absolute data to local coordinates for rendering
-    var isEditor = targetSvg && targetSvg.id === "canvas";
-    var localRoom = (!isEditor) ? _canonicalizeRoom(room) : room;
+    // R-12 B: room already canonical in fpData (via fromStorage at load).
+    // Editor et Review partagent le même repère canonique.
+    var localRoom = room;
     state.rows = [];
     state.row_gaps_cm = [];
     state.room_width_cm = localRoom.width_cm;
