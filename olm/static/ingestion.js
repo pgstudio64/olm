@@ -1544,10 +1544,12 @@
             var prevO = (am && am.openings) || r.openings || [];
             var manualW = prevW.filter(function (w) { return w.origin === 'manual'; });
             var manualO = prevO.filter(function (o) { return o.origin === 'manual' && !o.has_door; });
-            // Portes préservées : seulement les non-auto (D-110). Les portes
-            // auto sont entièrement redétectées par le backend.
+            // Portes préservées : seulement les doors manuelles (D-110).
+            // Fix : `=== "manual"` et non `!== "auto"` — les doors initiales
+            // issues du backend n'ont pas d'origin, elles doivent être
+            // redétectées (pas préservées). Cohérent avec manualW / manualO.
             var preservedDoors = prevO.filter(function (o) {
-              return o.has_door && o.origin !== 'auto';
+              return o.has_door && o.origin === 'manual';
             });
 
             // Canonicalise abs → canon. R-12 : le helper attend le
