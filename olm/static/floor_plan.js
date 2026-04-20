@@ -373,6 +373,7 @@
     state.room_exclusions = localRoom.exclusion_zones || [];
     state.room_transparents = localRoom.transparent_zones || [];
     state.corridor_face = room.corridor_face || "";
+    state.original_corridor_face = room.original_corridor_face || "";
     state.selectedRow = 0;
     state.selectedBlock = -1;
 
@@ -523,6 +524,7 @@
     state.room_openings = pat.room_openings || [];
     state.room_exclusions = pat.room_exclusions || [];
     state.corridor_face = room.corridor_face || "";
+    state.original_corridor_face = room.original_corridor_face || "";
     state.name = candidate.pattern_name || pat.name || "";
     state._savedName = null;
     state.selectedRow = 0;
