@@ -1491,18 +1491,31 @@ async function save() {
       var newBbox = null;
       var ingRooms = (window.ingState && window.ingState.rooms) || [];
       var pxPerCm = 1.0 / scaleCmPerPx;
-      var doorsOut = (state.room_openings || [])
+      function _pxOf(cm) {
+        return (cm != null) ? Math.round(cm * pxPerCm) : 0;
+      }
+      // Enrichir state (canonique) avec offset_px / width_cm canoniques —
+      // match l'invariant ingState.rooms post-fromStorage / post-batch
+      // re-analyze (canonique face/offset_cm + offset_px canonique).
+      // L'absolute offset_px pour l'export v3 est recalculé dans
+      // serializeForStorage depuis l'offset_cm rotaté par toStorage.
+      function _enrichCanon(e) {
+        return Object.assign({}, e, {
+          offset_px: _pxOf(e.offset_cm),
+          width_px:  _pxOf(e.width_cm),
+        });
+      }
+      var windowsCanon = (state.room_windows || []).map(_enrichCanon);
+      var openingsCanon = (state.room_openings || [])
+        .filter(function (o) { return !o.has_door; })
+        .map(_enrichCanon);
+      var doorsCanon = (state.room_openings || [])
         .filter(function (o) { return o.has_door; })
         .map(function (o) {
-          return {
-            face: o.face,
-            offset_cm: o.offset_cm,
-            width_cm: o.width_cm,
-            offset_px: Math.round((o.offset_cm || 0) * pxPerCm),
-            width_px: Math.round((o.width_cm || 0) * pxPerCm),
+          return Object.assign({}, _enrichCanon(o), {
             hinge_side: o.hinge_side || "left",
             opens_inward: o.opens_inward !== false,
-          };
+          });
         });
       for (var ir = 0; ir < ingRooms.length; ir++) {
         if (ingRooms[ir].name !== ramend.roomName) continue;
@@ -1516,10 +1529,11 @@ async function save() {
         var nx1 = nx0 + absW / scaleCmPerPx;
         var ny1 = ny0 + absD / scaleCmPerPx;
         newBbox = [nx0, ny0, nx1, ny1];
-        // ingRooms reste en repère CANONIQUE (R-12) : on ne met à jour
-        // ici que ce qui change suite à un resize / shift de la pièce.
-        // Le corridor_face reste "south" et le repère absolu est porté
-        // par original_corridor_face + bbox_abs_px.
+        // ingRooms reste en repère CANONIQUE (R-12). Le corridor_face reste
+        // "south" et le repère absolu est porté par original_corridor_face +
+        // bbox_abs_px. Les amendements de features (windows/openings/zones/
+        // doors) en Room amend sont propagés ici pour qu'ils apparaissent
+        // dans l'export v3 (fix bug « édits perdus à la sauvegarde »).
         ingRooms[ir].bbox_px = newBbox;
         ingRooms[ir].bbox_abs_px = newBbox.slice();
         ingRooms[ir].width_cm = cW;
@@ -1527,7 +1541,19 @@ async function save() {
         ingRooms[ir].corridor_face = "south";
         ingRooms[ir].original_corridor_face = origCf;
         ingRooms[ir].surface_m2 = parseFloat(((cW * cD) / 10000).toFixed(2));
-        ingRooms[ir].doors = doorsOut;
+        ingRooms[ir].windows = windowsCanon.map(function (w) {
+          return Object.assign({}, w);
+        });
+        ingRooms[ir].openings = openingsCanon.map(function (o) {
+          return Object.assign({}, o);
+        });
+        ingRooms[ir].doors = doorsCanon.map(function (d) {
+          return Object.assign({}, d);
+        });
+        ingRooms[ir].exclusion_zones =
+          JSON.parse(JSON.stringify(state.room_exclusions || []));
+        ingRooms[ir].transparent_zones =
+          JSON.parse(JSON.stringify(state.room_transparents || []));
         break;
       }
       if (newBbox) {
@@ -1540,9 +1566,21 @@ async function save() {
             window.fpData.rooms[fr].depth_cm = cD;
             window.fpData.rooms[fr].bbox_px = newBbox.slice();
             window.fpData.rooms[fr].bbox_abs_px = newBbox.slice();
-            window.fpData.rooms[fr].doors = doorsOut.slice();
             window.fpData.rooms[fr].corridor_face = "south";
             window.fpData.rooms[fr].original_corridor_face = origCf;
+            window.fpData.rooms[fr].windows = windowsCanon.map(function (w) {
+              return Object.assign({}, w);
+            });
+            window.fpData.rooms[fr].openings = openingsCanon.map(function (o) {
+              return Object.assign({}, o);
+            });
+            window.fpData.rooms[fr].doors = doorsCanon.map(function (d) {
+              return Object.assign({}, d);
+            });
+            window.fpData.rooms[fr].exclusion_zones =
+              JSON.parse(JSON.stringify(state.room_exclusions || []));
+            window.fpData.rooms[fr].transparent_zones =
+              JSON.parse(JSON.stringify(state.room_transparents || []));
             break;
           }
         }

@@ -7,8 +7,15 @@
 //   fromStorage(roomStorage) → roomCanon  : repère absolu → corridor_face "south"
 //   toStorage(roomCanon)     → roomStorage: corridor_face "south" → repère absolu
 //
-// Source unique des matrices de rotation. Les copies dans floor_plan.js
-// (_FACE_MAPS / _INV_FACE_MAPS) seront retirées à l'étape B du refactor.
+// Source unique des matrices de rotation (D-120, R-12).
+//
+// ⚠ Champs rotés : face, offset_cm, hinge_side, width_cm (swap de dims).
+// ⚠ Champs NON rotés : offset_px, width_px (conservés en l'état).
+//    Les consommateurs qui ont besoin de px cohérents avec face/offset_cm
+//    rotés doivent les recalculer via offset_cm × pxPerCm à la
+//    sérialisation (cf. ingestion_serialize.js:serializeForStorage).
+//    Le Floor overlay lit offset_px du state canonique comme ABSOLU —
+//    c'est intentionnel (rendu raster dans le repère image).
 // ============================================================================
 (function () {
 
