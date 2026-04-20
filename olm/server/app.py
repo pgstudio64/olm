@@ -1181,6 +1181,48 @@ def api_room_reanalyze():
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
+@app.route("/api/room/orientation-check", methods=["POST"])
+def api_room_orientation_check():
+    """Auto-test R-13 / D-119 — vérifie l'orientation canonique d'une pièce.
+
+    Body JSON attendu :
+        {
+          "plan_path": "/chemin/vers/plan-SD.png",
+          "bbox_px": [x0, y0, x1, y1],
+          "original_corridor_face": "east"   # "", "south", "north", "east", "west"
+        }
+
+    Retour : diagnostic complet pour les 4 faces canon + verdicts corridor
+    (sud canon) et extérieur (nord canon).
+    """
+    try:
+        data = request.json or {}
+        plan_path = data.get("plan_path", "")
+        bbox_px = data.get("bbox_px")
+        ocf = data.get("original_corridor_face", "") or ""
+
+        if not plan_path or not os.path.exists(plan_path):
+            return jsonify({"error": "plan_path missing or invalid"}), 400
+        if not bbox_px or len(bbox_px) != 4:
+            return jsonify({"error": "bbox_px must be [x0,y0,x1,y1]"}), 400
+
+        from olm.ingestion.orientation_check import (
+            check_all_faces, check_corridor_south, check_exterior_north,
+        )
+        faces = check_all_faces(plan_path, bbox_px, ocf)
+        corridor = check_corridor_south(plan_path, bbox_px, ocf)
+        exterior = check_exterior_north(plan_path, bbox_px, ocf)
+        return jsonify({
+            "original_corridor_face": ocf,
+            "faces": faces["faces"],
+            "corridor_south": corridor,
+            "exterior_north": exterior,
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route("/api/room/reanalyze_batch", methods=["POST"])
 def api_room_reanalyze_batch():
     """Batch re-analyse : traite N pièces en partageant le chargement de l'image.

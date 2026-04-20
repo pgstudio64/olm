@@ -93,6 +93,25 @@ Migration de paramétrage : bouton "Upgrade to new standard" qui lit le paramét
 
 ## Chantiers actifs — Refonte OLM
 
+### R-13 : Auto-test d'orientation canonique (D-119)
+
+Objectif : valider automatiquement l'invariant « posture humaine » R-12
+via les couleurs sémantiques du PNG -SD. Évite les régressions silencieuses
+sur fromStorage / rendu / rotation / flux re-analyze.
+
+- [ ] **Étape 1 — Test corridor sud canon (minimal)** :
+  `olm/ingestion/orientation_check.py` avec fonction
+  `check_corridor_south(enhanced_png, bbox_px, original_corridor_face)`
+  → retourne `{ok, ratio_green, face_abs_checked}`.
+- [ ] **Étape 2 — Test extérieur nord canon** : extension + `exterior_faces`.
+- [ ] **Étape 3 — Test fenêtres côté bleu** : itération sur windows canon.
+- [ ] **Endpoint** `/api/room/orientation-check` (1 pièce) +
+  `/api/floor-plan/orientation-report` (batch).
+- [ ] **UI** : bouton dans Room toolbar → badge inline. Version avancée :
+  rapport agrégé avec pièces problématiques listées.
+- [ ] **Documentation** : seuils et faux-positifs (cours intérieures,
+  pièces enclavées) dans la spec.
+
 ### R-12 : Repère canonique unifié — posture humaine invariante (D-117)
 
 Objectif : déplacer toutes les rotations abs ↔ canon à deux frontières I/O

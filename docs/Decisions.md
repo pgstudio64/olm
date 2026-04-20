@@ -7,6 +7,55 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-119 · Auto-test d'orientation canonique via couleurs sémantiques (2026-04-20)
+
+**Décision** : introduire un test runtime qui vérifie automatiquement
+l'invariant « posture humaine » du refactor R-12 en échantillonnant les
+couleurs sémantiques du PNG -SD bordant le bbox absolu de chaque pièce.
+
+Trois vérifications :
+1. **Corridor au sud canon** : la bande juste au-delà de la face absolue
+   correspondant au sud canon doit être majoritairement verte
+   (`corridor_rgb`, défaut RGB 193,247,179).
+2. **Extérieur au nord canon (si façade externe attendue)** : la bande
+   au-delà de la face absolue correspondant au nord canon doit être
+   majoritairement bleue (`exterior_rgb`, défaut RGB 135,206,235).
+3. **Fenêtres côté bleu** : chaque fenêtre canon doit être positionnée
+   sur une portion de mur bordée de bleu côté extérieur.
+
+Chaque vérification retourne un ratio (0..1) et un verdict (ok/warn/skip)
+selon des seuils configurables.
+
+**Justification** :
+
+Le refactor R-12 repose sur un invariant simple mais impliquant plusieurs
+couches (fromStorage, rendu, rotation overlay, flux re-analyze). Une
+régression dans n'importe laquelle casse la « posture humaine ». Les
+bugs observés sur 903 et 922 montrent qu'un diagnostic visuel cas par
+cas consomme beaucoup de temps et laisse passer des cas limites (cours
+intérieures, pièces enclavées, détection corridor ambiguë).
+
+Les couleurs sémantiques du PNG -SD sont déjà la **source de vérité**
+métier : corridor = vert, extérieur = bleu. Les exploiter comme oracle
+de test convertit une observation manuelle en validation automatique,
+par pièce, reproductible.
+
+**Impact** :
+- Nouveau module `olm/ingestion/orientation_check.py` (fonction pure).
+- Endpoint `/api/room/orientation-check` (diagnostic ponctuel).
+- Extension optionnelle `/api/floor-plan/orientation-report` (batch).
+- UI minimal : bouton dans Room toolbar + badge de résultat ; version
+  avancée en rapport agrégé.
+- Chantier R-13 (TODO.md) à créer.
+
+Limitations connues à documenter :
+- Cours intérieures peuvent border du bleu sans être la façade principale.
+- Pièces enclavées (pas de façade extérieure) : check extérieur skippé.
+- Pièces sans `original_corridor_face` (corridor détecté absent) : test
+  non applicable.
+
+---
+
 ## D-118 · Re-analyze uniforme + zone transparente comme primitive de modélisation (2026-04-20)
 
 **Décision** : le re-analyze conserve un comportement unique
