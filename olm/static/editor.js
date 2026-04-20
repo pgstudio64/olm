@@ -1027,10 +1027,14 @@ function _renderImpl(targetSvg) {
       '" width="' + ovW.toFixed(1) + '" height="' + ovH.toFixed(1) +
       '" opacity="' + (ov.opacity / 100).toFixed(2) +
       '" preserveAspectRatio="none"/>';
-    // D-83: rotate overlay to match local coordinate system.
+    // D-83 / R-12 C: rotate overlay image so it aligns with the canonical
+    // room (corridor at south). After R-12, state.corridor_face is always
+    // "south", so we use state.original_corridor_face (the storage-space
+    // corridor) to compute the angle. Pure south → angle 0 (no rotation).
     // D-99: in room amend mode, pin rotation center to the ORIGINAL room
     //       dimensions so live resize doesn't drift the overlay.
-    var ovAngle = _canonicalAngle(state.corridor_face);
+    var ovAngle = _canonicalAngle(
+      state.original_corridor_face || state.corridor_face);
     if (ovAngle !== 0 && !isEditor) {
       var origRoom = state.roomAmendMode && state.roomAmendMode.originalRoom;
       var refWPx = origRoom ? origRoom.width_cm * SCALE : roomWPx;
@@ -1674,6 +1678,7 @@ async function loadPattern(name) {
     state.selectedBlock = -1;
     state.overlay = null;
     state.corridor_face = "";
+    state.original_corridor_face = "";
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
     var radios = document.querySelectorAll('input[name="standard"]');
@@ -1823,6 +1828,7 @@ function enterRoomAmendMode(room) {
   state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
   state.room_transparents = JSON.parse(JSON.stringify(localRoom.transparent_zones || []));
   state.corridor_face = room.corridor_face || "";
+  state.original_corridor_face = room.original_corridor_face || "";
 
   // Hits (pour V/H-rays debug). Convertis en room-local cm.
   state.room_hits = null;
