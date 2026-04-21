@@ -346,9 +346,9 @@
         room: {
           name: "T1", corridor_face: "south", width_cm: 300, depth_cm: 500,
           bbox_px: [100, 200, 160, 300], seed_px: [130, 250],
-          windows:  [{ face: "north", offset_cm: 50,  width_cm: 120, offset_px: 100, width_px: 240 }],
-          openings: [{ face: "south", offset_cm: 80,  width_cm: 90,  offset_px: 160, width_px: 180 }],
-          doors:    [{ face: "east",  offset_cm: 100, width_cm: 80,  offset_px: 200, width_px: 160, hinge_side: "left" }],
+          windows:  [{ face: "north", offset_cm: 50,  width_cm: 120, offset_px: 100, width_px: 240, origin: "manual" }],
+          openings: [{ face: "south", offset_cm: 80,  width_cm: 90,  offset_px: 160, width_px: 180, origin: "auto" }],
+          doors:    [{ face: "east",  offset_cm: 100, width_cm: 80,  offset_px: 200, width_px: 160, hinge_side: "left", origin: "manual" }],
           exclusion_zones: [{ x_cm: 10, y_cm: 20, width_cm: 50, depth_cm: 60 }],
         },
       },
