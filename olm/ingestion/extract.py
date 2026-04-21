@@ -1665,6 +1665,7 @@ def extract_room_features(
     threshold: int = 110,
     step_px: int = 5,
     binary_precomputed: np.ndarray | None = None,
+    clip_to_bbox: bool = False,
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105).
 
@@ -1701,6 +1702,12 @@ def extract_room_features(
             sont appliqués par zéro-out sur une copie locale — pas de
             re-binarisation globale ni de re-clean. Voir
             `/api/room/reanalyze_batch`.
+        clip_to_bbox: (D-132) Si True, les pixels hors de `bbox_px` sont
+            forcés solides (True) dans le binary local avant ray-cast.
+            Les rays s'arrêtent donc aux bords du bbox utilisateur au lieu
+            de trouver les vrais murs au-delà. Use case : Lock bbox depuis
+            le frontend après un resize manuel de pièce. Default False
+            pour non-régression sur le pipeline d'ingestion initial.
 
     Returns:
         {
@@ -1797,6 +1804,24 @@ def extract_room_features(
         binary_raw = gray < threshold
         binary = remove_non_ortho(binary_raw)
         binary_raw = binary
+
+    # --- D-132 : clip_to_bbox — force solides tous les pixels hors bbox_px
+    # pour que les rays de detect_room s'arrêtent aux bords du bbox user au
+    # lieu de trouver les vrais murs au-delà. Copie locale pour ne pas
+    # polluer binary_precomputed (partagé en batch).
+    if clip_to_bbox and bbox_px:
+        H, W = binary.shape
+        bx0 = max(0, int(bbox_px[0]))
+        by0 = max(0, int(bbox_px[1]))
+        bx1 = min(W, int(bbox_px[2]))
+        by1 = min(H, int(bbox_px[3]))
+        if bx1 > bx0 and by1 > by0:
+            binary = binary.copy()
+            if by0 > 0:         binary[:by0, :]       = True
+            if by1 < H:         binary[by1:, :]       = True
+            if bx0 > 0:         binary[by0:by1, :bx0] = True
+            if bx1 < W:         binary[by0:by1, bx1:] = True
+            binary_raw = binary
 
     # --- 3. Detection du bbox via l'algo comb (test_comb.detect_room,
     # même algo que l'import OCR — éprouvé et plus robuste que

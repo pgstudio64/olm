@@ -1149,6 +1149,7 @@ def api_room_reanalyze():
         doors = data.get("doors", []) or []
         door_width_cm = int(data.get("door_width_cm", 90))
         threshold = int(data.get("threshold", 110))
+        clip_to_bbox = bool(data.get("clip_to_bbox", False))
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1174,6 +1175,7 @@ def api_room_reanalyze():
             doors_px=doors,
             door_width_cm=door_width_cm,
             threshold=threshold,
+            clip_to_bbox=clip_to_bbox,
         )
         return jsonify(result)
     except Exception as e:
@@ -1249,6 +1251,7 @@ def api_room_reanalyze_batch():
         threshold = int(data.get("threshold", 110))
         door_width_cm = int(data.get("door_width_cm", 90))
         rooms = data.get("rooms") or []
+        clip_to_bbox = bool(data.get("clip_to_bbox", False))
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1295,6 +1298,7 @@ def api_room_reanalyze_batch():
                     door_width_cm=door_width_cm,
                     threshold=threshold,
                     binary_precomputed=_binary_global,
+                    clip_to_bbox=clip_to_bbox,
                 )
                 results.append({"name": name, **features})
             except Exception as e:

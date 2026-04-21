@@ -385,6 +385,11 @@
         reanalyzeBtn.disabled = true;
         reanalyzeBtn.textContent = "Analyzing...";
         try {
+          // D-132 : lockBbox → demande au backend de contraindre le
+          // ray-cast aux bords de effBbox (clip_to_bbox). Évite la
+          // détection de murs/portes hors pièce user.
+          var lockBboxElFetch = document.getElementById("rvLockBbox");
+          var lockBboxFlag = !!(lockBboxElFetch && lockBboxElFetch.checked);
           var resp = await fetch("/api/room/reanalyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -396,6 +401,7 @@
               transparent_zones: transparents,
               doors: doorsPx,
               door_width_cm: doorWidthCm,
+              clip_to_bbox: lockBboxFlag,
             }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);
