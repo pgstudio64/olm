@@ -5,7 +5,26 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-123 (2026-04-20)
+## [Unreleased] — D-115 à D-124 (2026-04-20 → 2026-04-21)
+
+### D-124 — Re-ancrage des zones canoniques après re-analyze (2026-04-21)
+
+- **Symptôme 2 « zones d'exclusion qui dérivent »** : après re-analyze, les
+  zones restaient en canonique room-local alors que le bbox détecté se
+  décalait dans l'image. Elles s'éloignaient des features du plan qu'elles
+  couvraient initialement.
+- **Fix** : pipeline canon → abs-room → abs-image → abs-room (new) → canon.
+  Nouveau helper `canonicalIO.rotateRectInv(rect, cfAbs, absW, absD)` (source
+  unique, 4 auto-tests round-trip) + `window.reanchorCanonicalZones` partagé
+  par re-analyze unitaire (`init_rvtool.js`) et batch (`ingestion.js`).
+  Propagé à `state.room_exclusions/transparents`, `r.*`, `am.*`, `fpData.*`.
+- **Tests** : 16/16 auto-tests canonical_io OK. Identité préservée sur
+  bbox/cf inchangés.
+- **Hors scope** : symptôme 1 (décalage nord au placement) non reproductible
+  sur lecture de code ; piste `transparent_zones` canon→abs manquant pour
+  envoi backend (latent sur pièces non-south).
+
+
 
 ### Fixes session post-D-120
 

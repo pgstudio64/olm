@@ -109,6 +109,27 @@
     return { x: x, y: y, width: w, depth: d };
   }
 
+  /**
+   * Inverse exact de rotateRect : canon → abs. Prend un rectangle en repère
+   * canonique (corridor sud) et retourne ses coords room-local dans le repère
+   * absolu avec corridor_face_abs = cfAbs.
+   * absW / absD sont les dims ABSOLUES (pas canoniques) ; ce sont les mêmes
+   * que celles passées à rotateRect, ce qui garantit la symétrie :
+   *   rotateRectInv(rotateRect(r, cf, W, D), cf, W, D) ≡ r.
+   *
+   * @param {{x:number,y:number,width:number,depth:number}} rect
+   * @param {string} cfAbs
+   * @param {number} absW
+   * @param {number} absD
+   */
+  function rotateRectInv(rect, cfAbs, absW, absD) {
+    var xc = rect.x, yc = rect.y, wc = rect.width, dc = rect.depth;
+    if (cfAbs === "north") return { x: absW - xc - wc, y: absD - yc - dc, width: wc, depth: dc };
+    if (cfAbs === "east")  return { x: absW - yc - dc, y: xc,             width: dc, depth: wc };
+    if (cfAbs === "west")  return { x: yc,             y: absD - xc - wc, width: dc, depth: wc };
+    return { x: xc, y: yc, width: wc, depth: dc };
+  }
+
 
   // ── fromStorage ─────────────────────────────────────────────────────────
 
@@ -418,6 +439,20 @@
           "got", r, "expected", c.exp);
       }
     });
+    // rotateRectInv : round-trip rotateRect ∘ rotateRectInv ≡ identity.
+    ["south", "north", "east", "west"].forEach(function (cf) {
+      var fwd = rotateRect(RECT, cf, W, D);
+      var back = rotateRectInv(fwd, cf, W, D);
+      var ok = (back.x === RECT.x && back.y === RECT.y &&
+                back.width === RECT.width && back.depth === RECT.depth);
+      if (ok) {
+        console.log("[canonical_io] OK — rotateRectInv " + cf);
+      } else {
+        allOk = false;
+        console.error("[canonical_io] FAIL — rotateRectInv " + cf,
+          "got", back, "expected", RECT);
+      }
+    });
 
     if (allOk) {
       console.log("[canonical_io] ALL TESTS PASSED");
@@ -468,6 +503,7 @@
     toStorage:      toStorage,
     rotatePoint:    rotatePoint,
     rotateRect:     rotateRect,
+    rotateRectInv:  rotateRectInv,
     FACE_MAPS:      FACE_MAPS,
     INV_FACE_MAPS:  INV_FACE_MAPS,
   };

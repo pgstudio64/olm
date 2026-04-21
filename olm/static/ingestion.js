@@ -122,6 +122,52 @@
   }
   window.computeCanonicalReanalyzeResult = computeCanonicalReanalyzeResult;
 
+  // --- Zone re-anchoring after re-analyze -----------------------------------
+  // Après un re-analyze, le bbox détecté (et éventuellement corridor_face_abs)
+  // peut changer. Les zones (exclusion / transparent) sont stockées en repère
+  // CANONIQUE room-local ; pour qu'elles restent sur les mêmes features du
+  // plan (position absolue image), il faut les reprojeter.
+  //
+  // Pipeline : canon (old) → abs-room-local (old) → abs-image-cm → abs-room-
+  // local (new) → canon (new). Utilise canonicalIO.rotateRectInv /
+  // rotateRect (source unique des matrices).
+  //
+  // @param {Array} zones    - zones canoniques [{x_cm,y_cm,width_cm,depth_cm}].
+  // @param {Array} oldBbox  - bbox absolu avant re-analyze [x0,y0,x1,y1] (px).
+  // @param {string} oldCf   - corridor_face_abs avant re-analyze.
+  // @param {Array} newBbox  - bbox absolu après re-analyze [x0,y0,x1,y1] (px).
+  // @param {string} newCf   - corridor_face_abs après re-analyze.
+  // @param {number} scale   - cm/px (ingState.scale).
+  // @returns {Array} zones canoniques reprojetées.
+  function reanchorCanonicalZones(zones, oldBbox, oldCf, newBbox, newCf, scale) {
+    if (!zones || !zones.length) return zones || [];
+    if (!oldBbox || !newBbox || !(scale > 0)) return zones;
+    var cio = window.canonicalIO;
+    if (!cio || !cio.rotateRectInv || !cio.rotateRect) return zones;
+    var oldAbsW = (oldBbox[2] - oldBbox[0]) * scale;
+    var oldAbsD = (oldBbox[3] - oldBbox[1]) * scale;
+    var newAbsW = (newBbox[2] - newBbox[0]) * scale;
+    var newAbsD = (newBbox[3] - newBbox[1]) * scale;
+    var dx = (oldBbox[0] - newBbox[0]) * scale;
+    var dy = (oldBbox[1] - newBbox[1]) * scale;
+    return zones.map(function (z) {
+      var absOld = cio.rotateRectInv(
+        { x: z.x_cm || 0, y: z.y_cm || 0,
+          width: z.width_cm || 0, depth: z.depth_cm || 0 },
+        oldCf || '', oldAbsW, oldAbsD);
+      var absNew = { x: absOld.x + dx, y: absOld.y + dy,
+                     width: absOld.width, depth: absOld.depth };
+      var canon = cio.rotateRect(absNew, newCf || '', newAbsW, newAbsD);
+      return {
+        x_cm: Math.round(canon.x),
+        y_cm: Math.round(canon.y),
+        width_cm: Math.round(canon.width),
+        depth_cm: Math.round(canon.depth),
+      };
+    });
+  }
+  window.reanchorCanonicalZones = reanchorCanonicalZones;
+
   // --- Drawing scale helpers (extracted to ingestion_scale.js, D-94 P4) ---
   var parseDrawingScale     = window.olmScale.parseDrawingScale;
   var computeCmPerPx        = window.olmScale.computeCmPerPx;
@@ -1572,9 +1618,30 @@
             var mergedOpenings = newO.concat(manualO);
             var mergedDoors = newDoors.concat(preservedDoors);
 
+            // D-124 : re-ancrage des zones avant mutation du bbox.
+            // Capture l'ancien repère (bbox + cf) pour re-projeter les zones.
+            var oldBboxR = r.bbox_px ? r.bbox_px.slice() : null;
+            var oldCfR = prevCfAbs;
+            var newCfR = canon.corridor_face || prevCfAbs || '';
+            var reanchored = null;
+            if (canon.bbox_px && oldBboxR && window.reanchorCanonicalZones) {
+              reanchored = {
+                exclusion_zones: window.reanchorCanonicalZones(
+                  r.exclusion_zones || [], oldBboxR, oldCfR,
+                  canon.bbox_px, newCfR, ingState.scale),
+                transparent_zones: window.reanchorCanonicalZones(
+                  r.transparent_zones || [], oldBboxR, oldCfR,
+                  canon.bbox_px, newCfR, ingState.scale),
+              };
+            }
+
             r.windows = mergedW;
             r.openings = mergedOpenings;
             r.doors = mergedDoors;
+            if (reanchored) {
+              r.exclusion_zones = reanchored.exclusion_zones;
+              r.transparent_zones = reanchored.transparent_zones;
+            }
             // Adopter le nouveau bbox + dims + corridor_face (D-113).
             if (canon.bbox_px) {
               r.bbox_px = canon.bbox_px;
@@ -1599,6 +1666,10 @@
               am.windows = mergedW;
               am.openings = mergedOpenings;
               am.doors = mergedDoors;
+              if (reanchored) {
+                am.exclusion_zones = reanchored.exclusion_zones;
+                am.transparent_zones = reanchored.transparent_zones;
+              }
               if (canon.corridor_face) {
                 am.corridor_face_abs = canon.corridor_face;
                 am.corridor_face = "south";
@@ -1610,6 +1681,10 @@
                 fr.windows = mergedW;
                 fr.openings = mergedOpenings;
                 fr.doors = mergedDoors;
+                if (reanchored) {
+                  fr.exclusion_zones = reanchored.exclusion_zones;
+                  fr.transparent_zones = reanchored.transparent_zones;
+                }
                 if (canon.bbox_px) {
                   fr.bbox_px = canon.bbox_px;
                   fr.width_cm = canon.width_cm;

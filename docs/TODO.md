@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-20 (D-123 : perf Re-analyze All + fix bug openings→doors ; D-122 : R-14 canonique P1-P7)
+Dernière mise à jour : 2026-04-21 (D-124 : re-ancrage zones post-re-analyze ; D-123 : perf Re-analyze All + fix bug openings→doors ; D-122 : R-14 canonique P1-P7)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
@@ -255,23 +255,22 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 - [ ] **Bug zones d'exclusion — déplacement vertical intempestif** :
   - **Symptôme 1 (placement)** : dans une pièce à corridor sud, quand
     on dessine une zone d'exclusion, elle apparaît décalée plus haut
-    (vers le nord) que la position cliquée.
-  - **Symptôme 2 (re-analyze)** : après un re-analyze, la zone se
-    déplace encore.
-  - **Pistes** :
-    - Conversion canon ↔ abs des coords de zone : `rvScreenToRoomCm`
-      retourne des coords canoniques, mais le drawStart / stockage
-      pourrait ajouter un offset (roomRenderOffset) qui n'est pas
-      défalqué à l'affichage.
-    - Re-analyze : `extract_room_features` renvoie un nouveau
-      `bbox_px` (potentiellement décalé en y même à corridor sud). Les
-      zones sont en coord room-local (relatives au NW du bbox) ; si le
-      bbox NW bouge, les zones visuelles semblent bouger sans que le
-      state soit touché. À vérifier : est-ce que le re-analyze doit
-      ajuster les coords des zones en fonction du shift du bbox ?
-    - Vérifier aussi que `state.room_exclusions` reste en canon pendant
-      toute l'édition et que `canonicalIO.rotateRect` n'est jamais
-      appelé avec `corridor_face_abs` à vide quand il devrait l'être.
+    (vers le nord) que la position cliquée. **Non reproduit** sur
+    lecture de code (rvScreenToRoomCm + render utilisent le même
+    référentiel SVG avec roomX=0 en amend mode). Instrumentation
+    browser requise pour capturer les valeurs réelles client / svg /
+    stored / rendered.
+  - [x] **Symptôme 2 (re-analyze)** ✅ 2026-04-21 (D-124) : re-ancrage
+    automatique des zones et transparentes à la position absolue image
+    via `reanchorCanonicalZones` (pipeline canon → abs → abs(new) →
+    canon(new)). Appliqué à re-analyze unitaire + batch.
+  - **Piste restante symptôme 1** :
+    - Vérifier via console.log que `svg.getScreenCTM().inverse()`
+      retourne bien des coords SVG user-space (pas client-space) ;
+      comparer stored zone (`state.room_exclusions[i]`) au ghost rect
+      affiché au drag.
+    - Vérifier que `state.roomRenderOffset` reste bien à {0,0} quand
+      aucun resize room n'a eu lieu.
 - [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `test_comb.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
 - [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.

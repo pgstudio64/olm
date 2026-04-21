@@ -7,6 +7,65 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-124 · Re-ancrage des zones canoniques après re-analyze (2026-04-21)
+
+### Décision
+
+Après un `re-analyze` (unitaire ou batch), les zones `exclusion_zones` /
+`transparent_zones` sont re-projetées pour préserver leur **position absolue
+dans l'image du plan**, au lieu de rester figées en room-local cm (qui dérive
+dès que le bbox détecté change).
+
+Le pipeline géométrique :
+```
+canon (old) → abs-room-local (old) → abs-image-cm → abs-room-local (new) → canon (new)
+```
+
+Trois composants :
+1. `canonicalIO.rotateRectInv(rect, cfAbs, absW, absD)` — inverse exact de
+   `rotateRect`, exposé publiquement comme 3e primitive de rotation. Satisfait
+   `rotateRectInv(rotateRect(r, cf, W, D), cf, W, D) ≡ r` (4 auto-tests
+   round-trip).
+2. `window.reanchorCanonicalZones(zones, oldBbox, oldCf, newBbox, newCf, scale)`
+   — helper partagé dans `olm/static/ingestion.js`, source unique de la
+   conversion.
+3. Appelé depuis `init_rvtool.js` (re-analyze unitaire) et `ingestion.js`
+   (re-analyze batch), propagé à `state.room_exclusions/transparents`,
+   `r.exclusion_zones/transparent_zones`, `am.*` et `fpData.rooms[i].*`.
+
+### Justification
+
+Symptôme utilisateur (D-108+ itérations) : « après un re-analyze, la zone se
+déplace ». Root cause : zones stockées en canonique **room-local**, donc
+ancrées au coin NW canonique. Quand re-analyze décale le bbox de N px
+(typiquement ±3-5 px), le NW canonique se déplace dans l'image tandis que le
+overlay raster se repositionne dessus — les zones qui couvraient un escalier
+sur le plan se retrouvent à côté.
+
+Solution adoptée : préserver la sémantique « la zone couvre CE feature du
+plan » en reprojetant automatiquement lors des mutations de bbox / corridor_face.
+Le cas bbox-inchangé + cf-inchangé est l'identité (dx=dy=0, rotation identité),
+sans overhead détectable.
+
+### Impact
+
+- **Fichiers modifiés** : 3 JS (+74 lignes net).
+  - `olm/static/canonical_io.js` : +28 lignes (rotateRectInv + 4 tests).
+  - `olm/static/ingestion.js` : +60 lignes (helper + wiring batch).
+  - `olm/static/init_rvtool.js` : +11 lignes (wiring unitaire).
+- **Rétrocompatibilité** : JSON v3 sur disque inchangé. Les zones déjà stockées
+  (non reanchorées) restent valides pour leur contexte d'origine.
+- **Tests** : 12 → 16 auto-tests `canonical_io.js`, tous verts. Flask import OK.
+  Python 132/139 (7 failures pré-existantes hors scope).
+- **Hors scope** :
+  - Symptôme 1 (zone se place décalée nord au clic) : non reproduit sur code,
+    instrumentation browser requise.
+  - Bug latent `transparent_zones` envoyées au backend en canonique au lieu
+    d'abs pour les pièces non-south (mask mal positionné pendant la détection).
+    Ne se manifeste pas sur pièces south testées ; à corriger séparément.
+
+---
+
 ## D-123 · Perf Re-analyze All + fix bug has_door POST matching (2026-04-20)
 
 ### Fix bug — openings transformées en portes à la sauvegarde JSON
