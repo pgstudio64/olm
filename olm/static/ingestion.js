@@ -1566,6 +1566,30 @@
       populateRoomsJson();
       updateIngRoomList();
       renderIngestion();
+      // D-130 : sync immédiat de fpData.rooms[i] AVANT le fetch async pour
+      // que Review reflète la nouvelle géométrie dès le commit. Sans ce
+      // sync, double-clic sur la pièce pendant le gap async affiche la
+      // version stale pré-resize, puis currentIdx reset à 0 au retour →
+      // mauvaise pièce affichée.
+      if (room && window.fpData && window.fpData.rooms) {
+        var fr = window.fpData.rooms.find(function (x) {
+          return x.name === room.name;
+        });
+        if (fr) {
+          fr.bbox_px = room.bbox_px ? room.bbox_px.slice() : fr.bbox_px;
+          fr.width_cm = room.width_cm;
+          fr.depth_cm = room.depth_cm;
+          fr.width_px = room.width_px;
+          fr.height_px = room.height_px;
+          if (room.seed_px) fr.seed_px = room.seed_px.slice();
+          fr.windows = (room.windows || []).slice();
+          fr.openings = (room.openings || []).slice();
+          fr.doors = (room.doors || []).slice();
+          fr.exclusion_zones = (room.exclusion_zones || []).slice();
+          fr.transparent_zones = (room.transparent_zones || []).slice();
+          fr.surface_m2_bbox = room.surface_m2 || fr.surface_m2_bbox;
+        }
+      }
       if (typeof window.fpLoadAndMatch === 'function') {
         window.fpLoadAndMatch(ingState.rooms);
       }

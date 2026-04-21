@@ -127,8 +127,25 @@
           r.doors = doorsByName[r.name];
         }
       });
+      // D-130 : préserver la sélection courante par NOM à travers le
+      // remplacement de fpData.rooms. Sans ça, chaque re-match (ex :
+      // déclenché par bbox edit dans Floor) reset currentIdx = 0 → la
+      // Review peut afficher une autre pièce que celle sur laquelle
+      // l'utilisateur travaille.
+      var prevName = null;
+      if (fpData.rooms && fpData.currentIdx != null &&
+          fpData.rooms[fpData.currentIdx]) {
+        prevName = fpData.rooms[fpData.currentIdx].name;
+      }
       fpData.rooms = data.rooms;
-      fpData.currentIdx = 0;
+      if (prevName) {
+        var foundIdx = fpData.rooms.findIndex(function (r) {
+          return r.name === prevName;
+        });
+        fpData.currentIdx = foundIdx >= 0 ? foundIdx : 0;
+      } else {
+        fpData.currentIdx = 0;
+      }
       // Render Review data (but stay on current tab)
       fpRenderCurrent();
       rvRenderCurrent();
