@@ -320,18 +320,57 @@
           alert("Re-analyze unavailable: missing plan path, seed, or scale.");
           return;
         }
-        // Backend /api/room/reanalyze interprète transparent_zones en
-        // abs-room-local ; le state les porte en canonique. Conversion
-        // canon → abs via rotateRectInv (identité si corridor_face_abs
-        // ∈ {"", "south"}).
+        // D-127 : si l'utilisateur a redimensionné la pièce en amend mode
+        // (roomRenderOffset != 0 ou dims ≠ dims originelles), propager le
+        // bbox effectif user → backend. Sans ça, backend détecte dans
+        // l'ancienne zone et ré-applique les openings dans la nouvelle
+        // géométrie — résultat incohérent (cf. Test 3 D-126 : porte
+        // fantôme à la face sud après raccourcissement par le bas).
+        //
+        // Pipeline : canonBbox {x: shift, y: shift, w: canonW, d: canonD}
+        //   → rotateRectInv(cfAbs, absOrigW, absOrigD) → abs-room-local
+        //   → + origBbox NW × pxPerCm → effBbox (image px).
         var cfAbsForZones = amend.originalRoom.corridor_face_abs ||
           state.corridor_face_abs || "";
-        var absWForZones = bbox ? (bbox[2] - bbox[0]) * ingst.scale : 0;
-        var absDForZones = bbox ? (bbox[3] - bbox[1]) * ingst.scale : 0;
+        var effBbox = bbox;
+        var effAbsW = bbox ? (bbox[2] - bbox[0]) * ingst.scale : 0;
+        var effAbsD = bbox ? (bbox[3] - bbox[1]) * ingst.scale : 0;
+        var cio = window.canonicalIO;
+        if (bbox && ingst.scale && cio && cio.rotateRectInv) {
+          var pxPerCm = 1.0 / ingst.scale;
+          var absOrigW = (bbox[2] - bbox[0]) * ingst.scale;
+          var absOrigD = (bbox[3] - bbox[1]) * ingst.scale;
+          var offs = state.roomRenderOffset || { x_cm: 0, y_cm: 0 };
+          var canonBboxUser = {
+            x: offs.x_cm || 0,
+            y: offs.y_cm || 0,
+            width: state.room_width_cm || 0,
+            depth: state.room_depth_cm || 0,
+          };
+          var origCanonW = origRoom.width_cm || 0;
+          var origCanonD = origRoom.depth_cm || 0;
+          var resized = (canonBboxUser.x !== 0 || canonBboxUser.y !== 0 ||
+            canonBboxUser.width !== origCanonW ||
+            canonBboxUser.depth !== origCanonD);
+          if (resized && canonBboxUser.width > 0 && canonBboxUser.depth > 0) {
+            var absRel = cio.rotateRectInv(
+              canonBboxUser, cfAbsForZones, absOrigW, absOrigD);
+            effBbox = [
+              Math.round(bbox[0] + absRel.x * pxPerCm),
+              Math.round(bbox[1] + absRel.y * pxPerCm),
+              Math.round(bbox[0] + (absRel.x + absRel.width) * pxPerCm),
+              Math.round(bbox[1] + (absRel.y + absRel.depth) * pxPerCm),
+            ];
+            effAbsW = absRel.width;
+            effAbsD = absRel.depth;
+          }
+        }
+        // Backend /api/room/reanalyze interprète transparent_zones en
+        // abs-room-local relative à effBbox (dims effectives user).
         var transparents = window.canonicalZonesToAbs
           ? window.canonicalZonesToAbs(
               state.room_transparents || [],
-              cfAbsForZones, absWForZones, absDForZones)
+              cfAbsForZones, effAbsW, effAbsD)
           : (state.room_transparents || []).map(function (z) {
               return {
                 x_cm: z.x_cm, y_cm: z.y_cm,
@@ -352,7 +391,7 @@
             body: JSON.stringify({
               plan_path: ingst.planPathEnhanced,
               seed_px: seedPx,
-              bbox_px: bbox,
+              bbox_px: effBbox,
               scale_cm_per_px: ingst.scale,
               transparent_zones: transparents,
               doors: doorsPx,
@@ -432,13 +471,16 @@
             state.roomRenderOffset = { x_cm: 0, y_cm: 0 };
             // Re-anchor zones to preserve their absolute image position
             // across bbox / corridor_face changes (fix symptôme 2 D-124).
+            // D-127 : on passe effBbox (bbox effectif user, tient compte du
+            // resize amend) et non l'origBbox — les coords zones sont
+            // relatives au canonical NW user, pas au canonical NW original.
             if (window.reanchorCanonicalZones) {
               var newCf = canon.corridor_face || prevCf || "";
               state.room_exclusions = window.reanchorCanonicalZones(
-                state.room_exclusions, bbox, prevCf,
+                state.room_exclusions, effBbox, prevCf,
                 canon.bbox_px, newCf, ingst.scale);
               state.room_transparents = window.reanchorCanonicalZones(
-                state.room_transparents, bbox, prevCf,
+                state.room_transparents, effBbox, prevCf,
                 canon.bbox_px, newCf, ingst.scale);
             }
             amend.originalRoom.bbox_px = canon.bbox_px;

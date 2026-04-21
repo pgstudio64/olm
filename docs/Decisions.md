@@ -7,6 +7,66 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-127 · Propagation du bbox effectif user au backend Re-analyze (2026-04-21)
+
+### Décision
+
+Sur Re-analyze unitaire (amend mode), calcul d'un `effBbox` qui intègre le
+redimensionnement manuel fait par l'utilisateur (via `state.roomRenderOffset`
++ `state.room_width_cm / depth_cm`). Le backend reçoit ce bbox au lieu de
+l'`origRoom.bbox_px` figé, donc détecte dans la zone vraiment éditée par
+l'utilisateur.
+
+### Pipeline
+
+```
+canonBboxUser = {x: roomRenderOffset.x, y: roomRenderOffset.y,
+                 width: room_width_cm, depth: room_depth_cm}
+   canonical frame (NW = canonical NW de la pièce originelle)
+
+  ↓ canonicalIO.rotateRectInv(cfAbs, absOrigW, absOrigD)
+
+absRel = {x, y, width, depth}  en cm, abs-room-local vs original NW
+
+  ↓ × pxPerCm + origBbox[0,1]
+
+effBbox = [x0, y0, x1, y1]  en px image absolus
+```
+
+`transparent_zones` sont ensuite converties canon→abs avec les nouvelles
+dims effectives (`effAbsW / effAbsD`) au lieu des originelles. La re-ancrage
+D-124 utilise aussi `effBbox` comme « vieux » repère (car les zones sont
+relatives au canonical NW user).
+
+### Justification
+
+Test 3 D-126 : l'utilisateur raccourcit la pièce par le bas, coche Lock
+bbox, clique Re-analyze. Attendu : la porte sud (qui était dans la zone
+retirée) doit disparaître. Observé : porte persistait.
+
+Cause : le backend recevait `origRoom.bbox_px` (bbox avant resize) et
+détectait la porte originelle. Sans Lock : porte ré-appliquée dans la face
+sud de la nouvelle pièce. Avec Lock : openings acceptées → même porte.
+
+Avec D-127, backend reçoit `effBbox` → détecte dans la zone user, ne
+trouve plus la porte → comportement attendu.
+
+### Impact
+
+- **init_rvtool.js** : +40 lignes. Calcul effBbox avant fetch, utilisé pour
+  `bbox_px` payload, `transparent_zones` conversion, et reanchor D-124.
+- **Pas de changement backend** ni batch : le batch re-analyze n'a pas
+  de `roomRenderOffset` (hors amend mode).
+- **Seed_px inchangé** : conservé comme repère image absolu. Cas edge : si
+  le user shrunk tellement que la seed tombe hors de effBbox, le backend
+  peut échouer proprement — à traiter séparément si besoin.
+- **Limite connue** : au Save amend, `ramend.originalRoom.bbox_px` n'est
+  pas mis à jour avec effBbox. Donc la persistence du resize dans JSON v3
+  reste incomplète (dims persistent mais bbox_px reste originel). Bug
+  latent à traiter séparément (listé dans TODO.md).
+
+---
+
 ## D-126 · Toggle « Lock bbox » sur Re-analyze (2026-04-21)
 
 ### Décision

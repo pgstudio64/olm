@@ -5,7 +5,21 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-126 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-127 (2026-04-20 → 2026-04-21)
+
+### D-127 — Propagation bbox effectif user au backend Re-analyze (2026-04-21)
+
+- **Fix Test 3 D-126** : quand l'utilisateur résize en amend mode puis
+  Re-analyze (avec ou sans Lock), le backend recevait l'ancien bbox_px
+  et détectait les openings dans l'ancienne géométrie — incohérent avec
+  le bbox redimensionné.
+- Pipeline : `canonBboxUser → rotateRectInv → × pxPerCm → effBbox` envoyé
+  au backend à la place de `origRoom.bbox_px`.
+- `transparent_zones` conversion + re-ancrage D-124 utilisent aussi les
+  dims effectives.
+- **Limite connue** : `ramend.originalRoom.bbox_px` n'est pas mis à jour
+  au Save — le resize persiste dans `dims` mais pas dans `bbox_px`. À
+  traiter séparément.
 
 ### D-126 — Toggle Lock bbox sur Re-analyze (2026-04-21)
 

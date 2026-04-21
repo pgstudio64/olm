@@ -266,7 +266,17 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 - [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `test_comb.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
 - [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
-- [ ] **Re-analyze + resize pièce** : la ré-analyse utilise le bbox original. Si l'utilisateur a déjà redimensionné la pièce en amend mode, propager le nouveau bbox avant l'appel.
+- [x] **Re-analyze + resize pièce** ✅ 2026-04-21 (D-127). Propagation du
+  bbox effectif user au backend (`canonBboxUser → rotateRectInv → +origBbox →
+  effBbox`). Le backend détecte dans la zone éditée et non dans l'ancien
+  bbox. S'applique aux deux modes Lock et non-Lock.
+- [ ] **Persistence Save room : bbox_px non mis à jour si resize**
+  (D-127 limite). Au Save, `canonRoom.bbox_px` récupère toujours
+  `ramend.originalRoom.bbox_px` (la valeur d'entrée en amend mode), pas
+  le bbox effectif redimensionné. Résultat : les dims persistées dans
+  fpData reflètent le resize, mais `bbox_px` reste à la position d'origine
+  → désalignement potentiel avec l'overlay. Fix : calculer effBbox au
+  save comme dans D-127 et le persister.
 - [ ] **Zoom arrière bloqué trop tôt (Review / Room)** : la limite max de dézoom se déclenche avant que l'utilisateur puisse voir toute la pièce + marge confortable. Ajuster le clamp `maxW` (actuellement `planW × 1.1` dans ingestion.js). À revoir aussi pour Room amend mode.
 - [x] ~~**Re-analyze instable — 2 passes quasi systématiques**~~ ✅ fixé
   2026-04-20 : bug dans le filtre `preservedDoors` (init_rvtool.js /
