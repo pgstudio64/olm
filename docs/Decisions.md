@@ -7,6 +7,46 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-125 · Fix race condition state.overlay partagé fp/rv (2026-04-21)
+
+### Décision
+
+`fpRenderSvg` ([floor_plan.js:470-486](../olm/static/floor_plan.js#L470-L486))
+calcule désormais `state.overlay.offsetX/offsetY` depuis `room.bbox_px /
+pxPerCm`, même convention que `fpRenderEmptyRoom:318-321`. Remplace
+`room._overlayOffsetX || 0` — champ jamais initialisé côté producteur.
+
+### Justification — race condition rvCanvas/fpCanvas
+
+Symptôme utilisateur : après Save room puis pan sur le plan, l'overlay se
+décale et la pièce arrive à (0,0) du plan raster.
+
+Root cause : `state.overlay` est **partagé** entre les canvases (fpCanvas
+Design / rvCanvas Review / canvas éditeur). Le flux Save room déclenche :
+1. `rvRenderCurrent() → fpRenderEmptyRoom(rvCanvas)` synchrone : pose
+   `state.overlay.offsetX/Y = bbox_px[0,1] / pxPerCm` (correct).
+2. `fpRematchRoom(...)` en parallèle, `fetch` async ; à la résolution,
+   appelle `fpRenderCurrent()` qui auto-clique le premier candidat →
+   `fpRenderSvg(fpCanvas)`.
+3. `fpRenderSvg` lisait `room._overlayOffsetX || 0` → jamais défini →
+   `state.overlay.offsetX = 0, offsetY = 0`. **Écrase** l'état posé en 1.
+4. Pan sur rvCanvas → mouseup → `render(rvCanvas)` → overlay rendu à
+   (-0, -0) → la pièce (au NW en SVG coords) se retrouve alignée avec
+   le pixel (0,0) du plan raster.
+
+### Impact
+
+- **Fix collatéral** : le rendu Design/fpCanvas avec overlay ON affichait
+  aussi l'image mal alignée (top-left du raster au NW de la pièce) — bug
+  silencieux pré-existant. Corrigé.
+- **Pas de refactor architecture** : l'idée de splitter en
+  `state.fpOverlay` / `state.rvOverlay` pour supprimer le shared-state
+  reste pertinente mais non urgente. Notée pour plus tard si d'autres
+  races émergent.
+- **Fichiers modifiés** : 1 JS (+6 / -3 lignes).
+
+---
+
 ## D-124 · Re-ancrage des zones canoniques après re-analyze (2026-04-21)
 
 ### Décision

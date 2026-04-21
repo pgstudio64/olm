@@ -5,7 +5,18 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-124 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-125 (2026-04-20 → 2026-04-21)
+
+### D-125 — Fix race state.overlay partagé fp/rv (2026-04-21)
+
+- **Symptôme** : après Save room + pan, l'overlay se décale et la pièce
+  arrive à (0,0) du plan raster.
+- **Cause** : `fpRenderSvg` lisait `room._overlayOffsetX || 0` (champ
+  jamais défini) → 0, écrasant l'état posé par `fpRenderEmptyRoom`. État
+  partagé via `state.overlay` entre rvCanvas et fpCanvas. Race déclenchée
+  par `fpRematchRoom` async post-Save.
+- **Fix** : utiliser `room.bbox_px / pxPerCm` dans `fpRenderSvg` (même
+  convention que `fpRenderEmptyRoom`). 4 lignes modifiées.
 
 ### D-124 — Re-ancrage des zones canoniques après re-analyze (2026-04-21)
 
