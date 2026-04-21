@@ -495,9 +495,17 @@
             }
           }
 
-          state.room_windows = newWindows.concat(manualW);
-          state.room_openings = newOpenings.concat(manualO);
-          state.room_doors = newDoors.concat(preservedDoors);
+          // D-129 : clamp des openings/windows/doors acceptées aux dims
+          // courantes de state. Lock ON protège le bbox user mais les
+          // openings canon peuvent déborder si le backend a détecté un
+          // bbox légèrement plus large. Non-Lock : idempotent (dims =
+          // canon, openings déjà dans canon frame).
+          var _sW = state.room_width_cm || 0;
+          var _sD = state.room_depth_cm || 0;
+          var clampOd = window.clampOpeningsToDims || function (a) { return a; };
+          state.room_windows = clampOd(newWindows.concat(manualW), _sW, _sD);
+          state.room_openings = clampOd(newOpenings.concat(manualO), _sW, _sD);
+          state.room_doors = clampOd(newDoors.concat(preservedDoors), _sW, _sD);
           _rvCommitFromState();
           if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
         } catch (err) {
