@@ -1664,6 +1664,7 @@ def extract_room_features(
     door_width_cm: int = 90,
     threshold: int = 110,
     step_px: int = 5,
+    binary_precomputed: np.ndarray | None = None,
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105).
 
@@ -1693,6 +1694,13 @@ def extract_room_features(
             auto aux portes. Défaut = `default_door_width_cm` = 90.
         threshold: seuil binarisation.
         step_px: pas de classify_wall_direct.
+        binary_precomputed: (OPT, D-123 perf) binaire global (bool ndarray
+            H×W) déjà cleaned par `remove_non_ortho`. Si fourni, cet
+            appel saute binarisation + remove_non_ortho (gain dominant
+            en batch). Les masques room-locaux (doors + transparent_zones)
+            sont appliqués par zéro-out sur une copie locale — pas de
+            re-binarisation globale ni de re-clean. Voir
+            `/api/room/reanalyze_batch`.
 
     Returns:
         {
@@ -1711,9 +1719,10 @@ def extract_room_features(
     px_per_cm = 1.0 / scale_cm_per_px
     door_dw_px = max(1, int(round(door_width_cm * px_per_cm)))
 
-    # --- 1. Masque zones transparentes (user + auto-portes) ---
-    working = image.copy()
-    draw = _PILDraw.Draw(working)
+    # --- 1. Collecte des rectangles de masque (portes + zones transparentes) ---
+    # D-123 : rassemblés dans une liste unique, appliqués soit via PIL
+    # (pipeline classique) soit via zéro-out numpy (pipeline batch partagé).
+    mask_rects_px: list[tuple[int, int, int, int]] = []
     auto_door_rects_px: list[list[int]] = []
 
     if bbox_px and doors_px:
@@ -1740,7 +1749,7 @@ def extract_room_features(
                         bx1, cy + door_dw_px / 2)
             else:
                 continue
-            draw.rectangle(rect, fill=255)
+            mask_rects_px.append(rect)
             auto_door_rects_px.append([
                 int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])
             ])
@@ -1753,14 +1762,41 @@ def extract_room_features(
             zw = int(round(z.get("width_cm", 0) * px_per_cm))
             zh = int(round(z.get("depth_cm", 0) * px_per_cm))
             if zw > 0 and zh > 0:
-                draw.rectangle([zx_abs, zy_abs,
-                                zx_abs + zw, zy_abs + zh], fill=255)
+                mask_rects_px.append(
+                    (zx_abs, zy_abs, zx_abs + zw, zy_abs + zh))
 
     # --- 2. Binarisation ---
-    gray = np.asarray(working)
-    binary_raw = gray < threshold
-    binary = remove_non_ortho(binary_raw)
-    binary_raw = binary
+    if binary_precomputed is not None:
+        # D-123 : base binaire déjà cleaned partagée → copie + zéro-out local.
+        # Les masques sont forcés à False dans la copie room-scoped ; c'est
+        # équivalent fonctionnellement à drawr.rectangle(fill=255) avant
+        # binarisation + remove_non_ortho, sauf pour un cas-limite : un
+        # composant non-orthogonal partiellement recouvert par un masque.
+        # Dans le pipeline classique, le masque coupe le composant avant
+        # remove_non_ortho et le reste peut devenir orthogonal ; ici, si
+        # le composant était non-ortho dans la base, il a déjà été retiré
+        # globalement. Diff négligeable sur des plans réels (masques petits).
+        binary = binary_precomputed.copy()
+        if mask_rects_px:
+            H, W = binary.shape
+            for (x0, y0, x1, y1) in mask_rects_px:
+                ix0 = max(0, int(round(x0)))
+                iy0 = max(0, int(round(y0)))
+                ix1 = min(W, int(round(x1)))
+                iy1 = min(H, int(round(y1)))
+                if ix1 > ix0 and iy1 > iy0:
+                    binary[iy0:iy1, ix0:ix1] = False
+        binary_raw = binary
+    else:
+        # Pipeline classique : copie PIL + drawing + binarisation + cleanup.
+        working = image.copy()
+        draw = _PILDraw.Draw(working)
+        for rect in mask_rects_px:
+            draw.rectangle(rect, fill=255)
+        gray = np.asarray(working)
+        binary_raw = gray < threshold
+        binary = remove_non_ortho(binary_raw)
+        binary_raw = binary
 
     # --- 3. Detection du bbox via l'algo comb (test_comb.detect_room,
     # même algo que l'import OCR — éprouvé et plus robuste que

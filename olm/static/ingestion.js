@@ -48,7 +48,7 @@
       doors: (data.doors || []).map(slimDoor),
     };
     var canon = (window.canonicalIO && window.canonicalIO.fromStorage)
-      ? window.canonicalIO.fromStorage(roomAbs)
+      ? window.canonicalIO.fromStorage(roomAbs, scale)
       : { width_cm: roomAbs.width_cm, depth_cm: roomAbs.depth_cm,
           windows: [], openings: [], doors: [] };
 
@@ -60,13 +60,13 @@
         origin: 'auto',
       }, extra || {});
     }
+    // D-122 P4 : openings et doors sortent séparés (has_door banni du state).
     var windowsCanon = (canon.windows || []).map(function (w) { return feat(w); });
     var openingsCanon = (canon.openings || []).map(function (o) {
-      return feat(o, { has_door: false });
+      return feat(o);
     });
     var doorsCanon = (canon.doors || []).map(function (d) {
       return feat(d, {
-        has_door: true,
         hinge_side: d.hinge_side,
         opens_inward: d.opens_inward !== false,
       });
@@ -74,26 +74,24 @@
 
     // --- 2) Post-traitement points / rectangles relatifs au bbox ---
     // fromStorage ne touche pas hits / seed / auto_door_masks_px (ils sont
-    // exprimés en px image, pas en cm room-local). Rotation via les mêmes
-    // matrices que canonicalIO, conservées ici sous forme fonctionnelle.
-    function pointAbsToCanon(xAbs, yAbs) {
-      if (corridor === 'north') return { x: absW - xAbs, y: absD - yAbs };
-      if (corridor === 'east')  return { x: yAbs,         y: absW - xAbs };
-      if (corridor === 'west')  return { x: absD - yAbs,  y: xAbs };
-      return { x: xAbs, y: yAbs };
-    }
+    // exprimés en px image, pas en cm room-local). Délégation à canonicalIO
+    // (D-122 P6 : source unique, plus de rotation ad-hoc locale).
+    var _rotP = window.canonicalIO.rotatePoint;
+    var _rotR = window.canonicalIO.rotateRect;
     var hits = null, seed_cm = null;
     if (data.hits && bbox) {
       var hbx0 = bbox[0], hby0 = bbox[1];
       hits = data.hits.map(function (h) {
-        var pAbs = { x: (h[0] - hbx0) * scale, y: (h[1] - hby0) * scale };
-        var p = pointAbsToCanon(pAbs.x, pAbs.y);
+        var p = _rotP(
+          { x: (h[0] - hbx0) * scale, y: (h[1] - hby0) * scale },
+          corridor, absW, absD);
         return { x_cm: p.x, y_cm: p.y };
       });
       if (data.seed_px) {
-        var sAbsX = (data.seed_px[0] - hbx0) * scale;
-        var sAbsY = (data.seed_px[1] - hby0) * scale;
-        var sC = pointAbsToCanon(sAbsX, sAbsY);
+        var sC = _rotP(
+          { x: (data.seed_px[0] - hbx0) * scale,
+            y: (data.seed_px[1] - hby0) * scale },
+          corridor, absW, absD);
         seed_cm = { x_cm: sC.x, y_cm: sC.y };
       }
     }
@@ -101,23 +99,12 @@
     if (data.auto_door_masks_px && bbox) {
       var rbx0 = bbox[0], rby0 = bbox[1];
       masks = data.auto_door_masks_px.map(function (rc) {
-        var ax0 = (rc[0] - rbx0) * scale;
-        var ay0 = (rc[1] - rby0) * scale;
-        var aw = (rc[2] - rc[0]) * scale;
-        var ad = (rc[3] - rc[1]) * scale;
-        if (corridor === 'north') {
-          return { x_cm: absW - ax0 - aw, y_cm: absD - ay0 - ad,
-                   width_cm: aw, depth_cm: ad };
-        }
-        if (corridor === 'east') {
-          return { x_cm: ay0, y_cm: absW - ax0 - aw,
-                   width_cm: ad, depth_cm: aw };
-        }
-        if (corridor === 'west') {
-          return { x_cm: absD - ay0 - ad, y_cm: ax0,
-                   width_cm: ad, depth_cm: aw };
-        }
-        return { x_cm: ax0, y_cm: ay0, width_cm: aw, depth_cm: ad };
+        var rr = _rotR(
+          { x: (rc[0] - rbx0) * scale, y: (rc[1] - rby0) * scale,
+            width: (rc[2] - rc[0]) * scale, depth: (rc[3] - rc[1]) * scale },
+          corridor, absW, absD);
+        return { x_cm: rr.x, y_cm: rr.y,
+                 width_cm: rr.width, depth_cm: rr.depth };
       });
     }
     return {
@@ -668,36 +655,15 @@
     var show = ingState.show;
     var zoomRoom = ingState.zoomRoom;
 
-    // R-12 : ingState.rooms est en repère canonique (corridor_face="south"
-    // via fromStorage). Le Floor overlay doit rendre dans le repère ABSOLU
-    // (le raster). On applique toStorage() par pièce puis on recalcule les
-    // offset_px / width_px depuis offset_cm × pxPerCm (toStorage ne roter
-    // pas les px). Guard contre offset_px undefined / NaN pour éviter les
-    // <line x1="NaN"> côté SVG.
-    var _renderPxPerCm = (ingState.scale && ingState.scale > 0)
-      ? (1.0 / ingState.scale) : 0;
-    function _renderFeat(e) {
-      if (!e) return e;
-      var out = Object.assign({}, e);
-      if (e.offset_cm != null && _renderPxPerCm > 0) {
-        out.offset_px = Math.round(e.offset_cm * _renderPxPerCm);
-      }
-      if (e.width_cm != null && _renderPxPerCm > 0) {
-        out.width_px = Math.round(e.width_cm * _renderPxPerCm);
-      }
-      return out;
-    }
+    // R-12 / D-122 P1 : ingState.rooms est en repère canonique. Le Floor
+    // overlay rend dans le repère ABSOLU (raster). toStorage(room, scale)
+    // retourne une pièce absolue avec offset_px / width_px déjà recalculés.
     function _renderRoom(roomCanon) {
-      var abs = (roomCanon.original_corridor_face !== undefined &&
-                 window.canonicalIO)
-        ? window.canonicalIO.toStorage(roomCanon)
-        : roomCanon;
-      // Copie superficielle pour ne pas muter ingState.rooms[i]
-      var out = Object.assign({}, abs);
-      out.windows  = (abs.windows  || []).map(_renderFeat);
-      out.openings = (abs.openings || []).map(_renderFeat);
-      out.doors    = (abs.doors    || []).map(_renderFeat);
-      return out;
+      if (roomCanon.corridor_face_abs !== undefined &&
+          window.canonicalIO) {
+        return window.canonicalIO.toStorage(roomCanon, ingState.scale);
+      }
+      return roomCanon;
     }
 
     ingState.rooms.forEach(function (roomCanon) {
@@ -1577,23 +1543,19 @@
             if (!res || res.error) { fail++; return; }
             var am = amendments[r.name];
             var deleted = new Set((am && am.deleted_auto_signatures) || []);
-            var prevW = (am && am.windows) || r.windows || [];
-            var prevO = (am && am.openings) || r.openings || [];
+            // D-122 P4 : collections séparées partout (windows / openings / doors).
+            var prevW = (am && am.windows)  || r.windows  || [];
+            var prevOp = (am && am.openings) || r.openings || [];
+            var prevDr = (am && am.doors)   || r.doors   || [];
             var manualW = prevW.filter(function (w) { return w.origin === 'manual'; });
-            var manualO = prevO.filter(function (o) { return o.origin === 'manual' && !o.has_door; });
-            // Portes préservées : seulement les doors manuelles (D-110).
-            // Fix : `=== "manual"` et non `!== "auto"` — les doors initiales
-            // issues du backend n'ont pas d'origin, elles doivent être
-            // redétectées (pas préservées). Cohérent avec manualW / manualO.
-            var preservedDoors = prevO.filter(function (o) {
-              return o.has_door && o.origin === 'manual';
-            });
+            var manualO = prevOp.filter(function (o) { return o.origin === 'manual'; });
+            // D-110 : préserver uniquement les doors explicitement "manual".
+            var preservedDoors = prevDr.filter(function (d) { return d.origin === 'manual'; });
 
             // Canonicalise abs → canon. R-12 : le helper attend le
             // corridor_face ABSOLU (res vient du backend en absolu).
-            // original_corridor_face mémorise ce repère ; corridor_face
-            // est "south" canonique et ne doit pas être passé ici.
-            var prevCfAbs = r.original_corridor_face || r.corridor_face || '';
+            // D-122 P3 : corridor_face_abs unique source du repère absolu.
+            var prevCfAbs = r.corridor_face_abs || '';
             var canon = window.computeCanonicalReanalyzeResult(
               res, prevCfAbs, ingState.scale);
 
@@ -1603,19 +1565,12 @@
             var newO = canon.openings.filter(function (o) {
               return !deleted.has(_sig('opening', o));
             });
-            // Portes auto redétectées (déjà canonicalisées) seulement si
-            // aucune porte manuelle n'existe.
+            // Portes auto redétectées seulement si aucune manuelle n'existe.
             var newDoors = preservedDoors.length ? [] : canon.doors;
 
             var mergedW = newW.concat(manualW);
-            var mergedO = newO.concat(newDoors, preservedDoors, manualO);
-            // ingState / fpData doivent garder r.openings ET r.doors SÉPARÉS
-            // (invariant posé par fromStorage au load ; le Floor renderer
-            // lit r.doors séparément). mergedO reste combiné pour les
-            // amendments (nécessaire pour les préservations au prochain
-            // re-analyze), mais on split à l'injection dans ingState/fpData.
-            var mergedOpenings = mergedO.filter(function (o) { return !o.has_door; });
-            var mergedDoors = mergedO.filter(function (o) { return o.has_door; });
+            var mergedOpenings = newO.concat(manualO);
+            var mergedDoors = newDoors.concat(preservedDoors);
 
             r.windows = mergedW;
             r.openings = mergedOpenings;
@@ -1623,7 +1578,6 @@
             // Adopter le nouveau bbox + dims + corridor_face (D-113).
             if (canon.bbox_px) {
               r.bbox_px = canon.bbox_px;
-              r.bbox_abs_px = canon.bbox_px.slice();
               r.width_cm = canon.width_cm;
               r.depth_cm = canon.depth_cm;
               r.width_px = canon.bbox_px[2] - canon.bbox_px[0];
@@ -1633,19 +1587,20 @@
             }
             // D-113 + R-12 : canon.corridor_face est le repère ABSOLU
             // détecté. En state canonique, corridor_face reste "south" ;
-            // original_corridor_face pilote la rotation overlay.
+            // corridor_face_abs pilote la rotation overlay.
             if (canon.corridor_face) {
-              r.original_corridor_face = canon.corridor_face;
+              r.corridor_face_abs = canon.corridor_face;
               r.corridor_face = "south";
             }
 
             if (am) {
-              // amendments garde openings combiné (source pour les
-              // préservations au prochain re-analyze via prevO).
+              // D-122 P4 : amendments gardent les 3 collections séparées
+              // (même invariant que ingState / fpData, pas de re-split).
               am.windows = mergedW;
-              am.openings = mergedO;
+              am.openings = mergedOpenings;
+              am.doors = mergedDoors;
               if (canon.corridor_face) {
-                am.original_corridor_face = canon.corridor_face;
+                am.corridor_face_abs = canon.corridor_face;
                 am.corridor_face = "south";
               }
             }
@@ -1657,12 +1612,11 @@
                 fr.doors = mergedDoors;
                 if (canon.bbox_px) {
                   fr.bbox_px = canon.bbox_px;
-                  fr.bbox_abs_px = canon.bbox_px.slice();
                   fr.width_cm = canon.width_cm;
                   fr.depth_cm = canon.depth_cm;
                 }
                 if (canon.corridor_face) {
-                  fr.original_corridor_face = canon.corridor_face;
+                  fr.corridor_face_abs = canon.corridor_face;
                   fr.corridor_face = "south";
                 }
               }
@@ -1720,7 +1674,12 @@
           if (status) status.textContent = 'Error: ' + data.error;
           return;
         }
-        ingState.rooms = (data.rooms || []).map(window.canonicalIO.fromStorage);
+        var _impScale = (typeof data.scale_cm_per_px === 'number' &&
+                         data.scale_cm_per_px > 0)
+          ? data.scale_cm_per_px : 0;
+        ingState.rooms = (data.rooms || []).map(function (r) {
+          return window.canonicalIO.fromStorage(r, _impScale);
+        });
         if (status) status.textContent = ingState.rooms.length + ' room(s) imported';
 
         // Header badge

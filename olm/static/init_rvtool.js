@@ -45,7 +45,8 @@
         state.room_width_cm = data.width_cm;
         state.room_depth_cm = data.depth_cm;
         state.room_windows = data.windows || [];
-        state.room_openings = data.openings || [];
+        // D-122 P4 : DSL backend retourne openings combiné (has_door) → split.
+        _splitOpeningsIntoState(data.openings);
         state.room_exclusions = data.exclusion_zones || [];
         state.room_transparents = data.transparent_zones || [];
         render(document.getElementById("rvCanvas"));
@@ -137,6 +138,7 @@
       }
       (state.room_windows || []).forEach(clampFeature);
       (state.room_openings || []).forEach(clampFeature);
+      (state.room_doors || []).forEach(clampFeature);
       (state.room_exclusions || []).forEach(function (z) {
         z.x_cm = Math.max(0, z.x_cm || 0);
         z.y_cm = Math.max(0, z.y_cm || 0);
@@ -163,15 +165,16 @@
           dsl += "\nWINDOW " + f + " " + (w.offset_cm || 0) + " " + (w.width_cm || 0);
         }
       });
+      // D-122 P4 : openings ne contient plus de doors (collections séparées).
       (state.room_openings || []).forEach(function (o) {
         var f = FACE[o.face] || o.face || "?";
-        if (o.has_door) {
-          var dir = o.opens_inward ? "INT" : "EXT";
-          var side = (o.hinge_side === "left") ? "L" : "R";
-          dsl += "\nDOOR " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90) + " " + dir + " " + side;
-        } else {
-          dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
-        }
+        dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
+      });
+      (state.room_doors || []).forEach(function (d) {
+        var f = FACE[d.face] || d.face || "?";
+        var dir = d.opens_inward !== false ? "INT" : "EXT";
+        var side = (d.hinge_side === "left") ? "L" : "R";
+        dsl += "\nDOOR " + f + " " + (d.offset_cm || 0) + " " + (d.width_cm || 90) + " " + dir + " " + side;
       });
       (state.room_exclusions || []).forEach(function (z) {
         dsl += "\nEXCLUSION " + (z.x_cm || 0) + " " + (z.y_cm || 0) +
@@ -256,7 +259,7 @@
         if (!state.roomAmendMode) return;
         var ingst = window.ingState || {};
         var orig = state.roomAmendMode.originalRoom || {};
-        var bbox = orig.bbox_px || orig.bbox_abs_px;
+        var bbox = orig.bbox_px;
         if (!bbox || !ingst.planPathEnhanced) {
           alert("Orientation check: missing bbox or plan path.");
           return;
@@ -272,8 +275,7 @@
             body: JSON.stringify({
               plan_path: ingst.planPathEnhanced,
               bbox_px: bbox,
-              original_corridor_face:
-                orig.original_corridor_face || orig.corridor_face || "",
+              corridor_face_abs: orig.corridor_face_abs || "",
             }),
           });
           var data = await resp.json();
@@ -287,7 +289,7 @@
             " — corridor south " + rg + "g · exterior north " + rb + "b";
           badge.style.background = ok ? "#2a4d2a" : "#7a3a1a";
           badge.style.color = "#fff";
-          badge.title = "ocf=" + (data.original_corridor_face || "-") +
+          badge.title = "ocf=" + (data.corridor_face_abs || "-") +
             "\nFaces canon → ratio green / blue:\n" +
             Object.entries(data.faces || {}).map(function (e) {
               return "  " + e[0] + " (abs " + e[1].face_abs + "): " +
@@ -359,40 +361,33 @@
             return type + "|" + e.face + "|" +
               (e.offset_cm || 0) + "|" + (e.width_cm || 0);
           }
+          // D-122 P4 : openings et doors séparés dans le state → plus de
+          // filtrage has_door, chaque collection a son propre filter.
           var manualW = (state.room_windows || []).filter(function (w) {
             return w.origin === "manual";
           });
           var manualO = (state.room_openings || []).filter(function (o) {
-            return o.origin === "manual" && !o.has_door;
+            return o.origin === "manual";
           });
           // D-110 fix : ne préserver QUE les doors explicitement "manual".
-          // Les doors initiales issues du match /api/floor-plan/match ont
-          // origin=undefined ; `!== "auto"` les aurait préservées à tort,
-          // bloquant la redétection à la 1ère re-analyze. Cohérent avec
-          // manualW / manualO ci-dessus qui utilisent `=== "manual"`.
-          var preservedDoors = (state.room_openings || []).filter(function (o) {
-            return o.has_door && o.origin === "manual";
+          var preservedDoors = (state.room_doors || []).filter(function (d) {
+            return d.origin === "manual";
           });
 
-          // R-12 : le helper travaille en repère ABSOLU (entrée backend).
-          // prevCf doit donc être le corridor_face absolu mémorisé
-          // (original_corridor_face). corridor_face en state vaut "south"
-          // canonique, à ne pas passer ici.
+          // R-12 / D-122 P3 : le helper travaille en repère ABSOLU
+          // (entrée backend). prevCf doit donc être le corridor_face
+          // absolu mémorisé (corridor_face_abs).
           var prevCf = (amend.originalRoom &&
-            (amend.originalRoom.original_corridor_face ||
-             amend.originalRoom.corridor_face)) || "";
+            amend.originalRoom.corridor_face_abs) || "";
           var canon = window.computeCanonicalReanalyzeResult(
             data, prevCf, ingst.scale || 0);
 
           if (canon.corridor_face) {
-            // D-113 + R-12 : la porte détectée met à jour le REPÈRE ABSOLU
-            // mémorisé (original_corridor_face). En state canonique R-12,
-            // corridor_face reste "south" constant ; c'est
-            // original_corridor_face qui pilote la rotation d'overlay.
-            amend.originalRoom.original_corridor_face = canon.corridor_face;
-            amend.originalRoom.corridor_face = "south";
-            state.original_corridor_face = canon.corridor_face;
-            state.corridor_face = "south";
+            // D-113 + R-12 : la porte détectée met à jour le repère
+            // absolu mémorisé. corridor_face_abs seul — corridor_face
+            // "south" est une constante implicite du repère canon.
+            amend.originalRoom.corridor_face_abs = canon.corridor_face;
+            state.corridor_face_abs = canon.corridor_face;
           }
           var newWindows = canon.windows.filter(function (w) {
             return !deleted.has(sig("window", w));
@@ -424,9 +419,8 @@
           }
 
           state.room_windows = newWindows.concat(manualW);
-          state.room_openings = newOpenings.concat(
-            newDoors, preservedDoors, manualO
-          );
+          state.room_openings = newOpenings.concat(manualO);
+          state.room_doors = newDoors.concat(preservedDoors);
           _rvCommitFromState();
           if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
         } catch (err) {
@@ -518,6 +512,9 @@
       (state.room_openings || []).forEach(function (o) {
         if (o.origin) originCache[_keyFor("o", o)] = o.origin;
       });
+      (state.room_doors || []).forEach(function (d) {
+        if (d.origin) originCache[_keyFor("d", d)] = d.origin;
+      });
       var el = document.getElementById("rvRoomDsl");
       if (el) el.value = _stateToDsl();
       rvApplyDslAsync().then(function () {
@@ -530,6 +527,11 @@
           var k = _keyFor("o", o);
           if (originCache[k]) o.origin = originCache[k];
           else if (!o.origin) o.origin = "auto";
+        });
+        (state.room_doors || []).forEach(function (d) {
+          var k = _keyFor("d", d);
+          if (originCache[k]) d.origin = originCache[k];
+          else if (!d.origin) d.origin = "auto";
         });
       });
     }
@@ -593,7 +595,10 @@
       if (openingDelete) {
         var dparts = openingDelete.dataset.openingDelete.split("-");
         var dtype = dparts[0], didx = parseInt(dparts[1], 10);
-        var darr = (dtype === "window") ? state.room_windows : state.room_openings;
+        // D-122 P4 : type peut être window / opening / door.
+        var darr = (dtype === "window") ? state.room_windows
+                 : (dtype === "door")   ? state.room_doors
+                 :                        state.room_openings;
         var dRemoved = darr && darr[didx];
         if (dRemoved && dRemoved.origin === "auto") {
           state.deleted_auto_signatures = state.deleted_auto_signatures || [];
@@ -614,7 +619,9 @@
       if (openingResize) {
         var rparts = openingResize.dataset.openingResize.split("-");
         var rtype = rparts[0], ridx = parseInt(rparts[1], 10), rend = rparts[2];
-        var rarr = (rtype === "window") ? state.room_windows : state.room_openings;
+        var rarr = (rtype === "window") ? state.room_windows
+                 : (rtype === "door")   ? state.room_doors
+                 :                        state.room_openings;
         var rop = rarr && rarr[ridx];
         if (!rop) return;
         state.selectedOpening = { type: rtype, index: ridx };
@@ -639,7 +646,9 @@
       if (openingHandle) {
         var parts = openingHandle.dataset.openingHandle.split("-");
         var otype = parts[0], oidx = parseInt(parts[1], 10);
-        var oarr = (otype === "window") ? state.room_windows : state.room_openings;
+        var oarr = (otype === "window") ? state.room_windows
+                 : (otype === "door")   ? state.room_doors
+                 :                        state.room_openings;
         var op = oarr && oarr[oidx];
         if (!op) return;
         state.selectedOpening = { type: otype, index: oidx };
@@ -679,6 +688,7 @@
           offset_x_cm: baseOffset.x_cm, offset_y_cm: baseOffset.y_cm,
           windows: JSON.parse(JSON.stringify(state.room_windows || [])),
           openings: JSON.parse(JSON.stringify(state.room_openings || [])),
+          doors: JSON.parse(JSON.stringify(state.room_doors || [])),
           exclusions: JSON.parse(JSON.stringify(state.room_exclusions || [])),
         };
         e.preventDefault();
@@ -719,17 +729,17 @@
             origin: "manual",
           });
         } else if (type === "door") {
-          state.room_openings = state.room_openings || [];
-          state.room_openings.push({
+          // D-122 P4 : push dans state.room_doors (séparé).
+          state.room_doors = state.room_doors || [];
+          state.room_doors.push({
             face: fo.face, offset_cm: offset, width_cm: width,
-            has_door: true, opens_inward: true, hinge_side: "left",
-            origin: "manual",
+            opens_inward: true, hinge_side: "left", origin: "manual",
           });
         } else {
           state.room_openings = state.room_openings || [];
           state.room_openings.push({
             face: fo.face, offset_cm: offset, width_cm: width,
-            has_door: false, origin: "manual",
+            origin: "manual",
           });
         }
         // Exit placing mode.
@@ -819,7 +829,9 @@
            document.activeElement.tagName === "TEXTAREA")) return;
       var sel = state.selectedOpening;
       if (sel) {
-        var arr = (sel.type === "window") ? state.room_windows : state.room_openings;
+        var arr = (sel.type === "window") ? state.room_windows
+                : (sel.type === "door")   ? state.room_doors
+                :                           state.room_openings;
         var removed = arr && arr[sel.index];
         if (removed && removed.origin === "auto") {
           state.deleted_auto_signatures = state.deleted_auto_signatures || [];
@@ -848,7 +860,9 @@
     document.addEventListener("mousemove", function (e) {
       if (rvTool.mode === "openingResizing" && rvTool.openingResize) {
         var or = rvTool.openingResize;
-        var arrR = (or.type === "window") ? state.room_windows : state.room_openings;
+        var arrR = (or.type === "window") ? state.room_windows
+                 : (or.type === "door")   ? state.room_doors
+                 :                          state.room_openings;
         var opR = arrR[or.index];
         if (!opR) return;
         var ptR = rvScreenToRoomCm(e);
@@ -918,7 +932,9 @@
       }
       if (rvTool.mode === "openingMoving" && rvTool.openingMove) {
         var om = rvTool.openingMove;
-        var arr = (om.type === "window") ? state.room_windows : state.room_openings;
+        var arr = (om.type === "window") ? state.room_windows
+                : (om.type === "door")   ? state.room_doors
+                :                          state.room_openings;
         var op = arr[om.index];
         if (!op) return;
         var pt = rvScreenToRoomCm(e);
@@ -1003,6 +1019,13 @@
         });
         state.room_openings = rrs.openings.map(function (o) {
           var c = Object.assign({}, o);
+          if (c.face === "north" || c.face === "south") c.offset_cm = (c.offset_cm || 0) - shiftX;
+          else c.offset_cm = (c.offset_cm || 0) - shiftY;
+          return c;
+        });
+        // D-122 P4 : doors suivent le même shift que openings.
+        state.room_doors = (rrs.doors || []).map(function (d) {
+          var c = Object.assign({}, d);
           if (c.face === "north" || c.face === "south") c.offset_cm = (c.offset_cm || 0) - shiftX;
           else c.offset_cm = (c.offset_cm || 0) - shiftY;
           return c;

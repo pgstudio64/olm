@@ -1189,7 +1189,7 @@ def api_room_orientation_check():
         {
           "plan_path": "/chemin/vers/plan-SD.png",
           "bbox_px": [x0, y0, x1, y1],
-          "original_corridor_face": "east"   # "", "south", "north", "east", "west"
+          "corridor_face_abs": "east"   # "", "south", "north", "east", "west"
         }
 
     Retour : diagnostic complet pour les 4 faces canon + verdicts corridor
@@ -1199,7 +1199,7 @@ def api_room_orientation_check():
         data = request.json or {}
         plan_path = data.get("plan_path", "")
         bbox_px = data.get("bbox_px")
-        ocf = data.get("original_corridor_face", "") or ""
+        ocf = data.get("corridor_face_abs", "") or ""
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1213,7 +1213,7 @@ def api_room_orientation_check():
         corridor = check_corridor_south(plan_path, bbox_px, ocf)
         exterior = check_exterior_north(plan_path, bbox_px, ocf)
         return jsonify({
-            "original_corridor_face": ocf,
+            "corridor_face_abs": ocf,
             "faces": faces["faces"],
             "corridor_south": corridor,
             "exterior_north": exterior,
@@ -1256,10 +1256,21 @@ def api_room_reanalyze_batch():
             return jsonify({"error": "rooms must be non-empty list"}), 400
 
         from PIL import Image as _PILImage
-        from olm.ingestion.extract import extract_room_features
+        import numpy as _np
+        from olm.ingestion.extract import (
+            extract_room_features, remove_non_ortho,
+        )
 
         # Chargement unique : l'image est partagée entre toutes les pièces.
         img = _PILImage.open(plan_path).convert("L")
+
+        # D-123 perf : binarisation + remove_non_ortho partagées sur toute
+        # l'image. ~200-300 ms × N pièces → 1 seule invocation. Les masques
+        # room-locaux (portes + zones transparentes) sont zéro-outés
+        # localement par `extract_room_features` via `binary_precomputed`.
+        _gray_global = _np.asarray(img)
+        _binary_raw_global = _gray_global < threshold
+        _binary_global = remove_non_ortho(_binary_raw_global)
 
         results = []
         for r in rooms:
@@ -1283,6 +1294,7 @@ def api_room_reanalyze_batch():
                     doors_px=[],
                     door_width_cm=door_width_cm,
                     threshold=threshold,
+                    binary_precomputed=_binary_global,
                 )
                 results.append({"name": name, **features})
             except Exception as e:
@@ -1382,7 +1394,13 @@ def api_match():
 def api_floor_plan_match():
     """Run catalogue matching on a set of rooms for the floor plan viewer.
 
-    JSON body: {"rooms": [...]} in load_rooms_json format.
+    JSON body: {"rooms": [...]}.
+    Contract (D-122 P5) : les pièces sont envoyées en repère CANONIQUE
+    (corridor_face = "south"). width_cm / depth_cm / faces d'openings
+    sont déjà normalisés ; le champ `corridor_face_abs` (optionnel) indique
+    le repère absolu d'origine pour traçabilité. Le matcher et le catalogue
+    étant définis en canonique, aucune rotation n'est appliquée ici.
+
     Returns matching results per room with all scored candidates.
     """
     try:

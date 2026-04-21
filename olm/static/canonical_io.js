@@ -1,21 +1,21 @@
 // ============================================================================
-// canonical_io.js — Frontières abs ↔ canonique (R-12, D-117)
+// canonical_io.js — Frontières abs ↔ canonique (R-12, D-117, D-122 P1)
 // ============================================================================
 // Expose window.canonicalIO = { fromStorage, toStorage, FACE_MAPS, INV_FACE_MAPS }
 //
 // Deux fonctions frontière :
-//   fromStorage(roomStorage) → roomCanon  : repère absolu → corridor_face "south"
-//   toStorage(roomCanon)     → roomStorage: corridor_face "south" → repère absolu
+//   fromStorage(roomStorage, scale) → roomCanon  : repère absolu → "south"
+//   toStorage(roomCanon,     scale) → roomStorage: "south"       → absolu
 //
-// Source unique des matrices de rotation (D-120, R-12).
+// Source unique des matrices de rotation (D-120) et des conversions px ↔ cm
+// (D-122 P1). scale = cm/px (ingState.scale) ; si omis, les offset_px /
+// width_px sont laissés intacts (utile pour les tests fragments).
 //
-// ⚠ Champs rotés : face, offset_cm, hinge_side, width_cm (swap de dims).
-// ⚠ Champs NON rotés : offset_px, width_px (conservés en l'état).
-//    Les consommateurs qui ont besoin de px cohérents avec face/offset_cm
-//    rotés doivent les recalculer via offset_cm × pxPerCm à la
-//    sérialisation (cf. ingestion_serialize.js:serializeForStorage).
-//    Le Floor overlay lit offset_px du state canonique comme ABSOLU —
-//    c'est intentionnel (rendu raster dans le repère image).
+// Champs traités automatiquement dans chaque opening/door :
+//   face, offset_cm, width_cm, hinge_side (symétrie gauche/droite).
+//   offset_px et width_px sont recalculés depuis offset_cm × pxPerCm
+//   lorsqu'un scale est passé — plus besoin de recalc ad-hoc côté
+//   appelant (cf. ingestion_serialize.js, ingestion.js:_renderRoom).
 // ============================================================================
 (function () {
 
@@ -59,6 +59,57 @@
     return (face === "north" || face === "south") ? Wc : Dc;
   }
 
+  /**
+   * Recalcule offset_px / width_px depuis offset_cm × pxPerCm.
+   * Si pxPerCm <= 0 ou offset_cm absent, laisse la valeur en l'état.
+   * D-122 P1 : toStorage/fromStorage deviennent la source unique des px.
+   */
+  function _syncPx(o, pxPerCm) {
+    if (!(pxPerCm > 0)) return;
+    if (o.offset_cm != null) o.offset_px = Math.round(o.offset_cm * pxPerCm);
+    if (o.width_cm  != null) o.width_px  = Math.round(o.width_cm  * pxPerCm);
+  }
+
+  // ── Helpers publics de rotation (D-122 P6) ───────────────────────────────
+
+  /**
+   * Rote un point room-local (cm) depuis le repère ABSOLU vers le repère
+   * CANONIQUE (corridor = "south"). Les coords d'entrée sont relatives au
+   * coin NW absolu de la pièce ; celles de sortie sont relatives au coin
+   * NW canonique après swap éventuel.
+   *
+   * @param {{x:number,y:number}} pt - Point absolu room-local (cm).
+   * @param {string} cfAbs           - corridor_face absolu ("north"/"east"/"west"/"south"/"").
+   * @param {number} absW            - Largeur absolue (cm).
+   * @param {number} absD            - Profondeur absolue (cm).
+   * @returns {{x:number,y:number}} Point canonique room-local (cm).
+   */
+  function rotatePoint(pt, cfAbs, absW, absD) {
+    var x = pt.x, y = pt.y;
+    if (cfAbs === "north") return { x: absW - x, y: absD - y };
+    if (cfAbs === "east")  return { x: y,        y: absW - x };
+    if (cfAbs === "west")  return { x: absD - y, y: x         };
+    return { x: x, y: y };
+  }
+
+  /**
+   * Rote un rectangle room-local (cm) abs → canon. Applique la rotation
+   * au coin NW puis remappe width/depth selon l'axe swap (east/west).
+   *
+   * @param {{x:number,y:number,width:number,depth:number}} rect
+   * @param {string} cfAbs
+   * @param {number} absW
+   * @param {number} absD
+   */
+  function rotateRect(rect, cfAbs, absW, absD) {
+    var x = rect.x, y = rect.y, w = rect.width, d = rect.depth;
+    if (cfAbs === "north") return { x: absW - x - w, y: absD - y - d, width: w, depth: d };
+    if (cfAbs === "east")  return { x: y,            y: absW - x - w, width: d, depth: w };
+    if (cfAbs === "west")  return { x: absD - y - d, y: x,             width: d, depth: w };
+    return { x: x, y: y, width: w, depth: d };
+  }
+
+
   // ── fromStorage ─────────────────────────────────────────────────────────
 
   /**
@@ -67,26 +118,32 @@
    *
    * @param {Object} roomStorage - Pièce telle que lue du JSON v3 ou re-analyze.
    *   corridor_face ∈ {"", "south", "north", "east", "west"}
+   * @param {number}  [scale]    - cm/px ; optionnel. Permet de recalculer
+   *   offset_px / width_px en cohérence avec offset_cm post-rotation.
    * @returns {Object} roomCanon - Copie profonde avec repère canonique.
    *
    * @example
-   *   var canon = window.canonicalIO.fromStorage(room);
+   *   var canon = window.canonicalIO.fromStorage(room, ingState.scale);
    *   // canon.corridor_face === "south"
-   *   // canon.original_corridor_face === room.corridor_face || ""
+   *   // canon.corridor_face_abs === room.corridor_face || ""
    */
-  function fromStorage(roomStorage) {
+  function fromStorage(roomStorage, scale) {
+    var pxPerCm = (typeof scale === "number" && scale > 0) ? (1.0 / scale) : 0;
     var copy = JSON.parse(JSON.stringify(roomStorage));
     var cf = roomStorage.corridor_face || "";
 
-    copy.original_corridor_face = cf;
-    copy.bbox_abs_px = roomStorage.bbox_px || null;
-    copy.seed_abs_px = roomStorage.seed_px || null;
+    copy.corridor_face_abs = cf;
+    // D-122 P2 : bbox_px / seed_px en coords image absolues (jamais rotés).
+    // Plus de duplication bbox_abs_px / seed_abs_px — fusion acquise.
 
     if (!cf || cf === "south") {
-      // Rotation identité — assurer les champs canoniques
+      // Rotation identité — assurer les champs canoniques + sync px
       copy.corridor_face = "south";
       copy.bbox_canon_cm = { x: 0, y: 0, w: copy.width_cm, h: copy.depth_cm };
       copy.surface_m2_bbox = Math.round(copy.width_cm * copy.depth_cm / 10000 * 100) / 100;
+      (copy.windows  || []).forEach(function (o) { _syncPx(o, pxPerCm); });
+      (copy.openings || []).forEach(function (o) { _syncPx(o, pxPerCm); });
+      (copy.doors    || []).forEach(function (o) { _syncPx(o, pxPerCm); });
       return copy;
     }
 
@@ -103,7 +160,7 @@
     var swap = (cf === "east" || cf === "west");
     if (swap) { copy.width_cm = D; copy.depth_cm = W; }
 
-    // Transforme une ouverture (window / opening / door)
+    // Transforme une ouverture (window / opening / door) + sync px
     function xformOpening(o) {
       var r = Object.assign({}, o);
       r.face = faceMap[o.face] || o.face;
@@ -113,6 +170,7 @@
           r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
         }
       }
+      _syncPx(r, pxPerCm);
       return r;
     }
 
@@ -163,38 +221,34 @@
    * Inverse exacte de fromStorage : toStorage(fromStorage(r)) ≡ r.
    *
    * @param {Object} roomCanon - Pièce en repère canonique.
-   *   Doit posséder original_corridor_face (mémorisé par fromStorage).
+   *   Doit posséder corridor_face_abs (mémorisé par fromStorage).
+   * @param {number} [scale]   - cm/px ; optionnel. Permet de recalculer
+   *   offset_px / width_px en cohérence avec offset_cm post-rotation.
    * @returns {Object} roomStorage - Copie profonde en repère absolu.
    *
    * @example
-   *   var stored = window.canonicalIO.toStorage(canonRoom);
-   *   // stored.corridor_face === canonRoom.original_corridor_face || "south"
+   *   var stored = window.canonicalIO.toStorage(canonRoom, ingState.scale);
+   *   // stored.corridor_face === canonRoom.corridor_face_abs || "south"
    */
-  function toStorage(roomCanon) {
+  function toStorage(roomCanon, scale) {
+    var pxPerCm = (typeof scale === "number" && scale > 0) ? (1.0 / scale) : 0;
     var copy = JSON.parse(JSON.stringify(roomCanon));
-    var ocf = roomCanon.original_corridor_face || "";
+    var ocf = roomCanon.corridor_face_abs || "";
 
-    // Restaure bbox_px / seed_px depuis bbox_abs_px / seed_abs_px UNIQUEMENT
-    // si pas déjà présents dans roomCanon. bbox_px est absolu en canonique
-    // (fromStorage ne rote pas les coords image) ; il peut être plus à jour
-    // que bbox_abs_px après un re-analyze qui écrit seulement bbox_px.
-    if (!copy.bbox_px && roomCanon.bbox_abs_px) {
-      copy.bbox_px = roomCanon.bbox_abs_px;
-    }
-    if (!copy.seed_px && roomCanon.seed_abs_px) {
-      copy.seed_px = roomCanon.seed_abs_px;
-    }
+    // D-122 P2 : bbox_px / seed_px = coords image absolues, jamais rotés.
+    // Plus de bbox_abs_px / seed_abs_px à restaurer.
 
     // Nettoie les champs canoniques (absents du stockage)
-    delete copy.original_corridor_face;
-    delete copy.bbox_abs_px;
-    delete copy.seed_abs_px;
+    delete copy.corridor_face_abs;
     delete copy.bbox_canon_cm;
     delete copy.surface_m2_bbox;
 
     copy.corridor_face = ocf;
 
     if (!ocf || ocf === "south") {
+      (copy.windows  || []).forEach(function (o) { _syncPx(o, pxPerCm); });
+      (copy.openings || []).forEach(function (o) { _syncPx(o, pxPerCm); });
+      (copy.doors    || []).forEach(function (o) { _syncPx(o, pxPerCm); });
       return copy;
     }
 
@@ -207,7 +261,7 @@
     var swap = (ocf === "east" || ocf === "west");
     if (swap) { copy.width_cm = Dc; copy.depth_cm = Wc; }
 
-    // Transforme en retour une ouverture
+    // Transforme en retour une ouverture + sync px
     function xformBack(o) {
       var r = Object.assign({}, o);
       r.face = invMap[o.face] || o.face;
@@ -217,6 +271,7 @@
           r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
         }
       }
+      _syncPx(r, pxPerCm);
       return r;
     }
 
@@ -262,15 +317,17 @@
   // du script ou depuis la console avant reload)
 
   function _runTests() {
+    // scale = cm/px ; pxPerCm = 1/scale = 2 ⇒ 100 cm = 200 px.
+    var SCALE = 0.5;
     var SAMPLES = [
       {
         name: "T1-south",
         room: {
           name: "T1", corridor_face: "south", width_cm: 300, depth_cm: 500,
           bbox_px: [100, 200, 160, 300], seed_px: [130, 250],
-          windows:  [{ face: "north", offset_cm: 50,  width_cm: 120 }],
-          openings: [{ face: "south", offset_cm: 80,  width_cm: 90  }],
-          doors:    [{ face: "east",  offset_cm: 100, width_cm: 80, hinge_side: "left" }],
+          windows:  [{ face: "north", offset_cm: 50,  width_cm: 120, offset_px: 100, width_px: 240 }],
+          openings: [{ face: "south", offset_cm: 80,  width_cm: 90,  offset_px: 160, width_px: 180 }],
+          doors:    [{ face: "east",  offset_cm: 100, width_cm: 80,  offset_px: 200, width_px: 160, hinge_side: "left" }],
           exclusion_zones: [{ x_cm: 10, y_cm: 20, width_cm: 50, depth_cm: 60 }],
         },
       },
@@ -279,9 +336,9 @@
         room: {
           name: "T2", corridor_face: "north", width_cm: 400, depth_cm: 600,
           bbox_px: [200, 300, 280, 420], seed_px: [240, 360],
-          windows:  [{ face: "north", offset_cm: 30, width_cm: 150 }],
-          openings: [{ face: "west",  offset_cm: 20, width_cm: 100 }],
-          doors:    [{ face: "south", offset_cm: 50, width_cm: 80, hinge_side: "right" }],
+          windows:  [{ face: "north", offset_cm: 30, width_cm: 150, offset_px: 60,  width_px: 300 }],
+          openings: [{ face: "west",  offset_cm: 20, width_cm: 100, offset_px: 40,  width_px: 200 }],
+          doors:    [{ face: "south", offset_cm: 50, width_cm: 80,  offset_px: 100, width_px: 160, hinge_side: "right" }],
           exclusion_zones: [{ x_cm: 5, y_cm: 10, width_cm: 40, depth_cm: 70 }],
           transparent_zones: [{ x_cm: 100, y_cm: 200, width_cm: 60, depth_cm: 80 }],
         },
@@ -291,9 +348,9 @@
         room: {
           name: "T3", corridor_face: "east", width_cm: 250, depth_cm: 700,
           bbox_px: [50, 80, 120, 290], seed_px: [85, 185],
-          windows:  [{ face: "east",  offset_cm: 60,  width_cm: 110 }],
-          openings: [{ face: "south", offset_cm: 40,  width_cm: 90  }],
-          doors:    [{ face: "north", offset_cm: 20,  width_cm: 80, hinge_side: "left" }],
+          windows:  [{ face: "east",  offset_cm: 60,  width_cm: 110, offset_px: 120, width_px: 220 }],
+          openings: [{ face: "south", offset_cm: 40,  width_cm: 90,  offset_px: 80,  width_px: 180 }],
+          doors:    [{ face: "north", offset_cm: 20,  width_cm: 80,  offset_px: 40,  width_px: 160, hinge_side: "left" }],
           exclusion_zones: [{ x_cm: 15, y_cm: 25, width_cm: 80, depth_cm: 100 }],
         },
       },
@@ -302,9 +359,9 @@
         room: {
           name: "T4", corridor_face: "west", width_cm: 350, depth_cm: 550,
           bbox_px: [300, 100, 380, 265], seed_px: [340, 180],
-          windows:  [{ face: "west",  offset_cm: 70,  width_cm: 130 }],
-          openings: [{ face: "north", offset_cm: 30,  width_cm: 95  }],
-          doors:    [{ face: "east",  offset_cm: 45,  width_cm: 80, hinge_side: "right" }],
+          windows:  [{ face: "west",  offset_cm: 70,  width_cm: 130, offset_px: 140, width_px: 260 }],
+          openings: [{ face: "north", offset_cm: 30,  width_cm: 95,  offset_px: 60,  width_px: 190 }],
+          doors:    [{ face: "east",  offset_cm: 45,  width_cm: 80,  offset_px: 90,  width_px: 160, hinge_side: "right" }],
           exclusion_zones: [{ x_cm: 20, y_cm: 30, width_cm: 70, depth_cm: 90 }],
         },
       },
@@ -313,14 +370,52 @@
     var allOk = true;
 
     SAMPLES.forEach(function (s) {
-      var canon   = fromStorage(s.room);
-      var storage = toStorage(canon);
+      var canon   = fromStorage(s.room, SCALE);
+      var storage = toStorage(canon,    SCALE);
       var diff    = _deepDiff(s.room, storage, "");
       if (diff.length === 0) {
         console.log("[canonical_io] OK — round-trip " + s.name);
       } else {
         allOk = false;
         console.error("[canonical_io] DIFF — round-trip " + s.name, diff);
+      }
+    });
+
+    // Tests auxiliaires rotatePoint / rotateRect (D-122 P6) ────────────────
+    var W = 300, D = 500;
+    var POINT_CASES = [
+      { cf: "south", pt: { x: 30, y: 40 }, exp: { x: 30, y: 40 } },
+      { cf: "north", pt: { x: 30, y: 40 }, exp: { x: W - 30, y: D - 40 } },
+      { cf: "east",  pt: { x: 30, y: 40 }, exp: { x: 40,      y: W - 30 } },
+      { cf: "west",  pt: { x: 30, y: 40 }, exp: { x: D - 40,  y: 30      } },
+    ];
+    POINT_CASES.forEach(function (c) {
+      var r = rotatePoint(c.pt, c.cf, W, D);
+      if (r.x === c.exp.x && r.y === c.exp.y) {
+        console.log("[canonical_io] OK — rotatePoint " + c.cf);
+      } else {
+        allOk = false;
+        console.error("[canonical_io] FAIL — rotatePoint " + c.cf,
+          "got", r, "expected", c.exp);
+      }
+    });
+    var RECT = { x: 10, y: 20, width: 50, depth: 60 };
+    var RECT_CASES = [
+      { cf: "south", exp: { x: 10, y: 20, width: 50, depth: 60 } },
+      { cf: "north", exp: { x: W - 10 - 50, y: D - 20 - 60, width: 50, depth: 60 } },
+      { cf: "east",  exp: { x: 20, y: W - 10 - 50, width: 60, depth: 50 } },
+      { cf: "west",  exp: { x: D - 20 - 60, y: 10, width: 60, depth: 50 } },
+    ];
+    RECT_CASES.forEach(function (c) {
+      var r = rotateRect(RECT, c.cf, W, D);
+      var ok = (r.x === c.exp.x && r.y === c.exp.y &&
+                r.width === c.exp.width && r.depth === c.exp.depth);
+      if (ok) {
+        console.log("[canonical_io] OK — rotateRect " + c.cf);
+      } else {
+        allOk = false;
+        console.error("[canonical_io] FAIL — rotateRect " + c.cf,
+          "got", r, "expected", c.exp);
       }
     });
 
@@ -369,10 +464,12 @@
 
   // ── Exposition publique ──────────────────────────────────────────────────
   window.canonicalIO = {
-    fromStorage:   fromStorage,
-    toStorage:     toStorage,
-    FACE_MAPS:     FACE_MAPS,
-    INV_FACE_MAPS: INV_FACE_MAPS,
+    fromStorage:    fromStorage,
+    toStorage:      toStorage,
+    rotatePoint:    rotatePoint,
+    rotateRect:     rotateRect,
+    FACE_MAPS:      FACE_MAPS,
+    INV_FACE_MAPS:  INV_FACE_MAPS,
   };
 
   if (window.RUN_CANONICAL_IO_TESTS) {
