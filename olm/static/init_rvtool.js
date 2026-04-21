@@ -406,6 +406,17 @@
               state.room_width_cm = canon.width_cm;
               state.room_depth_cm = canon.depth_cm;
             }
+            // Re-anchor zones to preserve their absolute image position
+            // across bbox / corridor_face changes (fix symptôme 2 D-124).
+            if (window.reanchorCanonicalZones) {
+              var newCf = canon.corridor_face || prevCf || "";
+              state.room_exclusions = window.reanchorCanonicalZones(
+                state.room_exclusions, bbox, prevCf,
+                canon.bbox_px, newCf, ingst.scale);
+              state.room_transparents = window.reanchorCanonicalZones(
+                state.room_transparents, bbox, prevCf,
+                canon.bbox_px, newCf, ingst.scale);
+            }
             amend.originalRoom.bbox_px = canon.bbox_px;
             amend.originalRoom.width_cm = canon.width_cm;
             amend.originalRoom.depth_cm = canon.depth_cm;
