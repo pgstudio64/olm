@@ -468,9 +468,15 @@
     var fpOvToggle = document.getElementById("fpOverlayToggle");
     if (window.fpOverlay && fpOvToggle && fpOvToggle.checked) {
       var ov = window.fpOverlay;
-      // Room offset within the floor plan (from room_amended or stored offsets)
-      var roomOvX = room._overlayOffsetX || 0;
-      var roomOvY = room._overlayOffsetY || 0;
+      // D-125 : offset depuis bbox_px (même convention que fpRenderEmptyRoom,
+      // ligne 318-321) ; le champ _overlayOffsetX/Y n'était jamais défini
+      // côté producteur → 0 → état overlay corrompu et partagé avec rvCanvas
+      // (race post-Save via fpRematchRoom async).
+      var roomOvX = 0, roomOvY = 0;
+      if (room.bbox_px) {
+        roomOvX = room.bbox_px[0] / ov.pxPerCm;
+        roomOvY = room.bbox_px[1] / ov.pxPerCm;
+      }
       var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
       state.overlay = {
         dataUrl: ov.dataUrl,
