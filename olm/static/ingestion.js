@@ -190,6 +190,49 @@
   }
   window.canonicalZonesToAbs = canonicalZonesToAbs;
 
+  // D-128 : après resize du bbox d'une pièce (Floor bbox editor), clamper
+  // les openings / windows / doors et les zones au nouveau gabarit. Sans
+  // clamp, un opening dont offset+width dépasse le mur réduit reste dans
+  // l'état mais est hors pièce visuellement.
+  // Règle : on coupe proprement, puis on drop tout ce qui descend sous
+  // MIN_OPENING_CM (10 cm).
+  function clampRoomContentsToBbox(room) {
+    var W = room.width_cm || 0;
+    var D = room.depth_cm || 0;
+    var MIN_OPENING_CM = 10;
+    function faceLen(face) {
+      return (face === 'north' || face === 'south') ? W : D;
+    }
+    function clampOpening(o) {
+      var fl = faceLen(o.face);
+      var off = o.offset_cm || 0;
+      var w = o.width_cm || 0;
+      if (off < 0) { w += off; off = 0; }
+      if (off >= fl) return null;
+      if (off + w > fl) w = fl - off;
+      if (w < MIN_OPENING_CM) return null;
+      return Object.assign({}, o, { offset_cm: off, width_cm: w });
+    }
+    room.windows = (room.windows || []).map(clampOpening).filter(Boolean);
+    room.openings = (room.openings || []).map(clampOpening).filter(Boolean);
+    room.doors = (room.doors || []).map(clampOpening).filter(Boolean);
+    function clampZone(z) {
+      var x = z.x_cm || 0, y = z.y_cm || 0;
+      var w = z.width_cm || 0, d = z.depth_cm || 0;
+      var x0 = Math.max(0, x);
+      var y0 = Math.max(0, y);
+      var x1 = Math.min(W, x + w);
+      var y1 = Math.min(D, y + d);
+      if (x1 - x0 <= 0 || y1 - y0 <= 0) return null;
+      return Object.assign({}, z, {
+        x_cm: x0, y_cm: y0,
+        width_cm: x1 - x0, depth_cm: y1 - y0,
+      });
+    }
+    room.exclusion_zones = (room.exclusion_zones || []).map(clampZone).filter(Boolean);
+    room.transparent_zones = (room.transparent_zones || []).map(clampZone).filter(Boolean);
+  }
+
   // --- Drawing scale helpers (extracted to ingestion_scale.js, D-94 P4) ---
   var parseDrawingScale     = window.olmScale.parseDrawingScale;
   var computeCmPerPx        = window.olmScale.computeCmPerPx;
@@ -1500,10 +1543,20 @@
       be.handle = null;
       be.dragStart = null;
       be.preDragBbox = null;
-      // Commit: update JSON + list
+      // D-128 : clamp openings/zones au nouveau bbox + re-match.
+      // Sans clamp, les openings dont offset+width dépasse le mur résultant
+      // restent (visuellement hors pièce). Sans fpLoadAndMatch, fpData
+      // garde l'ancien bbox/dims → Review affiche la pièce non modifiée.
+      var room = ingState.rooms.find(function(r) {
+        return r.name === be.selectedName;
+      });
+      if (room) clampRoomContentsToBbox(room);
       populateRoomsJson();
       updateIngRoomList();
       renderIngestion();
+      if (typeof window.fpLoadAndMatch === 'function') {
+        window.fpLoadAndMatch(ingState.rooms);
+      }
     });
 
     // Peuplement de la liste + filtre de recherche + toggle popup.

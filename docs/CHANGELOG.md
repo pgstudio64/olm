@@ -5,7 +5,16 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-127 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-128 (2026-04-20 → 2026-04-21)
+
+### D-128 — Clamp openings + sync fpData après bbox edit Floor (2026-04-21)
+
+- **Bug** : resize d'une pièce dans Floor laissait les openings/windows/
+  doors dépassant hors de la nouvelle pièce, et Review affichait toujours
+  la pièce pré-resize.
+- **Fix** : `clampRoomContentsToBbox(room)` coupe les ouvertures / zones
+  au nouveau gabarit ; `fpLoadAndMatch(ingState.rooms)` re-match et
+  synchronise `fpData.rooms` après chaque commit du bbox editor.
 
 ### D-127 — Propagation bbox effectif user au backend Re-analyze (2026-04-21)
 

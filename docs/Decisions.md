@@ -7,6 +7,49 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-128 · Clamp openings/zones + sync fpData après bbox edit Floor (2026-04-21)
+
+### Décision
+
+Sur commit du bbox editor dans Floor (mouseup du drag des handles
+NW/NE/SW/SE ou move), deux changements :
+
+1. Nouveau helper `clampRoomContentsToBbox(room)` qui coupe les openings /
+   windows / doors + zones au nouveau gabarit (rien de récupérable sous
+   MIN_OPENING_CM = 10 cm n'est gardé).
+2. Appel de `window.fpLoadAndMatch(ingState.rooms)` après le commit →
+   `fpData.rooms` est re-synchronisé et les candidats re-matchés avec la
+   nouvelle géométrie.
+
+### Justification
+
+Bug utilisateur : raccourcir une pièce dans Floor. Résultats observés :
+- Les openings / portes / fenêtres dépassant les nouveaux murs restaient
+  dans le state (visuellement hors pièce).
+- Cliquer sur la pièce dans Review l'affichait avec ses dims/bbox
+  d'origine, comme si le resize Floor n'avait rien changé.
+
+Cause : le handler mouseup du bbox editor ne faisait que
+`populateRoomsJson + updateIngRoomList + renderIngestion`. Aucune
+propagation vers `fpData.rooms` (d'où Review stale), aucun clamp du
+contenu de la pièce (d'où openings hors pièce).
+
+### Impact
+
+- **ingestion.js** : +45 lignes (clampRoomContentsToBbox helper + 2
+  appels dans mouseup).
+- **Limite** : clamp raisonne sur `room.width_cm/depth_cm` qui sont
+  **absolus** dans ingState (le bbox editor les dérive de bbox_px). Pour
+  corridor_face_abs ∈ {"", "south"} c'est identique au canonique (cas
+  commun). Pour east/west/north la convention face N/S pouvant référer
+  aux dims absolues ou canoniques, il y a un décalage potentiel —
+  inconsistance pré-existante à corriger séparément.
+- **Suppression d'openings** : si l'offset dépasse totalement le mur
+  réduit, l'opening disparaît (aucune UI de récupération). Acceptable
+  en proto.
+
+---
+
 ## D-127 · Propagation du bbox effectif user au backend Re-analyze (2026-04-21)
 
 ### Décision
