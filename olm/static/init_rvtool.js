@@ -394,7 +394,13 @@
           var canon = window.computeCanonicalReanalyzeResult(
             data, prevCf, ingst.scale || 0);
 
-          if (canon.corridor_face) {
+          // D-126 : toggle "Lock bbox" — quand coché, la géométrie
+          // (bbox_px, dims, corridor_face_abs, overlay) reste figée ;
+          // seuls openings / windows / doors / hits sont adoptés.
+          var lockBboxEl = document.getElementById("rvLockBbox");
+          var lockBbox = !!(lockBboxEl && lockBboxEl.checked);
+
+          if (canon.corridor_face && !lockBbox) {
             // D-113 + R-12 : la porte détectée met à jour le repère
             // absolu mémorisé. corridor_face_abs seul — corridor_face
             // "south" est une constante implicite du repère canon.
@@ -413,7 +419,7 @@
           if (canon.seed_cm) state.room_seed_cm = canon.seed_cm;
           if (canon.auto_door_masks) state.room_auto_door_masks = canon.auto_door_masks;
 
-          if (canon.bbox_px && ingst.scale) {
+          if (canon.bbox_px && ingst.scale && !lockBbox) {
             if (canon.width_cm > 0 && canon.depth_cm > 0) {
               state.room_width_cm = canon.width_cm;
               state.room_depth_cm = canon.depth_cm;
