@@ -5,7 +5,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-121 (2026-04-20)
+## [Unreleased] — D-115 à D-123 (2026-04-20)
 
 ### Fixes session post-D-120
 
@@ -35,13 +35,123 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   `fpData.rooms[fr]` après propagation (canonique, cohérent avec
   invariant). `amendedRoom` (absolu) reste local pour `fpRematchRoom`.
 
+### D-123 — Fix bug sauvegarde + perf Re-analyze All ×10
+
+**Fix bug « openings transformées en portes au reload »** :
+
+- `floor_plan.js:fpLoadAndMatch` pose maintenant `has_door=false`
+  sur les openings et `has_door=true` sur les doors avant le POST à
+  `/api/floor-plan/match`. Le backend (`OpeningSpec.has_door`
+  défaut=True) interprétait auparavant les openings sans flag comme
+  des portes, corrompant fpData/ingState au split de réponse → la
+  sauvegarde écrivait les openings dans `doors` du JSON v3.
+
+**Perf Re-analyze All (×9.8 mesuré sur M4)** :
+
+- `extract_room_features` accepte un paramètre `binary_precomputed`.
+  Si fourni, saute la binarisation globale + `remove_non_ortho`
+  (opération dominante ~830 ms/appel sur 1920×1080).
+- `/api/room/reanalyze_batch` calcule binary_global une seule fois
+  puis partage à toutes les pièces. Masques room-locaux appliqués en
+  zéro-out numpy sur une copie.
+- Bench 10 pièces : 8 317 ms → 846 ms. Extrapolation 28 pièces sur
+  cible CPU 10× plus lent : ~230 s → ~13 s.
+
+### D-122 — R-14 complet (P1 → P7) livré
+
+**P7 — Spec CANONICAL_STATE.md + tests** :
+
+- Nouveau document `docs/specs/CANONICAL_STATE.md` : structure
+  canonique, frontières I/O, API `canonicalIO`, 6 antipatterns
+  interdits. Remplace `CANONICAL_STATE_REFACTOR.md` (R-12, archive).
+- 12 auto-tests dans `canonical_io.js` (4 round-trips × 4 faces +
+  8 rotatePoint/rotateRect × 4 faces). Tous verts.
+
+**P5 — Frontend envoie canonique au matching** :
+
+- `/api/floor-plan/match` reçoit désormais du canonique (fini le
+  `toStorage` préalable dans `serializeForMatching` et
+  `editor.js:save()`). Les scores sont corrects pour toutes les
+  orientations, plus seulement south.
+- `_canonRooms()` helper ajouté dans `ingestion_serialize.js` pour
+  `serializeForMatching`. `_toAbsRooms()` reste pour
+  `serializeForStorage` (JSON v3 disque = absolu, inchangé).
+- `fpLoadAndMatch` + `fpRematchRoom` splittent l'openings combiné
+  retourné par le backend pour préserver l'invariant P4.
+- Backend `app.py:/api/floor-plan/match` : docstring du contrat
+  canonique explicite. Pas de canonicalisation backend ajoutée
+  (redondant si frontend respecte le contrat).
+
+**P4 — Séparation openings/doors dans le state** :
+
+- `state.room_doors` introduit comme collection parallèle à
+  `state.room_openings`. `has_door:true` banni du state.
+- Helper `_splitOpeningsIntoState` (editor.js) convertit la forme
+  combinée (backend DSL / catalogue disque) vers les 2 collections.
+- Rendu (editor.js / shared.js), DSL (editor.js / init_rvtool.js),
+  CRUD (init_rvtool.js), enterRoomAmendMode, save, batch re-analyze
+  utilisent les collections séparées directement.
+- Combine+split aux frontières internes supprimés. Les combinaisons
+  restantes sont aux frontières API (matching, catalogue disque),
+  elles seront traitées par P5.
+
+**P6 — Helpers publics de rotation canonicalIO** :
+
+- `canonicalIO.rotatePoint(pt, cfAbs, absW, absD)` et
+  `canonicalIO.rotateRect(rect, cfAbs, absW, absD)` exposés pour
+  couvrir hits / seed / zones / auto_door_masks, non gérés par
+  `fromStorage` / `toStorage` (qui opèrent sur offset_cm de face).
+- `pointAbsToCanon` (ingestion.js) et `_absToCanon2` (editor.js)
+  supprimés — remplacés par appels directs aux helpers publics.
+- Tests auto-cover 8 cas (rotatePoint × 4 faces + rotateRect × 4 faces).
+- `_canonicalAngle` local (editor.js) laissé en place — migration
+  différée (convention d'angle SVG à valider visuellement).
+
+**P3 — Rename `original_corridor_face` → `corridor_face_abs`** :
+
+- 6 fichiers JS (canonical_io, ingestion_serialize, floor_plan,
+  ingestion, editor, init_rvtool) + endpoint
+  `/api/room/orientation-check` (request + response).
+- 4 lectures ambiguës `room.original_corridor_face ||
+  room.corridor_face` supprimées — elles masquaient silencieusement le
+  "south" canonique pour le vrai repère absolu.
+- `state.corridor_face` retiré (n'avait plus de lecteur post-rename).
+- JSON v3 sur disque inchangé (`corridor_face` = absolu).
+
+**P2 — Fusion `bbox_abs_px` / `seed_abs_px`** :
+
+- Champs redondants supprimés ; `bbox_px` / `seed_px` seules coords
+  image absolues (jamais rotés par la rotation canonique).
+- Adapté dans `canonical_io.js`, `editor.js` save, `init_rvtool.js`
+  orientation-check, `ingestion.js` batch re-analyze, `floor_plan.js`
+  fpLoadAndMatch.
+- Tests round-trip 4/4 OK.
+
+**P1 — Rotation offset_px intégrée à canonicalIO** :
+
+- **canonicalIO étendu avec `scale`** (`fromStorage(room, scale)` /
+  `toStorage(room, scale)`). Recalcul `offset_px` / `width_px` =
+  `round(offset_cm × pxPerCm)` colocalisé avec la rotation
+  `offset_cm`. Fini les recalculs ad-hoc dans
+  `ingestion_serialize.js:_pxFromCm` et
+  `ingestion.js:_renderFeat/_renderPxPerCm`.
+- **Call sites mis à jour** : `fpLoadAndMatch`, `_renderRoom`,
+  `extractRoomsPreprocessed`, `computeCanonicalReanalyzeResult`,
+  `_toAbsRooms`, `editor.js:save()` passent tous `ingState.scale`
+  (ou `data.scale_cm_per_px` à l'import).
+- **Tests round-trip étendus** : les 4 samples (south/north/east/west)
+  portent désormais `offset_px` / `width_px` ; round-trip Node
+  `fromStorage→toStorage` valide 4/4.
+- Rétrocompatibilité : `scale` omis → px laissés intacts. Aucun
+  changement du format JSON v3 sur disque.
+
 ### Planifié
 
 - **D-121 / R-14 — Refactor canonique unifié** (plan complet :
   `docs/specs/CANONICAL_REFACTOR_PLAN.md`). 7 phases pour éliminer les
   causes racines des fixes récurrents : frontière unique canonicalIO,
   structures uniformes, champs redondants supprimés, contrat front/back
-  explicite. ~6 jours de travail concentré.
+  explicite. ~6 jours de travail concentré. P1 livrée (2026-04-20).
 
 ## [Unreleased] — D-115 à D-120 (2026-04-20)
 

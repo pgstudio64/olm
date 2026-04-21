@@ -138,14 +138,14 @@ function computeCirculationInfo() {
 
   // Door cell: center of each door
   var doorCells = [];
-  state.room_openings.forEach(function(o) {
-    if (!o.has_door) return;
-    var midCm = o.offset_cm + o.width_cm / 2;
+  // D-122 P4 : doors dans state.room_doors séparément.
+  (state.room_doors || []).forEach(function(d) {
+    var midCm = d.offset_cm + d.width_cm / 2;
     var dr, dc;
-    if (o.face === "north") { dr = 0; dc = Math.floor(midCm / cellCm); }
-    else if (o.face === "south") { dr = rowsN - 1; dc = Math.floor(midCm / cellCm); }
-    else if (o.face === "west") { dr = Math.floor(midCm / cellCm); dc = 0; }
-    else if (o.face === "east") { dr = Math.floor(midCm / cellCm); dc = cols - 1; }
+    if (d.face === "north") { dr = 0; dc = Math.floor(midCm / cellCm); }
+    else if (d.face === "south") { dr = rowsN - 1; dc = Math.floor(midCm / cellCm); }
+    else if (d.face === "west") { dr = Math.floor(midCm / cellCm); dc = 0; }
+    else if (d.face === "east") { dr = Math.floor(midCm / cellCm); dc = cols - 1; }
     else return;
     dr = Math.max(0, Math.min(rowsN - 1, dr));
     dc = Math.max(0, Math.min(cols - 1, dc));

@@ -24,10 +24,11 @@
   //   - un Array de pièces (appel interne depuis ingState.rooms) — pas de
   //     stringify / parse, pas de fromStorage redondant pour les pièces déjà
   //     canoniques (Préprocessé). Les pièces non-canoniques (mode OCR, sans
-  //     original_corridor_face) sont canonicalisées au vol.
+  //     corridor_face_abs) sont canonicalisées au vol.
   //   - une string JSON (legacy : file upload, reload button, auto-dev) —
   //     parse + fromStorage sur chaque pièce.
   function fpLoadAndMatch(arg) {
+    var _fpScale = (window.ingState && window.ingState.scale) || 0;
     var rooms;
     if (typeof arg === "string") {
       var parsed;
@@ -38,16 +39,16 @@
         alert("No rooms found in JSON"); return;
       }
       rooms = parsed.rooms.map(function (r) {
-        return (r.original_corridor_face !== undefined)
+        return (r.corridor_face_abs !== undefined)
           ? r
-          : window.canonicalIO.fromStorage(r);
+          : window.canonicalIO.fromStorage(r, _fpScale);
       });
     } else if (Array.isArray(arg)) {
       if (!arg.length) { alert("No rooms to match"); return; }
       rooms = arg.map(function (r) {
-        return (r.original_corridor_face !== undefined)
+        return (r.corridor_face_abs !== undefined)
           ? r
-          : window.canonicalIO.fromStorage(r);
+          : window.canonicalIO.fromStorage(r, _fpScale);
       });
     } else {
       console.warn("fpLoadAndMatch: invalid argument", arg); return;
@@ -59,24 +60,44 @@
     });
 
     // Preserve fields from input (not returned by matching API)
+    // D-122 P2 : bbox_px / seed_px uniquement (bbox_abs_px / seed_abs_px fusionnés).
     var bboxByName = {};
     var corridorByName = {};
     var seedByName = {};
     var doorsByName = {};
     rooms.forEach(function(r) {
-      if (r.bbox_abs_px) bboxByName[r.name] = r.bbox_abs_px;
-      corridorByName[r.name] = r.original_corridor_face || "";
-      if (r.seed_abs_px) seedByName[r.name] = r.seed_abs_px;
+      if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
+      corridorByName[r.name] = r.corridor_face_abs || "";
+      if (r.seed_px) seedByName[r.name] = r.seed_px;
       if (r.doors) doorsByName[r.name] = r.doors;
     });
 
     document.getElementById("fpCandidatesList").innerHTML =
       '<div class="fp-no-match">Matching in progress...</div>';
 
+    // D-122 P5 fix : backend OpeningSpec.has_door défaut = True → il faut
+    // explicitement poser has_door=false pour les openings ET combiner
+    // state.doors (has_door=true) dans openings[]. Sinon les openings
+    // canoniques sont interprétés comme des portes et écrasent la
+    // collection state.room_openings au retour (bug save JSON).
+    var apiRooms = rooms.map(function (r) {
+      var apiOpenings = (r.openings || []).map(function (o) {
+        return Object.assign({}, o, { has_door: false });
+      });
+      (r.doors || []).forEach(function (d) {
+        apiOpenings.push(Object.assign({}, d, {
+          has_door: true,
+          opens_inward: d.opens_inward !== false,
+          hinge_side: d.hinge_side || "left",
+        }));
+      });
+      return Object.assign({}, r, { openings: apiOpenings, doors: undefined });
+    });
+
     fetch("/api/floor-plan/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rooms: rooms }),
+      body: JSON.stringify({ rooms: apiRooms }),
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -84,21 +105,27 @@
       // Sort results by name
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
       // Re-attach canonical fields not returned by matching API.
-      // bbox_px / seed_px dupliquent bbox_abs_px / seed_abs_px : les
-      // consommateurs de rendu (overlay, re-analyze) lisent encore bbox_px
-      // pour le positionnement absolu.
+      // D-122 P2 : bbox_px / seed_px = coords image absolues uniques.
+      // D-122 P5 : réponse backend en canonique ; D-122 P4 impose
+      // openings/doors séparés côté state → on split si retour combiné.
       data.rooms.forEach(function(r) {
-        if (bboxByName[r.name]) {
-          r.bbox_abs_px = bboxByName[r.name];
-          r.bbox_px     = bboxByName[r.name];
-        }
-        if (seedByName[r.name]) {
-          r.seed_abs_px = seedByName[r.name];
-          r.seed_px     = seedByName[r.name];
-        }
-        if (doorsByName[r.name])   r.doors = doorsByName[r.name];
-        r.original_corridor_face = corridorByName[r.name] || "";
+        if (bboxByName[r.name]) r.bbox_px = bboxByName[r.name];
+        if (seedByName[r.name]) r.seed_px = seedByName[r.name];
+        r.corridor_face_abs = corridorByName[r.name] || "";
         r.corridor_face = "south";
+        // Si le backend renvoie openings avec has_door, on split.
+        if (Array.isArray(r.openings) && r.openings.some(function(o){ return o.has_door; })) {
+          var _doors = [];
+          var _ops = [];
+          r.openings.forEach(function(o) {
+            var c = Object.assign({}, o); delete c.has_door;
+            if (o.has_door) _doors.push(c); else _ops.push(c);
+          });
+          r.openings = _ops;
+          r.doors = _doors;
+        } else if (doorsByName[r.name]) {
+          r.doors = doorsByName[r.name];
+        }
       });
       fpData.rooms = data.rooms;
       fpData.currentIdx = 0;
@@ -181,16 +208,10 @@
         dsl += "\nWINDOW " + f + " " + (w.offset_cm || 0) + " " + (w.width_cm || 0);
       }
     });
+    // D-122 P4 : openings ne contient plus de doors (invariant canonique).
     (localRoom.openings || []).forEach(function(o) {
       var f = faceMap[o.face] || o.face || "?";
-      if (o.has_door) {
-        // Compat : certaines entrées legacy ont has_door=true dans openings.
-        var dir = o.opens_inward ? "INT" : "EXT";
-        var side = (o.hinge_side === "left") ? "L" : "R";
-        dsl += "\nDOOR " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90) + " " + dir + " " + side;
-      } else {
-        dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
-      }
+      dsl += "\nOPENING " + f + " " + (o.offset_cm || 0) + " " + (o.width_cm || 90);
     });
     // Doors séparées (convention fromStorage / v3 JSON).
     (localRoom.doors || []).forEach(function(d) {
@@ -273,18 +294,14 @@
     state.room_width_cm = localRoom.width_cm;
     state.room_depth_cm = localRoom.depth_cm;
     state.room_windows = localRoom.windows || [];
-    // state.room_openings est COMBINÉ (openings non-door + doors has_door=true).
-    // localRoom (fpData) garde les deux séparés (invariant fromStorage) ;
-    // on recombine ici pour que le rendu state-based voie les doors.
-    var _lrOpenings = (localRoom.openings || []).slice();
-    var _lrDoors = (localRoom.doors || []).map(function (d) {
-      return Object.assign({}, d, { has_door: true });
-    });
-    state.room_openings = _lrOpenings.concat(_lrDoors);
+    // D-122 P4 : openings et doors séparés dans le state, même invariant
+    // que fpData / ingState post-fromStorage.
+    state.room_openings = (localRoom.openings || []).slice();
+    state.room_doors = (localRoom.doors || []).slice();
     state.room_exclusions = localRoom.exclusion_zones || [];
     state.room_transparents = localRoom.transparent_zones || [];
-    state.corridor_face = room.corridor_face || "";
-    state.original_corridor_face = room.original_corridor_face || "";
+    // D-122 P3 : state.corridor_face_abs seul (corridor_face canon = "south").
+    state.corridor_face_abs = room.corridor_face_abs || "";
     state.selectedRow = 0;
     state.selectedBlock = -1;
 
@@ -432,10 +449,10 @@
     state.room_depth_cm = pat.room_depth_cm;
     state.standard = pat.standard || candidate.standard || getStandards()[0] || "";
     state.room_windows = pat.room_windows || [];
-    state.room_openings = pat.room_openings || [];
+    // D-122 P4 : pattern catalogue stocke openings combiné → split.
+    _splitOpeningsIntoState(pat.room_openings);
     state.room_exclusions = pat.room_exclusions || [];
-    state.corridor_face = room.corridor_face || "";
-    state.original_corridor_face = room.original_corridor_face || "";
+    state.corridor_face_abs = room.corridor_face_abs || "";
     state.name = candidate.pattern_name || pat.name || "";
     state._savedName = null;
     state.selectedRow = 0;
@@ -530,15 +547,22 @@
         setStatus("Re-matching error for \"" + roomName + "\".");
         return;
       }
-      // Replace the room data in fpData
+      // Replace the room data in fpData (D-122 P5 : réponse canonique ;
+      // D-122 P4 : split openings combiné retour backend).
       var newRoom = data.rooms[0];
+      var _nrDoors = [];
+      var _nrOps = [];
+      (newRoom.openings || []).forEach(function (o) {
+        var c = Object.assign({}, o); delete c.has_door;
+        if (o.has_door) _nrDoors.push(c); else _nrOps.push(c);
+      });
       for (var i = 0; i < fpData.rooms.length; i++) {
         if (fpData.rooms[i].name === roomName) {
-          // Preserve original room reference but update geometry + candidates
           fpData.rooms[i].width_cm = newRoom.width_cm;
           fpData.rooms[i].depth_cm = newRoom.depth_cm;
           fpData.rooms[i].windows = newRoom.windows;
-          fpData.rooms[i].openings = newRoom.openings;
+          fpData.rooms[i].openings = _nrOps;
+          fpData.rooms[i].doors = _nrDoors;
           fpData.rooms[i].exclusion_zones = newRoom.exclusion_zones;
           fpData.rooms[i].all_candidates = newRoom.all_candidates;
           fpData.rooms[i].by_standard = newRoom.by_standard;

@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-17
+Dernière mise à jour : 2026-04-20 (D-123 : perf Re-analyze All + fix bug openings→doors ; D-122 : R-14 canonique P1-P7)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
@@ -136,35 +136,53 @@ structures uniformes, et d'un contrat front/back explicite. Les 6
 symptômes observés (902/915/922/906/...) partagent la même cause
 racine. Refactor structurel en 7 phases.
 
-- [ ] **P1 — Rotation `offset_px` intégrée à canonicalIO** : étendre
-  `fromStorage` / `toStorage` avec `scale` dans la signature, roter
-  offset_px en interne. Supprimer recalcul ad-hoc dans
-  `ingestion_serialize.js:serializeForStorage` et `ingestion.js:_renderRoom`.
-  Tests round-trip étendus.
-- [ ] **P2 — Fusion `bbox_abs_px` / `seed_abs_px`** : supprimer ces
-  champs, garder seulement `bbox_px` / `seed_px` (image coords, jamais
-  rotés). Adapter tous les call sites identifiés (canonical_io,
-  editor.js save, init_rvtool re-analyze, ingestion batch re-analyze).
-- [ ] **P3 — Renommage `original_corridor_face` → `corridor_face_abs`** :
-  clarification sémantique. Suppression du `corridor_face` canonique
-  stocké (dérivable = "south" par construction). Nettoyage des
-  lectures ambiguës `room.original_corridor_face || room.corridor_face`.
-- [ ] **P4 — Séparation openings/doors uniforme dans state** :
-  introduire `state.room_doors`, supprimer `has_door:true` dans
-  `state.room_openings`. Adapter `buildRoomDSL`, `_stateToDsl`,
-  `renderRoomElements`, CRUD (add window/door/opening),
-  `_rvCommitFromState`. Supprimer les combine/split aux frontières.
-- [ ] **P5 — Contrat front/back `/api/floor-plan/match`** : frontend
-  envoie canonique. Backend canonicalise via `canonical.py` (actuellement
-  orphelin) avant matching. Tests front/back.
-- [ ] **P6 — Suppression des conversions ad-hoc** : `pointAbsToCanon`,
-  `_absToCanon2`, `_canonicalAngle` (local), FACE_MAPS éparpillées.
-  Tout passe par canonicalIO public (ajout helpers `rotatePoint` /
-  `rotateRect` si besoin).
-- [ ] **P7 — Tests round-trip complets + spec** : tests Node sur rooms
-  complètes (pas juste fragments). Nouvelle spec `CANONICAL_STATE.md`
-  remplaçant `CANONICAL_STATE_REFACTOR.md` : structure unique
-  documentée, contrats explicites, antipatterns interdits.
+- [x] **P1 — Rotation `offset_px` intégrée à canonicalIO** ✅ 2026-04-20
+  (D-122). Signature `fromStorage(room, scale)` / `toStorage(room,
+  scale)` ; helper `_syncPx` interne recalcule
+  `offset_px = round(offset_cm × pxPerCm)` après la rotation de
+  `offset_cm`. Recalculs ad-hoc supprimés dans `_pxFromCm` et
+  `_renderFeat` ; tous les call sites passent désormais `scale`.
+  Tests round-trip 4/4 OK avec `offset_px` intégré aux samples.
+- [x] **P2 — Fusion `bbox_abs_px` / `seed_abs_px`** ✅ 2026-04-20
+  (D-122). Champs redondants supprimés ; `bbox_px` / `seed_px` seules
+  coords image absolues (jamais rotés). Adapté dans canonical_io,
+  editor.js save, init_rvtool re-analyze, ingestion batch re-analyze,
+  fpLoadAndMatch.
+- [x] **P3 — Renommage `original_corridor_face` → `corridor_face_abs`** ✅
+  2026-04-20 (D-122). Rename global front + endpoint
+  `/api/room/orientation-check`. Lectures ambiguës
+  `room.original_corridor_face || room.corridor_face` supprimées (4
+  sites : _canonicalAngle, _absToCanon2, editor.save, init_rvtool
+  re-analyze). `state.corridor_face` retiré. JSON v3 disque inchangé.
+- [x] **P4 — Séparation openings/doors uniforme dans state** ✅
+  2026-04-20 (D-122). `state.room_doors` introduit comme collection
+  séparée ; `has_door:true` banni du state. `buildRoomDSL`,
+  `_stateToDsl`, `renderRoomElements`, CRUD, `_rvCommitFromState`,
+  batch re-analyze et amendments adaptés. Combine+split aux
+  frontières supprimés. Forme combinée conservée uniquement aux
+  frontières API externes (matching, catalogue disque).
+- [x] **P5 — Contrat front/back `/api/floor-plan/match`** ✅
+  2026-04-20 (D-122). Frontend envoie du canonique (suppression
+  `toStorage` préalable dans `serializeForMatching` + `editor.save`).
+  Backend suppose canonique (docstring explicité) ; pas de
+  `canonicalize_room()` ajoutée côté Python (redondant si frontend
+  respecte le contrat). `fpLoadAndMatch` / `fpRematchRoom` splittent
+  l'openings combiné reçu pour préserver l'invariant P4.
+- [x] **P6 — Suppression des conversions ad-hoc** ✅ 2026-04-20
+  (D-122). Helpers publics `canonicalIO.rotatePoint` /
+  `canonicalIO.rotateRect` ajoutés (8 assertions auto-test).
+  `pointAbsToCanon` (ingestion.js) et `_absToCanon2` (editor.js)
+  supprimés.
+  **Reste à faire** : `_canonicalAngle` local (editor.js) pas encore
+  centralisé — la convention CSS du rendu SVG diverge des matrices
+  de `fromStorage/toStorage`, migration demande un test visuel.
+  FACE_MAPS restent dans canonical_io (sources uniques) mais ne sont
+  plus dupliquées ailleurs.
+- [x] **P7 — Tests round-trip complets + spec** ✅ 2026-04-20
+  (D-122). Nouveau `docs/specs/CANONICAL_STATE.md` (structure, 4
+  frontières I/O, API publique, 6 antipatterns). 12 auto-tests dans
+  `canonical_io.js` (4 round-trips + 8 rotations), tous verts via
+  Node. Tests Python `test_canonical.py` 19/19.
 
 Points ouverts à arbitrer avant démarrage :
 - Backend `/api/room/reanalyze` reste en absolu (pragmatique).
@@ -234,6 +252,26 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 
 - [x] CRUD ouvertures : ajout, suppression, déplacement, redimensionnement (D-103). Changement de type non implémenté (on supprime et on redessine).
 - [x] **Zones interdites et transparentes (Room)** : zones interdites (rouge, `EXCLUSION`) et zones transparentes (vert, `TRANSPARENT`) définissables dans Room amend mode via le dropdown "Add room items" (D-103).
+- [ ] **Bug zones d'exclusion — déplacement vertical intempestif** :
+  - **Symptôme 1 (placement)** : dans une pièce à corridor sud, quand
+    on dessine une zone d'exclusion, elle apparaît décalée plus haut
+    (vers le nord) que la position cliquée.
+  - **Symptôme 2 (re-analyze)** : après un re-analyze, la zone se
+    déplace encore.
+  - **Pistes** :
+    - Conversion canon ↔ abs des coords de zone : `rvScreenToRoomCm`
+      retourne des coords canoniques, mais le drawStart / stockage
+      pourrait ajouter un offset (roomRenderOffset) qui n'est pas
+      défalqué à l'affichage.
+    - Re-analyze : `extract_room_features` renvoie un nouveau
+      `bbox_px` (potentiellement décalé en y même à corridor sud). Les
+      zones sont en coord room-local (relatives au NW du bbox) ; si le
+      bbox NW bouge, les zones visuelles semblent bouger sans que le
+      state soit touché. À vérifier : est-ce que le re-analyze doit
+      ajuster les coords des zones en fonction du shift du bbox ?
+    - Vérifier aussi que `state.room_exclusions` reste en canon pendant
+      toute l'édition et que `canonicalIO.rotateRect` n'est jamais
+      appelé avec `corridor_face_abs` à vide quand il devrait l'être.
 - [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `test_comb.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
 - [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
@@ -244,13 +282,23 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
   ingestion.js). Utilisait `o.origin !== "auto"` → capturait les doors
   initiales (origin:undefined) et bloquait la redétection au 1er appel.
   Passé à `o.origin === "manual"`, cohérent avec `manualW` / `manualO`.
-- [ ] **Perf Re-analyze All** : ~1s/pièce sur MacBook M4 (CPU 10× la
-  machine cible). Extrapolation : ~10s/pièce sur cible, 28 pièces →
-  280s. Piste la plus évidente : serialiser les appels `extract_room_features`
-  depuis un endpoint batch côté backend et mutualiser le chargement
-  / binarisation de l'image (actuellement refait par pièce). À
-  creuser : profiling `detect_room_three_phase` + `_classify_wall_direct`.
+- [x] **Perf Re-analyze All** ✅ 2026-04-20 (D-123). Mesuré ×9.83
+  speedup sur M4 : 831 ms/pièce → 15 ms/pièce + 831 ms one-shot
+  précompute. Extrapolation 28 pièces sur cible CPU 10× plus lent :
+  ~230 s → ~13 s. Mise en œuvre : `extract_room_features` accepte
+  `binary_precomputed`, `/api/room/reanalyze_batch` calcule
+  binarisation + `remove_non_ortho` une fois en amont.
 - [ ] **Toggle « lock bbox » sur Re-analyze (D-118)** : checkbox dans la Room toolbar. Quand coché, le re-analyze ne modifie pas `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Utile pour raffiner les ouvertures après repositionnement manuel ou dépose d'un mur modélisée via zone transparente.
+- [ ] **Re-analyze : fusionner Re-analyze + lock-bbox dans un dropdown** :
+  remplacer le bouton simple « Re-analyze » par un dropdown (ou split
+  button) avec deux options :
+  - « Re-analyze — full » : comportement actuel (bbox, ouvertures,
+    tout est redétecté).
+  - « Re-analyze — keep walls » : équivalent du toggle lock bbox
+    activé (bbox + dimensions figées, seuls openings/windows/doors/
+    hits sont adoptés).
+  Supprime le toggle indépendant, cohérent avec une seule action
+  utilisateur paramétrée au clic.
 - [x] **Bouton Close** : ferme le projet courant avec confirmation (warning unsaved changes implicite).
 - [x] **Bouton Erase** (All / Layout only) avec confirmation.
 

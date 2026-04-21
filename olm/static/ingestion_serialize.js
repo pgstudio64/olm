@@ -1,37 +1,46 @@
 "use strict";
 // ============================================================================
-// INGESTION SERIALIZE — Unified rooms serializer (D-94 P4, R-12 C3)
+// INGESTION SERIALIZE — Unified rooms serializer (D-94 P4, R-12 C3, D-122 P5)
 // ============================================================================
 //
-// Deux destinations partagent la même fondation en repère absolu :
-//   • Matching   → textarea `fpRoomsJson` puis fpLoadAndMatch (C3, avant C4).
-//   • Storage v3 → écriture disque `<plan_id>.json` (bouton Save / Export).
+// Deux destinations, deux repères distincts :
+//   • Matching   → POST `/api/floor-plan/match` en repère CANONIQUE
+//                  (backend matcher suppose canonique — P5 acté).
+//   • Storage v3 → écriture disque `<plan_id>.json` en repère ABSOLU
+//                  (format fichier historique, voir PREPROCESSED_JSON_SPEC).
 //
-// Les deux passent chaque pièce en repère canonique par `canonicalIO.toStorage`
-// quand elle est marquée par `original_corridor_face`, pour que les
-// formatteurs en aval voient uniformément du repère absolu. La logique
-// `toStorage` n'apparaît qu'à un seul endroit : `_toAbsRooms()`.
+// `_canonRooms()` renvoie ingState.rooms tel quel (canonique).
+// `_toAbsRooms()` applique `canonicalIO.toStorage` avant sérialisation.
 // ============================================================================
 
 (function () {
 
-  // --- Source unique : pièces de ingState.rooms ramenées en repère absolu ---
+  // Source canonique : ingState.rooms tel quel (invariant post-fromStorage).
+  function _canonRooms() {
+    var ingState = window.ingState;
+    if (!ingState || !ingState.rooms) return [];
+    return ingState.rooms;
+  }
+
+  // Source absolue : canonicalIO.toStorage par pièce.
+  // D-122 P1 : scale passé à toStorage pour rotation des offset_px / width_px.
   function _toAbsRooms() {
     var ingState = window.ingState;
     if (!ingState || !ingState.rooms) return [];
+    var scale = ingState.scale || 0;
     return ingState.rooms.map(function (rC) {
-      return (rC.original_corridor_face !== undefined && window.canonicalIO)
-        ? window.canonicalIO.toStorage(rC)
+      return (rC.corridor_face_abs !== undefined && window.canonicalIO)
+        ? window.canonicalIO.toStorage(rC, scale)
         : rC;
     });
   }
 
   // ==========================================================================
-  // Destination 1 : Matching
-  // Consommée par fpLoadAndMatch via le textarea `fpRoomsJson` (avant C4).
-  // Format : { rooms: [{name, width_cm, depth_cm, windows, openings, ...}] }
-  // Offsets en cm (offset_cm / width_cm) pour rester aligné avec l'algo de
-  // matching. Les portes sont fusionnées dans `openings[]` via has_door=true.
+  // Destination 1 : Matching (D-122 P5 — frontière canonique)
+  // Consommée par fpLoadAndMatch / fpRematchRoom → `/api/floor-plan/match`.
+  // Payload en repère CANONIQUE : le backend matcher suppose corridor-south,
+  // aligné avec le catalogue lui-même canonique. Les portes sont fusionnées
+  // dans `openings[]` via has_door=true (contrat OpeningSpec backend).
   // ==========================================================================
   function serializeForMatching() {
     var ingState = window.ingState;
@@ -46,7 +55,7 @@
         ? Math.round(e.width_cm)
         : Math.round(((e && e.width_px) || 0) * scale);
     }
-    var rooms = _toAbsRooms().map(function (r) {
+    var rooms = _canonRooms().map(function (r) {
       var windows = (r.windows || []).map(function (w) {
         return { face: w.face, offset_cm: _offCm(w), width_cm: _widCm(w) };
       });
@@ -64,19 +73,25 @@
           offset_cm: _offCm(d),
           width_cm: _widCm(d),
           has_door: true,
-          opens_inward: d.opens_inward || true,
+          opens_inward: d.opens_inward !== false,
           hinge_side: d.hinge_side || 'left',
         });
       });
       return {
         name: r.name,
-        width_cm: r.width_cm,
+        width_cm: r.width_cm,       // canonique (post-swap pour east/west)
         depth_cm: r.depth_cm,
         windows: windows,
         openings: openings,
-        exclusion_zones: [],
+        exclusion_zones: (r.exclusion_zones || []).map(function (z) {
+          return {
+            x_cm: z.x_cm, y_cm: z.y_cm,
+            width_cm: z.width_cm, depth_cm: z.depth_cm,
+          };
+        }),
         exterior_faces: r.exterior_faces,
-        corridor_face: r.corridor_face,
+        corridor_face: 'south',     // invariant canonique explicite
+        corridor_face_abs: r.corridor_face_abs || '',
         bbox_px: r.bbox_px,
         seed_px: r.seed_px || r.seed,
         doors: r.doors || [],
@@ -105,15 +120,11 @@
     var planName = hdr ? hdr.textContent.trim() : '';
     var fileHint = planName ? (planName + '.png') : 'plan.png';
 
-    // R-12 dette : toStorage rote offset_cm / face mais pas offset_px.
-    // On recalcule donc offset_px / width_px depuis offset_cm × pxPerCm
-    // à la sérialisation. Fallback sur l'offset_px existant si offset_cm
-    // est absent (rétrocompat rooms OCR legacy).
-    var pxPerCm = (ingState.scale && ingState.scale > 0)
-      ? (1.0 / ingState.scale) : 0;
-    function _pxFromCm(cm, fallbackPx) {
-      if (cm != null && pxPerCm > 0) return Math.round(cm * pxPerCm);
-      return (fallbackPx != null) ? fallbackPx : 0;
+    // D-122 P1 : _toAbsRooms() passe scale à toStorage → offset_px /
+    // width_px déjà rotés en cohérence avec offset_cm. Fallback vers 0
+    // uniquement pour les legacy rooms sans offset_cm ni offset_px.
+    function _px(v) {
+      return (typeof v === 'number' && !isNaN(v)) ? Math.round(v) : 0;
     }
 
     var roomsDict = {};
@@ -159,8 +170,8 @@
         roomObj.doors = r.doors.map(function (d) {
           var o = {
             face: d.face,
-            offset_px: _pxFromCm(d.offset_cm, d.offset_px),
-            width_px:  _pxFromCm(d.width_cm,  d.width_px),
+            offset_px: _px(d.offset_px),
+            width_px:  _px(d.width_px),
           };
           if (d.hinge_side) o.hinge_side = d.hinge_side;
           if (typeof d.opens_inward === 'boolean') o.opens_inward = d.opens_inward;
@@ -171,8 +182,8 @@
         roomObj.openings = r.openings.map(function (o) {
           return {
             face: o.face,
-            offset_px: _pxFromCm(o.offset_cm, o.offset_px),
-            width_px:  _pxFromCm(o.width_cm,  o.width_px),
+            offset_px: _px(o.offset_px),
+            width_px:  _px(o.width_px),
           };
         });
       }
@@ -180,8 +191,8 @@
         roomObj.windows = r.windows.map(function (w) {
           return {
             face: w.face,
-            offset_px: _pxFromCm(w.offset_cm, w.offset_px),
-            width_px:  _pxFromCm(w.width_cm,  w.width_px),
+            offset_px: _px(w.offset_px),
+            width_px:  _px(w.width_px),
           };
         });
       }

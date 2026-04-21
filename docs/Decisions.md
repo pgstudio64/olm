@@ -7,6 +7,325 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-123 · Perf Re-analyze All + fix bug has_door POST matching (2026-04-20)
+
+### Fix bug — openings transformées en portes à la sauvegarde JSON
+
+**Symptôme** : l'utilisateur modifie des ouvertures dans Room amend,
+sauvegarde sur disque, ferme/rouvre le projet → les ouvertures sont
+apparues comme de **grandes portes** dans la pièce.
+
+**Cause** : après les changements P4 (séparation openings/doors en
+state) et P5 (envoi canonique au matching), `fpLoadAndMatch` envoyait
+les openings canoniques au `/api/floor-plan/match` **sans** champ
+`has_door`. Or le backend (`app.py:1415`) construit
+`OpeningSpec(..., has_door=o.get("has_door", True), ...)` — valeur
+**défaut True**. Tous les openings étaient donc interprétés comme des
+portes par le matcher ; la réponse contenait `has_door=true` partout.
+
+Le split post-réponse de `fpLoadAndMatch` (introduit en P5) poussait
+alors tout vers `r.doors` : `fpData.rooms[i].openings = []`,
+`.doors = [toutes les ouvertures]`. À l'entrée en Room amend, le
+state se retrouvait avec `state.room_doors = toutes les ouvertures`.
+Au Save amendment, `ingState.rooms[i]` était écrasé, puis la
+sauvegarde disque sérialisait les ouvertures dans la clé `doors` du
+JSON v3. Au reload, doors arrivaient comme portes avec leurs
+dimensions originales, souvent larges (d'où « grandes portes »).
+
+**Fix** : `fpLoadAndMatch` pose désormais `has_door=false` explicite
+sur les openings et `has_door=true` sur les doors avant le POST, puis
+supprime `doors` du payload. Aligne avec
+`serializeForMatching` et `editor.js:save()` (déjà corrects). 1 seul
+fichier modifié (`floor_plan.js:78`).
+
+**Impact** : sauvegarde/rechargement fonctionnels. Les pièces non-south
+amendées ne corrompent plus l'état au retour de matching.
+
+### Perf Re-analyze All — binarisation partagée (×9.8)
+
+**Décision** : `/api/room/reanalyze_batch` calcule la binarisation
+globale + `remove_non_ortho` une seule fois par batch, puis les
+partage à toutes les pièces via le nouveau paramètre
+`binary_precomputed` de `extract_room_features`. Les masques
+room-locaux (portes + zones transparentes) sont appliqués en zéro-out
+numpy sur une copie de la base partagée.
+
+**Justification** : `remove_non_ortho` (cv2.connectedComponents sur
+image 1920×1080) dominait le coût de chaque pièce (~830 ms sur M4,
+extrapolé ~8 s sur cible). Appelé 28 fois → ~230 s pour un
+Re-analyze All. La binarisation et le cleanup sont identiques pour
+toutes les pièces (même image source) — les seules différences sont
+les masques locaux (petites zones).
+
+**Bench mesuré** (MacBook M4, `test_floorplan_preprocessed-SD.png`,
+1920×1080, 10 pièces) :
+- Classic : 831 ms/pièce × 10 = 8 317 ms
+- Batch : 831 ms précompute + 15 ms/pièce × 10 = 846 ms
+- **Speedup ×9.83**. Extrapolation 28 pièces : 23 s → 1.3 s sur M4,
+  ~230 s → ~13 s sur cible (CPU 10× plus lent).
+
+**Changements** :
+- `olm/ingestion/extract.py:extract_room_features` : nouveau param
+  optionnel `binary_precomputed`. Si fourni, saute la binarisation +
+  `remove_non_ortho` ; les masques sont appliqués par zéro-out numpy
+  sur une copie room-local de la base.
+- Refactor interne : les rectangles de masque (doors + transparent
+  zones) sont d'abord collectés en liste, puis appliqués soit via PIL
+  (pipeline classique), soit via numpy slicing (pipeline batch).
+- `olm/server/app.py:/api/room/reanalyze_batch` : précalcule
+  `_binary_global` avant la boucle, passe `binary_precomputed` à
+  chaque appel `extract_room_features`.
+- Rétrocompat : signature par défaut `binary_precomputed=None` →
+  comportement identique (utilisé par `/api/room/reanalyze` unitaire,
+  non touché).
+
+**Equivalence fonctionnelle vérifiée** : smoke test (plan synthétique
++ plan réel) produit un `bbox_px` identique entre les deux chemins,
+nombres d'ouvertures / portes identiques.
+
+**Caveat** : cas-limite théorique — un composant non-orthogonal
+partiellement recouvert par un masque serait traité différemment
+entre les deux chemins. Dans le pipeline classique, le masque coupe
+le composant avant `remove_non_ortho` et le reste peut devenir
+orthogonal. Dans le pipeline batch, le composant a déjà été retiré
+globalement. Diff négligeable sur des plans réels (masques petits =
+door width, non-orthos = arcs de porte toujours retirés dans les
+deux cas).
+
+---
+
+## D-122 · R-14 P1→P7 — canonicalIO consolidé complet (2026-04-20)
+
+Refactor R-14 complet : 7 phases livrées dans la foulée. Spec de
+synthèse : `docs/specs/CANONICAL_STATE.md`. Tests auto 12/12 OK.
+Validation visuelle / fonctionnelle en browser recommandée avant
+commit final.
+
+### P7 — Spec CANONICAL_STATE.md + tests
+
+**Décision** : `docs/specs/CANONICAL_STATE.md` (nouveau) devient la
+spec de référence du repère canonique. `CANONICAL_STATE_REFACTOR.md`
+(R-12, D-117) reste en archive. La spec documente la structure d'une
+pièce canonique, les 4 frontières I/O, l'API `canonicalIO` et
+6 antipatterns interdits.
+
+**Tests** : 12 auto-tests dans `canonical_io.js` (4 round-trips × 4
+faces + 8 rotations × 4 faces). Exécutables depuis console browser
+ou Node (snippet dans la spec §4). Tests Python canonique
+(`test_canonical.py`) 19/19 également verts (backend module qui
+reste dead code après P5, conservé comme référence).
+
+### P5 — Frontend envoie canonique au matching
+
+**Décision** : `/api/floor-plan/match` reçoit désormais des pièces en
+repère CANONIQUE (corridor_face = "south", width_cm/depth_cm post-swap
+pour east/west, faces d'openings rotées). Le `toStorage` préalable
+dans `serializeForMatching` et `editor.js:save()` est supprimé. Le
+backend matcher, qui supposait déjà canonique par convention interne,
+voit enfin une entrée cohérente.
+
+**Justification** : avant P5, le frontend envoyait de l'absolu
+(via `_toAbsRooms` / `toStorage`) à un matcher qui raisonne canonique.
+Les scores étaient corrects **par accident pour les pièces south
+uniquement** — les autres avaient des swaps W↔D incohérents et des
+faces d'openings qui ne correspondaient pas au catalogue. Symptôme
+typique : « No matching patterns » ou candidats faussement positifs
+pour les pièces non-south (D-121 diagnostic).
+
+**Changements** :
+- `ingestion_serialize.js` : ajout `_canonRooms()` (retourne
+  `ingState.rooms` tel quel) ; `serializeForMatching` l'utilise à la
+  place de `_toAbsRooms()`. `_toAbsRooms()` reste pour
+  `serializeForStorage` (JSON v3 disque = absolu, inchangé).
+- `editor.js:save()` : `amendedRoom` construit depuis `canonRoom`
+  directement (combinaison openings+doors pour le contrat API qui
+  reste avec `has_door`). Plus de `toStorage` préalable.
+- `floor_plan.js:fpLoadAndMatch` : sur la réponse, si le backend
+  renvoie openings combinés avec `has_door`, split en `r.openings` +
+  `r.doors` pour rester cohérent avec l'invariant P4.
+- `floor_plan.js:fpRematchRoom` : idem, split de `newRoom.openings`
+  avant injection dans `fpData.rooms[i]`.
+- `app.py:/api/floor-plan/match` docstring : contrat canonique
+  explicité. Aucune canonicalisation backend ajoutée (redondant si
+  frontend respecte le contrat).
+
+**Impact** :
+- Matching désormais correct pour toutes les orientations de pièce,
+  pas seulement south.
+- Le champ `corridor_face_abs` est inclus dans le payload pour
+  traçabilité ; ignoré par le backend (champ excédentaire autorisé
+  sur les dicts Python).
+- JSON v3 sur disque reste en repère absolu (séparation claire des
+  deux canaux).
+
+### P4 — Séparation openings/doors uniforme dans le state
+
+**Décision** : `state.room_doors` introduit comme collection parallèle
+à `state.room_openings`. `has_door:true` banni du state — toutes les
+portes vivent exclusivement dans `state.room_doors`. Même invariant
+appliqué à `ingState.rooms[i]`, `fpData.rooms[i]`, `fpRoomAmendments`
+(déjà acquis post-fromStorage), `amendments[name]` (pour les
+préservations au re-analyze batch).
+
+**Justification** : le combine+split aux frontières
+(`enterRoomAmendMode` / `save()` / batch re-analyze) était la source
+des bugs doors invisibles (pièces 906, 915). Une structure uniforme
+élimine les points de conversion oubliables. Le backend (DSL parse,
+catalogue sur disque, matching API) conserve la forme combinée via
+`has_door` — P5 pourra unifier la couche transport.
+
+**Changements** :
+- `editor.js` : `state.room_doors: []` dans les defaults +
+  `_splitOpeningsIntoState` helper (split combinée→séparée), utilisé
+  par `loadPattern` / `loadPatternFromData` / `applyRoomDSL`.
+- `editor.js:buildRoomDSL` itère `state.room_doors` séparément.
+- `editor.js:renderRoomElements` : 2 boucles distinctes (openings,
+  doors). Handles emit `type="door"` en plus de window/opening.
+- `editor.js:buildPatternPayload` : concatène doors dans
+  `room_openings` (avec `has_door:true`) pour l'API catalogue
+  (format fichier patterns inchangé).
+- `editor.js:save()` : `canonRoom.doors = state.room_doors` directement,
+  plus de filter.
+- `editor.js:enterRoomAmendMode` / `floor_plan.js:enterRoomAmendMode`
+  / `fpRenderEmptyRoom` / load pattern : openings + doors séparés.
+- `init_rvtool.js:clampFeature` sur les 3 collections ;
+  `_stateToDsl` 2 boucles ; re-analyze lit/écrit `manualO` +
+  `preservedDoors` depuis `state.room_doors` sans filter ; CRUD
+  (push door, delete, resize, move) cible la bonne collection via
+  `type === "door"`.
+- `init_rvtool.js:roomResizeStart` snapshot inclut `doors`, le résize
+  recalcule leurs offsets aussi.
+- `ingestion.js:computeCanonicalReanalyzeResult` : `feat()` ne tagge
+  plus `has_door` — sortie déjà séparée. Batch re-analyze utilise
+  `prevOp`/`prevDr`, écrit directement dans `r.openings` / `r.doors`
+  + `am.openings` / `am.doors` (plus de re-split à la fin).
+- `shared.js` doorCells itère `state.room_doors`.
+- `init.js` default room + snapshot save/restore incluent `room_doors`.
+
+**Conservé (frontières API) avec `has_door`** :
+- `ingestion_serialize.js:serializeForMatching` (payload POST pour
+  `/api/floor-plan/match` — P5 pourra unifier).
+- `catalogue.js:260` (format fichier patterns sur disque).
+- `editor.js:buildPatternPayload` (catalogue save API).
+
+### P6 — Helpers publics de rotation + suppression conversions ad-hoc
+
+**Décision** : `canonicalIO` expose désormais `rotatePoint` / `rotateRect`
+pour couvrir la rotation abs → canon des points et rectangles
+room-local (coords cm relatives au bbox), qui ne sont pas couverts par
+`fromStorage` / `toStorage` (ces derniers opèrent sur offset_cm de face).
+`pointAbsToCanon` (ingestion.js:79) et `_absToCanon2` (editor.js:1910)
+sont supprimés, remplacés par des appels directs aux helpers publics.
+
+**Justification** : les conversions locales dupliquaient la matrice de
+rotation — risque identique au bug fix de P3 (« corridor fallback »
+masquait le repère absolu) mais silencieux : une divergence de la
+matrice passerait inaperçue. Une seule implémentation.
+
+**Changements** :
+- `canonical_io.js` : ajout `rotatePoint(pt, cfAbs, absW, absD)` et
+  `rotateRect(rect, cfAbs, absW, absD)`. 8 assertions auto-test
+  couvrent les 4 faces × 2 helpers.
+- `ingestion.js` `computeCanonicalReanalyzeResult` : rotation hits /
+  seed / auto_door_masks via les helpers publics (suppression
+  `pointAbsToCanon` + bloc rect inline).
+- `editor.js` chargement state hits / seed : rotation via helper
+  public (suppression `_absToCanon2`).
+- `_canonicalAngle` local (editor.js) non migré pour l'instant — la
+  convention d'angle CSS du rendu SVG diverge ; migration différée
+  pour cohérence avec un test visuel.
+
+### P3 — Renommage corridor_face_abs + retrait lecture ambiguë
+
+**Décision** : rename global `original_corridor_face` → `corridor_face_abs`
+dans tout le front + endpoint `/api/room/orientation-check`. Suppression
+de la lecture ambiguë `room.original_corridor_face || room.corridor_face`
+qui masquait le vrai repère absolu derrière le `"south"` canonique
+constant.
+
+**Justification** : `room.corridor_face` canonique vaut toujours
+`"south"` post-`fromStorage` ; l'utiliser comme fallback faisait
+silencieusement passer des rooms non-south pour des rooms south dans
+plusieurs chemins (rotation hits/seed dans `enterRoomAmendMode`,
+détection de repère au batch re-analyze). Le rename force un nom non
+ambigu (`_abs` = « absolu »).
+
+**Changements** :
+- 6 fichiers JS renommés : `canonical_io.js`, `ingestion_serialize.js`,
+  `floor_plan.js`, `ingestion.js`, `editor.js`, `init_rvtool.js`.
+- 4 lectures ambiguës supprimées (editor.js `_canonicalAngle`,
+  `_absToCanon2`, `save()`, init_rvtool.js re-analyze).
+- `state.corridor_face` retiré (n'avait plus de lecteur).
+- API `/api/room/orientation-check` : champ `original_corridor_face` →
+  `corridor_face_abs` (request + response). Seul client = le front.
+- JSON v3 sur disque conservé inchangé (`corridor_face` = absolu).
+- Tests round-trip 4/4 OK.
+
+### P2 — Fusion bbox_abs_px / seed_abs_px
+
+**Décision** : suppression des champs `bbox_abs_px` / `seed_abs_px`.
+`bbox_px` / `seed_px` portent désormais seuls les coords image absolues
+(jamais rotés, image inchangée par la rotation canonique).
+
+**Justification** : duplication sans valeur ajoutée. `canonical_io.js`
+créait `bbox_abs_px` = copie de `bbox_px`, puis `toStorage` les
+fusionnait (fallback). Risque de désynchronisation avéré en session
+précédente (fix pièce 922 : `bbox_abs_px` stale écrasait `bbox_px` à
+jour après re-analyze).
+
+**Changements** :
+- `canonical_io.js`: `fromStorage` ne crée plus `bbox_abs_px` /
+  `seed_abs_px` ; `toStorage` lit `bbox_px` / `seed_px` directement.
+- `ingestion.js` batch re-analyze : `r.bbox_abs_px` supprimé.
+- `floor_plan.js` `fpLoadAndMatch` : preserve bbox_px / seed_px.
+- `editor.js` save : écrit `bbox_px` / `seed_px` uniquement.
+- `init_rvtool.js` orientation-check : fallback bbox_abs_px retiré.
+- Tests round-trip 4/4 OK.
+
+### P1 — Rotation offset_px intégrée à canonicalIO (2026-04-20)
+
+**Décision** : `canonicalIO.fromStorage(room, scale)` et
+`canonicalIO.toStorage(room, scale)` acceptent désormais le paramètre
+`scale` (cm/px) et recalculent `offset_px` / `width_px` depuis
+`offset_cm × pxPerCm` en interne, en cohérence avec la rotation
+`offset_cm` qu'elles appliquent déjà. Plus besoin de recalcul ad-hoc
+à la sérialisation ou au rendu.
+
+**Justification** : phase P1 du plan R-14 (D-121). Suppression d'une
+source de bugs récurrents : `toStorage` ne rotait pas les px, imposant
+un recalcul manuel dans 2 sites (`ingestion_serialize.js:_pxFromCm`
+et `ingestion.js:_renderFeat` / `_renderPxPerCm`). Un oubli aurait
+silencieusement décalé les features du rendu Floor.
+
+**Changements** :
+- `olm/static/canonical_io.js` : helper `_syncPx`, signature étendue
+  des deux fonctions, tests round-trip enrichis avec `offset_px` /
+  `width_px` (4/4 OK via Node).
+- `olm/static/ingestion_serialize.js` : `_toAbsRooms()` passe `scale`
+  à `toStorage` ; `serializeForStorage` lit `r.offset_px` /
+  `r.width_px` directement (fini `_pxFromCm`).
+- `olm/static/ingestion.js` : `_renderRoom` supprime `_renderFeat` et
+  `_renderPxPerCm`, délègue entièrement à `toStorage(room, scale)`.
+- `olm/static/ingestion.js` : `computeCanonicalReanalyzeResult` passe
+  `scale` à `fromStorage`.
+- `olm/static/ingestion.js` : import préprocessé passe
+  `data.scale_cm_per_px` à `fromStorage`.
+- `olm/static/floor_plan.js` : `fpLoadAndMatch` passe
+  `ingState.scale` à `fromStorage`.
+- `olm/static/editor.js` : save Room amend passe `ingState.scale` à
+  `toStorage`.
+
+**Impact** :
+- Une seule formule `offset_px = round(offset_cm × pxPerCm)` dans le
+  front, colocalisée avec la rotation `offset_cm`.
+- Signature rétrocompat : `scale` omis → px laissés intacts (les
+  tests fragments sans scale continuent de passer).
+- Pas de changement du format JSON v3 sur disque.
+- `editor.js:_enrichCanon` reste (maintenance canonique du state,
+  pas un abs↔canon) — à revoir en P4 / P6.
+
+---
+
 ## D-121 · Plan de refactor canonique unifié — R-14 (2026-04-20)
 
 **Décision** : après 4 sessions successives de fixes sur le repère canonique

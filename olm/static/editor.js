@@ -18,7 +18,8 @@ let state = {
   room_depth_cm: 480,
   standard: "",  // set dynamically from loaded config
   room_windows: [],      // [{face, offset_cm, width_cm}]
-  room_openings: [],     // [{face, offset_cm, width_cm, has_door, opens_inward, hinge_side}]
+  room_openings: [],     // [{face, offset_cm, width_cm}] — non-door openings only (D-122 P4)
+  room_doors: [],        // [{face, offset_cm, width_cm, opens_inward, hinge_side}] — séparé (D-122 P4)
   room_exclusions: [],   // [{x_cm, y_cm, width_cm, depth_cm}]
   selectedRow: 0,
   selectedBlock: -1,
@@ -106,13 +107,12 @@ function buildRoomDSL() {
     }
   });
   state.room_openings.forEach(function(o) {
-    if (o.has_door) {
-      var dir = o.opens_inward ? "INT" : "EXT";
-      var hinge = o.hinge_side === "left" ? "L" : "R";
-      lines.push("DOOR " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm + " " + dir + " " + hinge);
-    } else {
-      lines.push("OPENING " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm);
-    }
+    lines.push("OPENING " + faceToCode(o.face) + " " + o.offset_cm + " " + o.width_cm);
+  });
+  (state.room_doors || []).forEach(function(d) {
+    var dir = d.opens_inward ? "INT" : "EXT";
+    var hinge = d.hinge_side === "left" ? "L" : "R";
+    lines.push("DOOR " + faceToCode(d.face) + " " + d.offset_cm + " " + d.width_cm + " " + dir + " " + hinge);
   });
   state.room_exclusions.forEach(function(z) {
     lines.push("EXCLUSION " + z.x_cm + " " + z.y_cm + " " + z.width_cm + " " + z.depth_cm);
@@ -147,7 +147,14 @@ async function applyRoomDSL() {
     state.room_width_cm = data.width_cm;
     state.room_depth_cm = data.depth_cm;
     state.room_windows = data.windows || [];
-    state.room_openings = data.openings || [];
+    // D-122 P4 : split backend openings (combined) → state.room_openings +
+    // state.room_doors séparés. Le backend DSL retourne encore la forme
+    // combinée via has_door (P5 pourra unifier le contrat).
+    var _dslOpenings = data.openings || [];
+    state.room_openings = _dslOpenings.filter(function(o) { return !o.has_door; })
+      .map(function(o) { var c = Object.assign({}, o); delete c.has_door; return c; });
+    state.room_doors = _dslOpenings.filter(function(o) { return o.has_door; })
+      .map(function(o) { var c = Object.assign({}, o); delete c.has_door; return c; });
     state.room_exclusions = data.exclusion_zones || [];
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
@@ -171,44 +178,43 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       '" vector-effect="non-scaling-stroke" stroke-linecap="round"/>' });
   });
 
-  // Doors and open bays
+  // Open bays (non-door) — D-122 P4 : state.room_openings ne contient
+  // plus de doors. Les portes sont rendues dans la boucle séparée ci-dessous.
   state.room_openings.forEach(function(o) {
     var pos = wallSegment(o.face, o.offset_cm, o.width_cm, roomX, roomY, roomWPx, roomHPx);
-    var dw = o.width_cm * SCALE;
-
-    // Erase wall under opening (background-colored line)
     elements.push({ z: 5.5, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
       '" stroke="#1e1e1e" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
+    elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
+      '" x2="' + pos.x2 + '" y2="' + pos.y2 +
+      '" stroke="#80c060" stroke-width="2" vector-effect="non-scaling-stroke"' +
+      ' stroke-dasharray="4 3"/>' });
+  });
 
-    if (!o.has_door) {
-      // Open bay — green line
-      elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
-        '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-        '" stroke="#80c060" stroke-width="2" vector-effect="non-scaling-stroke"' +
-        ' stroke-dasharray="4 3"/>' });
-      return;
-    }
-
-    // Hinged door — delegate arc + leaf geometry to render_shared.
-    // West wall inverts the swing↔hinge-coord mapping (see render_shared).
-    var swing = o.hinge_side;  // "left" or "right"
+  // Doors — D-122 P4 : itération sur state.room_doors séparée.
+  (state.room_doors || []).forEach(function(d) {
+    var pos = wallSegment(d.face, d.offset_cm, d.width_cm, roomX, roomY, roomWPx, roomHPx);
+    var dw = d.width_cm * SCALE;
+    elements.push({ z: 5.5, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
+      '" x2="' + pos.x2 + '" y2="' + pos.y2 +
+      '" stroke="#1e1e1e" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
+    var swing = d.hinge_side;
     var swingLeft = (swing === "left");
-    var hingeAtStart = swingLeft !== (o.face === "west");
+    var hingeAtStart = swingLeft !== (d.face === "west");
     var along, wallCoord;
-    if (o.face === "south") {
-      along = roomX + o.offset_cm * SCALE; wallCoord = roomY + roomHPx;
-    } else if (o.face === "north") {
-      along = roomX + o.offset_cm * SCALE; wallCoord = roomY;
-    } else if (o.face === "east") {
-      along = roomY + o.offset_cm * SCALE; wallCoord = roomX + roomWPx;
-    } else { // west
-      along = roomY + o.offset_cm * SCALE; wallCoord = roomX;
+    if (d.face === "south") {
+      along = roomX + d.offset_cm * SCALE; wallCoord = roomY + roomHPx;
+    } else if (d.face === "north") {
+      along = roomX + d.offset_cm * SCALE; wallCoord = roomY;
+    } else if (d.face === "east") {
+      along = roomY + d.offset_cm * SCALE; wallCoord = roomX + roomWPx;
+    } else {
+      along = roomY + d.offset_cm * SCALE; wallCoord = roomX;
     }
     var hingeCoord = hingeAtStart ? along : along + dw;
     var freeCoord  = hingeAtStart ? along + dw : along;
     var doorParts = window.renderShared.doorSvg(
-      o.face, hingeCoord, freeCoord, wallCoord, swing, o.opens_inward, 1.5);
+      d.face, hingeCoord, freeCoord, wallCoord, swing, d.opens_inward, 1.5);
     elements.push({ z: 6, s: doorParts[0] });
     elements.push({ z: 6, s: doorParts[1] });
   });
@@ -328,6 +334,9 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     });
     (state.room_openings || []).forEach(function (o, i) {
       _emitOpeningHandle("opening", i, o.face, o.offset_cm, o.width_cm);
+    });
+    (state.room_doors || []).forEach(function (d, i) {
+      _emitOpeningHandle("door", i, d.face, d.offset_cm, d.width_cm);
     });
   }
 
@@ -1027,14 +1036,12 @@ function _renderImpl(targetSvg) {
       '" width="' + ovW.toFixed(1) + '" height="' + ovH.toFixed(1) +
       '" opacity="' + (ov.opacity / 100).toFixed(2) +
       '" preserveAspectRatio="none"/>';
-    // D-83 / R-12 C: rotate overlay image so it aligns with the canonical
-    // room (corridor at south). After R-12, state.corridor_face is always
-    // "south", so we use state.original_corridor_face (the storage-space
-    // corridor) to compute the angle. Pure south → angle 0 (no rotation).
+    // D-83 / R-12 C / D-122 P3 : rotate overlay image so it aligns with
+    // the canonical room (corridor at south). En state canonique R-12,
+    // le repère absolu est porté uniquement par state.corridor_face_abs.
     // D-99: in room amend mode, pin rotation center to the ORIGINAL room
     //       dimensions so live resize doesn't drift the overlay.
-    var ovAngle = _canonicalAngle(
-      state.original_corridor_face || state.corridor_face);
+    var ovAngle = _canonicalAngle(state.corridor_face_abs);
     if (ovAngle !== 0 && !isEditor) {
       var origRoom = state.roomAmendMode && state.roomAmendMode.originalRoom;
       var refWPx = origRoom ? origRoom.width_cm * SCALE : roomWPx;
@@ -1375,7 +1382,12 @@ function buildPatternPayload() {
     room_depth_cm: state.room_depth_cm,
     standard: state.standard,
     room_windows: state.room_windows,
-    room_openings: state.room_openings,
+    // D-122 P4 : le backend catalogue / pattern_dsl attend openings combiné
+    // (avec has_door pour les doors). On concatène juste à l'export payload.
+    room_openings: (state.room_openings || []).concat(
+      (state.room_doors || []).map(function (d) {
+        return Object.assign({}, d, { has_door: true });
+      })),
     room_exclusions: state.room_exclusions,
   };
 }
@@ -1432,32 +1444,50 @@ async function save() {
   // Room amend mode: store amended room geometry and re-run matching
   if (state.roomAmendMode) {
     var ramend = state.roomAmendMode;
-    // State is canonical (D-117). originalRoom est aussi canonique
-    // (corridor_face === "south") ; le vrai repère absolu est mémorisé dans
-    // original_corridor_face — c'est lui qu'on passe à toStorage.
-    var origCf = ramend.originalRoom.original_corridor_face ||
-                 ramend.originalRoom.corridor_face || "";
+    // State is canonical (D-117 / D-122 P3). Le vrai repère absolu est
+    // uniquement porté par corridor_face_abs — c'est lui qu'on passe à
+    // toStorage.
+    var origCf = ramend.originalRoom.corridor_face_abs || "";
     var _origSeed = ramend.originalRoom.seed_px ||
       ramend.originalRoom.seed ||
       (ramend.originalRoom.seed_x != null &&
        ramend.originalRoom.seed_y != null
         ? [ramend.originalRoom.seed_x, ramend.originalRoom.seed_y]
         : null);
+    // D-122 P2 : bbox_px / seed_px = coords image absolues uniques,
+    // jamais rotés par canonicalIO (invariants image → pas de duplication).
+    // D-122 P4 : state.room_openings ne contient plus de doors ;
+    // state.room_doors est séparé. canonRoom porte la forme canonique
+    // uniforme (openings / doors séparés) attendue par toStorage.
     var canonRoom = {
       name: ramend.roomName,
       width_cm: state.room_width_cm,
       depth_cm: state.room_depth_cm,
       windows: JSON.parse(JSON.stringify(state.room_windows)),
       openings: JSON.parse(JSON.stringify(state.room_openings)),
+      doors: JSON.parse(JSON.stringify(state.room_doors || [])),
       exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions)),
       transparent_zones: JSON.parse(JSON.stringify(state.room_transparents || [])),
       corridor_face: "south",
-      original_corridor_face: origCf,
-      bbox_abs_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : null,
-      seed_abs_px: _origSeed ? _origSeed.slice() : null,
+      corridor_face_abs: origCf,
+      bbox_px: ramend.originalRoom.bbox_px ? ramend.originalRoom.bbox_px.slice() : null,
+      seed_px: _origSeed ? _origSeed.slice() : null,
     };
-    // amendedRoom = version ABSOLUE pour le backend /api/floor-plan/match.
-    var amendedRoom = window.canonicalIO.toStorage(canonRoom);
+    // D-122 P5 : `/api/floor-plan/match` consomme du CANONIQUE. On envoie
+    // canonRoom directement, en fusionnant doors dans openings (contrat
+    // OpeningSpec backend qui utilise has_door).
+    var amendedRoom = Object.assign({}, canonRoom, {
+      openings: (canonRoom.openings || []).map(function (o) {
+        return Object.assign({}, o, { has_door: false });
+      }).concat((canonRoom.doors || []).map(function (d) {
+        return Object.assign({}, d, {
+          has_door: true,
+          opens_inward: d.opens_inward !== false,
+          hinge_side: d.hinge_side || 'left',
+        });
+      })),
+    });
+    delete amendedRoom.doors;
     // fpRoomAmendments stocke la version CANONIQUE — même convention que
     // fpData.rooms (post-fromStorage au load). Les consommateurs du rendu
     // (rvRenderCurrent, fpRenderEmptyRoom) s'attendent à du canonique et
@@ -1512,17 +1542,14 @@ async function save() {
         });
       }
       var windowsCanon = (state.room_windows || []).map(_enrichCanon);
-      var openingsCanon = (state.room_openings || [])
-        .filter(function (o) { return !o.has_door; })
-        .map(_enrichCanon);
-      var doorsCanon = (state.room_openings || [])
-        .filter(function (o) { return o.has_door; })
-        .map(function (o) {
-          return Object.assign({}, _enrichCanon(o), {
-            hinge_side: o.hinge_side || "left",
-            opens_inward: o.opens_inward !== false,
-          });
+      var openingsCanon = (state.room_openings || []).map(_enrichCanon);
+      // D-122 P4 : doors lus depuis state.room_doors, plus de filtrage.
+      var doorsCanon = (state.room_doors || []).map(function (d) {
+        return Object.assign({}, _enrichCanon(d), {
+          hinge_side: d.hinge_side || "left",
+          opens_inward: d.opens_inward !== false,
         });
+      });
       for (var ir = 0; ir < ingRooms.length; ir++) {
         if (ingRooms[ir].name !== ramend.roomName) continue;
         // Base bbox : prefer the one updated by Re-analyze (stored on
@@ -1535,17 +1562,16 @@ async function save() {
         var nx1 = nx0 + absW / scaleCmPerPx;
         var ny1 = ny0 + absD / scaleCmPerPx;
         newBbox = [nx0, ny0, nx1, ny1];
-        // ingRooms reste en repère CANONIQUE (R-12). Le corridor_face reste
-        // "south" et le repère absolu est porté par original_corridor_face +
-        // bbox_abs_px. Les amendements de features (windows/openings/zones/
-        // doors) en Room amend sont propagés ici pour qu'ils apparaissent
-        // dans l'export v3 (fix bug « édits perdus à la sauvegarde »).
+        // ingRooms reste en repère CANONIQUE (R-12). corridor_face = "south" ;
+        // le repère absolu est porté par corridor_face_abs. D-122 P2 :
+        // bbox_px seul (plus de duplicat bbox_abs_px). Les amendements de
+        // features (windows/openings/zones/doors) en Room amend sont propagés
+        // ici pour qu'ils apparaissent dans l'export v3.
         ingRooms[ir].bbox_px = newBbox;
-        ingRooms[ir].bbox_abs_px = newBbox.slice();
         ingRooms[ir].width_cm = cW;
         ingRooms[ir].depth_cm = cD;
         ingRooms[ir].corridor_face = "south";
-        ingRooms[ir].original_corridor_face = origCf;
+        ingRooms[ir].corridor_face_abs = origCf;
         ingRooms[ir].surface_m2 = parseFloat(((cW * cD) / 10000).toFixed(2));
         ingRooms[ir].windows = windowsCanon.map(function (w) {
           return Object.assign({}, w);
@@ -1571,9 +1597,8 @@ async function save() {
             window.fpData.rooms[fr].width_cm = cW;
             window.fpData.rooms[fr].depth_cm = cD;
             window.fpData.rooms[fr].bbox_px = newBbox.slice();
-            window.fpData.rooms[fr].bbox_abs_px = newBbox.slice();
             window.fpData.rooms[fr].corridor_face = "south";
-            window.fpData.rooms[fr].original_corridor_face = origCf;
+            window.fpData.rooms[fr].corridor_face_abs = origCf;
             window.fpData.rooms[fr].windows = windowsCanon.map(function (w) {
               return Object.assign({}, w);
             });
@@ -1717,6 +1742,21 @@ async function loadList() {
   }
 }
 
+// D-122 P4 : convertit une liste d'openings combinés (avec has_door) vers
+// les 2 collections state.room_openings (non-doors) + state.room_doors.
+function _splitOpeningsIntoState(combinedList) {
+  var openings = [];
+  var doors = [];
+  (combinedList || []).forEach(function (o) {
+    var clone = Object.assign({}, o);
+    delete clone.has_door;
+    if (o.has_door) doors.push(clone);
+    else openings.push(clone);
+  });
+  state.room_openings = openings;
+  state.room_doors = doors;
+}
+
 async function loadPattern(name) {
   document.getElementById("loadModal").classList.remove("active");
   try {
@@ -1729,13 +1769,13 @@ async function loadPattern(name) {
     state.room_depth_cm = data.room_depth_cm || 480;
     state.standard = data.standard || getStandards()[0] || "";
     state.room_windows = data.room_windows || [];
-    state.room_openings = data.room_openings || [];
+    _splitOpeningsIntoState(data.room_openings);
     state.room_exclusions = data.room_exclusions || [];
     state.selectedRow = 0;
     state.selectedBlock = -1;
     state.overlay = null;
-    state.corridor_face = "";
-    state.original_corridor_face = "";
+    // D-122 P3 : state.corridor_face_abs est la seule source du repère absolu.
+    state.corridor_face_abs = "";
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
     var radios = document.querySelectorAll('input[name="standard"]');
@@ -1763,7 +1803,7 @@ function loadPatternFromData(data) {
   state.room_depth_cm = data.room_depth_cm || 480;
   state.standard = data.standard || getStandards()[0] || "";
   state.room_windows = data.room_windows || [];
-  state.room_openings = data.room_openings || [];
+  _splitOpeningsIntoState(data.room_openings);
   state.room_exclusions = data.room_exclusions || [];
   state.selectedRow = 0;
   state.selectedBlock = -1;
@@ -1881,19 +1921,16 @@ function enterRoomAmendMode(room) {
   state.room_width_cm = localRoom.width_cm;
   state.room_depth_cm = localRoom.depth_cm;
   state.room_windows = JSON.parse(JSON.stringify(localRoom.windows || []));
-  // state.room_openings est COMBINÉ (openings non-door + doors has_door=true),
-  // convention pour Room amend (buildRoomDSL distingue via o.has_door).
-  // ingState / fpData gardent openings et doors séparés (invariant fromStorage) ;
-  // on recombine ici pour que les doors apparaissent dans le rendu Room.
-  var _lrOpenings = JSON.parse(JSON.stringify(localRoom.openings || []));
-  var _lrDoors = (localRoom.doors || []).map(function (d) {
-    return Object.assign(JSON.parse(JSON.stringify(d)), { has_door: true });
-  });
-  state.room_openings = _lrOpenings.concat(_lrDoors);
+  // D-122 P4 : state.room_openings (sans doors) + state.room_doors séparés,
+  // même invariant que ingState.rooms / fpData.rooms post-fromStorage.
+  state.room_openings = JSON.parse(JSON.stringify(localRoom.openings || []));
+  state.room_doors = JSON.parse(JSON.stringify(localRoom.doors || []));
   state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
   state.room_transparents = JSON.parse(JSON.stringify(localRoom.transparent_zones || []));
-  state.corridor_face = room.corridor_face || "";
-  state.original_corridor_face = room.original_corridor_face || "";
+  // D-122 P3 : state.corridor_face canonique = "south" par construction ;
+  // on ne stocke plus que corridor_face_abs (repère absolu) pour piloter
+  // la rotation overlay et les conversions abs↔canon.
+  state.corridor_face_abs = room.corridor_face_abs || "";
 
   // Hits (pour V/H-rays debug). Convertis en room-local cm.
   state.room_hits = null;
@@ -1906,23 +1943,22 @@ function enterRoomAmendMode(room) {
       var sc = _ing.scale;
       var absW2 = (room.bbox_px[2] - room.bbox_px[0]) * sc;
       var absD2 = (room.bbox_px[3] - room.bbox_px[1]) * sc;
-      var cf2 = room.corridor_face || "";
-      function _absToCanon2(xAbs, yAbs) {
-        if (cf2 === "north") return { x: absW2 - xAbs, y: absD2 - yAbs };
-        if (cf2 === "east")  return { x: yAbs, y: absW2 - xAbs };
-        if (cf2 === "west")  return { x: absD2 - yAbs, y: xAbs };
-        return { x: xAbs, y: yAbs };
-      }
+      // D-122 P3/P6 : rotation hits/seed via canonicalIO.rotatePoint
+      // (source unique ; cf2 = corridor absolu, jamais "south" canon).
+      var cf2 = room.corridor_face_abs || "";
+      var _rotP2 = window.canonicalIO.rotatePoint;
       var seedPx = _ingRoom.seed_px || _ingRoom.seed;
       if (seedPx) {
-        var sA = { x: (seedPx[0] - bx0) * sc, y: (seedPx[1] - by0) * sc };
-        var sC2 = _absToCanon2(sA.x, sA.y);
+        var sC2 = _rotP2(
+          { x: (seedPx[0] - bx0) * sc, y: (seedPx[1] - by0) * sc },
+          cf2, absW2, absD2);
         state.room_seed_cm = { x_cm: sC2.x, y_cm: sC2.y };
       }
       if (_ingRoom.hits && _ingRoom.hits.length) {
         state.room_hits = _ingRoom.hits.map(function (h) {
-          var pA = { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc };
-          var pC = _absToCanon2(pA.x, pA.y);
+          var pC = _rotP2(
+            { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
+            cf2, absW2, absD2);
           return { x_cm: pC.x, y_cm: pC.y };
         });
       }
@@ -2055,7 +2091,9 @@ function resetState() {
   state.room_depth_cm = parseInt(document.getElementById("roomDepth").value) || 480;
   state.standard = document.querySelector('input[name="standard"]:checked').value;
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
-  state.room_openings = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, has_door: true, opens_inward: true, hinge_side: "left" }];
+  // D-122 P4 : openings séparé de doors dans le state.
+  state.room_openings = [];
+  state.room_doors = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, opens_inward: true, hinge_side: "left" }];
   state.room_exclusions = [];
   state.selectedRow = 0;
   state.selectedBlock = -1;

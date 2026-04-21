@@ -27,9 +27,10 @@ async function init() {
   _ensureRulers(document.getElementById("fpCanvas"));
   _ensureRulers(document.getElementById("rvCanvas"));
   addRow(false);
-  // Default room
+  // Default room (D-122 P4 : door dans state.room_doors séparé)
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
-  state.room_openings = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, has_door: true, opens_inward: true, hinge_side: "left" }];
+  state.room_openings = [];
+  state.room_doors = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, opens_inward: true, hinge_side: "left" }];
   updateAutoName();
   clearDirty();
   requestAnimationFrame(function() { zoomFit(); });
@@ -80,7 +81,8 @@ async function init() {
       state.room_width_cm = data.width_cm;
       state.room_depth_cm = data.depth_cm;
       state.room_windows = data.windows || [];
-      state.room_openings = data.openings || [];
+      // D-122 P4 : backend DSL renvoie openings combiné → split.
+      _splitOpeningsIntoState(data.openings);
       state.room_exclusions = data.exclusion_zones || [];
       render(document.getElementById("rvCanvas"));
       zoomFit(document.getElementById("rvCanvas"));
@@ -268,6 +270,7 @@ async function init() {
       room_depth_cm: state.room_depth_cm,
       room_windows: JSON.parse(JSON.stringify(state.room_windows)),
       room_openings: JSON.parse(JSON.stringify(state.room_openings)),
+      room_doors: JSON.parse(JSON.stringify(state.room_doors || [])),
       room_exclusions: JSON.parse(JSON.stringify(state.room_exclusions)),
       name: state.name,
       standard: state.standard,

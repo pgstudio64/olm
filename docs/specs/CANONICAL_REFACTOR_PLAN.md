@@ -1,7 +1,26 @@
 # Canonical Repère — Plan de refactor (D-121)
 
 Date : 2026-04-20.
-Status : proposé, à valider.
+Status : **P1 → P7 livrées (D-122)**. Refactor R-14 complet.
+Validation visuelle / fonctionnelle en browser recommandée avant
+commit final.
+
+## 0. État d'avancement (2026-04-20)
+
+| Phase | Scope | Statut |
+|-------|-------|--------|
+| P1 | `scale` dans canonicalIO, suppression `_pxFromCm`, `_renderFeat` | ✅ livré |
+| P2 | Fusion `bbox_abs_px` → `bbox_px`, `seed_abs_px` → `seed_px` | ✅ livré |
+| P3 | Rename `original_corridor_face` → `corridor_face_abs`, lecture ambiguë retirée | ✅ livré |
+| P4 | `state.room_doors` séparé, `has_door:true` banni du state | ✅ livré |
+| P5 | `/api/floor-plan/match` reçoit canonique, `toStorage` préalable supprimé | ✅ livré |
+| P6 | `canonicalIO.rotatePoint` / `rotateRect`, suppression ad-hoc | ✅ livré |
+| P7 | Spec `CANONICAL_STATE.md` + tests round-trip (12/12) | ✅ livré |
+
+Tests round-trip `canonical_io.js` : 4 rooms × 4 corridors + 8 helpers =
+**16 auto-tests, tous OK** (lancer `window.RUN_CANONICAL_IO_TESTS = true;`
+avant chargement du script ou via Node :
+`node -e "global.window={RUN_CANONICAL_IO_TESTS:true};require('./olm/static/canonical_io.js')"`).
 
 ## 1. Diagnostic
 
