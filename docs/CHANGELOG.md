@@ -5,7 +5,34 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-134 (2026-04-20 → 2026-04-21)
+## [v0.4.0] — 2026-04-21 : D-94 → D-134
+
+### Highlights
+
+- **R-14 canonique unifié** (D-121 → D-122, complété D-134) : refactor en 7
+  phases du repère canonique. `canonicalIO` devient source unique pour
+  `fromStorage/toStorage`, `rotatePoint/rotateRect/rotateRectInv`,
+  `canonAngle`. 21 auto-tests.
+- **Re-analyze resilience** (D-124 → D-132) : re-ancrage zones post-
+  re-analyze, toggle Lock bbox, propagation du bbox effectif user,
+  clamp openings aux dims, race fpData/currentIdx corrigée, backend
+  respecte bbox_px comme frontière (`clip_to_bbox`).
+- **Persistance** (D-131) : champ `origin` (auto/manual) traverse la
+  chaîne save/load/match.
+- **R-13 auto-test orientation** (D-133) : étape 3 fenêtres + endpoint
+  batch `/api/floor-plan/orientation-report`.
+- **Perf** (D-123) : Re-analyze All ×9.83 via binarisation partagée.
+- **UX Floor bbox editor** (D-128 → D-130) : clamp + sync fpData
+  immédiat, préservation de la sélection courante par nom.
+- **Refactor front-end** (D-94 → D-107) : store unifié, render_shared,
+  split init/ingestion, Room resize 4 poignées, CRUD ouvertures, zones
+  rouge/verte, re-analyze pièce unitaire.
+
+### Compat
+
+- Backward compatible avec les JSON v3 existants (nouveaux champs
+  optionnels).
+- API `/api/floor-plan/match` étendue, réponses restent compatibles.
 
 ### D-134 — R-14 P6 : `canonicalIO.canonAngle` source unique (2026-04-21)
 
@@ -286,7 +313,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   structures uniformes, champs redondants supprimés, contrat front/back
   explicite. ~6 jours de travail concentré. P1 livrée (2026-04-20).
 
-## [Unreleased] — D-115 à D-120 (2026-04-20)
+### Sous-session D-115 → D-120 (2026-04-20)
 
 ### Ajouté
 
@@ -392,7 +419,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-108 à D-114 (2026-04-19)
+### Sous-session D-108 → D-114 (2026-04-19)
 
 ### Ajouté
 
@@ -438,7 +465,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-101 à D-107 (2026-04-19)
+### Sous-session D-101 → D-107 (2026-04-19)
 
 ### Ajouté
 
@@ -464,7 +491,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-94 refactoring front-end
+### Sous-session D-94 refactoring front-end
 
 ### Supprimé
 - `olm/templates/matching_viewer.html` (1138 lignes) et route Flask `/matching` associée — dead code, jamais référencé depuis HTML/JS (P0 du refactoring front-end, D-94).
