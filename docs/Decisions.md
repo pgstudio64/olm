@@ -7,6 +7,44 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-126 · Toggle « Lock bbox » sur Re-analyze (2026-04-21)
+
+### Décision
+
+Case à cocher « Lock bbox » dans la Room toolbar (Review amend mode), à côté
+du bouton Re-analyze. Quand cochée, le re-analyze ne modifie pas la géométrie
+de la pièce : ni `bbox_px`, ni `width_cm` / `depth_cm`, ni
+`corridor_face_abs`, ni `state.overlay.offsetX/Y`. Seuls les openings /
+windows / doors / hits sont adoptés depuis la réponse backend.
+
+### Justification
+
+Use case D-118 : après un repositionnement manuel du bbox (drag NW corner de
+la pièce) ou la dépose d'un mur modélisée via zone transparente,
+l'utilisateur veut raffiner la détection des ouvertures **sans perdre** son
+ajustement manuel. Sans lock, le re-analyze recalculait systématiquement le
+bbox via ray-cast depuis le seed, écrasant le travail manuel.
+
+Sémantique retenue : lock protège **toute la géométrie image-pixel** (bbox,
+dims, overlay, cf). Les openings retournées par le backend restent dans leur
+frame canonique d'origine ; si la détection backend a un écart mineur
+(quelques px) avec le bbox utilisateur, les offsets seront très
+approximativement corrects. Pour un écart important, l'utilisateur peut
+décocher Lock et relancer.
+
+### Impact
+
+- **HTML** : nouveau `<label id="rvLockBboxWrap">` avec checkbox
+  `rvLockBbox` après le bouton Re-analyze.
+- **editor.js** : show/hide synchronisé avec l'amend mode (reset cleared à
+  la sortie).
+- **init_rvtool.js** : 2 sites gardés par `!lockBbox` :
+  1. `amend.originalRoom.corridor_face_abs = canon.corridor_face` ;
+  2. bloc bbox/dims/overlay/reanchor complet.
+- **+12 lignes net**.
+
+---
+
 ## D-125 · Fix race condition state.overlay partagé fp/rv (2026-04-21)
 
 ### Décision

@@ -290,6 +290,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
               <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
               <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Re-analyze windows & openings (keeps manual edits)">Re-analyze</button>
+              <label id="rvLockBboxWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock bbox: re-detect openings without moving the room or changing its dimensions (D-118).">
+                <input type="checkbox" id="rvLockBbox"> Lock bbox
+              </label>
               <button class="btn btn-toolbar" id="rvBtnCheckOrient" style="display:none;" title="Check canonical orientation: corridor south, exterior north (D-119)">Check orient.</button>
               <span id="rvOrientBadge" style="display:none;font-size:11px;padding:2px 6px;border-radius:3px;"></span>
               <div id="rvAddMenuWrap" style="display:none;position:relative;">

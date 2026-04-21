@@ -1999,6 +1999,8 @@ function enterRoomAmendMode(room) {
   if (rvAddMenuWrap) rvAddMenuWrap.style.display = "";
   var rvBtnReanalyze = document.getElementById("rvBtnReanalyze");
   if (rvBtnReanalyze) rvBtnReanalyze.style.display = "";
+  var rvLockBboxWrap = document.getElementById("rvLockBboxWrap");
+  if (rvLockBboxWrap) rvLockBboxWrap.style.display = "";
   var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
   if (rvBtnCheck) rvBtnCheck.style.display = "";
 
@@ -2029,6 +2031,10 @@ function exitRoomAmendUI() {
   if (rvAddMenu2) rvAddMenu2.style.display = "none";
   var rvBtnReanalyze2 = document.getElementById("rvBtnReanalyze");
   if (rvBtnReanalyze2) rvBtnReanalyze2.style.display = "none";
+  var rvLockBboxWrap2 = document.getElementById("rvLockBboxWrap");
+  if (rvLockBboxWrap2) rvLockBboxWrap2.style.display = "none";
+  var rvLockBbox2 = document.getElementById("rvLockBbox");
+  if (rvLockBbox2) rvLockBbox2.checked = false;
   var rvBtnCheck2 = document.getElementById("rvBtnCheckOrient");
   if (rvBtnCheck2) rvBtnCheck2.style.display = "none";
   var rvBadge = document.getElementById("rvOrientBadge");

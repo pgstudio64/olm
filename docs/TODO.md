@@ -279,7 +279,11 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
   ~230 s → ~13 s. Mise en œuvre : `extract_room_features` accepte
   `binary_precomputed`, `/api/room/reanalyze_batch` calcule
   binarisation + `remove_non_ortho` une fois en amont.
-- [ ] **Toggle « lock bbox » sur Re-analyze (D-118)** : checkbox dans la Room toolbar. Quand coché, le re-analyze ne modifie pas `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Utile pour raffiner les ouvertures après repositionnement manuel ou dépose d'un mur modélisée via zone transparente.
+- [x] **Toggle « lock bbox » sur Re-analyze (D-118)** ✅ 2026-04-21 (D-126).
+  Checkbox dans la Room toolbar. Quand coché, le re-analyze ne modifie pas
+  `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, `corridor_face_abs`
+  ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Reset
+  automatique à la sortie de l'amend mode.
 - [ ] **Re-analyze : fusionner Re-analyze + lock-bbox dans un dropdown** :
   remplacer le bouton simple « Re-analyze » par un dropdown (ou split
   button) avec deux options :

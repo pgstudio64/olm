@@ -5,7 +5,16 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-125 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-126 (2026-04-20 → 2026-04-21)
+
+### D-126 — Toggle Lock bbox sur Re-analyze (2026-04-21)
+
+- Nouvelle checkbox « Lock bbox » Room toolbar (amend mode). Quand cochée,
+  Re-analyze adopte uniquement les openings / windows / doors / hits
+  redétectés ; bbox_px, dims, corridor_face_abs et overlay restent figés.
+- Use case : raffiner les ouvertures après repositionnement manuel du bbox
+  ou dépose d'un mur via zone transparente, sans perdre l'ajustement.
+- Reset automatique de la checkbox à la sortie de l'amend mode.
 
 ### D-125 — Fix race state.overlay partagé fp/rv (2026-04-21)
 
