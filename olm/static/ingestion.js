@@ -168,6 +168,28 @@
   }
   window.reanchorCanonicalZones = reanchorCanonicalZones;
 
+  // Convertit une liste de zones canoniques (room-local, corridor sud) vers
+  // le repère ABSOLU room-local (corridor_face_abs = cfAbs). Utilisé avant
+  // envoi au backend /api/room/reanalyze{,_batch} qui interprète les zones
+  // comme abs-room-local (cf. extract.py:1757-1766).
+  // Pour cfAbs ∈ {"", "south"} retourne l'identité.
+  function canonicalZonesToAbs(zones, cfAbs, absW, absD) {
+    if (!zones || !zones.length) return zones || [];
+    var cio = window.canonicalIO;
+    if (!cio || !cio.rotateRectInv) return zones;
+    return zones.map(function (z) {
+      var abs = cio.rotateRectInv(
+        { x: z.x_cm || 0, y: z.y_cm || 0,
+          width: z.width_cm || 0, depth: z.depth_cm || 0 },
+        cfAbs || '', absW, absD);
+      return {
+        x_cm: abs.x, y_cm: abs.y,
+        width_cm: abs.width, depth_cm: abs.depth,
+      };
+    });
+  }
+  window.canonicalZonesToAbs = canonicalZonesToAbs;
+
   // --- Drawing scale helpers (extracted to ingestion_scale.js, D-94 P4) ---
   var parseDrawingScale     = window.olmScale.parseDrawingScale;
   var computeCmPerPx        = window.olmScale.computeCmPerPx;
@@ -1559,11 +1581,21 @@
             var seedPx = r.seed_px || r.seed ||
               (r.seed_x != null && r.seed_y != null
                 ? [r.seed_x, r.seed_y] : null);
+            // D-124 suite : transparent_zones converties canon → abs avant
+            // envoi backend (extract.py interprète en abs-room-local).
+            var rCfAbs = r.corridor_face_abs || '';
+            var rAbsW = (r.bbox_px[2] - r.bbox_px[0]) * ingState.scale;
+            var rAbsD = (r.bbox_px[3] - r.bbox_px[1]) * ingState.scale;
+            var rawTransparents = (am && am.transparent_zones) || [];
+            var absTransparents = window.canonicalZonesToAbs
+              ? window.canonicalZonesToAbs(
+                  rawTransparents, rCfAbs, rAbsW, rAbsD)
+              : rawTransparents;
             payload.rooms.push({
               name: r.name,
               bbox_px: r.bbox_px,
               seed_px: seedPx,
-              transparent_zones: (am && am.transparent_zones) || [],
+              transparent_zones: absTransparents,
             });
             validRooms.push(r);
           });
