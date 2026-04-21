@@ -196,16 +196,23 @@ Objectif : valider automatiquement l'invariant « posture humaine » R-12
 via les couleurs sémantiques du PNG -SD. Évite les régressions silencieuses
 sur fromStorage / rendu / rotation / flux re-analyze.
 
-- [ ] **Étape 1 — Test corridor sud canon (minimal)** :
-  `olm/ingestion/orientation_check.py` avec fonction
-  `check_corridor_south(enhanced_png, bbox_px, original_corridor_face)`
-  → retourne `{ok, ratio_green, face_abs_checked}`.
-- [ ] **Étape 2 — Test extérieur nord canon** : extension + `exterior_faces`.
-- [ ] **Étape 3 — Test fenêtres côté bleu** : itération sur windows canon.
-- [ ] **Endpoint** `/api/room/orientation-check` (1 pièce) +
-  `/api/floor-plan/orientation-report` (batch).
-- [ ] **UI** : bouton dans Room toolbar → badge inline. Version avancée :
-  rapport agrégé avec pièces problématiques listées.
+- [x] **Étape 1 — Test corridor sud canon (minimal)** ✅ D-119 (commit 48b2377).
+  `olm/ingestion/orientation_check.py:check_corridor_south`.
+- [x] **Étape 2 — Test extérieur nord canon** ✅ D-119.
+  `check_exterior_north` + `check_all_faces` diagnostic.
+- [x] **Étape 3 — Test fenêtres côté bleu** ✅ 2026-04-21 (D-133).
+  `check_windows_exterior(path, bbox_px, ocf, windows_canon, scale)`
+  itère sur les fenêtres canoniques, mappe chaque face canon → face abs
+  via `_CANON_TO_ABS`, échantillonne la bande restreinte à la largeur
+  fenêtre, retourne verdict (ok/partial/fail) + détail par fenêtre.
+- [x] **Endpoints** ✅ `/api/room/orientation-check` (1 pièce, D-119)
+  enrichi en D-133 avec param `windows` + `scale_cm_per_px` optionnels.
+  Batch `/api/floor-plan/orientation-report` ajouté en D-133 avec
+  résumé (n_ok/n_warn/n_fail + failing names).
+- [ ] **UI** : bouton Room toolbar `Check orient.` existant (étape 2 R-13).
+  À ajouter : bouton Floor toolbar pour le rapport batch + vue
+  aggrégée avec pièces failing listées. Pas bloquant pour la validation
+  automatique — la CLI/curl suffit en attendant.
 - [ ] **Documentation** : seuils et faux-positifs (cours intérieures,
   pièces enclavées) dans la spec.
 

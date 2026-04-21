@@ -5,7 +5,18 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-132 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-133 (2026-04-20 → 2026-04-21)
+
+### D-133 — R-13 étape 3 + endpoint batch orientation-report (2026-04-21)
+
+- **`check_windows_exterior`** : itère sur les fenêtres canoniques,
+  échantillonne la bande bleue extérieure par fenêtre, retourne verdict
+  ok/partial/fail.
+- **`/api/room/orientation-check`** enrichi : accepte `windows` +
+  `scale_cm_per_px`, retourne `"windows"` dans la réponse.
+- **`/api/floor-plan/orientation-report`** (nouveau) : rapport batch
+  par plan, agrège corridor + exterior + windows par pièce +
+  résumé `n_total / n_ok / n_warn / n_fail + failing`.
 
 ### D-132 — Backend Re-analyze respecte bbox_px comme frontière (2026-04-21)
 

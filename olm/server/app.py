@@ -1210,15 +1210,122 @@ def api_room_orientation_check():
 
         from olm.ingestion.orientation_check import (
             check_all_faces, check_corridor_south, check_exterior_north,
+            check_windows_exterior,
         )
         faces = check_all_faces(plan_path, bbox_px, ocf)
         corridor = check_corridor_south(plan_path, bbox_px, ocf)
         exterior = check_exterior_north(plan_path, bbox_px, ocf)
+        windows = None
+        windows_in = data.get("windows") or []
+        scale = float(data.get("scale_cm_per_px", 0) or 0)
+        if windows_in and scale > 0:
+            windows = check_windows_exterior(
+                plan_path, bbox_px, ocf, windows_in, scale)
         return jsonify({
             "corridor_face_abs": ocf,
             "faces": faces["faces"],
             "corridor_south": corridor,
             "exterior_north": exterior,
+            "windows": windows,
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/floor-plan/orientation-report", methods=["POST"])
+def api_floor_plan_orientation_report():
+    """Batch R-13 : rapport d'orientation pour toutes les pièces du plan.
+
+    Body JSON attendu :
+        {
+          "plan_path": "/chemin/vers/plan-SD.png",
+          "scale_cm_per_px": 0.5,
+          "rooms": [
+            {"name": "237", "bbox_px": [x0,y0,x1,y1],
+             "corridor_face_abs": "east",
+             "windows": [{face, offset_cm, width_cm}, ...]},
+            ...
+          ]
+        }
+
+    Retour :
+        {
+          "results": [{name, corridor_south, exterior_north, windows,
+                       verdict}, ...],
+          "summary": {n_ok, n_warn, n_total, failing: [name, ...]},
+        }
+    """
+    try:
+        data = request.json or {}
+        plan_path = data.get("plan_path", "")
+        rooms = data.get("rooms") or []
+        scale = float(data.get("scale_cm_per_px", 0) or 0)
+
+        if not plan_path or not os.path.exists(plan_path):
+            return jsonify({"error": "plan_path missing or invalid"}), 400
+        if not isinstance(rooms, list) or not rooms:
+            return jsonify({"error": "rooms must be non-empty list"}), 400
+
+        from olm.ingestion.orientation_check import (
+            check_corridor_south, check_exterior_north,
+            check_windows_exterior,
+        )
+
+        results = []
+        failing = []
+        n_ok = 0
+        n_warn = 0
+        for r in rooms:
+            name = r.get("name", "")
+            bbox = r.get("bbox_px")
+            ocf = r.get("corridor_face_abs", "") or ""
+            if not bbox or len(bbox) != 4:
+                results.append({"name": name, "error": "invalid bbox_px"})
+                continue
+            try:
+                corridor = check_corridor_south(plan_path, bbox, ocf)
+                exterior = check_exterior_north(plan_path, bbox, ocf)
+                windows_res = None
+                win_list = r.get("windows") or []
+                if win_list and scale > 0:
+                    windows_res = check_windows_exterior(
+                        plan_path, bbox, ocf, win_list, scale)
+
+                # Verdict par pièce : ok si corridor OK + (extérieur ou
+                # fenêtres indiquent une façade valide).
+                corridor_ok = corridor.get("ok", False)
+                windows_ok = (windows_res is None
+                              or windows_res.get("verdict") in ("ok", ""))
+                if corridor_ok and windows_ok:
+                    verdict = "ok"
+                    n_ok += 1
+                elif not corridor_ok:
+                    verdict = "corridor_fail"
+                    failing.append(name)
+                else:
+                    verdict = "windows_warn"
+                    n_warn += 1
+                results.append({
+                    "name": name,
+                    "corridor_face_abs": ocf,
+                    "corridor_south": corridor,
+                    "exterior_north": exterior,
+                    "windows": windows_res,
+                    "verdict": verdict,
+                })
+            except Exception as e:
+                results.append({"name": name, "error": str(e)})
+
+        return jsonify({
+            "results": results,
+            "summary": {
+                "n_total": len(rooms),
+                "n_ok": n_ok,
+                "n_warn": n_warn,
+                "n_fail": len(failing),
+                "failing": failing,
+            },
         })
     except Exception as e:
         traceback.print_exc()

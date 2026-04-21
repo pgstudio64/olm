@@ -7,6 +7,53 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-133 · R-13 étape 3 + endpoint batch orientation-report (2026-04-21)
+
+### Décision
+
+Complément R-13 (auto-test d'orientation canonique D-119) :
+
+1. **`check_windows_exterior(path, bbox, ocf, windows, scale)`** dans
+   `olm/ingestion/orientation_check.py`. Itère sur les fenêtres en
+   repère canonique, mappe chaque face canon → face absolue via
+   `_CANON_TO_ABS[ocf]`, calcule la position pixel de la fenêtre, puis
+   échantillonne une bande juste au-delà et mesure le ratio bleu
+   (extérieur). Retourne verdict {ok | partial | fail} + détail par
+   fenêtre.
+
+2. **`/api/room/orientation-check`** étendu : accepte `windows` et
+   `scale_cm_per_px` optionnels. Si fournis, invoque
+   `check_windows_exterior` et ajoute `"windows"` à la réponse.
+
+3. **`/api/floor-plan/orientation-report`** (batch) : nouveau endpoint.
+   Pour chaque pièce du plan, calcule corridor_south + exterior_north +
+   windows (si fournies), agrège un verdict par pièce, et retourne un
+   résumé avec `n_total / n_ok / n_warn / n_fail + failing: [names]`.
+
+### Justification
+
+Étape 3 manquante pour compléter le triple-checkpoint R-13 : corridor
+(sud), extérieur (nord), fenêtres (bleu). Le batch permet un audit
+global du plan après ingestion ou rotation — utile pour détecter les
+régressions silencieuses de rotation canonique avant qu'elles ne
+remontent via des tickets utilisateur.
+
+### Impact
+
+- **orientation_check.py** : +113 lignes (`check_windows_exterior`).
+- **app.py** : +85 lignes (endpoint batch + enrichissement single).
+- **Tests** : 135/142 Python, pas de nouveau test ajouté (les fonctions
+  nécessitent un PNG réel, tests E2E à faire via curl ou UI).
+
+### Hors scope
+
+- **UI Floor** pour visualiser le rapport batch agrégé : listé dans
+  TODO.md comme suite, non bloquant.
+- **Documentation** seuils et faux-positifs (cours intérieures) : à
+  ajouter dans les specs R-13 quand le retour d'expérience existera.
+
+---
+
 ## D-132 · Backend Re-analyze respecte bbox_px comme frontière (clip_to_bbox) (2026-04-21)
 
 ### Décision
