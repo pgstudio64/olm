@@ -7,6 +7,47 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-130 · Sync immédiat fpData + préservation currentIdx après bbox edit Floor (2026-04-21)
+
+### Décision
+
+Deux changements couplés pour corriger la race post-D-128 (commit bbox
+edit → fpLoadAndMatch async) :
+
+1. **Sync immédiat de fpData.rooms[i]** après le commit bbox edit mouseup,
+   avant le fetch `/api/floor-plan/match`. La pièce éditée dans
+   `ingState.rooms` est recopiée vers son homologue dans `fpData.rooms`
+   (bbox_px, dims, openings, zones, seed_px).
+2. **Préservation de `fpData.currentIdx` par NOM** à travers
+   `fpLoadAndMatch` au lieu du reset systématique à 0.
+
+### Justification
+
+Deux bugs utilisateur reportés :
+
+- « Je redimensionne 927 et si je double-clique dessus c'est 305 qui
+  s'ouvre dans Review. » → Cause : fetch async résout avec
+  `fpData.currentIdx = 0` ; 305 étant la 1re pièce alphabétique (natSort),
+  elle s'affiche.
+- « Je redimensionne 927, double-clic, elle s'ouvre mais apparaît entière
+  (redimensionnement ignoré). » → Cause : pendant le gap async,
+  `fpData.rooms[927]` est stale ; Review affiche la version pré-resize.
+
+Les deux sont des races autour de `fpLoadAndMatch(ingState.rooms)` ajouté
+en D-128. Le fetch backend peut prendre 100-500 ms ; l'utilisateur a
+largement le temps de double-cliquer.
+
+### Impact
+
+- **floor_plan.js** : `fpLoadAndMatch` préserve currentIdx par name lookup
+  (fallback 0 si la pièce a disparu). +10 lignes.
+- **ingestion.js** : sync direct de fpData.rooms[i] sur commit bbox edit,
+  avant le fetch. +20 lignes.
+- **Idempotent** : le fetch arrive ensuite avec les mêmes données, override
+  proprement.
+
+---
+
 ## D-129 · Clamp openings acceptées par Re-analyze aux dims state (2026-04-21)
 
 ### Décision

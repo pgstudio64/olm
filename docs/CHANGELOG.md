@@ -5,7 +5,18 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-129 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-130 (2026-04-20 → 2026-04-21)
+
+### D-130 — Sync immédiat fpData + préservation currentIdx bbox edit (2026-04-21)
+
+- **Bugs** : après resize d'une pièce dans Floor + D-128,
+  (a) double-clic pouvait ouvrir 305 au lieu de 927 (currentIdx reset à 0),
+  (b) la pièce s'ouvrait en Review avec son ancien bbox (fpData stale).
+- **Fix** :
+  (a) `fpLoadAndMatch` préserve `fpData.currentIdx` par NOM au lieu de
+  le reset à 0.
+  (b) Sync immédiat `fpData.rooms[i]` depuis `ingState.rooms[i]` sur
+  commit bbox edit, avant le fetch async.
 
 ### D-129 — Clamp openings accepted par Re-analyze aux dims state (2026-04-21)
 
