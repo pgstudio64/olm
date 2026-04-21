@@ -5,7 +5,17 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-128 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-129 (2026-04-20 → 2026-04-21)
+
+### D-129 — Clamp openings accepted par Re-analyze aux dims state (2026-04-21)
+
+- **Bug Lock ON + pièce rétrécie** : openings retournées par le backend
+  (dans le canon frame relative au bbox backend) pouvaient dépasser les
+  dims state quand le bbox backend différait du effBbox user locked.
+- **Fix** : `window.clampOpeningsToDims(openings, W, D)` extrait comme
+  helper partagé (refactor D-128 interne). Appliqué dans init_rvtool.js
+  avant assignation à state.room_windows/openings/doors. Non-Lock :
+  idempotent. Lock : coupe les openings débordantes.
 
 ### D-128 — Clamp openings + sync fpData après bbox edit Floor (2026-04-21)
 

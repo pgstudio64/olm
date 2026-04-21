@@ -190,20 +190,19 @@
   }
   window.canonicalZonesToAbs = canonicalZonesToAbs;
 
-  // D-128 : après resize du bbox d'une pièce (Floor bbox editor), clamper
-  // les openings / windows / doors et les zones au nouveau gabarit. Sans
-  // clamp, un opening dont offset+width dépasse le mur réduit reste dans
-  // l'état mais est hors pièce visuellement.
-  // Règle : on coupe proprement, puis on drop tout ce qui descend sous
-  // MIN_OPENING_CM (10 cm).
-  function clampRoomContentsToBbox(room) {
-    var W = room.width_cm || 0;
-    var D = room.depth_cm || 0;
-    var MIN_OPENING_CM = 10;
+  // D-128 + D-129 : clamp d'un tableau d'openings (windows / openings /
+  // doors) aux dims courantes d'une pièce. Règle : on coupe proprement,
+  // on drop tout ce qui descend sous MIN_OPENING_CM (10 cm).
+  // Exposé pour réutilisation : re-analyze Lock ON clamp aussi les
+  // openings retournées par le backend (bbox détecté potentiellement
+  // plus large que le bbox user locked).
+  var MIN_OPENING_CM = 10;
+  function clampOpeningsToDims(openings, W, D) {
+    if (!openings || !openings.length) return openings || [];
     function faceLen(face) {
       return (face === 'north' || face === 'south') ? W : D;
     }
-    function clampOpening(o) {
+    return openings.map(function (o) {
       var fl = faceLen(o.face);
       var off = o.offset_cm || 0;
       var w = o.width_cm || 0;
@@ -212,11 +211,13 @@
       if (off + w > fl) w = fl - off;
       if (w < MIN_OPENING_CM) return null;
       return Object.assign({}, o, { offset_cm: off, width_cm: w });
-    }
-    room.windows = (room.windows || []).map(clampOpening).filter(Boolean);
-    room.openings = (room.openings || []).map(clampOpening).filter(Boolean);
-    room.doors = (room.doors || []).map(clampOpening).filter(Boolean);
-    function clampZone(z) {
+    }).filter(Boolean);
+  }
+  window.clampOpeningsToDims = clampOpeningsToDims;
+
+  function clampZonesToDims(zones, W, D) {
+    if (!zones || !zones.length) return zones || [];
+    return zones.map(function (z) {
       var x = z.x_cm || 0, y = z.y_cm || 0;
       var w = z.width_cm || 0, d = z.depth_cm || 0;
       var x0 = Math.max(0, x);
@@ -228,9 +229,20 @@
         x_cm: x0, y_cm: y0,
         width_cm: x1 - x0, depth_cm: y1 - y0,
       });
-    }
-    room.exclusion_zones = (room.exclusion_zones || []).map(clampZone).filter(Boolean);
-    room.transparent_zones = (room.transparent_zones || []).map(clampZone).filter(Boolean);
+    }).filter(Boolean);
+  }
+  window.clampZonesToDims = clampZonesToDims;
+
+  // D-128 : après resize du bbox d'une pièce (Floor bbox editor), clamper
+  // les openings / windows / doors et les zones au nouveau gabarit.
+  function clampRoomContentsToBbox(room) {
+    var W = room.width_cm || 0;
+    var D = room.depth_cm || 0;
+    room.windows = clampOpeningsToDims(room.windows, W, D);
+    room.openings = clampOpeningsToDims(room.openings, W, D);
+    room.doors = clampOpeningsToDims(room.doors, W, D);
+    room.exclusion_zones = clampZonesToDims(room.exclusion_zones, W, D);
+    room.transparent_zones = clampZonesToDims(room.transparent_zones, W, D);
   }
 
   // --- Drawing scale helpers (extracted to ingestion_scale.js, D-94 P4) ---

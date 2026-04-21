@@ -7,6 +7,46 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-129 · Clamp openings acceptées par Re-analyze aux dims state (2026-04-21)
+
+### Décision
+
+Dans `init_rvtool.js`, clamp systématique des tableaux finaux
+`newWindows.concat(manualW)` / `newOpenings.concat(manualO)` /
+`newDoors.concat(preservedDoors)` aux dims courantes
+`state.room_width_cm / depth_cm` avant assignation au state.
+
+Helper `window.clampOpeningsToDims(openings, W, D)` extrait dans
+`ingestion.js` (refactor de `clampRoomContentsToBbox` D-128 pour
+réutilisation).
+
+### Justification
+
+Bug utilisateur D-126 Test 3 bis : Lock bbox ON + pièce rétrécie → openings
+retournées par le backend extrêmement près du bord détecté, offset+width
+dépassant la face réduite du bbox user locked. Résultat : portes / fenêtres
+visuellement hors pièce.
+
+Root cause : `canon.openings` sont dans le canon frame relative au **bbox
+détecté par le backend**, pas au bbox user. Avec Lock, state dims restent
+celles de l'user. Mismatch → overflow.
+
+Clamp rend le comportement robuste pour :
+- Lock ON : coupe les openings qui dépassent les dims user.
+- Non-Lock : idempotent (dims adoptées = canon dims, openings déjà dans
+  cette frame).
+- Manuel concat : même clamp sur les manuels préservés, utile si un
+  resize s'est glissé entre-temps.
+
+### Impact
+
+- **ingestion.js** : refactor `clampRoomContentsToBbox` en
+  `clampOpeningsToDims` + `clampZonesToDims` (helpers publics) +
+  orchestrateur. +15 lignes net.
+- **init_rvtool.js** : 5 lignes avant les 3 assignations state.
+
+---
+
 ## D-128 · Clamp openings/zones + sync fpData après bbox edit Floor (2026-04-21)
 
 ### Décision
