@@ -173,10 +173,10 @@ racine. Refactor structurel en 7 phases.
   `canonicalIO.rotateRect` ajoutés (8 assertions auto-test).
   `pointAbsToCanon` (ingestion.js) et `_absToCanon2` (editor.js)
   supprimés.
-  **Reste à faire** : `_canonicalAngle` local (editor.js) pas encore
-  centralisé — la convention CSS du rendu SVG diverge des matrices
-  de `fromStorage/toStorage`, migration demande un test visuel.
-  FACE_MAPS restent dans canonical_io (sources uniques) mais ne sont
+  **Complément P6 livré 2026-04-21 (D-134)** : `_canonicalAngle`
+  migré comme `canonicalIO.canonAngle` (5 auto-tests). Editor.js
+  devient wrapper mince de la source unique.
+  FACE_MAPS restent dans canonical_io (sources uniques) et ne sont
   plus dupliquées ailleurs.
 - [x] **P7 — Tests round-trip complets + spec** ✅ 2026-04-20
   (D-122). Nouveau `docs/specs/CANONICAL_STATE.md` (structure, 4

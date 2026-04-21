@@ -7,6 +7,38 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-134 · R-14 P6 : `canonicalIO.canonAngle` (source unique rotation SVG) (2026-04-21)
+
+### Décision
+
+Le mapping `corridor_face_abs → angle SVG rotate` (south=0, east=90,
+north=180, west=270) vit désormais dans `canonical_io.js` comme primitive
+publique `canonicalIO.canonAngle(cfAbs)`.
+
+`editor.js:_canonicalAngle` devient un wrapper mince (fallback si
+canonicalIO non chargé). Le call site principal (overlay Room line 1044)
+appelle directement `window.canonicalIO.canonAngle(...)`.
+
+### Justification
+
+Finalise P6 de R-14 (cf. D-121 / D-122) : la convention d'angle était
+éparpillée en fonction locale dans editor.js alors que les matrices de
+rotation (`FACE_MAPS`, `INV_FACE_MAPS`, `rotateRect`, `rotateRectInv`)
+vivent déjà dans canonical_io.js. Incohérence levée.
+
+### Impact
+
+- **canonical_io.js** : +17 lignes (canonAngle + 5 auto-tests).
+- **editor.js** : -1 fonction redondante → wrapper léger, call site
+  inline préfère canonicalIO.
+- **Tests** : 21/21 auto-tests canonical_io OK (16 → 21 avec les 5
+  cas canonAngle).
+- **Non-régression** : wrapper local conservé avec la même table pour
+  les cas où canonical_io ne serait pas chargé (ordre de chargement
+  scripts).
+
+---
+
 ## D-133 · R-13 étape 3 + endpoint batch orientation-report (2026-04-21)
 
 ### Décision

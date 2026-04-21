@@ -5,7 +5,14 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-133 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-134 (2026-04-20 → 2026-04-21)
+
+### D-134 — R-14 P6 : `canonicalIO.canonAngle` source unique (2026-04-21)
+
+- Migration du helper `_canonicalAngle` (editor.js) vers
+  `canonicalIO.canonAngle` (canonical_io.js). Source unique de la
+  convention rotation SVG `cfAbs → degrés`.
+- 5 auto-tests ajoutés (cas vide / south / east / north / west).
 
 ### D-133 — R-13 étape 3 + endpoint batch orientation-report (2026-04-21)
 
