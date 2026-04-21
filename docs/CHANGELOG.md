@@ -15,6 +15,11 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Use case : raffiner les ouvertures après repositionnement manuel du bbox
   ou dépose d'un mur via zone transparente, sans perdre l'ajustement.
 - Reset automatique de la checkbox à la sortie de l'amend mode.
+- **Rider** : sur Re-analyze sans Lock, reset de `state.roomRenderOffset`
+  à `{0,0}` en même temps que l'adoption du nouveau bbox/dims. Sans ce
+  reset, un resize manuel préalable laissait la pièce visuellement
+  décalée alors que les dims revenaient à l'auto-détection (pièce qui
+  débordait dans le couloir).
 
 ### D-125 — Fix race state.overlay partagé fp/rv (2026-04-21)
 

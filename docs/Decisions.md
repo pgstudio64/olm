@@ -41,6 +41,10 @@ décocher Lock et relancer.
 - **init_rvtool.js** : 2 sites gardés par `!lockBbox` :
   1. `amend.originalRoom.corridor_face_abs = canon.corridor_face` ;
   2. bloc bbox/dims/overlay/reanchor complet.
+- **Rider** : reset `state.roomRenderOffset = {0,0}` dans la branche
+  non-locked (re-analyze revient à la détection auto, donc le resize
+  manuel antérieur doit aussi être reset sinon la pièce se retrouve
+  visuellement décalée hors de l'overlay).
 - **+12 lignes net**.
 
 ---
