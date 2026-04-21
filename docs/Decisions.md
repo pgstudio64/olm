@@ -62,10 +62,15 @@ sans overhead détectable.
   mais une conséquence d'un re-analyze antérieur ayant dérivé les coordonnées
   stockées. Le chemin `rvScreenToRoomCm` → render est correct ; le re-ancrage
   D-124 supprime la source de dérive en amont.
-- **Hors scope** :
-  - Bug latent `transparent_zones` envoyées au backend en canonique au lieu
-    d'abs pour les pièces non-south (mask mal positionné pendant la détection).
-    Ne se manifeste pas sur pièces south testées ; à corriger séparément.
+- **Suite 2026-04-21 — fix `transparent_zones` canon→abs** : le backend
+  `/api/room/reanalyze{,_batch}` (`extract.py:1757-1766`) interprète les zones
+  en abs-room-local ; le frontend les stockait en canonique → mask mal
+  positionné pendant la binarisation pour pièces non-south. Fix : helper
+  `window.canonicalZonesToAbs(zones, cfAbs, absW, absD)` dans `ingestion.js`
+  (map `rotateRectInv`, identité pour cfAbs ∈ {"", "south"}). Appliqué aux
+  deux sites d'envoi (unitaire + batch). Latent sur pièces south testées
+  jusqu'ici, invisible en surface mais corrige le masking des murs retirés
+  pour orientations north/east/west.
 
 ---
 

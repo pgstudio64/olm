@@ -320,12 +320,24 @@
           alert("Re-analyze unavailable: missing plan path, seed, or scale.");
           return;
         }
-        var transparents = (state.room_transparents || []).map(function (z) {
-          return {
-            x_cm: z.x_cm, y_cm: z.y_cm,
-            width_cm: z.width_cm, depth_cm: z.depth_cm,
-          };
-        });
+        // Backend /api/room/reanalyze interprète transparent_zones en
+        // abs-room-local ; le state les porte en canonique. Conversion
+        // canon → abs via rotateRectInv (identité si corridor_face_abs
+        // ∈ {"", "south"}).
+        var cfAbsForZones = amend.originalRoom.corridor_face_abs ||
+          state.corridor_face_abs || "";
+        var absWForZones = bbox ? (bbox[2] - bbox[0]) * ingst.scale : 0;
+        var absDForZones = bbox ? (bbox[3] - bbox[1]) * ingst.scale : 0;
+        var transparents = window.canonicalZonesToAbs
+          ? window.canonicalZonesToAbs(
+              state.room_transparents || [],
+              cfAbsForZones, absWForZones, absDForZones)
+          : (state.room_transparents || []).map(function (z) {
+              return {
+                x_cm: z.x_cm, y_cm: z.y_cm,
+                width_cm: z.width_cm, depth_cm: z.depth_cm,
+              };
+            });
         // Re-analyze = redétection complète : on ne préserve PAS les
         // anciennes portes (sinon leurs masques empêchent la détection
         // de fraîches portes via l'arc).

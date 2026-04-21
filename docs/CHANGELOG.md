@@ -18,11 +18,14 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   unique, 4 auto-tests round-trip) + `window.reanchorCanonicalZones` partagé
   par re-analyze unitaire (`init_rvtool.js`) et batch (`ingestion.js`).
   Propagé à `state.room_exclusions/transparents`, `r.*`, `am.*`, `fpData.*`.
+- **Symptôme 1 (placement décalé nord)** : fixé transitivement. Même cause
+  commune : zone stockée dérivait via re-analyze antérieur, pas bug de
+  placement. Validé user 2026-04-21.
+- **Suite — fix `transparent_zones` canon→abs** : helper
+  `window.canonicalZonesToAbs` dans `ingestion.js` avant envoi backend (le
+  backend attend abs-room-local, pas canon). Identité pour corridor sud.
 - **Tests** : 16/16 auto-tests canonical_io OK. Identité préservée sur
   bbox/cf inchangés.
-- **Hors scope** : symptôme 1 (décalage nord au placement) non reproductible
-  sur lecture de code ; piste `transparent_zones` canon→abs manquant pour
-  envoi backend (latent sur pièces non-south).
 
 
 
