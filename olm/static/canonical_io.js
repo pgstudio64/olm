@@ -110,6 +110,26 @@
   }
 
   /**
+   * Angle SVG (degrés, sens SVG rotate positif) pour mettre une pièce en
+   * repère canonique (corridor sud). cfAbs = corridor_face absolu.
+   *
+   * Convention dérivée du rendu overlay actuel (D-83 / éditeur.js) :
+   *   south → 0, east → 90, north → 180, west → 270.
+   *
+   * Source unique de cette convention (D-134 P6) — remplace
+   * `_canonicalAngle` éparpillé dans editor.js.
+   *
+   * @param {string} cfAbs
+   * @returns {number} degrés pour `transform="rotate(angle cx cy)"`.
+   */
+  function canonAngle(cfAbs) {
+    if (cfAbs === "east")  return 90;
+    if (cfAbs === "north") return 180;
+    if (cfAbs === "west")  return 270;
+    return 0;  // "" ou "south" ou inconnu → pas de rotation
+  }
+
+  /**
    * Inverse exact de rotateRect : canon → abs. Prend un rectangle en repère
    * canonique (corridor sud) et retourne ses coords room-local dans le repère
    * absolu avec corridor_face_abs = cfAbs.
@@ -453,6 +473,24 @@
           "got", back, "expected", RECT);
       }
     });
+    // canonAngle (D-134 P6) : convention overlay SVG rotate.
+    var ANGLE_CASES = [
+      { cf: "",      exp: 0   },
+      { cf: "south", exp: 0   },
+      { cf: "east",  exp: 90  },
+      { cf: "north", exp: 180 },
+      { cf: "west",  exp: 270 },
+    ];
+    ANGLE_CASES.forEach(function (c) {
+      var got = canonAngle(c.cf);
+      if (got === c.exp) {
+        console.log("[canonical_io] OK — canonAngle " + (c.cf || "<empty>"));
+      } else {
+        allOk = false;
+        console.error("[canonical_io] FAIL — canonAngle " + c.cf,
+          "got", got, "expected", c.exp);
+      }
+    });
 
     if (allOk) {
       console.log("[canonical_io] ALL TESTS PASSED");
@@ -504,6 +542,7 @@
     rotatePoint:    rotatePoint,
     rotateRect:     rotateRect,
     rotateRectInv:  rotateRectInv,
+    canonAngle:     canonAngle,
     FACE_MAPS:      FACE_MAPS,
     INV_FACE_MAPS:  INV_FACE_MAPS,
   };

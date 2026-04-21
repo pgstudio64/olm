@@ -499,8 +499,14 @@ function computePatternDims() {
 }
 
 function _canonicalAngle(corridorFace) {
-  var map = { south: 0, east: 90, north: 180, west: 270 };
-  return map[corridorFace] || 0;
+  // D-134 P6 : délégation à canonicalIO.canonAngle (source unique).
+  // Wrapper conservé pour compatibilité avec _roomVisualInfo ci-dessous
+  // et les éventuels anciens call sites internes.
+  return (window.canonicalIO && window.canonicalIO.canonAngle)
+    ? window.canonicalIO.canonAngle(corridorFace)
+    : (corridorFace === "east" ? 90
+      : corridorFace === "north" ? 180
+      : corridorFace === "west" ? 270 : 0);
 }
 
 function _roomVisualInfo(corridorFace, roomWPx, roomHPx) {
@@ -1041,7 +1047,10 @@ function _renderImpl(targetSvg) {
     // le repère absolu est porté uniquement par state.corridor_face_abs.
     // D-99: in room amend mode, pin rotation center to the ORIGINAL room
     //       dimensions so live resize doesn't drift the overlay.
-    var ovAngle = _canonicalAngle(state.corridor_face_abs);
+    // D-134 P6 : source unique via canonicalIO (fallback wrapper local).
+    var ovAngle = (window.canonicalIO && window.canonicalIO.canonAngle)
+      ? window.canonicalIO.canonAngle(state.corridor_face_abs)
+      : _canonicalAngle(state.corridor_face_abs);
     if (ovAngle !== 0 && !isEditor) {
       var origRoom = state.roomAmendMode && state.roomAmendMode.originalRoom;
       var refWPx = origRoom ? origRoom.width_cm * SCALE : roomWPx;
