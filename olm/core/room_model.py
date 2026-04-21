@@ -32,10 +32,13 @@ class WindowSpec:
         face: Wall carrying the window.
         offset_cm: Distance from the west end (N/S faces) or north end (E/W faces).
         width_cm: Window width.
+        origin: "auto" (detected) or "manual" (user-edited). D-131: persisted
+            in JSON v3 so that Re-analyze preserves user edits across sessions.
     """
     face: Face
     offset_cm: int
     width_cm: int
+    origin: str | None = None
 
 
 @dataclass
@@ -49,6 +52,7 @@ class OpeningSpec:
         has_door: True if hinged door, False if free passage.
         opens_inward: Opening direction (True = inward). Ignored if has_door=False.
         hinge_side: Hinge side as seen from inside. Ignored if has_door=False.
+        origin: "auto" (detected) or "manual" (user-edited). D-131.
     """
     face: Face
     offset_cm: int
@@ -56,6 +60,7 @@ class OpeningSpec:
     has_door: bool = True
     opens_inward: bool = True
     hinge_side: HingeSide = HingeSide.LEFT
+    origin: str | None = None
 
 
 @dataclass

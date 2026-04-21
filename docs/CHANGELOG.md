@@ -5,7 +5,19 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-130 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-131 (2026-04-20 → 2026-04-21)
+
+### D-131 — Persistance `origin` dans JSON v3 (2026-04-21)
+
+- **Bug** : le champ `origin` ("auto"|"manual") sur chaque opening/
+  window/door était runtime seulement. Perdu au save/load JSON v3 →
+  chaque Re-analyze post-reload écrasait les ouvertures personnalisées.
+- **Fix** : ajout `origin: str | None = None` à `WindowSpec` et
+  `OpeningSpec`. `/api/floor-plan/match` parse + émet le champ.
+  `serializeForStorage` inclut `origin` conditionnellement.
+  `canonicalIO.fromStorage/toStorage` préservait déjà via `Object.assign`.
+- 3 tests unit ajoutés (`test_room_model.py`). Sample canonical_io
+  round-trip enrichi avec origin.
 
 ### D-130 — Sync immédiat fpData + préservation currentIdx bbox edit (2026-04-21)
 

@@ -1422,7 +1422,10 @@ def api_floor_plan_match():
 
         for r in data["rooms"]:
             windows = [
-                WindowSpec(Face(w["face"]), w["offset_cm"], w["width_cm"])
+                WindowSpec(
+                    Face(w["face"]), w["offset_cm"], w["width_cm"],
+                    origin=w.get("origin"),
+                )
                 for w in r.get("windows", [])
             ]
             openings = [
@@ -1432,6 +1435,7 @@ def api_floor_plan_match():
                     o.get("has_door", True),
                     o.get("opens_inward", True),
                     HingeSide(o.get("hinge_side", "left")),
+                    origin=o.get("origin"),
                 )
                 for o in r.get("openings", [])
             ]
@@ -1456,14 +1460,16 @@ def api_floor_plan_match():
                 "depth_cm": room.depth_cm,
                 "windows": [
                     {"face": w.face.value, "offset_cm": w.offset_cm,
-                     "width_cm": w.width_cm}
+                     "width_cm": w.width_cm,
+                     **({"origin": w.origin} if w.origin else {})}
                     for w in room.windows
                 ],
                 "openings": [
                     {"face": o.face.value, "offset_cm": o.offset_cm,
                      "width_cm": o.width_cm, "has_door": o.has_door,
                      "opens_inward": o.opens_inward,
-                     "hinge_side": o.hinge_side.value}
+                     "hinge_side": o.hinge_side.value,
+                     **({"origin": o.origin} if o.origin else {})}
                     for o in room.openings
                 ],
                 "exclusion_zones": [

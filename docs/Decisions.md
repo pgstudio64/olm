@@ -7,6 +7,44 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-131 · Persistance `origin` dans JSON v3 (2026-04-21)
+
+### Décision
+
+Le champ `origin: "auto" | "manual"` sur chaque opening / window / door est
+désormais persisté à travers toute la chaîne save/load/match :
+
+- **Backend** (`OpeningSpec`, `WindowSpec`) : nouveau champ `origin: str |
+  None = None` en fin de dataclass (keyword-only).
+- **`/api/floor-plan/match`** : parse `origin` depuis le POST, l'émet dans
+  la réponse uniquement si non-None (`**({"origin": x.origin} if x.origin
+  else {})`).
+- **`serializeForStorage` JSON v3** : inclut `origin` conditionnellement
+  pour doors/openings/windows.
+- **`canonicalIO.fromStorage/toStorage`** : déjà préservé via
+  `Object.assign({}, o)`. Sample T1-south du round-trip enrichi avec
+  `origin: "manual"/"auto"` pour valider.
+
+### Justification
+
+`origin` pilote la préservation des ouvertures manuelles au Re-analyze
+(filtre `origin === "manual"` dans init_rvtool.js et ingestion.js batch).
+Sans persistance, toute personnalisation utilisateur était perdue à la
+session suivante : save → load → toutes les ouvertures redevenaient
+`auto` par défaut, et le prochain Re-analyze les écrasait.
+
+### Impact
+
+- **Backend** : +2 champs dataclass, +4 lignes parsing/serialize app.py.
+- **Frontend** : ingestion_serialize.js conditionnel sur `origin`,
+  canonical_io.js sample enrichi.
+- **Backward compat** : vieux JSON v3 sans `origin` → défaut None →
+  non émis → pas de bruit.
+- **Tests** : 3 nouveaux unit tests dans `test_room_model.py` (defaults,
+  manual opening, manual window). Round-trip canonical_io 16/16 toujours OK.
+
+---
+
 ## D-130 · Sync immédiat fpData + préservation currentIdx après bbox edit Floor (2026-04-21)
 
 ### Décision

@@ -47,6 +47,21 @@ def test_window_spec():
     assert w.offset_cm == 50
 
 
+def test_opening_origin_default_none():
+    op = OpeningSpec(face=Face.SOUTH, offset_cm=200)
+    assert op.origin is None
+
+
+def test_opening_origin_manual():
+    op = OpeningSpec(face=Face.SOUTH, offset_cm=200, origin="manual")
+    assert op.origin == "manual"
+
+
+def test_window_origin_manual():
+    w = WindowSpec(face=Face.NORTH, offset_cm=50, width_cm=200, origin="manual")
+    assert w.origin == "manual"
+
+
 def test_exclusion_zone_physical():
     z = ExclusionZone(x_cm=100, y_cm=100, width_cm=80, depth_cm=80)
     assert z.physical is True

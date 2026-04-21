@@ -265,7 +265,10 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
     après D-124.
 - [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `test_comb.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
-- [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
+- [x] **Persistance `origin` dans le JSON v3** ✅ 2026-04-21 (D-131).
+  `WindowSpec` / `OpeningSpec` portent `origin: str | None = None`.
+  `serializeForStorage` et `/api/floor-plan/match` parse/emit le champ.
+  Round-trip canonical_io validé.
 - [x] **Re-analyze + resize pièce** ✅ 2026-04-21 (D-127). Propagation du
   bbox effectif user au backend (`canonBboxUser → rotateRectInv → +origBbox →
   effBbox`). Le backend détecte dans la zone éditée et non dans l'ancien

@@ -166,6 +166,9 @@
         roomObj.canonical_top_face = OPPOSITE[r.doors[0].face] || 'north';
       }
 
+      // D-131 : persiste origin ("auto"|"manual") si présent. Sans ça, la
+      // distinction auto vs manual se perd entre sessions → chaque Re-analyze
+      // écrase les ouvertures que l'utilisateur avait personnalisées.
       if (Array.isArray(r.doors) && r.doors.length > 0) {
         roomObj.doors = r.doors.map(function (d) {
           var o = {
@@ -175,25 +178,30 @@
           };
           if (d.hinge_side) o.hinge_side = d.hinge_side;
           if (typeof d.opens_inward === 'boolean') o.opens_inward = d.opens_inward;
+          if (d.origin) o.origin = d.origin;
           return o;
         });
       }
       if (Array.isArray(r.openings) && r.openings.length > 0) {
         roomObj.openings = r.openings.map(function (o) {
-          return {
+          var out = {
             face: o.face,
             offset_px: _px(o.offset_px),
             width_px:  _px(o.width_px),
           };
+          if (o.origin) out.origin = o.origin;
+          return out;
         });
       }
       if (Array.isArray(r.windows) && r.windows.length > 0) {
         roomObj.windows = r.windows.map(function (w) {
-          return {
+          var out = {
             face: w.face,
             offset_px: _px(w.offset_px),
             width_px:  _px(w.width_px),
           };
+          if (w.origin) out.origin = w.origin;
+          return out;
         });
       }
       roomsDict[roomId] = roomObj;
