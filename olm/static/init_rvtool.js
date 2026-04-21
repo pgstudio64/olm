@@ -424,6 +424,12 @@
               state.room_width_cm = canon.width_cm;
               state.room_depth_cm = canon.depth_cm;
             }
+            // D-126 rider : re-analyze sans Lock = revient à la détection
+            // automatique, donc on reset le roomRenderOffset du resize
+            // manuel éventuel. Sans ce reset, les nouvelles dims s'appliquent
+            // mais la pièce reste visuellement décalée par le resize, ce
+            // qui la fait déborder hors de l'overlay.
+            state.roomRenderOffset = { x_cm: 0, y_cm: 0 };
             // Re-anchor zones to preserve their absolute image position
             // across bbox / corridor_face changes (fix symptôme 2 D-124).
             if (window.reanchorCanonicalZones) {
