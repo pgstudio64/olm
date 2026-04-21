@@ -57,9 +57,12 @@ sans overhead détectable.
   (non reanchorées) restent valides pour leur contexte d'origine.
 - **Tests** : 12 → 16 auto-tests `canonical_io.js`, tous verts. Flask import OK.
   Python 132/139 (7 failures pré-existantes hors scope).
+- **Symptôme 1 fixé transitivement** (validé 2026-04-21 après tests user) : le
+  « décalage nord au placement » n'était pas un bug du chemin de placement,
+  mais une conséquence d'un re-analyze antérieur ayant dérivé les coordonnées
+  stockées. Le chemin `rvScreenToRoomCm` → render est correct ; le re-ancrage
+  D-124 supprime la source de dérive en amont.
 - **Hors scope** :
-  - Symptôme 1 (zone se place décalée nord au clic) : non reproduit sur code,
-    instrumentation browser requise.
   - Bug latent `transparent_zones` envoyées au backend en canonique au lieu
     d'abs pour les pièces non-south (mask mal positionné pendant la détection).
     Ne se manifeste pas sur pièces south testées ; à corriger séparément.

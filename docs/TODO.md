@@ -252,25 +252,17 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
 
 - [x] CRUD ouvertures : ajout, suppression, déplacement, redimensionnement (D-103). Changement de type non implémenté (on supprime et on redessine).
 - [x] **Zones interdites et transparentes (Room)** : zones interdites (rouge, `EXCLUSION`) et zones transparentes (vert, `TRANSPARENT`) définissables dans Room amend mode via le dropdown "Add room items" (D-103).
-- [ ] **Bug zones d'exclusion — déplacement vertical intempestif** :
-  - **Symptôme 1 (placement)** : dans une pièce à corridor sud, quand
-    on dessine une zone d'exclusion, elle apparaît décalée plus haut
-    (vers le nord) que la position cliquée. **Non reproduit** sur
-    lecture de code (rvScreenToRoomCm + render utilisent le même
-    référentiel SVG avec roomX=0 en amend mode). Instrumentation
-    browser requise pour capturer les valeurs réelles client / svg /
-    stored / rendered.
-  - [x] **Symptôme 2 (re-analyze)** ✅ 2026-04-21 (D-124) : re-ancrage
-    automatique des zones et transparentes à la position absolue image
-    via `reanchorCanonicalZones` (pipeline canon → abs → abs(new) →
-    canon(new)). Appliqué à re-analyze unitaire + batch.
-  - **Piste restante symptôme 1** :
-    - Vérifier via console.log que `svg.getScreenCTM().inverse()`
-      retourne bien des coords SVG user-space (pas client-space) ;
-      comparer stored zone (`state.room_exclusions[i]`) au ghost rect
-      affiché au drag.
-    - Vérifier que `state.roomRenderOffset` reste bien à {0,0} quand
-      aucun resize room n'a eu lieu.
+- [x] **Bug zones d'exclusion — déplacement vertical intempestif** ✅
+  2026-04-21 (D-124) — les deux symptômes fixés par le re-ancrage des
+  zones à la position absolue image après re-analyze
+  (`reanchorCanonicalZones`, pipeline canon → abs → abs(new) → canon(new)).
+  - Symptôme 2 (re-analyze) : root cause directe — zones restaient en
+    canonique room-local alors que le bbox détecté dérivait dans l'image.
+  - Symptôme 1 (placement décalé nord au clic) : cause commune, pas un
+    bug de placement. L'état des zones avait déjà dérivé via un
+    re-analyze antérieur ; le placement suivant héritait de coordonnées
+    canoniques pointant sur un feature décalé. Validé par l'utilisateur
+    après D-124.
 - [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `test_comb.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
 - [ ] **Persistance `origin` dans le JSON v3** : actuellement `origin` est runtime uniquement ; à ajouter au save/load du JSON v3 (olm_state) pour que la distinction auto/manuel survive entre sessions.
