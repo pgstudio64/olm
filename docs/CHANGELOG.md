@@ -5,7 +5,19 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased] — D-115 à D-131 (2026-04-20 → 2026-04-21)
+## [Unreleased] — D-115 à D-132 (2026-04-20 → 2026-04-21)
+
+### D-132 — Backend Re-analyze respecte bbox_px comme frontière (2026-04-21)
+
+- **Bug** : Lock bbox ON + pièce rétrécie → porte fantôme sud détectée
+  bien au-delà des nouveaux murs user.
+- **Cause** : ray-cast `_comb_detect_room` opérait sur le binary global,
+  ignorant `bbox_px` comme frontière. Les vrais murs (hors pièce user)
+  étaient trouvés et les openings projetées sur les faces canoniques.
+- **Fix** : nouveau kwarg `clip_to_bbox: bool = False` à
+  `extract_room_features`. Quand True, les pixels hors bbox_px sont
+  marqués solides avant ray-cast. Frontend envoie
+  `clip_to_bbox: rvLockBbox.checked`. Non-régression : default False.
 
 ### D-131 — Persistance `origin` dans JSON v3 (2026-04-21)
 

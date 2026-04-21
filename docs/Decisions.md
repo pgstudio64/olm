@@ -7,6 +7,54 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-132 · Backend Re-analyze respecte bbox_px comme frontière (clip_to_bbox) (2026-04-21)
+
+### Décision
+
+Nouveau paramètre `clip_to_bbox: bool = False` à
+`extract_room_features`. Quand `True`, le backend force solides (True)
+tous les pixels hors de `bbox_px` dans le binary avant ray-cast. Les
+rays de `_comb_detect_room` s'arrêtent aux bords du bbox user au lieu
+de trouver les vrais murs au-delà.
+
+Wiring :
+- `/api/room/reanalyze` et `/api/room/reanalyze_batch` exposent le flag
+  `clip_to_bbox` dans le body (default False).
+- Frontend : `init_rvtool.js` Re-analyze envoie `clip_to_bbox:
+  rvLockBbox.checked` → la case « Lock bbox » (D-126) active le clip.
+
+### Justification
+
+Bug utilisateur : avec Lock bbox ON sur une pièce rétrécie manuellement
+(ex: 927 passée de ~350×500 à 242×308), Re-analyze détectait encore une
+porte « fantôme » sur la face sud user. Hypothèse utilisateur (confirmée
+par lecture de `extract.py:1809`) : le ray-cast opère sur le binary
+global, `bbox_px` sert uniquement à positionner les masques — rien
+n'empêche les rays de traverser les bords du bbox user et de trouver les
+vrais murs au-delà.
+
+Avec `clip_to_bbox=True`, la logique est simple et efficace : marquer
+solides les 4 bandes extérieures au bbox dans le binary (copie locale
+pour ne pas polluer `binary_precomputed` en batch). Les rays rencontrent
+immédiatement un "mur" à la frontière du bbox → détection cantonnée au
+bbox user.
+
+### Impact
+
+- **extract.py** : +1 kwarg, +15 lignes (clip logic via numpy slicing,
+  binary.copy() pour isolation batch). Non-régression : default False.
+- **app.py** : +1 lecture du flag dans chaque endpoint reanalyze, +1
+  kwarg de passage.
+- **init_rvtool.js** : +3 lignes, lecture checkbox.
+- **Interaction avec D-129 (clamp)** : les openings hors bbox n'existent
+  plus côté backend → D-129 devient largement no-op sur Lock ON, OK
+  (ceinture + bretelles).
+- **Batch** : `clip_to_bbox` exposé mais non utilisé par défaut côté
+  frontend — batch garde sa sémantique de « reset auto-detect ». Opt-in
+  possible ultérieurement si besoin.
+
+---
+
 ## D-131 · Persistance `origin` dans JSON v3 (2026-04-21)
 
 ### Décision
