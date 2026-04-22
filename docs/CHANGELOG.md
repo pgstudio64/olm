@@ -5,25 +5,45 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [v0.4.1] — 2026-04-21 : D-135
 
-### D-135 — UX Scan / Lock walls + flags `walls_user_edited` & `first_scan_done` (2026-04-21)
+### Highlights
 
-- Renommage des boutons `Re-analyze` → `Rescan` (Floor « Rescan all »,
-  Room « Rescan ») et de la checkbox Room `Lock bbox` → `Lock walls`.
-  IDs HTML conservés pour les boutons. Bouton Room amend `Add room
-  items` → `Add items` (redondance du contexte supprimée).
-- Nouvelle checkbox `Lock walls` dans la toolbar Floor, contrôlant
-  `clip_to_bbox` envoyé à `/api/room/reanalyze_batch`.
-- Nouveau flag par pièce `walls_user_edited` (JSON v3 `rooms[<id>]`) :
-  passe à `true` au resize bbox en Room amend, à `false` après un Scan
-  destructif (Lock walls décoché), inchangé sinon. Pré-coche automatique
-  de la checkbox Lock walls à la réouverture de la pièce.
-- Nouveau flag racine `first_scan_done` (JSON v3) : passe à `true` dès
-  le premier Scan réussi ; sert de défaut pour la case `Lock walls`
-  Floor au prochain chargement du plan.
-- Backend : `/api/import/preprocessed` retourne `first_scan_done` ;
-  `/api/room/reanalyze_batch` inchangé (acceptait déjà `clip_to_bbox`).
+- **UX Rescan + Lock walls** (D-135) : renommage `Re-analyze` → `Rescan`
+  (Floor « Rescan all », Room « Rescan »), `Lock bbox` → `Lock walls`
+  (Room + nouvelle case Floor), `Add room items` → `Add items`,
+  `Edit pattern` → `Add pattern`. IDs HTML conservés.
+- **Flags persistants JSON v3** (D-135) : `walls_user_edited` par pièce
+  (true au resize bbox, reset au Rescan Lock OFF, inchangé Lock ON),
+  `first_scan_done` à la racine (true dès 1er Rescan, sert de défaut
+  à la case Lock walls Floor).
+- **Fix rider D-135** : handler batch Rescan all propage enfin
+  `bbox_px`/`dims` dans `fpRoomAmendments` — Review ne montrait pas
+  les murs re-scannés après scan destructif.
+- **Fix D-127** (limite bbox_px persistée) : écriture unique et
+  inconditionnelle de `fpRoomAmendments` en fin de `save()`, priorité
+  fpData si dispo, fallback canonRoom enrichi du newBbox.
+- **Fix Total area m² au change scale** : extraction
+  `updateFloorProperties()` hors de `rvRenderCurrent` — refresh
+  immédiat sans attendre le match async.
+- **UX Room dimensions** : 3 lignes Plan area / Bbox area / Bbox size,
+  seed `plan_area_m2` depuis le cartouche au load. Aide au diagnostic
+  d'échelle et de bbox mal détectée.
+- **Refactoring audit-driven** (ingestion.js + init_rvtool.js) :
+  blocs CONSTANTS, helpers extraits, renommages ambigus, schema rvTool
+  documenté. Zéro régression.
+- **Audits** livrés : `docs/AUDIT_{ingestion,init_rvtool,editor}_2026-04-21.md`
+  + `docs/INVESTIGATION_{D127_save_bbox,total_area_refresh}.md`.
+
+### Backend
+
+- `/api/import/preprocessed` retourne `first_scan_done`.
+- `/api/room/reanalyze_batch` acceptait déjà `clip_to_bbox`, inchangé.
+
+### Compat
+
+- JSON v3 rétro-compatible : nouveaux champs optionnels (`walls_user_edited`,
+  `first_scan_done`). Absents = `false`, comportement identique à v0.4.0.
 
 ---
 
