@@ -5,167 +5,75 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [v0.4.4] — 2026-04-21 : D-140 + D-141
+## [v0.4.4] — 2026-04-21
 
-### Hotfix — Compatibilité JSON v3 Input minimal en prod
+### Fixed
 
-- **D-140** : `/api/plans` classe `preprocessed` dès `has_json`,
-  sans comparer `json_mtime > png_mtime`. Corrige le confirm « No
-  JSON file found » qui apparaissait en prod quand les fichiers
-  étaient simplement copiés (mtimes altérés par la copie / git).
-- **D-141** : endpoints `/api/floor-plan/match` et frontend
-  `serializeForMatching` / `fpLoadAndMatch` filtrent les entries
-  windows/openings/doors sans `face`. Corrige l'erreur « Error:
-  'face' » (`KeyError` Python) qui survenait sur un JSON v3 Input
-  minimal (doors avec `seed_x/seed_y` seulement, non enrichies).
-
-### Limitation acceptée (D-141)
-
-L'enrichissement ray-cast des doors à partir de `seed_x/seed_y`
-(spec R-05) n'est pas implémenté. En attendant, les portes au
-format Input sont ignorées au matching ; la pièce charge et
-matche sur les autres éléments.
+- `/api/plans` : un plan est classé `preprocessed` dès que le JSON
+  associé existe (plus de comparaison de `mtime`).
+- `/api/floor-plan/match` et sérialisation frontend : les ouvertures
+  sans champ `face` sont ignorées au lieu de provoquer une erreur.
 
 ---
 
-## [v0.4.3] — 2026-04-21 : D-139
+## [v0.4.3] — 2026-04-21
 
-### Hotfix — Faux positif « No rooms found in JSON » en prod
+### Fixed
 
-- Backend `/test_rooms.json` : retourne **HTTP 404** si le fichier privé
-  `project/test_rooms.json` est absent (au lieu de `{"rooms": []}` +
-  HTTP 200 qui déclenchait à tort l'alerte « No rooms found in JSON »
-  à chaque ouverture de la page sur les déploiements prod).
-- Frontend `fpLoadAndMatch(string)` : accepte `parsed.rooms` en array
-  **ou** en dict indexé par room_id (format storage v3). Le chemin
-  « Load JSON file » marche maintenant aussi pour les JSON v3 bruts.
+- `/test_rooms.json` : renvoie `404` au lieu d'une liste vide quand le
+  fichier de démarrage n'est pas présent.
+- Chargement d'un JSON : le format `rooms` en dict indexé par room_id
+  (JSON v3) est désormais accepté en entrée directe.
 
 ---
 
-## [v0.4.2] — 2026-04-21 : D-136 → D-138
+## [v0.4.2] — 2026-04-21
 
-### Highlights
+### Added
 
-- **`room_sync_helpers.js`** (D-136) : source unique pour la mutation
-  atomique des 3 stores (`ingState.rooms`, `fpData.rooms`,
-  `fpRoomAmendments`) + split `has_door`. Migration des 3 call sites
-  (ingestion.js, editor.js, floor_plan.js). Absorbe les fix D-127 et
-  D-135 rider par construction.
-- **Métadonnées Floor JSON v3** (D-137) : `building_id`, `floor_id`,
-  `north_angle_deg` wirés end-to-end (backend + `ingState` + sérialisation
-  + UI inputs panneau Floor).
-- **Seed de porte** (D-138) : renommage `label_x/y` → `seed_x/y`
-  (spec v3.1 → v3.2) et round-trip Save/Load rétabli.
-- **UX série B** : zoom arrière Review/Room passé de 3× à 5×, seed
-  (disque vert) visible dès V-Rays / H-Rays activés même sans hits.
-- **Bloc `EDITOR_CONSTANTS`** : 8 couleurs nommées + `ZOOM_*` +
-  `SEED_DISC_R_PX` / `HIT_DISC_R_PX`. Tous les littéraux hex migrés.
-- **Audits** : 3 rapports JS core (`ingestion.js`, `init_rvtool.js`,
-  `editor.js`) + 2 investigations (`D-127_save_bbox`,
-  `total_area_refresh`) livrés dans `docs/`.
+- Champs `building_id`, `floor_id`, `north_angle_deg` au niveau racine
+  du JSON v3 : lecture, sérialisation et édition depuis le panneau
+  Floor (section « Floor metadata »).
 
-### Gains
+### Changed
 
-- `ingestion.js` : 2036 → 2008 lignes.
-- `editor.js`    : 2323 → 2280 lignes.
-- `floor_plan.js` : 994 → 976 lignes.
+- Zoom arrière en Review/Room : limite portée de 3× à 5× la vue fitée.
+- Seed de porte renommé `seed_x` / `seed_y` (format v3.2). Les
+  anciennes clés `label_x` / `label_y` ne sont plus lues.
 
-### Compat
+### Fixed
 
-- JSON v3 rétro-compatible avec v0.4.1 pour les champs `walls_user_edited`,
-  `first_scan_done`, `building_id`, `floor_id`, `north_angle_deg` (tous
-  optionnels, defaults si absents).
-- **Breaking** : les seeds de porte en `label_x` / `label_y` (v3.1) ne
-  sont plus lus — remplacés par `seed_x` / `seed_y`. Pas de shim legacy
-  (choix acté).
-
-### D-138 — Seed de porte `label_x/y` → `seed_x/y` + round-trip rétabli (2026-04-21)
-
-- Renommage des seeds de porte dans le JSON v3 (spec passe v3.1 → v3.2).
-- Persistance des seeds rétablie : `ingestion_serialize.js` écrit
-  désormais `seed_x` / `seed_y` sur les doors (auparavant ignorés).
-- Rétro-compat : aucune (user a choisi « dernière version uniquement »).
-
-### D-137 — Métadonnées Floor `building_id` / `floor_id` / `north_angle_deg` (2026-04-21)
-
-- Wiring complet des 3 champs racine JSON v3 : backend retour
-  (`/api/import/preprocessed`), seed `ingState`, sérialisation
-  conditionnelle, UI inputs dans le panneau Floor.
-- Spec documentait les champs depuis plusieurs versions ; implémentation
-  qui manquait désormais faite.
-
-### D-136 — `room_sync_helpers.js` (2026-04-21)
-
-- Nouveau module `olm/static/room_sync_helpers.js` : source unique pour
-  la mutation atomique des 3 stores (`ingState.rooms`, `fpData.rooms`,
-  `fpRoomAmendments`) et le split `has_door` backend → `{openings, doors}`.
-- Migration des 3 sites consommateurs : `ingestion.js` (handler batch
-  Rescan all), `editor.js save()` (Room amend), `floor_plan.js`
-  (`fpRematchRoom` + `fpLoadAndMatch`).
-- Absorbe les fix D-127 (bbox_px stale) et D-135 rider (amendments non
-  propagés) par construction.
-
-### Autres (consolidation post-v0.4.1)
-
-- **Zoom arrière Review/Room** : limite 3× → 5× `fitViewBox.w`
-  (`zoomOut()`, editor.js).
-- **Seed visible dès V-Rays / H-Rays** : push du disque vert sorti du
-  bloc conditionné par `room_hits` (editor.js).
-- **Bloc EDITOR_CONSTANTS** : 8 couleurs nommées (`COLOR_WINDOW`,
-  `COLOR_OPENING`, `COLOR_WALL_STROKE`, `COLOR_GOOD`, `COLOR_DANGER`,
-  `COLOR_NEUTRAL`, `COLOR_WALL_DEFAULT`, `COLOR_LABEL_BG`) + `ZOOM_*` +
-  `SEED_DISC_R_PX`, `HIT_DISC_R_PX`. Tous les littéraux hex des 8
-  couleurs migrés.
-- **Dead code** : `globalWestOffset` obsolète + commentaire orphelin
-  « zoomLevel display removed » supprimés.
-
-### Gains
-
-- `ingestion.js` : 2036 → 2008 lignes.
-- `editor.js`    : 2323 → 2280 lignes.
-- `floor_plan.js` : 994 → 976 lignes.
+- Seed (disque vert) visible dès l'activation de V-Rays ou H-Rays,
+  même avant le premier scan.
+- Persistance du seed de porte au round-trip Save / Load.
 
 ---
 
-## [v0.4.1] — 2026-04-21 : D-135
+## [v0.4.1] — 2026-04-21
 
-### Highlights
+### Added
 
-- **UX Rescan + Lock walls** (D-135) : renommage `Re-analyze` → `Rescan`
-  (Floor « Rescan all », Room « Rescan »), `Lock bbox` → `Lock walls`
-  (Room + nouvelle case Floor), `Add room items` → `Add items`,
-  `Edit pattern` → `Add pattern`. IDs HTML conservés.
-- **Flags persistants JSON v3** (D-135) : `walls_user_edited` par pièce
-  (true au resize bbox, reset au Rescan Lock OFF, inchangé Lock ON),
-  `first_scan_done` à la racine (true dès 1er Rescan, sert de défaut
-  à la case Lock walls Floor).
-- **Fix rider D-135** : handler batch Rescan all propage enfin
-  `bbox_px`/`dims` dans `fpRoomAmendments` — Review ne montrait pas
-  les murs re-scannés après scan destructif.
-- **Fix D-127** (limite bbox_px persistée) : écriture unique et
-  inconditionnelle de `fpRoomAmendments` en fin de `save()`, priorité
-  fpData si dispo, fallback canonRoom enrichi du newBbox.
-- **Fix Total area m² au change scale** : extraction
-  `updateFloorProperties()` hors de `rvRenderCurrent` — refresh
-  immédiat sans attendre le match async.
-- **UX Room dimensions** : 3 lignes Plan area / Bbox area / Bbox size,
-  seed `plan_area_m2` depuis le cartouche au load. Aide au diagnostic
-  d'échelle et de bbox mal détectée.
-- **Refactoring audit-driven** (ingestion.js + init_rvtool.js) :
-  blocs CONSTANTS, helpers extraits, renommages ambigus, schema rvTool
-  documenté. Zéro régression.
-- **Audits** livrés : `docs/AUDIT_{ingestion,init_rvtool,editor}_2026-04-21.md`
-  + `docs/INVESTIGATION_{D127_save_bbox,total_area_refresh}.md`.
+- Bouton « Lock walls » dans la barre d'outils Floor. Coché, un Rescan
+  préserve les murs détectés précédemment.
+- Flags `walls_user_edited` (par pièce) et `first_scan_done` (racine)
+  dans le JSON v3, pour mémoriser l'état entre sessions.
+- Affichage Room dimensions étendu : Plan area (cartouche),
+  Bbox area et Bbox size.
 
-### Backend
+### Changed
 
-- `/api/import/preprocessed` retourne `first_scan_done`.
-- `/api/room/reanalyze_batch` acceptait déjà `clip_to_bbox`, inchangé.
+- Boutons renommés : `Re-analyze` → `Rescan`, `Lock bbox` →
+  `Lock walls`, `Add room items` → `Add items`, `Edit pattern` →
+  `Add pattern`.
 
-### Compat
+### Fixed
 
-- JSON v3 rétro-compatible : nouveaux champs optionnels (`walls_user_edited`,
-  `first_scan_done`). Absents = `false`, comportement identique à v0.4.0.
+- Re-scan en batch : les modifications visuelles d'une pièce
+  (dimensions, bbox) sont maintenant correctement propagées à
+  la Review.
+- Dimensions et bbox_px persistés lors d'un Save même avant le
+  premier matching.
+- Total area en m² rafraîchi immédiatement au changement d'échelle.
 
 ---
 
