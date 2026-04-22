@@ -5,6 +5,29 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [v0.4.4] — 2026-04-21 : D-140 + D-141
+
+### Hotfix — Compatibilité JSON v3 Input minimal en prod
+
+- **D-140** : `/api/plans` classe `preprocessed` dès `has_json`,
+  sans comparer `json_mtime > png_mtime`. Corrige le confirm « No
+  JSON file found » qui apparaissait en prod quand les fichiers
+  étaient simplement copiés (mtimes altérés par la copie / git).
+- **D-141** : endpoints `/api/floor-plan/match` et frontend
+  `serializeForMatching` / `fpLoadAndMatch` filtrent les entries
+  windows/openings/doors sans `face`. Corrige l'erreur « Error:
+  'face' » (`KeyError` Python) qui survenait sur un JSON v3 Input
+  minimal (doors avec `seed_x/seed_y` seulement, non enrichies).
+
+### Limitation acceptée (D-141)
+
+L'enrichissement ray-cast des doors à partir de `seed_x/seed_y`
+(spec R-05) n'est pas implémenté. En attendant, les portes au
+format Input sont ignorées au matching ; la pièce charge et
+matche sur les autres éléments.
+
+---
+
 ## [v0.4.3] — 2026-04-21 : D-139
 
 ### Hotfix — Faux positif « No rooms found in JSON » en prod

@@ -7,6 +7,76 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-141 · Skip silencieux des ouvertures sans `face` dans la chaîne match (2026-04-21)
+
+### Décision
+
+Les endpoints `/api/floor-plan/match` (2 sites dans app.py) et les
+fonctions frontend `serializeForMatching` / `fpLoadAndMatch` filtrent
+désormais les entries `windows` / `openings` / `doors` dont le champ
+`face` est absent. Ces entries viennent principalement du format JSON v3
+**Input minimal** : doors avec uniquement `seed_x` / `seed_y`, non
+enrichies par un ray-cast.
+
+### Justification
+
+Avant D-141, une porte au format Input provoquait un `KeyError: 'face'`
+côté Python (symptôme « Error: 'face' » remonté par l'UI) dès qu'elle
+arrivait dans le backend matcher. Le frontend combinait pourtant les
+doors dans `openings[]` avec `has_door:true`, mais `face` undefined
+devenait clé absente au `JSON.stringify`.
+
+L'enrichissement ray-cast qui devrait attacher `face` / `offset_px` /
+`width_px` aux doors depuis leur `seed_x/seed_y` (spec R-05 / D-105)
+n'est pas encore implémenté. Entre-temps, le pipeline doit dégrader
+proprement : les portes non-enrichies sont ignorées au matching plutôt
+que de bloquer tout le plan.
+
+### Impact
+
+- **Robustesse** : les JSON v3 Input minimal chargent sans erreur.
+- **Limitation acceptée** : les portes au format Input ne sont pas
+  prises en compte dans le matching tant que l'enrichissement ray-cast
+  n'est pas implémenté. Les murs + windows/openings enrichies restent
+  matchés normalement.
+- **Convergence 5 sites** : même filtre à 5 endroits (2 backend, 3
+  frontend dans les 2 fichiers). Factoriser ce filtre est un TODO
+  structurel.
+
+---
+
+## D-140 · `effective_mode = "preprocessed"` dès `has_json` (2026-04-21)
+
+### Décision
+
+La route backend `/api/plans` ([app.py:415](../olm/server/app.py#L415))
+classe désormais un plan en `effective_mode = "preprocessed"` dès que le
+JSON associé existe (`has_json == True`), sans regarder les `mtime`. La
+condition précédente `json_mtime > png_mtime` est supprimée.
+
+### Justification
+
+La condition `mtime` visait à détecter un PNG ré-édité après le JSON pour
+déclencher un re-OCR. En pratique cette heuristique est fragile :
+- Copie inter-machine (déploiement prod) : les `mtime` reflètent l'ordre
+  de copie, pas l'ordre d'édition.
+- `git checkout` : tous les fichiers prennent le même `mtime`.
+- Timezones / clock skew.
+- Format de stockage filesystem variable.
+
+En prod, l'user constatait un confirm « No JSON file found for this
+plan » à chaque ouverture d'un plan copié tel quel. Le JSON était
+présent, juste perçu comme obsolète par le backend.
+
+### Impact
+
+- **Déploiement prod** : le classement `preprocessed` est maintenant
+  robuste aux copies de fichiers.
+- **Non-régression** : si le user veut forcer un re-OCR, il peut
+  supprimer explicitement le JSON.
+
+---
+
 ## D-139 · Fix faux positif « No rooms found in JSON » au démarrage + tolérance dict/array (2026-04-21)
 
 ### Décision
