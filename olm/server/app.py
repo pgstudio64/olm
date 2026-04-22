@@ -213,11 +213,17 @@ def index():
 
 @app.route("/test_rooms.json")
 def serve_test_rooms():
-    """DEV: serve test_rooms.json from project/ for auto-load."""
+    """DEV: serve test_rooms.json from project/ for auto-load.
+
+    Renvoie 404 si le fichier est absent (ex. déploiement prod sans
+    project/test_rooms.json) : le fetch frontend check `r.ok` et skip
+    silencieusement. Retourner `{"rooms": []}` avec HTTP 200 déclenchait
+    faussement l'alerte "No rooms found in JSON" à l'ouverture de la page.
+    """
     project_dir = os.path.join(os.path.dirname(BASE_DIR), "project")
     path = os.path.join(project_dir, "test_rooms.json")
     if not os.path.exists(path):
-        return jsonify({"rooms": []})
+        return "", 404
     return send_from_directory(project_dir, "test_rooms.json")
 
 

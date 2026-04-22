@@ -35,10 +35,22 @@
       try { parsed = JSON.parse(arg); } catch(e) {
         alert("Invalid JSON: " + e.message); return;
       }
-      if (!parsed.rooms || !parsed.rooms.length) {
+      // parsed.rooms accepté en array (format matching) ou en dict
+      // indexé par room_id (format storage v3). Dict converti au vol.
+      var roomsInput;
+      if (Array.isArray(parsed.rooms)) {
+        roomsInput = parsed.rooms;
+      } else if (parsed.rooms && typeof parsed.rooms === 'object') {
+        roomsInput = Object.keys(parsed.rooms).map(function (id) {
+          return Object.assign({ name: id }, parsed.rooms[id]);
+        });
+      } else {
+        roomsInput = [];
+      }
+      if (!roomsInput.length) {
         alert("No rooms found in JSON"); return;
       }
-      rooms = parsed.rooms.map(function (r) {
+      rooms = roomsInput.map(function (r) {
         return (r.corridor_face_abs !== undefined)
           ? r
           : window.canonicalIO.fromStorage(r, _fpScale);
