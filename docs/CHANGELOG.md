@@ -5,6 +5,15 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [v0.4.5] — 2026-04-21
+
+### Changed
+
+- Optimisation du rescan d'une pièce : fortement accéléré sur les
+  plans haute résolution (de plusieurs minutes à quelques secondes).
+
+---
+
 ## [v0.4.4] — 2026-04-21
 
 ### Fixed

@@ -7,6 +7,51 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-142 · `remove_non_ortho` travaille en local par composant (2026-04-21)
+
+### Décision
+
+La fonction `remove_non_ortho` ([extract.py:233](../olm/ingestion/extract.py#L233))
+utilise désormais `cv2.connectedComponentsWithStats` (au lieu de
+`connectedComponents`) pour lire la bbox de chaque composant connexe.
+Chaque composant est ensuite traité dans sa **bbox locale**, pas sur
+l'image entière :
+
+```python
+num, labels, stats, _ = cv2.connectedComponentsWithStats(binary_u8, 8)
+for label_id in range(1, num):
+    x, y, w, h = stats[label_id, [LEFT, TOP, WIDTH, HEIGHT]]
+    local_labels = labels[y:y+h, x:x+w]
+    local_mask = (local_labels == label_id)
+    # minAreaRect, effacement sur la vue locale
+```
+
+### Justification
+
+Sur un plan haute résolution (ex: 7320×3508 ≈ 25 Mpx, cas observé en
+prod), le rescan unitaire prenait 4 minutes. Le goulot dominant était
+ici : chaque itération faisait `labels == label_id` et `cleaned[labels
+== label_id] = False`, soit deux balayages **O(total_pixels)** par
+composant. Avec plusieurs centaines de composants, coût total **O(N ×
+pixels)** — plusieurs milliards d'opérations.
+
+En travaillant sur la bbox locale de chaque composant, le coût passe à
+**O(somme_des_bbox_composants)**, typiquement 50-100× plus rapide sur
+des plans où les composants sont petits devant l'image.
+
+### Impact
+
+- **Perf** : rescan unitaire attendu de l'ordre de 10-30 s au lieu de
+  4 min sur un PNG 25 Mpx.
+- **Sémantique inchangée** : même détection (angle via `minAreaRect`),
+  même seuil `min_component_px`, même effacement pour composants
+  non-orthogonaux.
+- **Benchmark synthétique** (500 composants, 7320×3508) : 31 ms.
+- **Non-régression** : 135/142 tests Python passent (7 échecs
+  pré-existants hors scope).
+
+---
+
 ## D-141 · Skip silencieux des ouvertures sans `face` dans la chaîne match (2026-04-21)
 
 ### Décision
