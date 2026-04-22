@@ -1820,93 +1820,40 @@
               };
             }
 
-            r.windows = mergedW;
-            r.openings = mergedOpenings;
-            r.doors = mergedDoors;
+            // Consolidation 2026-04-21 : les 3 stores (ingState.rooms /
+            // fpData.rooms / fpRoomAmendments) sont synchronisés en une
+            // seule opération via room_sync_helpers.syncRoomToAllStores.
+            // Remplace ~80 lignes de triple mutation (voir historique
+            // avant la consolidation, bug D-135 rider origine).
+            var updates = {
+              windows: mergedW,
+              openings: mergedOpenings,
+              doors: mergedDoors,
+            };
             if (reanchored) {
-              r.exclusion_zones = reanchored.exclusion_zones;
-              r.transparent_zones = reanchored.transparent_zones;
+              updates.exclusion_zones = reanchored.exclusion_zones;
+              updates.transparent_zones = reanchored.transparent_zones;
             }
-            // Adopter le nouveau bbox + dims + corridor_face (D-113).
             if (canon.bbox_px) {
-              r.bbox_px = canon.bbox_px;
-              r.width_cm = canon.width_cm;
-              r.depth_cm = canon.depth_cm;
-              r.width_px = canon.bbox_px[2] - canon.bbox_px[0];
-              r.height_px = canon.bbox_px[3] - canon.bbox_px[1];
-              r.surface_m2_bbox = parseFloat(
+              updates.bbox_px = canon.bbox_px;
+              updates.width_cm = canon.width_cm;
+              updates.depth_cm = canon.depth_cm;
+              updates.width_px = canon.bbox_px[2] - canon.bbox_px[0];
+              updates.height_px = canon.bbox_px[3] - canon.bbox_px[1];
+              updates.surface_m2_bbox = parseFloat(
                 ((canon.width_cm * canon.depth_cm) / 10000).toFixed(2));
             }
-            // D-113 + R-12 : canon.corridor_face est le repère ABSOLU
-            // détecté. En state canonique, corridor_face reste "south" ;
-            // corridor_face_abs pilote la rotation overlay.
             if (canon.corridor_face) {
-              r.corridor_face_abs = canon.corridor_face;
-              r.corridor_face = "south";
+              updates.corridor_face_abs = canon.corridor_face;
+              updates.corridor_face = "south";
             }
-
-            if (amend) {
-              // D-122 P4 : amendments gardent les 3 collections séparées
-              // (même invariant que ingState / fpData, pas de re-split).
-              amend.windows = mergedW;
-              amend.openings = mergedOpenings;
-              amend.doors = mergedDoors;
-              if (reanchored) {
-                amend.exclusion_zones = reanchored.exclusion_zones;
-                amend.transparent_zones = reanchored.transparent_zones;
-              }
-              if (canon.corridor_face) {
-                amend.corridor_face_abs = canon.corridor_face;
-                amend.corridor_face = "south";
-              }
-              // D-135 : rvRenderCurrent priorise fpRoomAmendments[name]
-              // sur fpData.rooms[i]. Sans propager les dims/bbox ici, un
-              // scan destructif remet les murs dans fpData / ingState
-              // mais la Review continue d'afficher les anciennes dims
-              // amendées.
-              if (canon.bbox_px) {
-                amend.bbox_px = canon.bbox_px;
-                amend.width_cm = canon.width_cm;
-                amend.depth_cm = canon.depth_cm;
-                amend.width_px = canon.bbox_px[2] - canon.bbox_px[0];
-                amend.height_px = canon.bbox_px[3] - canon.bbox_px[1];
-                amend.surface_m2_bbox = parseFloat(
-                  ((canon.width_cm * canon.depth_cm) / 10000).toFixed(2));
-              }
-            }
-            if (window.fpData && window.fpData.rooms) {
-              var fr = window.fpData.rooms.find(function (x) { return x.name === r.name; });
-              if (fr) {
-                fr.windows = mergedW;
-                fr.openings = mergedOpenings;
-                fr.doors = mergedDoors;
-                if (reanchored) {
-                  fr.exclusion_zones = reanchored.exclusion_zones;
-                  fr.transparent_zones = reanchored.transparent_zones;
-                }
-                if (canon.bbox_px) {
-                  fr.bbox_px = canon.bbox_px;
-                  fr.width_cm = canon.width_cm;
-                  fr.depth_cm = canon.depth_cm;
-                }
-                if (canon.corridor_face) {
-                  fr.corridor_face_abs = canon.corridor_face;
-                  fr.corridor_face = "south";
-                }
-              }
-            }
-            // D-135 : scan destructif (Lock walls Floor décoché) ⇒ les murs
-            // reviennent de la détection automatique, on efface le flag
-            // user-edited de la pièce. Rescan non destructif ⇒ inchangé.
+            // D-135 : Rescan destructif (Lock walls Floor décoché) ⇒ les
+            // murs reviennent de la détection automatique, on reset le
+            // flag user-edited. Rescan Lock ON ⇒ inchangé.
             if (!lockWallsFloor) {
-              r.walls_user_edited = false;
-              if (amend) amend.walls_user_edited = false;
-              if (window.fpData && window.fpData.rooms) {
-                var frWue = window.fpData.rooms.find(
-                  function (x) { return x.name === r.name; });
-                if (frWue) frWue.walls_user_edited = false;
-              }
+              updates.walls_user_edited = false;
             }
+            window.syncRoomToAllStores(r.name, updates);
             ok++;
           });
           if (ok > 0) {

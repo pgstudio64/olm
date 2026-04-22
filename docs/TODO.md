@@ -278,7 +278,9 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
   `fpData.rooms[fr]` si existe (plus riche), fallback à `canonRoom` enrichi
   du `newBbox` sinon. Investigation :
   [`docs/INVESTIGATION_D127_save_bbox.md`](INVESTIGATION_D127_save_bbox.md).
-- [ ] **Zoom arrière bloqué trop tôt (Review / Room)** : la limite max de dézoom se déclenche avant que l'utilisateur puisse voir toute la pièce + marge confortable. Ajuster le clamp `maxW` (actuellement `planW × 1.1` dans ingestion.js). À revoir aussi pour Room amend mode.
+- [x] ~~**Zoom arrière bloqué trop tôt (Review / Room)**~~ ✅ 2026-04-21.
+  Limite zoom-out passée de 3× à 5× `state._fitViewBox.w` dans
+  `zoomOut()` ([editor.js:2191](olm/static/editor.js#L2191)).
 - [x] ~~**Re-analyze instable — 2 passes quasi systématiques**~~ ✅ fixé
   2026-04-20 : bug dans le filtre `preservedDoors` (init_rvtool.js /
   ingestion.js). Utilisait `o.origin !== "auto"` → capturait les doors
@@ -514,11 +516,21 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
 - [ ] **Édition contours au niveau Room** : ajouter la capacité de modifier les contours de la pièce dans Room (même outil que l'édition bbox dans Floor)
 
 - [ ] **Bug position pièce 305 dans Office** : la pièce 305 est positionnée en (0,0) dans Office alors qu'elle est correctement placée dans Floor et Room. Semble arriver lorsqu'il y a un match automatique.
-- [ ] **Bug orientation pièce 922** : la pièce 922 (`canonical_top_face: "west"`) est positionnée comme si elle était à l'est alors qu'elle est au nord. Vérifier la logique de rotation canonique pour les pièces en orientation non standard.
+- [ ] **Bug orientation pièce 922** (à re-tester après R-14). Entrée datée
+  2026-04-17, antérieure au refactor R-14 (D-121 → D-134). Chaîne actuelle
+  mathématiquement correcte :
+  `canonical_top_face="west"` → backend `corridor_face="east"` (OPPOSITE) →
+  frontend `corridor_face_abs="east"` → `canonicalIO.canonAngle("east") = 90°`
+  → west image rendu en haut (north) ✓. Probablement résolu en passant. À
+  re-vérifier visuellement sur la pièce 922 ; si le bug persiste, il est
+  ailleurs dans le rendu (overlay pxPerCm ? bbox non rotaté ?).
 - [ ] Bug : Design Layout ne rote pas correctement les patterns selon l'orientation de la porte. Si la porte est en haut, les patterns devraient être rotatés mais ils conservent leur orientation par défaut (bureau sur la porte). À auditer dans le pipeline matching + rendu (fpCanvas).
 - [ ] **Rendu homogène Import/Review/Design** : utiliser le même rendu détaillé (arcs de porte, fenêtres épaisses, ouvertures) dans Import que dans Review/Design. Niveau de détail adaptatif selon le zoom : détails complets quand on zoome sur une pièce, traits simplifiés quand on voit tout le plan. Adapter l'épaisseur des traits au niveau de zoom pour rester lisible à toutes les échelles.
 - [ ] **Ajout manuel d'un seed** dans Floor/Room : besoin pour les pièces ajoutées à la main (nouveau contour sans cartouche OCR détecté) — permettre de placer le seed avec un clic pour que la re-analyze puisse partir.
-- [ ] **Afficher le seed (disque vert) dès l'activation V-Rays ou H-Rays** : aujourd'hui le seed est affiché en même temps que les rays. Le montrer dès qu'une des deux cases est cochée, même sans hits.
+- [x] ~~**Afficher le seed (disque vert) dès l'activation V-Rays ou H-Rays**~~ ✅
+  2026-04-21. Le push du cercle seed est sorti du bloc `if (room_hits)` et
+  conditionné uniquement à `state.room_seed_cm && (showVrays || showHrays)`
+  ([editor.js:238-246](olm/static/editor.js#L238-L246)).
 
 ### Refactoring architecture frontend — poursuite éventuelle
 
@@ -579,10 +591,16 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
      `_setupPostExtractionUI(planId)` (~50 lignes dédupliquées).
    - Renommage variables ambiguës (`am` → `amendments`, `_sig` →
      `_createOpeningSignature`, etc.).
-5. **Fonction `_syncRoomToAllStores(name, updates)`** pour atomiser les
-   mutations parallèles sur `ingState.rooms` / `fpRoomAmendments` /
-   `fpData.rooms`. Évite une future régression du type "D-135 rider"
-   (amendments pas propagés).
+5. [x] ~~**Fonction `_syncRoomToAllStores(name, updates)`**~~ ✅ 2026-04-21.
+   Nouveau module [`olm/static/room_sync_helpers.js`](../olm/static/room_sync_helpers.js)
+   expose `syncRoomToAllStores(name, updates, fallbackCanonRoom)` +
+   `splitOpeningsToFrontEnd(combined)`. Migré partout :
+   - `ingestion.js` handler batch Rescan all (~80 l. de triple mutation
+     → 30 l. déclaratives + 1 appel).
+   - `editor.js save()` Room amend (intègre fix D-127 + D-135 rider
+     par construction, `editor.js` passe de 2323 → 2280 l.).
+   - `floor_plan.js` : `fpRematchRoom()` + `fpLoadAndMatch()` split
+     via `splitOpeningsToFrontEnd` (source unique).
 
 ### Moyen terme (features)
 
