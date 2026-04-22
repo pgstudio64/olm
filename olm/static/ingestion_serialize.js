@@ -219,6 +219,15 @@
       rooms: roomsDict,
     };
 
+    // Métadonnées floor (PREPROCESSED_JSON_SPEC §1). Persistées seulement
+    // si renseignées pour respecter la convention d'omission.
+    if (ingState.buildingId) out.building_id = ingState.buildingId;
+    if (ingState.floorId)    out.floor_id    = ingState.floorId;
+    if (typeof ingState.northAngleDeg === 'number' &&
+        ingState.northAngleDeg !== 0) {
+      out.north_angle_deg = ingState.northAngleDeg;
+    }
+
     // D-135 : persiste "au moins un scan a été effectué". Sert de défaut
     // pour la case Lock walls de la toolbar Floor au prochain chargement.
     if (ingState.firstScanDone) out.first_scan_done = true;
