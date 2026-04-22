@@ -7,6 +7,48 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-138 · Seed de porte `label_x / label_y` → `seed_x / seed_y` + round-trip rétabli (2026-04-21)
+
+### Décision
+
+Renommage dans le schéma JSON v3 des seeds de porte : `label_x` / `label_y`
+deviennent `seed_x` / `seed_y` dans chaque `rooms[<id>].doors[<i>]`.
+Convention uniforme avec le seed de pièce (déjà `seed_x` / `seed_y`).
+
+Le round-trip Save/Load est rétabli : `ingestion_serialize.js` écrit
+désormais explicitement `seed_x` / `seed_y` sur les doors si fournis, et
+`extract.py` les parse à l'import. Les seeds survivent donc à chaque
+cycle (avant : perdus à la première sauvegarde OLS car non inclus dans
+`serializeForStorage`).
+
+### Justification
+
+- **Cohérence nominale** : un seul nom (`seed_x`/`seed_y`) pour tous
+  les seeds (pièce, porte, futures ouvertures manuelles…). Le terme
+  `label_*` était historiquement lié au texte label du cartouche de
+  porte sur le plan scanné ; la sémantique « seed de ray-cast » est
+  plus générale.
+- **Persistance** : la spec documentait le round-trip mais le code
+  frontend ne les sérialisait pas — bug silencieux découvert par
+  inspection visuelle du JSON après Save.
+- Coût quasi nul : 2 endroits backend (extract.py) + 2 lignes frontend
+  (ingestion_serialize.js) + spec.
+
+### Impact
+
+- **Spec JSON v3** : passe à v3.2. Les exemples et la table des champs
+  door utilisent désormais `seed_x` / `seed_y`.
+- **Backend** : [`extract.py:1562-1564`](../olm/ingestion/extract.py#L1562-L1564)
+  lit et pass-through les seeds renommés.
+- **Frontend** : [`ingestion_serialize.js`](../olm/static/ingestion_serialize.js)
+  écrit les seeds dans `roomObj.doors[<i>].seed_x` / `seed_y`.
+- **Rétro-compat** : aucune — l'user a choisi « OK dernière version
+  uniquement » pour les shims legacy. Les JSON v3.1 avec `label_x` /
+  `label_y` ne seront plus lus (le champ sera ignoré, les portes
+  chargées sans seed).
+
+---
+
 ## D-137 · Métadonnées Floor `building_id` / `floor_id` / `north_angle_deg` wirées end-to-end (2026-04-21)
 
 ### Décision

@@ -1558,10 +1558,11 @@ def extract_rooms_from_preprocessed(
             for k in ("face", "offset_px", "width_px", "hinge_side", "opens_inward"):
                 if k in d:
                     dd[k] = d[k]
-            # Champs Input (seed de porte)
-            if "label_x" in d and "label_y" in d:
-                dd["label_x"] = int(d["label_x"])
-                dd["label_y"] = int(d["label_y"])
+            # Champs Input (seed de porte) — convention uniforme avec le
+            # seed de pièce (seed_x/seed_y, cf. PREPROCESSED_JSON_SPEC §2.3).
+            if "seed_x" in d and "seed_y" in d:
+                dd["seed_x"] = int(d["seed_x"])
+                dd["seed_y"] = int(d["seed_y"])
             doors.append(dd)
 
         def _enrich_px_cm(e: dict) -> dict:

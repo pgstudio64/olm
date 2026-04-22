@@ -70,7 +70,7 @@ Format minimal attendu en entrée :
   "seed_x": 1234,
   "seed_y": 575,
   "doors": [
-    { "label_x": 1200, "label_y": 680 }
+    { "seed_x": 1200, "seed_y": 680 }
   ]
 }
 ```
@@ -102,8 +102,8 @@ Après le ray-cast et l'analyse de segments de mur, OLS ajoute les champs suivan
   "canonical_top_face": "north",
   "doors": [
     {
-      "label_x": 1200,
-      "label_y": 680,
+      "seed_x": 1200,
+      "seed_y": 680,
       "face": "south",
       "offset_px": 120,
       "width_px": 27,
@@ -148,8 +148,8 @@ Les pièces non-orthogonales au cadre image (rares) sont traitées via leur bbox
 
 | Champ | Type | Input/Save | Description |
 |---|---|---|---|
-| `label_x` | integer | Input | Axe X du centre du texte label de porte sur le plan — seed de la porte fourni par le preprocessing externe |
-| `label_y` | integer | Input | Axe Y du centre du texte label de porte |
+| `seed_x` | integer | Input | Axe X du centre du texte label de porte sur le plan — seed de la porte fourni par le preprocessing externe (D-138, convention uniforme avec le seed de pièce) |
+| `seed_y` | integer | Input | Axe Y du centre du texte label de porte |
 | `face` | string | Save | Mur portant la porte : `"north"` / `"south"` / `"east"` / `"west"` |
 | `offset_px` | integer | Save | Position du jamb côté charnière le long du mur (pixels, depuis le coin NW ou NE selon la face) |
 | `width_px` | integer | Save | Largeur de l'ouverture en pixels |
@@ -255,7 +255,7 @@ Côté OLS (fonction `extract_rooms_from_preprocessed()` dans `olm/ingestion/ext
    - Si `room_obj.bbox_px` présent → utilise tel quel (skip ray-cast)
    - Sinon → déclenche le ray-cast depuis le seed
    - Si `room_obj.doors[]` contient `face/offset_px/...` → utilise tel quel (skip door detection)
-   - Sinon → détecte les portes depuis `label_x` / `label_y` + analyse des segments de mur
+   - Sinon → détecte les portes depuis `seed_x` / `seed_y` + analyse des segments de mur
 4. Retourne la structure consommée par le pipeline UI (toujours une liste, pas un dict, pour compatibilité interne)
 
 ---
@@ -274,6 +274,7 @@ Côté OLS (fonction `extract_rooms_from_preprocessed()` dans `olm/ingestion/ext
 - **v2** (D-77, 2026-04-14) : structure `rooms` avec `code_line1` / `surface_line2` / `id_line3` imbriqués. Ajout de `doors` top-level et `all_text_blocks`. `scale` renommé en `scale_factor`
 - **v3** (2026-04-14) : simplification radicale — suppression de `all_text_blocks`, `font_*`, `color_rgb`, `points_*`, `scale_factor`, `plan_scale`, `dpi`, `rotation_angle`, `page_*_pts`, `total_*`. Aplatissement du cartouche (champs plats au lieu des 3 objets imbriqués). Imbrication des `doors/openings/windows` dans chaque room (plus de `associated_room`). Échelle déduite des surfaces côté OLS. Schéma door scindé Input (label seul) vs Save (enrichi par OLS). **`rooms` est un objet indexé par `id` de pièce** (plus un array), suppression des champs `id` et `code` dans chaque valeur (clé unique + filtre code interne Settings).
 - **v3.1** (2026-04-15) : affinage — split `seed_px: [x,y]` en `seed_x` / `seed_y` (champs scalaires), idem `label_px` → `label_x` / `label_y` dans les doors. Marquage explicite **Required / Optional / Save-only** sur chaque champ. Ajout de la **convention d'omission** : tout champ non renseigné est absent du JSON, jamais `""`/`null`/`0`/`[]`. `bbox_px` reste en array 4-tuple (décision : c'est une structure, pas 4 attributs indépendants).
+- **v3.2** (2026-04-21, D-138) : renommage `label_x` / `label_y` → `seed_x` / `seed_y` dans les doors, convention uniforme avec le seed de pièce. Rétabli la persistance du seed au round-trip (ingestion_serialize.js écrit explicitement `seed_x/seed_y` si fournis par l'input).
 
 ---
 

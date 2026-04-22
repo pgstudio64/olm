@@ -7,6 +7,13 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+### D-138 — Seed de porte `label_x/y` → `seed_x/y` + round-trip rétabli (2026-04-21)
+
+- Renommage des seeds de porte dans le JSON v3 (spec passe v3.1 → v3.2).
+- Persistance des seeds rétablie : `ingestion_serialize.js` écrit
+  désormais `seed_x` / `seed_y` sur les doors (auparavant ignorés).
+- Rétro-compat : aucune (user a choisi « dernière version uniquement »).
+
 ### D-137 — Métadonnées Floor `building_id` / `floor_id` / `north_angle_deg` (2026-04-21)
 
 - Wiring complet des 3 champs racine JSON v3 : backend retour
