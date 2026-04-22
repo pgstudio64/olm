@@ -5,7 +5,42 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [v0.4.2] — 2026-04-21 : D-136 → D-138
+
+### Highlights
+
+- **`room_sync_helpers.js`** (D-136) : source unique pour la mutation
+  atomique des 3 stores (`ingState.rooms`, `fpData.rooms`,
+  `fpRoomAmendments`) + split `has_door`. Migration des 3 call sites
+  (ingestion.js, editor.js, floor_plan.js). Absorbe les fix D-127 et
+  D-135 rider par construction.
+- **Métadonnées Floor JSON v3** (D-137) : `building_id`, `floor_id`,
+  `north_angle_deg` wirés end-to-end (backend + `ingState` + sérialisation
+  + UI inputs panneau Floor).
+- **Seed de porte** (D-138) : renommage `label_x/y` → `seed_x/y`
+  (spec v3.1 → v3.2) et round-trip Save/Load rétabli.
+- **UX série B** : zoom arrière Review/Room passé de 3× à 5×, seed
+  (disque vert) visible dès V-Rays / H-Rays activés même sans hits.
+- **Bloc `EDITOR_CONSTANTS`** : 8 couleurs nommées + `ZOOM_*` +
+  `SEED_DISC_R_PX` / `HIT_DISC_R_PX`. Tous les littéraux hex migrés.
+- **Audits** : 3 rapports JS core (`ingestion.js`, `init_rvtool.js`,
+  `editor.js`) + 2 investigations (`D-127_save_bbox`,
+  `total_area_refresh`) livrés dans `docs/`.
+
+### Gains
+
+- `ingestion.js` : 2036 → 2008 lignes.
+- `editor.js`    : 2323 → 2280 lignes.
+- `floor_plan.js` : 994 → 976 lignes.
+
+### Compat
+
+- JSON v3 rétro-compatible avec v0.4.1 pour les champs `walls_user_edited`,
+  `first_scan_done`, `building_id`, `floor_id`, `north_angle_deg` (tous
+  optionnels, defaults si absents).
+- **Breaking** : les seeds de porte en `label_x` / `label_y` (v3.1) ne
+  sont plus lus — remplacés par `seed_x` / `seed_y`. Pas de shim legacy
+  (choix acté).
 
 ### D-138 — Seed de porte `label_x/y` → `seed_x/y` + round-trip rétabli (2026-04-21)
 
