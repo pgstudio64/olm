@@ -5,6 +5,20 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [v0.4.3] — 2026-04-21 : D-139
+
+### Hotfix — Faux positif « No rooms found in JSON » en prod
+
+- Backend `/test_rooms.json` : retourne **HTTP 404** si le fichier privé
+  `project/test_rooms.json` est absent (au lieu de `{"rooms": []}` +
+  HTTP 200 qui déclenchait à tort l'alerte « No rooms found in JSON »
+  à chaque ouverture de la page sur les déploiements prod).
+- Frontend `fpLoadAndMatch(string)` : accepte `parsed.rooms` en array
+  **ou** en dict indexé par room_id (format storage v3). Le chemin
+  « Load JSON file » marche maintenant aussi pour les JSON v3 bruts.
+
+---
+
 ## [v0.4.2] — 2026-04-21 : D-136 → D-138
 
 ### Highlights

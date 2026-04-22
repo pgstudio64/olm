@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-21 (D-138 : seed de porte `label_x/y` → `seed_x/y` + round-trip rétabli ; D-137 : building_id / floor_id / north_angle_deg wirés end-to-end ; D-136 : `room_sync_helpers.js` source unique mutation 3 stores + UX fixes série B + bloc EDITOR_CONSTANTS ; D-135 : Rescan / Lock walls + flags `walls_user_edited` & `first_scan_done` + fix propagation amendments batch ; D-134 : canonAngle ; D-124 → D-133 : re-ancrage zones, perf Re-analyze, R-14 P1-P7, R-13 étape 3)
+Dernière mise à jour : 2026-04-21 (D-139 : hotfix `/test_rooms.json` 404 + tolérance dict/array dans `fpLoadAndMatch` ; D-138 : seed de porte `label_x/y` → `seed_x/y` + round-trip rétabli ; D-137 : building_id / floor_id / north_angle_deg wirés end-to-end ; D-136 : `room_sync_helpers.js` source unique mutation 3 stores + UX fixes série B + bloc EDITOR_CONSTANTS ; D-135 : Rescan / Lock walls + flags `walls_user_edited` & `first_scan_done` + fix propagation amendments batch ; D-134 : canonAngle ; D-124 → D-133 : re-ancrage zones, perf Re-analyze, R-14 P1-P7, R-13 étape 3)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 

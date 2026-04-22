@@ -7,6 +7,47 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-139 · Fix faux positif « No rooms found in JSON » au démarrage + tolérance dict/array (2026-04-21)
+
+### Décision
+
+Deux fixes pour résoudre le symptôme « No rooms found in JSON » observé à
+l'ouverture de `localhost` sur une machine de production sans
+`project/test_rooms.json` :
+
+1. **Backend** — [`app.py:214-221`](../olm/server/app.py#L214-L221) :
+   la route `/test_rooms.json` retourne désormais **HTTP 404** si le
+   fichier est absent, au lieu de `{"rooms": []}` avec HTTP 200. Le
+   fetch frontend utilise déjà `r.ok` et skip silencieusement sur
+   404 ; le comportement rétablit celui attendu depuis l'origine.
+2. **Frontend** — [`floor_plan.js`](../olm/static/floor_plan.js)
+   `fpLoadAndMatch(string)` : accepte désormais `parsed.rooms` en
+   **array** (format matching) **ou en dict** indexé par room_id
+   (format storage v3). Le dict est normalisé au vol via `Object.keys`.
+   Robustifie le chemin « Load JSON file » pour les fichiers v3 bruts.
+
+### Justification
+
+Sur la machine locale dev, `project/test_rooms.json` existe → pas de
+symptôme. En prod (GitHub public filtré), le répertoire `project/` est
+privé, donc `test_rooms.json` absent → la route renvoyait un array vide
+→ fpLoadAndMatch alertait. L'alerte s'affichait à chaque ouverture de
+la page, bloquant visuellement l'user.
+
+La tolérance dict/array généralise : le chemin « Load JSON file » (drop
+d'un fichier JSON dans l'UI) marchait déjà pour les JSON matching
+(array), il marche maintenant aussi pour les JSON v3 bruts (dict).
+
+### Impact
+
+- **Déploiement** : résout le blocage au démarrage sur toute machine
+  sans `project/test_rooms.json`.
+- **UX** : plus d'alerte parasite à l'ouverture de la page.
+- **Compat** : aucune régression — les consommateurs existants passaient
+  déjà par `r.ok`, le dict reste la forme JSON v3 canonique.
+
+---
+
 ## D-138 · Seed de porte `label_x / label_y` → `seed_x / seed_y` + round-trip rétabli (2026-04-21)
 
 ### Décision
