@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-21 (D-135 : Rescan / Lock walls + flags `walls_user_edited` & `first_scan_done` + fix propagation amendments batch ; D-134 : canonAngle ; D-124 → D-133 : re-ancrage zones, perf Re-analyze, R-14 P1-P7, R-13 étape 3)
+Dernière mise à jour : 2026-04-21 (D-136 : `room_sync_helpers.js` source unique mutation 3 stores + UX fixes série B + bloc EDITOR_CONSTANTS ; D-135 : Rescan / Lock walls + flags `walls_user_edited` & `first_scan_done` + fix propagation amendments batch ; D-134 : canonAngle ; D-124 → D-133 : re-ancrage zones, perf Re-analyze, R-14 P1-P7, R-13 étape 3)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 

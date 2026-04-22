@@ -5,6 +5,41 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### D-136 — `room_sync_helpers.js` (2026-04-21)
+
+- Nouveau module `olm/static/room_sync_helpers.js` : source unique pour
+  la mutation atomique des 3 stores (`ingState.rooms`, `fpData.rooms`,
+  `fpRoomAmendments`) et le split `has_door` backend → `{openings, doors}`.
+- Migration des 3 sites consommateurs : `ingestion.js` (handler batch
+  Rescan all), `editor.js save()` (Room amend), `floor_plan.js`
+  (`fpRematchRoom` + `fpLoadAndMatch`).
+- Absorbe les fix D-127 (bbox_px stale) et D-135 rider (amendments non
+  propagés) par construction.
+
+### Autres (consolidation post-v0.4.1)
+
+- **Zoom arrière Review/Room** : limite 3× → 5× `fitViewBox.w`
+  (`zoomOut()`, editor.js).
+- **Seed visible dès V-Rays / H-Rays** : push du disque vert sorti du
+  bloc conditionné par `room_hits` (editor.js).
+- **Bloc EDITOR_CONSTANTS** : 8 couleurs nommées (`COLOR_WINDOW`,
+  `COLOR_OPENING`, `COLOR_WALL_STROKE`, `COLOR_GOOD`, `COLOR_DANGER`,
+  `COLOR_NEUTRAL`, `COLOR_WALL_DEFAULT`, `COLOR_LABEL_BG`) + `ZOOM_*` +
+  `SEED_DISC_R_PX`, `HIT_DISC_R_PX`. Tous les littéraux hex des 8
+  couleurs migrés.
+- **Dead code** : `globalWestOffset` obsolète + commentaire orphelin
+  « zoomLevel display removed » supprimés.
+
+### Gains
+
+- `ingestion.js` : 2036 → 2008 lignes.
+- `editor.js`    : 2323 → 2280 lignes.
+- `floor_plan.js` : 994 → 976 lignes.
+
+---
+
 ## [v0.4.1] — 2026-04-21 : D-135
 
 ### Highlights

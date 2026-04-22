@@ -7,6 +7,68 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-136 · `room_sync_helpers.js` — source unique pour la mutation des 3 stores (2026-04-21)
+
+### Décision
+
+Nouveau module [`olm/static/room_sync_helpers.js`](../olm/static/room_sync_helpers.js)
+expose deux helpers globaux :
+
+- `window.syncRoomToAllStores(roomName, updates, fallbackCanonRoom?)` —
+  mute en une opération atomique `ingState.rooms[i]`, `fpData.rooms[j]`,
+  et `fpRoomAmendments[name]` pour la room cible. Priorité à `fpData`
+  pour peupler `fpRoomAmendments` (version la plus riche) ; fallback au
+  `canonRoom` enrichi des `updates` si `fpData` n'est pas peuplé. Warn
+  console si la room n'est trouvée dans aucun store.
+- `window.splitOpeningsToFrontEnd(combined)` — convertit la forme
+  backend `openings[]` avec `has_door:bool` vers la forme state
+  `{openings, doors}` (invariant D-122 P4). Source unique du split.
+
+Migration de l'ensemble des call sites :
+- [`ingestion.js`](../olm/static/ingestion.js) — handler batch Rescan
+  all : ~80 lignes de triple mutation parallèle → 30 lignes
+  déclaratives (dict `updates`) + 1 appel.
+- [`editor.js` `save()`](../olm/static/editor.js) — Room amend : 3
+  blocs séquentiels (ingRooms, fpData.rooms, fpRoomAmendments) + fix
+  D-127 dédié absorbés dans l'appel unique.
+- [`floor_plan.js`](../olm/static/floor_plan.js) — `fpRematchRoom()` et
+  `fpLoadAndMatch()` consomment `splitOpeningsToFrontEnd`.
+
+### Justification
+
+Le pattern « muter les 3 stores en parallèle » est la racine structurelle
+du bug D-135 rider (amendments pas propagés dans le handler batch post
+Rescan destructif) et de la limite D-127 (`fpRoomAmendments` stale en
+l'absence de `fpData` peuplé). Trois audits automatisés (ingestion.js,
+init_rvtool.js, editor.js) du 2026-04-21 ont identifié ce pattern comme
+priorité 2. Unifier la mutation à un point d'entrée :
+
+- Rend impossible la divergence partielle entre stores (tous reçoivent
+  les mêmes `updates`).
+- Absorbe le fix D-127 par construction (fallback `canonRoom` systématique
+  via le même chemin).
+- Log warn explicite si la room est absente partout — détection précoce
+  des futurs bugs de routage.
+
+### Impact
+
+- **Lignes économisées** :
+  - `ingestion.js` : 2036 → 2008 (−28).
+  - `editor.js`    : 2323 → 2280 (−43).
+  - `floor_plan.js` : 994 → 976 (−18).
+- **Non-régression** : `node --check` OK sur les 4 fichiers. Flask sert
+  `/static/room_sync_helpers.js` (HTTP 200, 4875 bytes). Les comportements
+  antérieurs (D-135 rider fix + D-127 fix) sont conservés — les tests
+  user de référence (resize bbox → Save → re-ouvrir Review, batch Rescan
+  avec Lock walls décoché) doivent rester verts.
+- **Bonus UX dans le même commit de consolidation** : zoom arrière
+  Review/Room passé de 3× à 5× `state._fitViewBox.w` ; seed visible dès
+  V-Rays ou H-Rays activées (push sorti du bloc `room_hits`) ; bloc
+  `EDITOR_CONSTANTS` (8 couleurs nommées + zoom + seed/hit radius) ;
+  dead code `globalWestOffset` supprimé.
+
+---
+
 ## D-135 · UX Scan / Lock walls + flags `walls_user_edited` & `first_scan_done` (2026-04-21)
 
 ### Décision
