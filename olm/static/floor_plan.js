@@ -123,16 +123,12 @@
         if (planAreaByName[r.name] != null) {
           r.plan_area_m2 = planAreaByName[r.name];
         }
-        // Si le backend renvoie openings avec has_door, on split.
+        // Split openings combinées (has_door) via source unique
+        // splitOpeningsToFrontEnd (room_sync_helpers.js).
         if (Array.isArray(r.openings) && r.openings.some(function(o){ return o.has_door; })) {
-          var _doors = [];
-          var _ops = [];
-          r.openings.forEach(function(o) {
-            var c = Object.assign({}, o); delete c.has_door;
-            if (o.has_door) _doors.push(c); else _ops.push(c);
-          });
-          r.openings = _ops;
-          r.doors = _doors;
+          var _split = window.splitOpeningsToFrontEnd(r.openings);
+          r.openings = _split.openings;
+          r.doors = _split.doors;
         } else if (doorsByName[r.name]) {
           r.doors = doorsByName[r.name];
         }
@@ -603,22 +599,18 @@
         setStatus("Re-matching error for \"" + roomName + "\".");
         return;
       }
-      // Replace the room data in fpData (D-122 P5 : réponse canonique ;
-      // D-122 P4 : split openings combiné retour backend).
+      // Replace the room data (D-122 P5 : réponse canonique ;
+      // D-122 P4 : split openings combiné retour backend via
+      // splitOpeningsToFrontEnd — source unique).
       var newRoom = data.rooms[0];
-      var _nrDoors = [];
-      var _nrOps = [];
-      (newRoom.openings || []).forEach(function (o) {
-        var c = Object.assign({}, o); delete c.has_door;
-        if (o.has_door) _nrDoors.push(c); else _nrOps.push(c);
-      });
+      var split = window.splitOpeningsToFrontEnd(newRoom.openings || []);
       for (var i = 0; i < fpData.rooms.length; i++) {
         if (fpData.rooms[i].name === roomName) {
           fpData.rooms[i].width_cm = newRoom.width_cm;
           fpData.rooms[i].depth_cm = newRoom.depth_cm;
           fpData.rooms[i].windows = newRoom.windows;
-          fpData.rooms[i].openings = _nrOps;
-          fpData.rooms[i].doors = _nrDoors;
+          fpData.rooms[i].openings = split.openings;
+          fpData.rooms[i].doors = split.doors;
           fpData.rooms[i].exclusion_zones = newRoom.exclusion_zones;
           fpData.rooms[i].all_candidates = newRoom.all_candidates;
           fpData.rooms[i].by_standard = newRoom.by_standard;

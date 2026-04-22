@@ -4,6 +4,26 @@ const SCALE = 0.5;
 var GRID_STEP_CM = 10;  // updated from APP_CONFIG.grid_cell_cm
 const DEFAULT_ROW_GAP_CM = 180;
 
+// --- EDITOR_CONSTANTS -------------------------------------------------------
+// Colors (SVG rendering — room features, zones, handles, labels).
+const COLOR_WINDOW       = "#50b8d0";  // cyan — window fill/stroke
+const COLOR_OPENING      = "#80c060";  // green — opening stroke
+const COLOR_WALL_STROKE  = "#1e1e1e";  // near-black — wall + door fill
+const COLOR_GOOD         = "#58c080";  // bright green — selected, seed, transparent zone
+const COLOR_DANGER       = "#c05858";  // red — exclusion, delete, warning
+const COLOR_NEUTRAL      = "#c8a050";  // amber — door handle, medium circulation
+const COLOR_WALL_DEFAULT = "#ffffff";  // white — wall background, handle stroke
+const COLOR_LABEL_BG     = "#0e0e0d";  // dim — dimension label background
+
+// Zoom factors and clamps (zoomIn / zoomOut).
+const ZOOM_IN_FACTOR         = 0.8;
+const ZOOM_OUT_FACTOR        = 1.25;
+const ZOOM_OUT_MAX_FIT_RATIO = 5;
+
+// Seed / hit visual radius in cm SVG units.
+const SEED_DISC_R_PX = 3;
+const HIT_DISC_R_PX  = 1.5;
+
 let BLOCK_DEFS = {};
 // BLOCK_DEFS per standard — loaded at startup for multi-standard rendering
 let BLOCK_DEFS_BY_STD = {};
@@ -174,7 +194,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     var pos = wallSegment(w.face, w.offset_cm, w.width_cm, roomX, roomY, roomWPx, roomHPx, wallThick);
     elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#50b8d0" stroke-width="' + (winStroke * 2) +
+      '" stroke="' + COLOR_WINDOW + '" stroke-width="' + (winStroke * 2) +
       '" vector-effect="non-scaling-stroke" stroke-linecap="round"/>' });
   });
 
@@ -184,10 +204,10 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     var pos = wallSegment(o.face, o.offset_cm, o.width_cm, roomX, roomY, roomWPx, roomHPx);
     elements.push({ z: 5.5, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#1e1e1e" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
+      '" stroke="' + COLOR_WALL_STROKE + '" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
     elements.push({ z: 6, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#80c060" stroke-width="2" vector-effect="non-scaling-stroke"' +
+      '" stroke="' + COLOR_OPENING + '" stroke-width="2" vector-effect="non-scaling-stroke"' +
       ' stroke-dasharray="4 3"/>' });
   });
 
@@ -197,7 +217,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     var dw = d.width_cm * SCALE;
     elements.push({ z: 5.5, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
       '" x2="' + pos.x2 + '" y2="' + pos.y2 +
-      '" stroke="#1e1e1e" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
+      '" stroke="' + COLOR_WALL_STROKE + '" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
     var swing = d.hinge_side;
     var swingLeft = (swing === "left");
     var hingeAtStart = swingLeft !== (d.face === "west");
@@ -235,6 +255,17 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     });
   }
 
+  // Seed (disque vert) — affiché dès que V-Rays ou H-Rays est activée,
+  // même si aucun hit n'a encore été collecté (ex : avant 1er Rescan).
+  if (isReview && state.room_seed_cm &&
+      (state.showVrays || state.showHrays)) {
+    var _seedSx = roomX + state.room_seed_cm.x_cm * SCALE;
+    var _seedSy = roomY + state.room_seed_cm.y_cm * SCALE;
+    elements.push({ z: 9.8, s: '<circle cx="' + _seedSx.toFixed(1) +
+      '" cy="' + _seedSy.toFixed(1) + '" r="' + SEED_DISC_R_PX +
+      '" fill="' + COLOR_GOOD + '"/>' });
+  }
+
   // V-Rays / H-Rays debug (Room) — rayons axis-aligned depuis la ligne
   // (axe) du seed. Chaque hit est classé V (y ≠ seed.y) ou H (x ≠ seed.x).
   // Le ray part du POINT DE DEPART ALIGNÉ (hx, seed.y pour V ; seed.x, hy
@@ -264,11 +295,11 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
           '" y2="' + y2.toFixed(1) + '" stroke="' + stroke +
           '" stroke-width="0.8" vector-effect="non-scaling-stroke"/>' });
         elements.push({ z: 9.7, s: '<circle cx="' + hx.toFixed(1) +
-          '" cy="' + hy.toFixed(1) + '" r="1.5" fill="#ffff00"/>' });
+          '" cy="' + hy.toFixed(1) + '" r="' + HIT_DISC_R_PX +
+          '" fill="#ffff00"/>' });
       }
     });
-    elements.push({ z: 9.8, s: '<circle cx="' + sx.toFixed(1) +
-      '" cy="' + sy.toFixed(1) + '" r="3" fill="#58c080"/>' });
+    // Seed déjà dessiné plus haut (indépendamment de la présence de hits).
   }
 
   // Opening/window handles — only in Room amend mode (Phase A CRUD).
@@ -288,7 +319,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       var sel = state.selectedOpening &&
         state.selectedOpening.type === type &&
         state.selectedOpening.index === index;
-      var fill = type === "window" ? "#50b8d0" : "#c8a050";
+      var fill = type === "window" ? COLOR_WINDOW : COLOR_NEUTRAL;
       elements.push({ z: 9.2, s: '<line x1="' + pos.x1 + '" y1="' + pos.y1 +
         '" x2="' + pos.x2 + '" y2="' + pos.y2 +
         '" stroke="transparent" stroke-width="' + clickW.toFixed(1) + '"' +
@@ -297,7 +328,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       if (sel) {
         elements.push({ z: 9.3, s: '<circle cx="' + cx.toFixed(1) +
           '" cy="' + cy.toFixed(1) + '" r="' + handleR.toFixed(1) + '"' +
-          ' fill="' + fill + '" stroke="#ffffff" stroke-width="' +
+          ' fill="' + fill + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
           (1.5 * hzf).toFixed(2) + '"' +
           ' data-opening-handle="' + type + '-' + index +
           '" style="cursor:move;"/>' });
@@ -310,7 +341,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
           elements.push({ z: 9.35, s: '<rect x="' + (h.x - sz / 2).toFixed(1) +
             '" y="' + (h.y - sz / 2).toFixed(1) +
             '" width="' + sz.toFixed(1) + '" height="' + sz.toFixed(1) + '"' +
-            ' fill="' + fill + '" stroke="#ffffff" stroke-width="' +
+            ' fill="' + fill + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
             (1 * hzf).toFixed(2) + '"' +
             ' data-opening-resize="' + type + '-' + index + '-' + h.ex +
             '" style="cursor:' + cur + ';"/>' });
@@ -318,13 +349,13 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
         var bx = cx + delOff, by = cy - delOff;
         elements.push({ z: 9.4, s: '<circle cx="' + bx.toFixed(1) +
           '" cy="' + by.toFixed(1) + '" r="' + delR.toFixed(1) + '"' +
-          ' fill="#c05858" stroke="#ffffff" stroke-width="' +
+          ' fill="' + COLOR_DANGER + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
           (0.5 * hzf).toFixed(2) + '"' +
           ' data-opening-delete="' + type + '-' + index +
           '" style="cursor:pointer;"/>' });
         elements.push({ z: 9.5, s: '<text x="' + bx.toFixed(1) +
           '" y="' + (by + 3 * hzf).toFixed(1) +
-          '" text-anchor="middle" fill="#ffffff" font-size="' +
+          '" text-anchor="middle" fill="' + COLOR_WALL_DEFAULT + '" font-size="' +
           delFs.toFixed(1) + '" font-weight="bold"' +
           ' style="pointer-events:none;">×</text>' });
       }
@@ -348,13 +379,13 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     var zh = z.depth_cm * SCALE;
     elements.push({ z: 5, s: '<rect x="' + zx + '" y="' + zy +
       '" width="' + zw + '" height="' + zh +
-      '" fill="#58c080" fill-opacity="0.25" stroke="#58c080"' +
+      '" fill="' + COLOR_GOOD + '" fill-opacity="0.25" stroke="' + COLOR_GOOD + '"' +
       ' stroke-width="0.5" vector-effect="non-scaling-stroke"/>' });
     if (isReview && state.roomAmendMode) {
       if (zi === state.selectedTransparent) {
         elements.push({ z: 8, s: '<rect x="' + zx + '" y="' + zy +
           '" width="' + zw + '" height="' + zh +
-          '" fill="none" stroke="#58c080" stroke-width="1.5"' +
+          '" fill="none" stroke="' + COLOR_GOOD + '" stroke-width="1.5"' +
           ' vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>' });
         var ths = 5 * (window._currentZf || 1);
         [{ h: 'nw', cx: zx, cy: zy, cur: 'nw-resize' },
@@ -365,7 +396,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
             elements.push({ z: 9.2, s: '<rect x="' + (c.cx - ths / 2).toFixed(1) +
               '" y="' + (c.cy - ths / 2).toFixed(1) +
               '" width="' + ths.toFixed(1) + '" height="' + ths.toFixed(1) + '"' +
-              ' fill="#58c080" stroke="#ffffff" stroke-width="' +
+              ' fill="' + COLOR_GOOD + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
               (0.5 * (window._currentZf || 1)).toFixed(2) + '"' +
               ' data-transp-handle="' + c.h + '" data-transp="' + zi +
               '" style="cursor:' + c.cur + ';"/>' });
@@ -388,12 +419,12 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     var zh = z.depth_cm * SCALE;
     elements.push({ z: 5, s: '<rect x="' + zx + '" y="' + zy +
       '" width="' + zw + '" height="' + zh +
-      '" fill="#c05858" fill-opacity="0.25" stroke="#c05858" stroke-width="0.5"/>' });
+      '" fill="' + COLOR_DANGER + '" fill-opacity="0.25" stroke="' + COLOR_DANGER + '" stroke-width="0.5"/>' });
     // Highlight if selected — red dashed outline + corner resize handles
     if (zi === state.selectedExclusion) {
       elements.push({ z: 8, s: '<rect x="' + zx + '" y="' + zy +
         '" width="' + zw + '" height="' + zh +
-        '" fill="none" stroke="#c05858" stroke-width="1.5" stroke-dasharray="6 3"/>' });
+        '" fill="none" stroke="' + COLOR_DANGER + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
       // Corner resize handles (centered on each corner).
       var hs = 2;
       var corners = [
@@ -405,7 +436,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       corners.forEach(function (c) {
         elements.push({ z: 9.2, s: '<rect x="' + (c.cx - hs / 2) +
           '" y="' + (c.cy - hs / 2) + '" width="' + hs + '" height="' + hs +
-          '" fill="#c05858" stroke="#ffffff" stroke-width="0.5"' +
+          '" fill="' + COLOR_DANGER + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="0.5"' +
           ' data-excl-handle="' + c.h + '" data-excl="' + zi +
           '" style="cursor:' + c.cur + ';"/>' });
       });
@@ -638,7 +669,7 @@ function _renderImpl(targetSvg) {
       // Opaque background: covers block + setback zones (even in circulation mode)
       elements.push({ z: 0.5, s: '<rect x="' + (bx - wTotal) + '" y="' + (by - nTotal) +
         '" width="' + (bw + wTotal + eTotal) + '" height="' + (bh + nTotal + sTotal) +
-        '" fill="#1e1e1e"/>' });
+        '" fill="' + COLOR_WALL_STROKE + '"/>' });
       elements.push({ z: 3, s: '<rect x="' + bx + '" y="' + by +
         '" width="' + bw + '" height="' + bh +
         '" fill="none" stroke="' + COLOR_BLOCK_BORDER +
@@ -651,7 +682,7 @@ function _renderImpl(targetSvg) {
       if (ri === state.selectedRow && bi === state.selectedBlock) {
         elements.push({ z: 8, s: '<rect x="' + bx + '" y="' + by +
           '" width="' + bw + '" height="' + bh +
-          '" fill="none" stroke="#58c080" stroke-width="1.5" stroke-dasharray="6 3"/>' });
+          '" fill="none" stroke="' + COLOR_GOOD + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
       }
 
       // Clickable zone
@@ -826,7 +857,7 @@ function _renderImpl(targetSvg) {
   }
   state._roomNW = { x: roomX, y: roomY };
   var isEditor = svg.id === "canvas";
-  var wallColor = "#ffffff";
+  var wallColor = COLOR_WALL_DEFAULT;
   var wallWidth = isEditor ? 0.75 : 1;
   // Walls drawn above blocks (z=3) but below openings/doors/windows (z=6)
   // and their erase-line (z=5.5). Dimension labels stay on top (z=9.5+).
@@ -853,14 +884,14 @@ function _renderImpl(targetSvg) {
       elements.push({ z: 9.2, s: '<rect x="' + (c.cx - rhs / 2).toFixed(1) +
         '" y="' + (c.cy - rhs / 2).toFixed(1) +
         '" width="' + rhs.toFixed(1) + '" height="' + rhs.toFixed(1) + '"' +
-        ' fill="#c05858" stroke="#ffffff" stroke-width="' + rhsStroke.toFixed(2) + '"' +
+        ' fill="' + COLOR_DANGER + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' + rhsStroke.toFixed(2) + '"' +
         ' data-room-handle="' + c.h + '" style="cursor:' + c.cur + ';"/>' });
     });
   }
   // Room dimension labels — data already in local coordinates, no swap needed
   var dimFs = (16.5 * zf).toFixed(1);
   var dimOff = 48 * zf;
-  var dimBgColor = "#0e0e0d";
+  var dimBgColor = COLOR_LABEL_BG;
   var dimCharW = dimFs * 0.62;  // approximate monospace char width
   var dimPadX = dimFs * 0.3, dimPadY = dimFs * 0.2;
   // Width label (bottom)
@@ -901,7 +932,7 @@ function _renderImpl(targetSvg) {
     if (circ && circ.paths.length > 0) {
       var cellPx = GRID_STEP_CM * SCALE;
       var halfCell = cellPx / 2;
-      var CIRC_COLORS = ["#58c080", "#c8a050", "#c05858"];
+      var CIRC_COLORS = [COLOR_GOOD, COLOR_NEUTRAL, COLOR_DANGER];
       var STROKE_PER_DESK = 1.0;
       var MIN_STROKE = 1.5;
       var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 0;
@@ -1533,18 +1564,17 @@ async function save() {
       absShiftX = cShiftX;  absShiftY = cShiftY;
       absW = cW;            absD = cD;
     }
-    var newBbox = null;  // hoisted : exploité par le fallback fpRoomAmendments ci-dessous
+    var newBbox = null;
     if (scaleCmPerPx > 0) {
       var ingRooms = (window.ingState && window.ingState.rooms) || [];
       var pxPerCm = 1.0 / scaleCmPerPx;
       function _pxOf(cm) {
         return (cm != null) ? Math.round(cm * pxPerCm) : 0;
       }
-      // Enrichir state (canonique) avec offset_px / width_cm canoniques —
+      // Enrichir state (canonique) avec offset_px / width_px canoniques —
       // match l'invariant ingState.rooms post-fromStorage / post-batch
-      // re-analyze (canonique face/offset_cm + offset_px canonique).
-      // L'absolute offset_px pour l'export v3 est recalculé dans
-      // serializeForStorage depuis l'offset_cm rotaté par toStorage.
+      // re-analyze. Pour l'export v3, serializeForStorage recalcule
+      // offset_px absolu via toStorage.
       function _enrichCanon(e) {
         return Object.assign({}, e, {
           offset_px: _pxOf(e.offset_cm),
@@ -1560,10 +1590,10 @@ async function save() {
           opens_inward: d.opens_inward !== false,
         });
       });
+      // Calcul du newBbox post-resize : base = ramend.originalRoom.bbox_px
+      // (à jour si Rescan intercalé) sinon ingRooms[ir].bbox_px courant.
       for (var ir = 0; ir < ingRooms.length; ir++) {
         if (ingRooms[ir].name !== ramend.roomName) continue;
-        // Base bbox : prefer the one updated by Re-analyze (stored on
-        // ramend.originalRoom) over the stale ingRooms copy.
         var orig = (ramend.originalRoom && ramend.originalRoom.bbox_px)
           || ingRooms[ir].bbox_px;
         if (!orig || orig.length !== 4) break;
@@ -1572,95 +1602,53 @@ async function save() {
         var nx1 = nx0 + absW / scaleCmPerPx;
         var ny1 = ny0 + absD / scaleCmPerPx;
         newBbox = [nx0, ny0, nx1, ny1];
-        // ingRooms reste en repère CANONIQUE (R-12). corridor_face = "south" ;
-        // le repère absolu est porté par corridor_face_abs. D-122 P2 :
-        // bbox_px seul (plus de duplicat bbox_abs_px). Les amendements de
-        // features (windows/openings/zones/doors) en Room amend sont propagés
-        // ici pour qu'ils apparaissent dans l'export v3.
-        ingRooms[ir].bbox_px = newBbox;
-        ingRooms[ir].width_cm = cW;
-        ingRooms[ir].depth_cm = cD;
-        ingRooms[ir].corridor_face = "south";
-        ingRooms[ir].corridor_face_abs = origCf;
-        ingRooms[ir].surface_m2 = parseFloat(((cW * cD) / 10000).toFixed(2));
-        ingRooms[ir].windows = windowsCanon.map(function (w) {
-          return Object.assign({}, w);
-        });
-        ingRooms[ir].openings = openingsCanon.map(function (o) {
-          return Object.assign({}, o);
-        });
-        ingRooms[ir].doors = doorsCanon.map(function (d) {
-          return Object.assign({}, d);
-        });
-        ingRooms[ir].exclusion_zones =
-          JSON.parse(JSON.stringify(state.room_exclusions || []));
-        ingRooms[ir].transparent_zones =
-          JSON.parse(JSON.stringify(state.room_transparents || []));
-        ingRooms[ir].walls_user_edited = !!state.walls_user_edited;
         break;
       }
-      if (newBbox) {
-        amendedRoom.bbox_px = newBbox.slice();
-        if (window.fpData && window.fpData.rooms) {
-          for (var fr = 0; fr < window.fpData.rooms.length; fr++) {
-            if (window.fpData.rooms[fr].name !== ramend.roomName) continue;
-            // fpData vit en repère canonique (même invariant que ingRooms).
-            window.fpData.rooms[fr].width_cm = cW;
-            window.fpData.rooms[fr].depth_cm = cD;
-            window.fpData.rooms[fr].bbox_px = newBbox.slice();
-            window.fpData.rooms[fr].corridor_face = "south";
-            window.fpData.rooms[fr].corridor_face_abs = origCf;
-            window.fpData.rooms[fr].windows = windowsCanon.map(function (w) {
-              return Object.assign({}, w);
-            });
-            window.fpData.rooms[fr].openings = openingsCanon.map(function (o) {
-              return Object.assign({}, o);
-            });
-            window.fpData.rooms[fr].doors = doorsCanon.map(function (d) {
-              return Object.assign({}, d);
-            });
-            window.fpData.rooms[fr].exclusion_zones =
-              JSON.parse(JSON.stringify(state.room_exclusions || []));
-            window.fpData.rooms[fr].transparent_zones =
-              JSON.parse(JSON.stringify(state.room_transparents || []));
-            window.fpData.rooms[fr].walls_user_edited = !!state.walls_user_edited;
-            break;
-          }
-        }
-        // Re-render Floor SVG + room list so the new size shows up without
-        // needing a click to trigger a redraw.
-        if (typeof window.renderIngestion === "function") window.renderIngestion();
-        if (typeof window.updateIngRoomList === "function") window.updateIngRoomList();
-      }
-    }
 
-    // D-127 fix : écriture unique de fpRoomAmendments, TOUJOURS exécutée
-    // (précédemment conditionnée à scaleCmPerPx > 0 && newBbox && fpData).
-    // Priorité à fpData.rooms[fr] s'il existe (plus riche : offset_px
-    // enrichis, walls_user_edited). Sinon canonRoom enrichi du newBbox.
-    var _matchedFp = null;
-    if (window.fpData && window.fpData.rooms) {
-      for (var _mi = 0; _mi < window.fpData.rooms.length; _mi++) {
-        if (window.fpData.rooms[_mi].name === ramend.roomName) {
-          _matchedFp = window.fpData.rooms[_mi];
-          break;
-        }
-      }
-    }
-    if (_matchedFp) {
-      fpRoomAmendments[ramend.roomName] =
-        JSON.parse(JSON.stringify(_matchedFp));
-    } else {
-      if (newBbox) canonRoom.bbox_px = newBbox.slice();
+      // Consolidation 2026-04-21 : syncRoomToAllStores unifie les
+      // mutations ingState.rooms / fpData.rooms / fpRoomAmendments.
+      // Remplace 3 blocs parallèles (D-127 fix compris) par un updates
+      // déclaratif + 1 appel. canonRoom sert de fallback quand fpData
+      // n'est pas peuplé (save avant tout match, cas edge D-127).
+      var updates = {
+        width_cm: cW,
+        depth_cm: cD,
+        corridor_face: "south",
+        corridor_face_abs: origCf,
+        surface_m2: parseFloat(((cW * cD) / 10000).toFixed(2)),
+        windows: windowsCanon.map(function (w) { return Object.assign({}, w); }),
+        openings: openingsCanon.map(function (o) { return Object.assign({}, o); }),
+        doors: doorsCanon.map(function (d) { return Object.assign({}, d); }),
+        exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions || [])),
+        transparent_zones: JSON.parse(JSON.stringify(state.room_transparents || [])),
+        walls_user_edited: !!state.walls_user_edited,
+      };
+      if (newBbox) updates.bbox_px = newBbox;
+
+      // Enrichir canonRoom (fallback fpRoomAmendments) pour le cas où
+      // fpData n'est pas encore peuplé (Save avant tout match).
       canonRoom.walls_user_edited = !!state.walls_user_edited;
-      // Préserver la plan_area_m2 (cartouche) sur le canonRoom de
-      // fallback ; sans ça le rendu Review tombe sur "-" après Save
-      // dans le cas edge fpData vide.
       if (ramend.originalRoom && ramend.originalRoom.plan_area_m2 != null) {
         canonRoom.plan_area_m2 = ramend.originalRoom.plan_area_m2;
       }
-      fpRoomAmendments[ramend.roomName] =
-        JSON.parse(JSON.stringify(canonRoom));
+
+      window.syncRoomToAllStores(ramend.roomName, updates, canonRoom);
+
+      if (newBbox) {
+        amendedRoom.bbox_px = newBbox.slice();
+        // Re-render Floor SVG + room list so the new size shows up
+        // without needing a click to trigger a redraw.
+        if (typeof window.renderIngestion === "function") window.renderIngestion();
+        if (typeof window.updateIngRoomList === "function") window.updateIngRoomList();
+      }
+    } else {
+      // scaleCmPerPx == 0 : pas de calcul de bbox possible, mais
+      // fpRoomAmendments doit quand même être écrit (canonRoom seul).
+      canonRoom.walls_user_edited = !!state.walls_user_edited;
+      if (ramend.originalRoom && ramend.originalRoom.plan_area_m2 != null) {
+        canonRoom.plan_area_m2 = ramend.originalRoom.plan_area_m2;
+      }
+      fpRoomAmendments[ramend.roomName] = JSON.parse(JSON.stringify(canonRoom));
     }
 
     state.roomAmendMode = null;
@@ -2177,7 +2165,7 @@ function buildPalette() {
 
 function zoomIn(targetSvg) {
   const vb = state.viewBox;
-  const factor = 0.8;
+  const factor = ZOOM_IN_FACTOR;
   const newW = vb.w * factor;
   const newH = vb.h * factor;
   vb.x += (vb.w - newW) / 2;
@@ -2189,13 +2177,14 @@ function zoomIn(targetSvg) {
 }
 
 function zoomOut(targetSvg) {
-  // Clamp: allow zoom out jusqu'à 3x la vue fitée par défaut (suffisant pour
-  // voir labels + handles autour de la pièce en amend mode).
+  // Clamp: allow zoom out jusqu'à 5x la vue fitée par défaut. Passé de 3x
+  // à 5x (2026-04-21) — 3x bloquait avant d'atteindre une marge confortable
+  // autour de la pièce en amend mode.
   if (state._fitViewBox) {
-    if (state.viewBox.w * 1.25 > state._fitViewBox.w * 3) return;
+    if (state.viewBox.w * ZOOM_OUT_FACTOR > state._fitViewBox.w * ZOOM_OUT_MAX_FIT_RATIO) return;
   }
   const vb = state.viewBox;
-  const factor = 1.25;
+  const factor = ZOOM_OUT_FACTOR;
   const newW = vb.w * factor;
   const newH = vb.h * factor;
   vb.x += (vb.w - newW) / 2;
