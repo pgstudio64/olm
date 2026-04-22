@@ -246,22 +246,46 @@ def remove_non_ortho(binary: np.ndarray,
 
     Returns:
         Cleaned binary mask (True = wall, non-ortho removed).
+
+    Note (D-142 perf) : utilise `connectedComponentsWithStats` pour lire
+    la bbox de chaque composant et ne travaille que sur son sous-array
+    local. Avant ce fix, chaque itération faisait `labels == label_id`
+    sur l'image entière (O(N × pixels) total — 50× plus lent sur un plan
+    haute résolution avec beaucoup de composants).
     """
     binary_u8 = binary.astype(np.uint8) * 255
-    num, labels = cv2.connectedComponents(binary_u8)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(
+        binary_u8, connectivity=8)
     cleaned = binary.copy()
+    removed = 0
 
     for label_id in range(1, num):
-        component = np.argwhere(labels == label_id)
-        if len(component) < min_component_px:
+        area = int(stats[label_id, cv2.CC_STAT_AREA])
+        if area < min_component_px:
             continue
-        rect = cv2.minAreaRect(component[:, ::-1].astype(np.float32))
+        x = int(stats[label_id, cv2.CC_STAT_LEFT])
+        y = int(stats[label_id, cv2.CC_STAT_TOP])
+        w = int(stats[label_id, cv2.CC_STAT_WIDTH])
+        h = int(stats[label_id, cv2.CC_STAT_HEIGHT])
+        # Sous-array local : bbox du composant, pas l'image entière.
+        local_labels = labels[y:y + h, x:x + w]
+        local_mask = (local_labels == label_id)
+        ys, xs = np.nonzero(local_mask)
+        if ys.size == 0:
+            continue
+        # minAreaRect attend des coords globales en (x, y) ; on peut le
+        # faire en local aussi car l'angle est invariant par translation.
+        component = np.column_stack([xs, ys]).astype(np.float32)
+        rect = cv2.minAreaRect(component)
         angle = rect[2] % 90
         if tolerance_deg < angle < (90 - tolerance_deg):
-            cleaned[labels == label_id] = False
+            # Efface uniquement la bbox locale (vue sur `cleaned`).
+            local_cleaned = cleaned[y:y + h, x:x + w]
+            local_cleaned[local_mask] = False
+            removed += area
 
     logger.info("remove_non_ortho: %d components, removed %d non-ortho",
-                num - 1, int(np.sum(binary) - np.sum(cleaned)))
+                num - 1, removed)
     return cleaned
 
 
