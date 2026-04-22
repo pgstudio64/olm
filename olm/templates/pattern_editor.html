@@ -239,7 +239,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             <button class="btn btn-toolbar" id="ingZoomOut" title="Zoom out">&#8722;</button>
             <button class="btn btn-toolbar" id="ingZoomFit" title="Fit all">&#8861;</button>
             <button class="btn btn-toolbar" id="ingZoomIn" title="Zoom in">+</button>
-            <button class="btn btn-toolbar" id="ingBtnReanalyzeAll" title="Re-analyze every room (preserves manual edits and transparent zones)">Re-analyze all</button>
+            <button class="btn btn-toolbar" id="ingBtnReanalyzeAll" title="Rescan every room (preserves manual edits and transparent zones)">Rescan all</button>
+            <label id="ingLockWallsWrap" style="font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock walls: keep the walls detected by the last rescan. The next Rescan re-detects only windows, openings and doors. Auto-checked once a first rescan has been performed on this plan.">
+              <input type="checkbox" id="ingLockWalls"> Lock walls
+            </label>
             <span style="flex:1;"></span>
             <span id="ingStatus" style="color:var(--text-dim);font-size:10px;"></span>
           </div>
@@ -289,14 +292,14 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
               <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
               <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
-              <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Re-analyze windows & openings (keeps manual edits)">Re-analyze</button>
-              <label id="rvLockBboxWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock bbox: re-detect openings without moving the room or changing its dimensions (D-118).">
-                <input type="checkbox" id="rvLockBbox"> Lock bbox
+              <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Rescan windows & openings (keeps manual edits)">Rescan</button>
+              <label id="rvLockWallsWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock walls: re-scan openings &amp; windows but keep the walls detected earlier (auto-checked when you resized the bbox).">
+                <input type="checkbox" id="rvLockWalls"> Lock walls
               </label>
-              <button class="btn btn-toolbar" id="rvBtnCheckOrient" style="display:none;" title="Check canonical orientation: corridor south, exterior north (D-119)">Check orient.</button>
+              <button class="btn btn-toolbar" id="rvBtnCheckOrient" style="display:none;background:var(--surface);color:var(--text-dim);border:1px solid var(--surface2);opacity:0.7;" title="Check canonical orientation: corridor south, exterior north (D-119). Outil de dev.">Check orient.</button>
               <span id="rvOrientBadge" style="display:none;font-size:11px;padding:2px 6px;border-radius:3px;"></span>
               <div id="rvAddMenuWrap" style="display:none;position:relative;">
-                <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add room items &#9662;</button>
+                <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add items &#9662;</button>
                 <div id="rvAddMenu" style="display:none;position:absolute;top:100%;right:0;z-index:20;background:var(--surface);border:1px solid var(--border);font-size:11px;min-width:160px;">
                   <div class="rv-add-item" data-add="window" style="padding:6px 10px;cursor:pointer;">Window</div>
                   <div class="rv-add-item" data-add="door" style="padding:6px 10px;cursor:pointer;">Door</div>
@@ -322,9 +325,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="fp-info-col" id="rvRightInfoCol">
         <div class="section-title">Room</div>
         <table>
-          <tr><td>Width (cm)</td><td id="rvRoomWidth">-</td></tr>
-          <tr><td>Depth (cm)</td><td id="rvRoomDepth">-</td></tr>
-          <tr><td>Area (m²)</td><td id="rvRoomArea">-</td></tr>
+          <tr><td>Plan area (m²)</td><td id="rvRoomPlanArea">-</td></tr>
+          <tr><td>Bbox area (m²)</td><td id="rvRoomBboxArea">-</td></tr>
+          <tr><td>Bbox size (cm)</td><td id="rvRoomBboxSize">-</td></tr>
         </table>
         <div class="section-title">Room definition</div>
         <textarea id="rvRoomDsl" readonly rows="12" class="sidebar-textarea"></textarea>
@@ -355,7 +358,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
           <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
           <span style="flex:1;"></span>
-          <button class="btn" id="fpBtnEditPattern" title="Open source pattern in editor" disabled>Edit pattern</button>
+          <button class="btn" id="fpBtnEditPattern" title="Open this pattern in the editor to add a variant to the catalogue" disabled>Add pattern</button>
           <button class="btn" id="fpBtnAdjustLayout" title="Amend layout in room" disabled>Amend layout</button>
           <button class="btn btn-cancel" id="fpBtnDiscard" style="display:none;" title="Discard amendment">Discard amendment</button>
         </div>

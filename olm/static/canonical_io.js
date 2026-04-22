@@ -492,6 +492,42 @@
       }
     });
 
+    // D-135 : walls_user_edited traverse fromStorage / toStorage sans
+    // altération (champ booléen non géométrique). Aucune rotation, aucune
+    // suppression dans le delete-chain (corridor_face_abs / bbox_canon_cm /
+    // surface_m2_bbox uniquement).
+    var WUE_CASES = [
+      { label: "true-south",  cf: "south", wue: true },
+      { label: "false-south", cf: "south", wue: false },
+      { label: "true-north",  cf: "north", wue: true },
+      { label: "true-east",   cf: "east",  wue: true },
+      { label: "true-west",   cf: "west",  wue: true },
+      { label: "absent-south", cf: "south", wue: undefined },
+    ];
+    WUE_CASES.forEach(function (c) {
+      var room = {
+        name: "WUE-" + c.label, corridor_face: c.cf,
+        width_cm: 300, depth_cm: 400,
+        bbox_px: [0, 0, 60, 80], seed_px: [30, 40],
+      };
+      if (c.wue !== undefined) room.walls_user_edited = c.wue;
+      var canon = fromStorage(room, SCALE);
+      var back = toStorage(canon, SCALE);
+      var expectCanon = c.wue;
+      var expectBack = c.wue;
+      var canonOk = canon.walls_user_edited === expectCanon;
+      var backOk = back.walls_user_edited === expectBack;
+      if (canonOk && backOk) {
+        console.log("[canonical_io] OK — walls_user_edited " + c.label);
+      } else {
+        allOk = false;
+        console.error("[canonical_io] FAIL — walls_user_edited " + c.label,
+          "canon=", canon.walls_user_edited,
+          "back=", back.walls_user_edited,
+          "expected=", expectCanon);
+      }
+    });
+
     if (allOk) {
       console.log("[canonical_io] ALL TESTS PASSED");
     } else {

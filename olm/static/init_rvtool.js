@@ -12,7 +12,30 @@
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
     var rvTool = { mode: "idle", drawStart: null, selectedIndex: -1, dragOffset: null };
+    // rvTool sub-fields populated on demand by the various handlers:
+    //   openingMove  : { type, index, face, startOffset, widthAlong, mouseStart }
+    //   openingResize: { type, index, end, face, startOffset, startWidth, mouseStart }
+    //   roomResizeStart / transpDrag / transpResize / resizeStart / dragStart …
     window.rvTool = rvTool;
+
+    // --- Constants --------------------------------------------------------
+    var ROOM_RESIZE_SNAP_CM = 5;        // D-99 fine snap for room resize handles
+    var WALL_SNAP_CM = 10;              // opening placement snap on walls
+    var GHOST_RECT_COLOR = "#2a9d8f";   // teal (draw preview outline)
+    var GHOST_RECT_DASH = "4 4";
+    var DEFAULT_WINDOW_WIDTH_CM = 100;  // "+ Add window" default width
+    var SQ_CM_PER_SQ_M = 10000;         // cm² → m² divisor
+    var ARROW_KEY_SHIFT_MULTIPLIER = 5; // Shift+arrow nudge = 5 × grid step
+
+    // --- Helpers ----------------------------------------------------------
+    // D-122 P4 : state.room_openings, room_doors, room_windows vivent en
+    // collections séparées. L'UI badge/handle encode le type dans le
+    // dataset ; on route l'accès à la bonne collection.
+    function _getOpeningArray(type) {
+      if (type === "window") return state.room_windows;
+      if (type === "door")   return state.room_doors;
+      return state.room_openings;
+    }
 
     var _rvGhostRect = null;
 
@@ -28,8 +51,6 @@
         y_cm: Math.round(svgPt.y / SCALE / snap) * snap,
       };
     }
-    // D-99: finer snap (5 cm) for room position handles.
-    var ROOM_RESIZE_SNAP_CM = 5;
 
     async function rvApplyDslAsync() {
       var text = document.getElementById("rvRoomDsl").value.trim();
@@ -102,9 +123,9 @@
       if (!_rvGhostRect) {
         _rvGhostRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         _rvGhostRect.setAttribute("fill", "none");
-        _rvGhostRect.setAttribute("stroke", "#2a9d8f");
+        _rvGhostRect.setAttribute("stroke", GHOST_RECT_COLOR);
         _rvGhostRect.setAttribute("stroke-width", "1");
-        _rvGhostRect.setAttribute("stroke-dasharray", "4 4");
+        _rvGhostRect.setAttribute("stroke-dasharray", GHOST_RECT_DASH);
         _rvGhostRect.setAttribute("pointer-events", "none");
       }
       _rvGhostRect.setAttribute("x", x_svg);
@@ -193,7 +214,6 @@
     // --- Opening placement buttons (Add Window / Door / Opening) ---
     // Click a button → enter placingOpening mode; next click on a wall
     // inserts the opening at that position.
-    var WALL_SNAP_CM = 10;
     function _nearestFaceAndOffset(x_cm, y_cm) {
       var W = state.room_width_cm, D = state.room_depth_cm;
       // Distance to each wall (clamped pt inside room).
@@ -317,7 +337,7 @@
           (origRoom.seed_x != null && origRoom.seed_y != null
             ? [origRoom.seed_x, origRoom.seed_y] : null);
         if (!seedPx || !ingst.planPathEnhanced || !ingst.scale) {
-          alert("Re-analyze unavailable: missing plan path, seed, or scale.");
+          alert("Rescan unavailable: missing plan path, seed, or scale.");
           return;
         }
         // D-127 : si l'utilisateur a redimensionné la pièce en amend mode
@@ -383,13 +403,14 @@
         var doorsPx = [];
         var doorWidthCm = ((window.APP_CONFIG || {}).default_door_width_cm) || 90;
         reanalyzeBtn.disabled = true;
-        reanalyzeBtn.textContent = "Analyzing...";
+        reanalyzeBtn.textContent = "Rescanning...";
         try {
-          // D-132 : lockBbox → demande au backend de contraindre le
-          // ray-cast aux bords de effBbox (clip_to_bbox). Évite la
-          // détection de murs/portes hors pièce user.
-          var lockBboxElFetch = document.getElementById("rvLockBbox");
-          var lockBboxFlag = !!(lockBboxElFetch && lockBboxElFetch.checked);
+          // Lock walls (ex-Lock bbox, D-132) → demande au backend de
+          // contraindre le ray-cast aux bords de effBbox (clip_to_bbox) :
+          // on re-scanne fenêtres / ouvertures / portes sans re-détecter
+          // les murs — le bbox user est préservé.
+          var lockWallsElFetch = document.getElementById("rvLockWalls");
+          var lockWallsFlag = !!(lockWallsElFetch && lockWallsElFetch.checked);
           var resp = await fetch("/api/room/reanalyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -401,7 +422,7 @@
               transparent_zones: transparents,
               doors: doorsPx,
               door_width_cm: doorWidthCm,
-              clip_to_bbox: lockBboxFlag,
+              clip_to_bbox: lockWallsFlag,
             }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -439,13 +460,23 @@
           var canon = window.computeCanonicalReanalyzeResult(
             data, prevCf, ingst.scale || 0);
 
-          // D-126 : toggle "Lock bbox" — quand coché, la géométrie
+          // D-126 : toggle "Lock walls" — quand coché, la géométrie
           // (bbox_px, dims, corridor_face_abs, overlay) reste figée ;
-          // seuls openings / windows / doors / hits sont adoptés.
-          var lockBboxEl = document.getElementById("rvLockBbox");
-          var lockBbox = !!(lockBboxEl && lockBboxEl.checked);
+          // seuls openings / windows / doors / hits sont adoptés. Quand
+          // décoché, on a re-détecté les murs → le flag user-edited est
+          // reset (la géométrie repart du scan backend).
+          var lockWallsEl = document.getElementById("rvLockWalls");
+          var lockWalls = !!(lockWallsEl && lockWallsEl.checked);
+          if (!lockWalls) state.walls_user_edited = false;
+          // D-135 : un scan (unitaire) suffit à armer le flag global Floor ;
+          // la toolbar Floor reflète l'état au retour sur cet onglet.
+          if (window.ingState) {
+            window.ingState.firstScanDone = true;
+            var ingLwAfter = document.getElementById("ingLockWalls");
+            if (ingLwAfter) ingLwAfter.checked = true;
+          }
 
-          if (canon.corridor_face && !lockBbox) {
+          if (canon.corridor_face && !lockWalls) {
             // D-113 + R-12 : la porte détectée met à jour le repère
             // absolu mémorisé. corridor_face_abs seul — corridor_face
             // "south" est une constante implicite du repère canon.
@@ -464,7 +495,7 @@
           if (canon.seed_cm) state.room_seed_cm = canon.seed_cm;
           if (canon.auto_door_masks) state.room_auto_door_masks = canon.auto_door_masks;
 
-          if (canon.bbox_px && ingst.scale && !lockBbox) {
+          if (canon.bbox_px && ingst.scale && !lockWalls) {
             if (canon.width_cm > 0 && canon.depth_cm > 0) {
               state.room_width_cm = canon.width_cm;
               state.room_depth_cm = canon.depth_cm;
@@ -493,7 +524,7 @@
             amend.originalRoom.width_cm = canon.width_cm;
             amend.originalRoom.depth_cm = canon.depth_cm;
             amend.originalRoom.surface_m2_bbox = parseFloat(
-              ((canon.width_cm * canon.depth_cm) / 10000).toFixed(2));
+              ((canon.width_cm * canon.depth_cm) / SQ_CM_PER_SQ_M).toFixed(2));
             if (window.fpOverlay && state.overlay) {
               var ov2 = window.fpOverlay;
               state.overlay.offsetX = canon.bbox_px[0] / ov2.pxPerCm;
@@ -515,10 +546,10 @@
           _rvCommitFromState();
           if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
         } catch (err) {
-          alert("Re-analyze failed: " + err.message);
+          alert("Rescan failed: " + err.message);
         } finally {
           reanalyzeBtn.disabled = false;
-          reanalyzeBtn.textContent = "Re-analyze";
+          reanalyzeBtn.textContent = "Rescan";
         }
       });
     }
@@ -686,10 +717,7 @@
       if (openingDelete) {
         var dparts = openingDelete.dataset.openingDelete.split("-");
         var dtype = dparts[0], didx = parseInt(dparts[1], 10);
-        // D-122 P4 : type peut être window / opening / door.
-        var darr = (dtype === "window") ? state.room_windows
-                 : (dtype === "door")   ? state.room_doors
-                 :                        state.room_openings;
+        var darr = _getOpeningArray(dtype);
         var dRemoved = darr && darr[didx];
         if (dRemoved && dRemoved.origin === "auto") {
           state.deleted_auto_signatures = state.deleted_auto_signatures || [];
@@ -710,9 +738,7 @@
       if (openingResize) {
         var rparts = openingResize.dataset.openingResize.split("-");
         var rtype = rparts[0], ridx = parseInt(rparts[1], 10), rend = rparts[2];
-        var rarr = (rtype === "window") ? state.room_windows
-                 : (rtype === "door")   ? state.room_doors
-                 :                        state.room_openings;
+        var rarr = _getOpeningArray(rtype);
         var rop = rarr && rarr[ridx];
         if (!rop) return;
         state.selectedOpening = { type: rtype, index: ridx };
@@ -737,9 +763,7 @@
       if (openingHandle) {
         var parts = openingHandle.dataset.openingHandle.split("-");
         var otype = parts[0], oidx = parseInt(parts[1], 10);
-        var oarr = (otype === "window") ? state.room_windows
-                 : (otype === "door")   ? state.room_doors
-                 :                        state.room_openings;
+        var oarr = _getOpeningArray(otype);
         var op = oarr && oarr[oidx];
         if (!op) return;
         state.selectedOpening = { type: otype, index: oidx };
@@ -804,7 +828,7 @@
         var fo = _nearestFaceAndOffset(ptO.x_cm, ptO.y_cm);
         var type = rvTool.placingOpeningType;
         var defaultW = (type === "window")
-          ? 100
+          ? DEFAULT_WINDOW_WIDTH_CM
           : ((window.APP_CONFIG && window.APP_CONFIG.default_door_width_cm) || 90);
         var wallLen = (fo.face === "north" || fo.face === "south")
           ? state.room_width_cm : state.room_depth_cm;
@@ -1231,6 +1255,11 @@
         // on amend mode exit (see _cancelAmendIfActive / exitRoomAmendMode).
         // Clamp any element that ended up outside the new room bounds.
         _clampContentsToRoom();
+        // User-driven wall change → mark the room so the next Rescan defaults
+        // to Lock walls (preserve the hand-tuned geometry).
+        state.walls_user_edited = true;
+        var lwEl = document.getElementById("rvLockWalls");
+        if (lwEl) lwEl.checked = true;
         // Commit: regenerate the whole DSL from current state (since a
         // corner drag may have shifted many content offsets) and re-apply.
         var dslEl = document.getElementById("rvRoomDsl");
@@ -1270,7 +1299,7 @@
         // Stop other handlers (floor_plan.js room nav, editor.js block nav)
         // from firing on this event.
         if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
-        var step = e.shiftKey ? GRID_STEP_CM * 5 : GRID_STEP_CM;
+        var step = e.shiftKey ? GRID_STEP_CM * ARROW_KEY_SHIFT_MULTIPLIER : GRID_STEP_CM;
         var idxK = rvTool.selectedIndex;
         var exclK = state.room_exclusions[idxK];
         if (!exclK) return;

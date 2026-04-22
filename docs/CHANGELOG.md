@@ -5,6 +5,28 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### D-135 — UX Scan / Lock walls + flags `walls_user_edited` & `first_scan_done` (2026-04-21)
+
+- Renommage des boutons `Re-analyze` → `Rescan` (Floor « Rescan all »,
+  Room « Rescan ») et de la checkbox Room `Lock bbox` → `Lock walls`.
+  IDs HTML conservés pour les boutons. Bouton Room amend `Add room
+  items` → `Add items` (redondance du contexte supprimée).
+- Nouvelle checkbox `Lock walls` dans la toolbar Floor, contrôlant
+  `clip_to_bbox` envoyé à `/api/room/reanalyze_batch`.
+- Nouveau flag par pièce `walls_user_edited` (JSON v3 `rooms[<id>]`) :
+  passe à `true` au resize bbox en Room amend, à `false` après un Scan
+  destructif (Lock walls décoché), inchangé sinon. Pré-coche automatique
+  de la checkbox Lock walls à la réouverture de la pièce.
+- Nouveau flag racine `first_scan_done` (JSON v3) : passe à `true` dès
+  le premier Scan réussi ; sert de défaut pour la case `Lock walls`
+  Floor au prochain chargement du plan.
+- Backend : `/api/import/preprocessed` retourne `first_scan_done` ;
+  `/api/room/reanalyze_batch` inchangé (acceptait déjà `clip_to_bbox`).
+
+---
+
 ## [v0.4.0] — 2026-04-21 : D-94 → D-134
 
 ### Highlights

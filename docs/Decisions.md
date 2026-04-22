@@ -7,6 +7,102 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-135 · UX Scan / Lock walls + flags `walls_user_edited` & `first_scan_done` (2026-04-21)
+
+### Décision
+
+Refonte du vocabulaire et de la logique de re-détection raster, avec deux
+nouveaux flags persistés dans le JSON v3 :
+
+1. **Renommages UI** :
+   - Floor : `Re-analyze all` → **Rescan all** (bouton `ingBtnReanalyzeAll`,
+     ID conservé pour ne pas casser les call sites).
+   - Room : `Re-analyze` → **Rescan** (bouton `rvBtnReanalyze`, ID conservé).
+   - Room : `Add room items` → **Add items** (le contexte Room amend est
+     déjà posé en en-tête, "room" redondant).
+   - Room : checkbox `Lock bbox` → **Lock walls** (renommée
+     `rvLockWalls` / `rvLockWallsWrap` pour cohérence).
+   - Tous les libellés, tooltips et messages (`Rescan unavailable`,
+     `Rescanning…`, `Rescan done`, `Rescan failed`) alignés.
+
+2. **`walls_user_edited: bool`** — nouveau champ par pièce dans le JSON v3
+   (racine `rooms[<id>]`). Cycle de vie :
+   - `true` quand l'utilisateur resize la bbox via poignées en Room amend
+     (init_rvtool.js mouseup `roomResizing`).
+   - `false` après un Scan avec Lock walls **décoché** (scan destructif =
+     les murs repartent de la détection automatique).
+   - **Inchangé** après un Scan avec Lock walls coché (murs préservés,
+     le flag user-edited reste valable).
+   - À l'entrée en Room amend, la checkbox `Lock walls` est pré-cochée
+     ssi `room.walls_user_edited === true`.
+
+3. **`first_scan_done: bool`** — flag racine du JSON v3, persistant dans
+   l'absolu :
+   - Passe à `true` au premier Scan réussi (batch ou unitaire), reste `true`.
+   - Contrôle la valeur par défaut de la case `ingLockWalls` (Floor) au
+     chargement du plan. L'utilisateur peut la décocher pour lancer un
+     scan destructif ; le flag racine ne repasse pas à `false`.
+   - Effet de `ingLockWalls` sur le batch : `clip_to_bbox` envoyé au
+     backend (`/api/room/reanalyze_batch`). Quand décoché, toutes les
+     rooms scannées voient leur `walls_user_edited` remis à `false`.
+
+### Justification
+
+- « Re-analyze » recouvrait la fois la détection des murs et celle des
+  ouvertures. Le renommage en « Scan » + « Lock walls » sépare nettement
+  les deux intentions et évite que l'utilisateur relance par inadvertance
+  un scan destructif qui écrase un bbox réglé à la main.
+- `walls_user_edited` matérialise un état implicite : une pièce dont la
+  géométrie a été ajustée manuellement doit, par défaut, être préservée
+  aux scans ultérieurs. Sans flag persistant, le pré-cochage était
+  volatile et perdu entre sessions.
+- `first_scan_done` évite qu'un utilisateur ouvrant un plan déjà scanné
+  perde toute sa géométrie en relançant « Scan all » distraitement
+  (premier scan en session = case décochée précédemment, maintenant
+  cochée par défaut).
+
+### Impact
+
+- **Frontend** :
+  - `pattern_editor.html` : checkbox `ingLockWalls` dans la toolbar
+    Floor, renommage des labels Lock bbox / Re-analyze.
+  - `init_rvtool.js` : handler Scan Room met à jour `walls_user_edited`
+    et `firstScanDone` ; mouseup resize marque `walls_user_edited=true`
+    et coche automatiquement Lock walls.
+  - `ingestion.js` : handler Scan all lit `ingLockWalls` et passe
+    `clip_to_bbox` au backend ; reset `walls_user_edited` par pièce si
+    scan destructif ; lecture de `first_scan_done` à l'import.
+  - `ingestion_serialize.js` : sérialise `walls_user_edited` (par room)
+    et `first_scan_done` (racine) dans le JSON v3.
+  - `editor.js` : enter/exit Room amend mettent à jour l'état de la
+    case `rvLockWalls` ; save propage `walls_user_edited` vers
+    `ingRooms[]` et `fpData.rooms[]`.
+  - `floor_plan.js` : `fpLoadAndMatch` préserve `walls_user_edited` à
+    travers le re-match (non-retourné par `/api/floor-plan/match`).
+  - `init.js` : Close plan reset `firstScanDone = false`.
+- **Backend** (`app.py`) : `/api/import/preprocessed` retourne désormais
+  `first_scan_done` (lu depuis `json_data`, défaut `False`). Aucun autre
+  changement ; `/api/room/reanalyze_batch` acceptait déjà `clip_to_bbox`.
+- **Schéma JSON v3** : deux champs ajoutés, sérialisation conditionnelle
+  (absents = faux) pour rétro-compatibilité avec les plans antérieurs.
+- **Non-régression** : les routes backend `/api/room/reanalyze*`
+  inchangées ; les IDs HTML des boutons Scan (`ingBtnReanalyzeAll`,
+  `rvBtnReanalyze`) conservés.
+
+### Rider — bug fix batch amendments propagation
+
+Découvert lors des tests : après un Scan all destructif (Lock walls
+décoché), `fpData.rooms[i]` et `ingState.rooms[i]` recevaient bien les
+nouvelles dims issues du ray-cast, mais `fpRoomAmendments[name]`
+conservait les anciennes dims amendées. Or `rvRenderCurrent`
+([floor_plan.js:200](olm/static/floor_plan.js#L200)) priorise
+`fpRoomAmendments[name]` sur `fpData.rooms[i]` → la Review continuait
+d'afficher les dims manuelles post-scan. Correction : propager aussi
+`bbox_px / width_cm / depth_cm / width_px / height_px / surface_m2_bbox`
+dans `am` au même titre que `windows/openings/doors/zones`.
+
+---
+
 ## D-134 · R-14 P6 : `canonicalIO.canonAngle` (source unique rotation SVG) (2026-04-21)
 
 ### Décision

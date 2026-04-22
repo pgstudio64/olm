@@ -569,7 +569,6 @@ function _renderImpl(targetSvg) {
   var zf = 1 / svgScale;
   window._currentZf = zf;  // shared with block_svg.js
 
-  let globalWestOffset = 0;  // obsolete, kept for viewBox compatibility
   let totalW = 0;
   let totalH = 0;
   let minX = MARGIN;  // track leftmost x coordinate (west zones)
@@ -1089,7 +1088,6 @@ function _renderImpl(targetSvg) {
   updateInfo();
   document.getElementById("canvasDims").textContent =
     state.room_width_cm + " x " + state.room_depth_cm + " cm";
-  // zoomLevel display removed — simplified toolbar
   // Restore rows if they were hidden for Review
   if (_savedRows !== undefined) state.rows = _savedRows;
 }
@@ -1502,7 +1500,10 @@ async function save() {
     // (rvRenderCurrent, fpRenderEmptyRoom) s'attendent à du canonique et
     // rendent buggé si on leur passe de l'absolu (bug 180° sur pièces
     // non-south détectées).
-    fpRoomAmendments[ramend.roomName] = JSON.parse(JSON.stringify(canonRoom));
+    // D-127 fix : l'écriture fpRoomAmendments est déplacée EN FIN du bloc
+    // Room amend, après le calcul du newBbox post-resize. Sans ça, un Save
+    // sans fpData peuplé préservait l'ancien bbox dans fpRoomAmendments →
+    // désalignement au rendu Review (cf. docs/INVESTIGATION_D127_save_bbox.md).
 
     // Propagate new size + NW shift back to ingState.rooms (and
     // fpData.rooms) so Floor reflects the amendment on the bbox overlay.
@@ -1532,8 +1533,8 @@ async function save() {
       absShiftX = cShiftX;  absShiftY = cShiftY;
       absW = cW;            absD = cD;
     }
+    var newBbox = null;  // hoisted : exploité par le fallback fpRoomAmendments ci-dessous
     if (scaleCmPerPx > 0) {
-      var newBbox = null;
       var ingRooms = (window.ingState && window.ingState.rooms) || [];
       var pxPerCm = 1.0 / scaleCmPerPx;
       function _pxOf(cm) {
@@ -1595,6 +1596,7 @@ async function save() {
           JSON.parse(JSON.stringify(state.room_exclusions || []));
         ingRooms[ir].transparent_zones =
           JSON.parse(JSON.stringify(state.room_transparents || []));
+        ingRooms[ir].walls_user_edited = !!state.walls_user_edited;
         break;
       }
       if (newBbox) {
@@ -1621,9 +1623,7 @@ async function save() {
               JSON.parse(JSON.stringify(state.room_exclusions || []));
             window.fpData.rooms[fr].transparent_zones =
               JSON.parse(JSON.stringify(state.room_transparents || []));
-            // fpRoomAmendments mirror la version canonique de fpData.rooms[fr].
-            fpRoomAmendments[ramend.roomName] =
-              JSON.parse(JSON.stringify(window.fpData.rooms[fr]));
+            window.fpData.rooms[fr].walls_user_edited = !!state.walls_user_edited;
             break;
           }
         }
@@ -1632,6 +1632,35 @@ async function save() {
         if (typeof window.renderIngestion === "function") window.renderIngestion();
         if (typeof window.updateIngRoomList === "function") window.updateIngRoomList();
       }
+    }
+
+    // D-127 fix : écriture unique de fpRoomAmendments, TOUJOURS exécutée
+    // (précédemment conditionnée à scaleCmPerPx > 0 && newBbox && fpData).
+    // Priorité à fpData.rooms[fr] s'il existe (plus riche : offset_px
+    // enrichis, walls_user_edited). Sinon canonRoom enrichi du newBbox.
+    var _matchedFp = null;
+    if (window.fpData && window.fpData.rooms) {
+      for (var _mi = 0; _mi < window.fpData.rooms.length; _mi++) {
+        if (window.fpData.rooms[_mi].name === ramend.roomName) {
+          _matchedFp = window.fpData.rooms[_mi];
+          break;
+        }
+      }
+    }
+    if (_matchedFp) {
+      fpRoomAmendments[ramend.roomName] =
+        JSON.parse(JSON.stringify(_matchedFp));
+    } else {
+      if (newBbox) canonRoom.bbox_px = newBbox.slice();
+      canonRoom.walls_user_edited = !!state.walls_user_edited;
+      // Préserver la plan_area_m2 (cartouche) sur le canonRoom de
+      // fallback ; sans ça le rendu Review tombe sur "-" après Save
+      // dans le cas edge fpData vide.
+      if (ramend.originalRoom && ramend.originalRoom.plan_area_m2 != null) {
+        canonRoom.plan_area_m2 = ramend.originalRoom.plan_area_m2;
+      }
+      fpRoomAmendments[ramend.roomName] =
+        JSON.parse(JSON.stringify(canonRoom));
     }
 
     state.roomAmendMode = null;
@@ -1940,6 +1969,7 @@ function enterRoomAmendMode(room) {
   // on ne stocke plus que corridor_face_abs (repère absolu) pour piloter
   // la rotation overlay et les conversions abs↔canon.
   state.corridor_face_abs = room.corridor_face_abs || "";
+  state.walls_user_edited = !!room.walls_user_edited;
 
   // Hits (pour V/H-rays debug). Convertis en room-local cm.
   state.room_hits = null;
@@ -2008,8 +2038,10 @@ function enterRoomAmendMode(room) {
   if (rvAddMenuWrap) rvAddMenuWrap.style.display = "";
   var rvBtnReanalyze = document.getElementById("rvBtnReanalyze");
   if (rvBtnReanalyze) rvBtnReanalyze.style.display = "";
-  var rvLockBboxWrap = document.getElementById("rvLockBboxWrap");
-  if (rvLockBboxWrap) rvLockBboxWrap.style.display = "";
+  var rvLockWallsWrap = document.getElementById("rvLockWallsWrap");
+  if (rvLockWallsWrap) rvLockWallsWrap.style.display = "";
+  var rvLockWallsCb = document.getElementById("rvLockWalls");
+  if (rvLockWallsCb) rvLockWallsCb.checked = !!state.walls_user_edited;
   var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
   if (rvBtnCheck) rvBtnCheck.style.display = "";
 
@@ -2040,10 +2072,10 @@ function exitRoomAmendUI() {
   if (rvAddMenu2) rvAddMenu2.style.display = "none";
   var rvBtnReanalyze2 = document.getElementById("rvBtnReanalyze");
   if (rvBtnReanalyze2) rvBtnReanalyze2.style.display = "none";
-  var rvLockBboxWrap2 = document.getElementById("rvLockBboxWrap");
-  if (rvLockBboxWrap2) rvLockBboxWrap2.style.display = "none";
-  var rvLockBbox2 = document.getElementById("rvLockBbox");
-  if (rvLockBbox2) rvLockBbox2.checked = false;
+  var rvLockWallsWrap2 = document.getElementById("rvLockWallsWrap");
+  if (rvLockWallsWrap2) rvLockWallsWrap2.style.display = "none";
+  var rvLockWalls2 = document.getElementById("rvLockWalls");
+  if (rvLockWalls2) rvLockWalls2.checked = false;
   var rvBtnCheck2 = document.getElementById("rvBtnCheckOrient");
   if (rvBtnCheck2) rvBtnCheck2.style.display = "none";
   var rvBadge = document.getElementById("rvOrientBadge");

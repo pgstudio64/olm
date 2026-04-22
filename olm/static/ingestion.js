@@ -8,6 +8,56 @@
 (function () {
   'use strict';
 
+  // --- Constants ------------------------------------------------------------
+  // Defaults for rooms added manually via "+ Add room" (addIngRoom).
+  var STUB_ROOM_DEFAULT_W_CM = 400;
+  var STUB_ROOM_DEFAULT_D_CM = 500;
+  var STUB_ROOM_MIN_DIM_CM = 50;
+  var STUB_ROOM_AUTO_MARGIN_CM = 50;
+
+  // Shared wall detection between contiguous rooms (merge checkboxes).
+  var SHARED_WALL_TOLERANCE_PX = 8;
+
+  // UX timings.
+  var DOUBLE_CLICK_DELAY_MS = 400;
+
+  // Zoom — wheel (continuous) vs toolbar buttons (Fit/In/Out).
+  var WHEEL_ZOOM_IN_FACTOR = 1.15;
+  var WHEEL_ZOOM_OUT_FACTOR = 0.87;
+  var ZOOM_MAX_EXTENT_RATIO = 1.1;
+  var ZOOM_FIT_ROOM_PADDING_PX = 50;
+  var BUTTON_ZOOM_IN_FACTOR = 0.7;
+  var BUTTON_ZOOM_OUT_FACTOR = 1.4;
+
+  // Wall-feature rendering (doors / openings / windows outside the bbox).
+  var WALL_ERASE_STROKE_WIDTH_PX = 2;
+  var WALL_FEATURE_OFFSET_PX = 3;
+
+  // Floor bbox editor — minimum resizable dimension in image pixels.
+  var BBOX_RESIZE_MIN_PX = 50;
+
+  // Auto-focus after plan load — padding ratio around the rooms bbox.
+  var BBOX_AUTOFOCUS_PADDING_RATIO = 0.10;
+
+  // --- Shared post-load UI setup --------------------------------------------
+  // Called after a successful plan import (OCR or Preprocessed). Reveals the
+  // plan-dependent header, save/export/close buttons, erase wrapper and
+  // toolbar. Header text only set if planId is non-empty so the helper stays
+  // safe for the upload-fallback path.
+  function _showPlanLoadedUI(planId) {
+    if (planId) {
+      var hdrEl = document.getElementById('hdrCurrentPlan');
+      if (hdrEl) hdrEl.textContent = planId;
+    }
+    [
+      'btnSavePlan', 'btnExportPlan', 'btnClosePlan',
+      'eraseWrapper', 'ingToolbar',
+    ].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
+  }
+
   // --- Shared re-analyze canonicalisation (D-112/D-113) ---------------------
   // Used by both the unitary room re-analyze (init_rvtool.js) and the batch
   // floor re-analyze below. Takes the absolute-coord backend payload and
@@ -448,6 +498,19 @@
           return;
         }
         ingState.rooms = data.rooms || [];
+        // D-135 rider : snapshot immutable de la surface cartouche pour
+        // l'affichage "Plan area (m²)". surface_m2 sera potentiellement
+        // écrasé par les recalculs bbox (_updateRoomDims, save Room) ;
+        // plan_area_m2 reste la valeur d'origine tant qu'elle existe.
+        ingState.rooms.forEach(function (r) {
+          if (r.plan_area_m2 == null &&
+              typeof r.surface_m2 === 'number' && r.surface_m2 > 0) {
+            r.plan_area_m2 = r.surface_m2;
+          }
+        });
+        ingState.firstScanDone = false;
+        var ingLwOcr = document.getElementById('ingLockWalls');
+        if (ingLwOcr) ingLwOcr.checked = false;
         ingState.planW = data.image_size[0];
         ingState.planH = data.image_size[1];
         ingState.planUrl = data.image_path
@@ -458,19 +521,7 @@
         ingState.scale = data.scale_cm_per_px;
         _suggestDrawingScale(data.scale_cm_per_px);
         ingState.vb = { x: 0, y: 0, w: ingState.planW, h: ingState.planH };
-        // Update header badge with selected plan ID
-        var hdrEl = document.getElementById('hdrCurrentPlan');
-        if (hdrEl) hdrEl.textContent = planId;
-        var btnSave = document.getElementById('btnSavePlan');
-        if (btnSave) btnSave.style.display = '';
-        var btnExport = document.getElementById('btnExportPlan');
-        if (btnExport) btnExport.style.display = '';
-        var btnClose = document.getElementById('btnClosePlan');
-        if (btnClose) btnClose.style.display = '';
-        var eraseWrap = document.getElementById('eraseWrapper');
-        if (eraseWrap) eraseWrap.style.display = '';
-        var ingTb = document.getElementById('ingToolbar');
-        if (ingTb) ingTb.style.display = '';
+        _showPlanLoadedUI(planId);
         if (status) status.textContent = ingState.rooms.length + ' rooms — scale ' +
           ingState.scale + ' cm/px';
         renderIngestion();
@@ -630,15 +681,15 @@
     }
     showHelp(OK_MSG, OK_COLOR);
 
-    // Stub size: average of existing rooms, or fallback 400×500 cm
-    var wCm = 400, dCm = 500;
+    // Stub size: average of existing rooms, or fallback to STUB_ROOM_DEFAULT.
+    var wCm = STUB_ROOM_DEFAULT_W_CM, dCm = STUB_ROOM_DEFAULT_D_CM;
     if (ingState.rooms.length > 0) {
       var totalW = 0, totalD = 0;
       ingState.rooms.forEach(function(r) { totalW += (r.width_cm || 0); totalD += (r.depth_cm || 0); });
       wCm = Math.round(totalW / ingState.rooms.length);
       dCm = Math.round(totalD / ingState.rooms.length);
-      if (wCm < 50) wCm = 400;
-      if (dCm < 50) dCm = 500;
+      if (wCm < STUB_ROOM_MIN_DIM_CM) wCm = STUB_ROOM_DEFAULT_W_CM;
+      if (dCm < STUB_ROOM_MIN_DIM_CM) dCm = STUB_ROOM_DEFAULT_D_CM;
     }
 
     var scale = ingState.scale || 0.5;  // cm/px
@@ -646,9 +697,9 @@
     var wPx = Math.round(wCm * pxPerCm);
     var hPx = Math.round(dCm * pxPerCm);
 
-    // Position: above the bounding box of all existing rooms, 50 cm margin
+    // Position: above the bounding box of all existing rooms, auto margin.
     var x0, y0;
-    var marginPx = Math.round(50 * pxPerCm);
+    var marginPx = Math.round(STUB_ROOM_AUTO_MARGIN_CM * pxPerCm);
     if (ingState.rooms.length > 0) {
       var minX = Infinity, minY = Infinity, maxX = -Infinity;
       ingState.rooms.forEach(function(r) {
@@ -963,7 +1014,7 @@
 
     // Merge checkboxes between contiguous rooms
     if (show.bbox && !zoomRoom) {
-      var MERGE_TOL = 8; // px tolerance for shared wall detection
+      var MERGE_TOL = SHARED_WALL_TOLERANCE_PX;
       var pairs = [];
       for (var i = 0; i < ingState.rooms.length; i++) {
         var ri = ingState.rooms[i];
@@ -1028,9 +1079,9 @@
         var name = this.dataset.bboxBody;
         var be = ingState.bboxEditor;
         if (be.selectedName === name) {
-          // Double-click detection: if 2nd mousedown on same room within 400ms → open in Review
+          // Double-click detection: 2nd mousedown on same room → open in Review.
           var now = Date.now();
-          if (be._lastSelectTime && (now - be._lastSelectTime) < 400) {
+          if (be._lastSelectTime && (now - be._lastSelectTime) < DOUBLE_CLICK_DELAY_MS) {
             be._lastSelectTime = 0;
             be.selectedName = null;
             be.mode = 'idle';
@@ -1093,7 +1144,7 @@
     if (ingState.zoomRoom) {
       var r = ingState.rooms.find(function (rm) { return rm.name === ingState.zoomRoom; });
       if (r) {
-        var m = 50;
+        var m = ZOOM_FIT_ROOM_PADDING_PX;
         ingState.vb = {
           x: r.bbox_px[0] - m, y: r.bbox_px[1] - m,
           w: r.bbox_px[2] - r.bbox_px[0] + 2 * m,
@@ -1135,11 +1186,11 @@
 
     svg.addEventListener('wheel', function (e) {
       e.preventDefault();
-      var factor = e.deltaY > 0 ? 1.15 : 0.87;
+      var factor = e.deltaY > 0 ? WHEEL_ZOOM_IN_FACTOR : WHEEL_ZOOM_OUT_FACTOR;
       var vb = ingState.vb;
-      // Clamp: don't zoom out beyond 1.1x the plan size
+      // Clamp: don't zoom out beyond ZOOM_MAX_EXTENT_RATIO × plan size.
       if (factor > 1) {
-        var maxW = (ingState.planW || 1000) * 1.1;
+        var maxW = (ingState.planW || 1000) * ZOOM_MAX_EXTENT_RATIO;
         if (vb.w * factor > maxW) return;
       }
       var rect = svg.getBoundingClientRect();
@@ -1210,7 +1261,7 @@
   // the SVG background so it effectively "cuts" the stroke.
   function eraseWallSegment(els, x0, y0, x1, y1, face, offset, width) {
     var ERASE_COLOR = '#1e1e1e';
-    var ERASE_W = 2;  // slightly thicker than bbox stroke (1.5) to fully cover
+    var ERASE_W = WALL_ERASE_STROKE_WIDTH_PX;  // thicker than bbox stroke (1.5) to fully cover
     if (face === 'north') {
       els.push('<line x1="' + (x0 + offset) + '" y1="' + y0 +
         '" x2="' + (x0 + offset + width) + '" y2="' + y0 +
@@ -1232,7 +1283,7 @@
 
   function drawWallFeature(els, x0, y0, x1, y1, face, offset, width,
                            color, strokeW, dash, extra) {
-    var off = 3; // offset from bbox edge
+    var off = WALL_FEATURE_OFFSET_PX;
     var dashAttr = dash ? ' stroke-dasharray="' + dash + '"' : '';
     var extraAttr = extra || '';
     if (face === 'north') {
@@ -1301,8 +1352,8 @@
     var btnIn = document.getElementById('ingZoomIn');
     var btnOut = document.getElementById('ingZoomOut');
     if (btnFit) btnFit.addEventListener('click', function () { zoomFit(); });
-    if (btnIn) btnIn.addEventListener('click', function () { zoomBy(0.7); });
-    if (btnOut) btnOut.addEventListener('click', function () { zoomBy(1.4); });
+    if (btnIn) btnIn.addEventListener('click', function () { zoomBy(BUTTON_ZOOM_IN_FACTOR); });
+    if (btnOut) btnOut.addEventListener('click', function () { zoomBy(BUTTON_ZOOM_OUT_FACTOR); });
 
     // Keyboard shortcuts (only when Import tab is active)
     document.addEventListener('keydown', function (e) {
@@ -1320,8 +1371,8 @@
         return;
       }
       // Zoom keys
-      if (e.key === '=' || e.key === '+') { zoomBy(0.7); return; }
-      if (e.key === '-') { zoomBy(1.4); return; }
+      if (e.key === '=' || e.key === '+') { zoomBy(BUTTON_ZOOM_IN_FACTOR); return; }
+      if (e.key === '-') { zoomBy(BUTTON_ZOOM_OUT_FACTOR); return; }
       if (e.key.toLowerCase() === 'f') { zoomFit(); return; }
     });
 
@@ -1394,6 +1445,13 @@
           updateIngRoomList();
           renderIngestion();
           populateRoomsJson();
+          // Refresh the Floor properties panel (Rooms + Total area m²)
+          // immediately — rvRenderCurrent would do it on match round-trip,
+          // but we want the sidebar to reflect the new scale without
+          // waiting on the async fetch.
+          if (typeof window.updateFloorProperties === 'function') {
+            window.updateFloorProperties();
+          }
           // Propager les offsets re-scalés (windows / openings) dans
           // fpData.rooms — sans quoi Room et Office gardent les anciennes
           // valeurs cm.
@@ -1510,7 +1568,7 @@
       var dx = p.x - be.dragStart.mouseX;
       var dy = p.y - be.dragStart.mouseY;
       var orig = be.dragStart.bbox;
-      var MIN_PX = 50;
+      var MIN_PX = BBOX_RESIZE_MIN_PX;
       var room = ingState.rooms.find(function(r) { return r.name === be.selectedName; });
       if (!room) return;
       var nx0 = orig[0], ny0 = orig[1], nx1 = orig[2], ny1 = orig[3];
@@ -1636,10 +1694,10 @@
       btnReanAll.addEventListener('click', async function () {
         if (!ingState.rooms || !ingState.rooms.length) return;
         if (!ingState.planPathEnhanced || !ingState.scale) {
-          alert('Re-analyze unavailable: missing plan path or scale.');
+          alert('Rescan unavailable: missing plan path or scale.');
           return;
         }
-        if (!confirm('Re-analyze ' + ingState.rooms.length +
+        if (!confirm('Rescan ' + ingState.rooms.length +
           ' room(s)? Auto windows/openings will be replaced; manual edits ' +
           'and deleted-auto signatures are preserved.')) return;
         var statusEl = document.getElementById('ingStatus');
@@ -1647,16 +1705,22 @@
         var origLabel = btnReanAll.textContent;
         var amendments = (window.fpRoomAmendments = window.fpRoomAmendments || {});
         var ok = 0, fail = 0;
-        function _sig(k, e) {
-          return k + '|' + e.face + '|' +
-            (e.offset_cm || 0) + '|' + (e.width_cm || 0);
+        function _opSignature(kind, op) {
+          return kind + '|' + op.face + '|' +
+            (op.offset_cm || 0) + '|' + (op.width_cm || 0);
         }
         var doorWidthCm = ((window.APP_CONFIG || {}).default_door_width_cm) || 90;
+        // D-135 : Lock walls Floor — coché ⇒ on ne re-détecte que les
+        // ouvertures ; décoché ⇒ ré-extraction complète des murs (scan
+        // destructif : les walls_user_edited par pièce sont reset).
+        var ingLwBatchEl = document.getElementById('ingLockWalls');
+        var lockWallsFloor = !!(ingLwBatchEl && ingLwBatchEl.checked);
         try {
           var payload = {
             plan_path: ingState.planPathEnhanced,
             scale_cm_per_px: ingState.scale,
             door_width_cm: doorWidthCm,
+            clip_to_bbox: lockWallsFloor,
             rooms: [],
           };
           var validRooms = [];
@@ -1666,7 +1730,7 @@
               fail++;
               return;
             }
-            var am = amendments[r.name];
+            var amend = amendments[r.name];
             var seedPx = r.seed_px || r.seed ||
               (r.seed_x != null && r.seed_y != null
                 ? [r.seed_x, r.seed_y] : null);
@@ -1675,7 +1739,7 @@
             var rCfAbs = r.corridor_face_abs || '';
             var rAbsW = (r.bbox_px[2] - r.bbox_px[0]) * ingState.scale;
             var rAbsD = (r.bbox_px[3] - r.bbox_px[1]) * ingState.scale;
-            var rawTransparents = (am && am.transparent_zones) || [];
+            var rawTransparents = (amend && amend.transparent_zones) || [];
             var absTransparents = window.canonicalZonesToAbs
               ? window.canonicalZonesToAbs(
                   rawTransparents, rCfAbs, rAbsW, rAbsD)
@@ -1689,7 +1753,7 @@
             validRooms.push(r);
           });
           if (statusEl) statusEl.textContent =
-            'Re-analyzing ' + validRooms.length + ' room(s)...';
+            'Rescanning ' + validRooms.length + ' room(s)...';
 
           var resp = await fetch('/api/room/reanalyze_batch', {
             method: 'POST',
@@ -1708,12 +1772,12 @@
           validRooms.forEach(function (r) {
             var res = resultsByName[r.name];
             if (!res || res.error) { fail++; return; }
-            var am = amendments[r.name];
-            var deleted = new Set((am && am.deleted_auto_signatures) || []);
+            var amend = amendments[r.name];
+            var deleted = new Set((amend && amend.deleted_auto_signatures) || []);
             // D-122 P4 : collections séparées partout (windows / openings / doors).
-            var prevW = (am && am.windows)  || r.windows  || [];
-            var prevOp = (am && am.openings) || r.openings || [];
-            var prevDr = (am && am.doors)   || r.doors   || [];
+            var prevW = (amend && amend.windows)  || r.windows  || [];
+            var prevOp = (amend && amend.openings) || r.openings || [];
+            var prevDr = (amend && amend.doors)   || r.doors   || [];
             var manualW = prevW.filter(function (w) { return w.origin === 'manual'; });
             var manualO = prevOp.filter(function (o) { return o.origin === 'manual'; });
             // D-110 : préserver uniquement les doors explicitement "manual".
@@ -1727,10 +1791,10 @@
               res, prevCfAbs, ingState.scale);
 
             var newW = canon.windows.filter(function (w) {
-              return !deleted.has(_sig('window', w));
+              return !deleted.has(_opSignature('window', w));
             });
             var newO = canon.openings.filter(function (o) {
-              return !deleted.has(_sig('opening', o));
+              return !deleted.has(_opSignature('opening', o));
             });
             // Portes auto redétectées seulement si aucune manuelle n'existe.
             var newDoors = preservedDoors.length ? [] : canon.doors;
@@ -1781,19 +1845,33 @@
               r.corridor_face = "south";
             }
 
-            if (am) {
+            if (amend) {
               // D-122 P4 : amendments gardent les 3 collections séparées
               // (même invariant que ingState / fpData, pas de re-split).
-              am.windows = mergedW;
-              am.openings = mergedOpenings;
-              am.doors = mergedDoors;
+              amend.windows = mergedW;
+              amend.openings = mergedOpenings;
+              amend.doors = mergedDoors;
               if (reanchored) {
-                am.exclusion_zones = reanchored.exclusion_zones;
-                am.transparent_zones = reanchored.transparent_zones;
+                amend.exclusion_zones = reanchored.exclusion_zones;
+                amend.transparent_zones = reanchored.transparent_zones;
               }
               if (canon.corridor_face) {
-                am.corridor_face_abs = canon.corridor_face;
-                am.corridor_face = "south";
+                amend.corridor_face_abs = canon.corridor_face;
+                amend.corridor_face = "south";
+              }
+              // D-135 : rvRenderCurrent priorise fpRoomAmendments[name]
+              // sur fpData.rooms[i]. Sans propager les dims/bbox ici, un
+              // scan destructif remet les murs dans fpData / ingState
+              // mais la Review continue d'afficher les anciennes dims
+              // amendées.
+              if (canon.bbox_px) {
+                amend.bbox_px = canon.bbox_px;
+                amend.width_cm = canon.width_cm;
+                amend.depth_cm = canon.depth_cm;
+                amend.width_px = canon.bbox_px[2] - canon.bbox_px[0];
+                amend.height_px = canon.bbox_px[3] - canon.bbox_px[1];
+                amend.surface_m2_bbox = parseFloat(
+                  ((canon.width_cm * canon.depth_cm) / 10000).toFixed(2));
               }
             }
             if (window.fpData && window.fpData.rooms) {
@@ -1817,15 +1895,32 @@
                 }
               }
             }
+            // D-135 : scan destructif (Lock walls Floor décoché) ⇒ les murs
+            // reviennent de la détection automatique, on efface le flag
+            // user-edited de la pièce. Rescan non destructif ⇒ inchangé.
+            if (!lockWallsFloor) {
+              r.walls_user_edited = false;
+              if (amend) amend.walls_user_edited = false;
+              if (window.fpData && window.fpData.rooms) {
+                var frWue = window.fpData.rooms.find(
+                  function (x) { return x.name === r.name; });
+                if (frWue) frWue.walls_user_edited = false;
+              }
+            }
             ok++;
           });
+          if (ok > 0) {
+            ingState.firstScanDone = true;
+            var ingLwPost = document.getElementById('ingLockWalls');
+            if (ingLwPost) ingLwPost.checked = true;
+          }
           renderIngestion();
           populateRoomsJson();
           if (typeof window.fpLoadAndMatch === 'function') {
             window.fpLoadAndMatch(ingState.rooms);
           }
           if (statusEl) statusEl.textContent =
-            'Re-analyze done: ' + ok + ' OK, ' + fail + ' failed.';
+            'Rescan done: ' + ok + ' OK, ' + fail + ' failed.';
         } catch (err) {
           console.error(err);
           if (statusEl) statusEl.textContent = 'Error: ' + err.message;
@@ -1876,23 +1971,24 @@
         ingState.rooms = (data.rooms || []).map(function (r) {
           return window.canonicalIO.fromStorage(r, _impScale);
         });
+        // D-135 rider : snapshot immutable surface cartouche → plan_area_m2.
+        // Voir commentaire équivalent dans le pipeline OCR ci-dessus.
+        ingState.rooms.forEach(function (r) {
+          if (r.plan_area_m2 == null &&
+              typeof r.surface_m2 === 'number' && r.surface_m2 > 0) {
+            r.plan_area_m2 = r.surface_m2;
+          }
+        });
+        // D-135 : flag "au moins un scan a déjà été effectué sur ce plan".
+        // Persisté dans le JSON v3 (racine) ; sert de défaut pour la case
+        // "Lock walls" de la toolbar Floor (coché ⇒ le prochain Rescan all
+        // préserve les murs détectés la première fois).
+        ingState.firstScanDone = !!data.first_scan_done;
+        var ingLwInit = document.getElementById('ingLockWalls');
+        if (ingLwInit) ingLwInit.checked = ingState.firstScanDone;
         if (status) status.textContent = ingState.rooms.length + ' room(s) imported';
 
-        // Header badge
-        if (planId) {
-          var hdrEl2 = document.getElementById('hdrCurrentPlan');
-          if (hdrEl2) hdrEl2.textContent = planId;
-          var btnSave2 = document.getElementById('btnSavePlan');
-          if (btnSave2) btnSave2.style.display = '';
-          var btnExport2 = document.getElementById('btnExportPlan');
-          if (btnExport2) btnExport2.style.display = '';
-          var btnClose2 = document.getElementById('btnClosePlan');
-          if (btnClose2) btnClose2.style.display = '';
-          var eraseWrap2 = document.getElementById('eraseWrapper');
-          if (eraseWrap2) eraseWrap2.style.display = '';
-          var ingTb2 = document.getElementById('ingToolbar');
-          if (ingTb2) ingTb2.style.display = '';
-        }
+        _showPlanLoadedUI(planId);
 
         // Canvas dimensions, scale, viewbox — alignés sur le flux OCR
         if (Array.isArray(data.image_size) && data.image_size.length === 2) {
@@ -1914,7 +2010,7 @@
             if (r.bbox_px[2] > maxX) maxX = r.bbox_px[2];
             if (r.bbox_px[3] > maxY) maxY = r.bbox_px[3];
           });
-          var pad = Math.max(maxX - minX, maxY - minY) * 0.10;
+          var pad = Math.max(maxX - minX, maxY - minY) * BBOX_AUTOFOCUS_PADDING_RATIO;
           ingState.vb = { x: minX - pad, y: minY - pad, w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
         } else {
           ingState.vb = { x: 0, y: 0, w: ingState.planW || 1000, h: ingState.planH || 1000 };

@@ -685,6 +685,9 @@ async function init() {
     if (searchEl) searchEl.value = "";
     // Reset ingestion state rooms (keeps ingState identity; only rooms cleared)
     window.ingState.rooms = [];
+    window.ingState.firstScanDone = false;
+    var ingLwReset = document.getElementById("ingLockWalls");
+    if (ingLwReset) ingLwReset.checked = false;
     // Hide plan-dependent sections, disable Review/Design
     if (window.updatePlanDependentUI) window.updatePlanDependentUI();
     // Switch to Import tab

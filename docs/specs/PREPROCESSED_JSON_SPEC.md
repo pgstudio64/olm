@@ -45,6 +45,7 @@ Le suffixe `_enhanced` est **réservé** au Mode Préprocessé. Aucun plan ne do
 | `north_angle_deg` | float, optionnel | Angle entre le haut de l'image et le nord géographique, en degrés sens horaire. `0` = le haut de l'image pointe vers le nord géographique. Purement métadonnée pour outils aval (ensoleillement, orientation, vent). **N'affecte pas la géométrie OLS** — toutes les coordonnées restent dans le cadre image. Défaut : `0`. |
 | `page_width_px` | integer | Largeur de l'image raster en pixels |
 | `page_height_px` | integer | Hauteur de l'image raster en pixels |
+| `first_scan_done` | bool, **Save-only** | `true` dès qu'au moins un Scan a été effectué sur le plan (batch ou unitaire). Sert de défaut à la checkbox `Lock walls` de la toolbar Floor au prochain chargement. Absent = `false`. D-135. |
 | `rooms` | object | **Dictionnaire indexé par ID de pièce**. Clé = `room_id` (string, ex: `"237"`, `"22K"`). Valeur = objet pièce (voir §2). |
 
 **Pourquoi un objet indexé, pas un array** : les IDs de pièces sont uniques par définition, donc l'objet est l'abstraction naturelle. Bénéfices : lookup O(1) par ID, unicité garantie par le format, symétrie avec `olm_state.rooms_state` qui utilise déjà la même clé, et disparition du champ `id` dupliqué dans chaque valeur. L'ordre d'itération n'est pas garanti par le standard JSON mais est préservé par tous les moteurs modernes (JS, Python 3.7+, jq) ; OLS trie par clé au rendu pour un affichage stable.
@@ -84,6 +85,7 @@ Format minimal attendu en entrée :
 | `canonical_top_face` | **Save-only** | string | Enrichi par OLS (voir §2.2) |
 | `openings` | **Save-only** | array | Enrichi par OLS (voir §2.2) |
 | `windows` | **Save-only** | array | Enrichi par OLS (voir §2.2) |
+| `walls_user_edited` | **Save-only** | bool | `true` si l'utilisateur a resizé la bbox de la pièce à la main (poignées Room amend). Passe à `false` après un Scan avec `Lock walls` décoché, inchangé si coché. Pré-coche la checkbox `Lock walls` Room à la réouverture. Absent = `false`. D-135. |
 
 > **Convention d'omission** : tout champ non requis qui n'est pas renseigné est **absent** du JSON, jamais `""`, `null`, `0` ou `[]` "par défaut". Un consommateur doit tester la présence (`if "champ" in obj`) avant l'accès. L'omission est sémantiquement "pas renseigné / à déduire".
 

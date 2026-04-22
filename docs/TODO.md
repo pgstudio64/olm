@@ -1,6 +1,6 @@
 # TODO — OLM (Office Layout Matching)
 
-Dernière mise à jour : 2026-04-21 (D-124 : re-ancrage zones post-re-analyze ; D-123 : perf Re-analyze All + fix bug openings→doors ; D-122 : R-14 canonique P1-P7)
+Dernière mise à jour : 2026-04-21 (D-135 : Rescan / Lock walls + flags `walls_user_edited` & `first_scan_done` + fix propagation amendments batch ; D-134 : canonAngle ; D-124 → D-133 : re-ancrage zones, perf Re-analyze, R-14 P1-P7, R-13 étape 3)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
@@ -123,10 +123,12 @@ Livrée en 2026-04-20 (D-120). Quatre étapes réalisées :
   la position du bouton). Confirmé non-lié à C1-C4 après consolidation.
   À investiguer séparément — probablement un overlay transparent qui
   capture les events (pas de liseré `:hover`, pas de click).
-- Bouton **Check orient.** ajouté dans Room toolbar (handler prêt,
-  R-13 étape 2) : à tester visuellement maintenant que C1-C4 sont livrés.
+  *Note : D-132 « Save button fullscreen » mentionne un fix dans la
+  session D-121 ; vérifier si le bug physique est encore reproductible.*
+- [x] Bouton **Check orient.** ajouté et fonctionnel (stylé en mode
+  dev discret, gris foncé, D-135 rider).
 
-### R-14 : Refactor canonique unifié (D-121) — PRIORITÉ HAUTE
+### R-14 : Refactor canonique unifié (D-121) — ✅ LIVRÉ (D-122 P1-P7 + D-134 rider P6)
 
 Plan complet : `docs/specs/CANONICAL_REFACTOR_PLAN.md`.
 
@@ -184,11 +186,11 @@ racine. Refactor structurel en 7 phases.
   `canonical_io.js` (4 round-trips + 8 rotations), tous verts via
   Node. Tests Python `test_canonical.py` 19/19.
 
-Points ouverts à arbitrer avant démarrage :
-- Backend `/api/room/reanalyze` reste en absolu (pragmatique).
-- JSON v3 sur disque reste en absolu (évite migration), seul le
-  renommage `original_corridor_face` → `corridor_face_abs` impacte.
-- `scale` toujours disponible aux call sites canonicalIO (confirmé).
+Arbitrages figés post-livraison :
+- Backend `/api/room/reanalyze` reste en absolu (pragmatique, validé).
+- JSON v3 sur disque reste en absolu, renommage `original_corridor_face`
+  → `corridor_face_abs` appliqué côté frontend uniquement.
+- `scale` passe bien à tous les call sites canonicalIO.
 
 ### R-13 : Auto-test d'orientation canonique (D-119)
 
@@ -216,29 +218,19 @@ sur fromStorage / rendu / rotation / flux re-analyze.
 - [ ] **Documentation** : seuils et faux-positifs (cours intérieures,
   pièces enclavées) dans la spec.
 
-### R-12 : Repère canonique unifié — posture humaine invariante (D-117)
+### R-12 : Repère canonique unifié — posture humaine invariante (D-117) — ✅ ABSORBÉ dans R-14
 
-Objectif : déplacer toutes les rotations abs ↔ canon à deux frontières I/O
-uniques (`fromStorage` / `toStorage`), de sorte que tout le state
-frontend vit en repère canonique (corridor_face constant = "south"). Voir
-`docs/specs/CANONICAL_STATE_REFACTOR.md`.
+Le plan R-12 initial (étapes A/B/C) a été remplacé par le refactor structurel
+R-14 P1-P7 (D-122, rider P6 en D-134). Les étapes A/B/C sont livrées
+implicitement :
+- [x] **Étape A** (fromStorage/toStorage coexistence) → devenu `canonicalIO.fromStorage/toStorage` en R-14 P1.
+- [x] **Étape B** (retrait `_canonicalizeRoom`/`_decanonicalizeRoom`) → R-12 C1 (D-120).
+- [x] **Étape C** (rotation CSS overlay) → livré par `canonicalIO.canonAngle` + rotation SVG (D-134).
+- [x] Matrices mutualisées dans `olm/static/canonical_io.js` (R-14 P6).
 
-Principe : « devant chaque porte, la même posture humaine » — toute
-pièce est présentée avec son corridor d'accès en bas, quelle que soit
-son orientation dans le bâtiment.
-
-- [ ] **Étape A** : introduire `fromStorage` / `toStorage` en
-  coexistence. `fpLoadAndMatch` applique `fromStorage` ; l'export
-  applique `toStorage`. `_canonicalizeRoom` reste appelé (no-op car
-  `corridor_face === "south"`). Round-trip JSON identique avant/après.
-- [ ] **Étape B** : retirer les appels à `_canonicalizeRoom` /
-  `_decanonicalizeRoom` des consommateurs (rendu Review, éditeur, save
-  editor, matching). Tests visuels inchangés sur pièces 917, 922, 929.
-- [ ] **Étape C** : rotation CSS de l'overlay plan selon
-  `original_corridor_face`. Fix visuel attendu sur pièces 922, 929, 900.
-- [ ] Après stabilisation : renommer `corridor_face` (state) →
-  `_canonical_south`, mutualiser les matrices de rotation dans un module
-  `olm/static/canonical_io.js`.
+Renommage `corridor_face` (state) → `_canonical_south` **non retenu** :
+le state garde `corridor_face = "south"` invariant + `corridor_face_abs`
+pour l'orientation réelle (D-122 P3).
 
 ### R-04 : Floor Plan — 4 sous-onglets (Import / Review / Match / Export)
 
@@ -280,13 +272,12 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
   bbox effectif user au backend (`canonBboxUser → rotateRectInv → +origBbox →
   effBbox`). Le backend détecte dans la zone éditée et non dans l'ancien
   bbox. S'applique aux deux modes Lock et non-Lock.
-- [ ] **Persistence Save room : bbox_px non mis à jour si resize**
-  (D-127 limite). Au Save, `canonRoom.bbox_px` récupère toujours
-  `ramend.originalRoom.bbox_px` (la valeur d'entrée en amend mode), pas
-  le bbox effectif redimensionné. Résultat : les dims persistées dans
-  fpData reflètent le resize, mais `bbox_px` reste à la position d'origine
-  → désalignement potentiel avec l'overlay. Fix : calculer effBbox au
-  save comme dans D-127 et le persister.
+- [x] ~~**Persistence Save room : bbox_px non mis à jour si resize**~~ ✅
+  2026-04-21 (D-127 limite levée). Écriture unique et inconditionnelle de
+  `fpRoomAmendments[name]` en fin du bloc Room amend save, priorité à
+  `fpData.rooms[fr]` si existe (plus riche), fallback à `canonRoom` enrichi
+  du `newBbox` sinon. Investigation :
+  [`docs/INVESTIGATION_D127_save_bbox.md`](INVESTIGATION_D127_save_bbox.md).
 - [ ] **Zoom arrière bloqué trop tôt (Review / Room)** : la limite max de dézoom se déclenche avant que l'utilisateur puisse voir toute la pièce + marge confortable. Ajuster le clamp `maxW` (actuellement `planW × 1.1` dans ingestion.js). À revoir aussi pour Room amend mode.
 - [x] ~~**Re-analyze instable — 2 passes quasi systématiques**~~ ✅ fixé
   2026-04-20 : bug dans le filtre `preservedDoors` (init_rvtool.js /
@@ -304,16 +295,11 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
   `state.room_width_cm/depth_cm`, `originalRoom.bbox_px`, `corridor_face_abs`
   ni l'overlay ; seuls les openings/windows/doors/hits sont adoptés. Reset
   automatique à la sortie de l'amend mode.
-- [ ] **Re-analyze : fusionner Re-analyze + lock-bbox dans un dropdown** :
-  remplacer le bouton simple « Re-analyze » par un dropdown (ou split
-  button) avec deux options :
-  - « Re-analyze — full » : comportement actuel (bbox, ouvertures,
-    tout est redétecté).
-  - « Re-analyze — keep walls » : équivalent du toggle lock bbox
-    activé (bbox + dimensions figées, seuls openings/windows/doors/
-    hits sont adoptés).
-  Supprime le toggle indépendant, cohérent avec une seule action
-  utilisateur paramétrée au clic.
+- [x] ~~**Re-analyze : fusionner Re-analyze + lock-bbox dans un dropdown**~~
+  → résolu autrement (D-135, 2026-04-21). Renommage `Re-analyze` → `Rescan`
+  et `Lock bbox` → `Lock walls`, visible à côté du bouton Rescan (Room et
+  Floor). Checkbox pré-cochée selon `walls_user_edited` (Room) ou
+  `first_scan_done` (Floor), avec persistance JSON v3.
 - [x] **Bouton Close** : ferme le projet courant avec confirmation (warning unsaved changes implicite).
 - [x] **Bouton Erase** (All / Layout only) avec confirmation.
 
@@ -508,11 +494,23 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
   - [ ] Endpoints `/api/room/reanalyze` et `/api/room/reanalyze_batch` : accepter `seed_px` et `door_seeds_px` ; bbox devient optionnel.
   - [ ] Produire `hits` (ray-cast) pour V/H-rays en Préprocessé (résolu par la refonte ci-dessus).
   - [ ] Mettre à jour `docs/specs/PREPROCESSED_JSON_SPEC.md` : clarifier quels champs sont entrée fiable vs dérivés.
-- [ ] **Mode OCR : utiliser `-SD.png` s'il existe pour ray-cast** : `extract_rooms_from_preprocessed` ne génère pas de hits actuellement (pas de ray-cast actif). Faire un ray-cast léger sur le PNG `-SD` pour peupler `room.hits` et rendre les cases V-rays / H-rays de Floor fonctionnelles en mode Préprocessé.
-- [ ] **Mode OCR : utiliser `-SD.png` s'il existe pour ray-cast** : en Mode OCR (sans JSON), si un fichier `<plan_id>-SD.png` est présent dans `project/plans/`, l'utiliser comme source pour l'algo de détection / ray-cast (H-rays et V-rays) au lieu de supprimer les descriptions manuellement. Le `-SD` (avec cartouches effacés, extérieur bleu, couloirs verts) donne des résultats plus propres.
+- [ ] **Ray-cast via `-SD.png` (Mode OCR + Mode Préprocessé)** : (fusion de
+  deux entrées doublon)
+  - Mode **Préprocessé** : `extract_rooms_from_preprocessed` ne génère
+    pas de `room.hits` actuellement. Faire un ray-cast léger sur le PNG
+    `-SD` pour peupler les hits et rendre les cases V-rays / H-rays de
+    Floor fonctionnelles.
+  - Mode **OCR** : si `<plan_id>-SD.png` existe dans `project/plans/`,
+    l'utiliser comme source pour l'algo de détection / ray-cast au lieu
+    de supprimer les cartouches manuellement — rendu plus propre.
 - [ ] **Nettoyer handlers de couplage de pièces (Floorplan)** : D-100 a supprimé le concept de merge mais il reste des handlers dans le code Floor (couplage/association de pièces). Les retirer.
 - [ ] **Fine-tuning taille éléments graphiques** : ajuster les épaisseurs de traits (murs, fenêtres, portes, arcs), diamètre des ronds de grille, taille des poignées/badges pour un rendu visuellement agréable à tous les niveaux de zoom. Actuellement : non-scaling-stroke appliqué partout + cap sur les dots grille à 2 px.
-- [ ] **Total area en m² non rafraîchi au changement d'échelle** : quand l'utilisateur modifie l'échelle (drawing_scale), le total area affiché reste sur l'ancienne valeur. À relier au recompute scale.
+- [x] ~~**Total area en m² non rafraîchi au changement d'échelle**~~ ✅
+  2026-04-21. Extraction de `updateFloorProperties()` dans
+  `floor_plan.js` (exposé sur `window`), appelé directement depuis
+  `_applyDrawingScale` (ingestion.js) et en tête de `rvRenderCurrent`
+  (hors du early-return `if (!room)`). Investigation :
+  [`docs/INVESTIGATION_total_area_refresh.md`](INVESTIGATION_total_area_refresh.md).
 - [ ] **Édition contours au niveau Room** : ajouter la capacité de modifier les contours de la pièce dans Room (même outil que l'édition bbox dans Floor)
 
 - [ ] **Bug position pièce 305 dans Office** : la pièce 305 est positionnée en (0,0) dans Office alors qu'elle est correctement placée dans Floor et Room. Semble arriver lorsqu'il y a un match automatique.
@@ -554,3 +552,54 @@ Pour couvrir le cas "étudier l'aménagement en supprimant des murs entre pièce
 
 ---
 
+## Priorités proposées (triage 2026-04-21)
+
+Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
+
+### Court terme (bugs bloquants UX / régressions potentielles)
+
+1. **Persistance Save room : bbox_px non mis à jour si resize** (R-04
+   Review, limite D-127). Fix : calculer `effBbox` au save comme dans
+   le handler re-analyze et le persister. Impact fort sur le workflow
+   resize → Save → re-ouverture.
+2. **Bug "No matching patterns"** (R-04 Office) : aucun candidat
+   trouvé. Investigation prioritaire, bloque le matching.
+3. **Bug bouton Save (clic physique)** (dette R-12) : à revérifier ;
+   si encore reproductible, corriger l'overlay transparent qui
+   intercepte les events.
+
+### Court terme (dette technique à faible risque)
+
+4. **Audit ingestion.js — actions faciles** (rapport
+   [`docs/AUDIT_ingestion_2026-04-21.md`](AUDIT_ingestion_2026-04-21.md)) :
+   - Bloc CONSTANTS en tête de fichier (magic numbers identifiés :
+     zooms, double-click delay, padding, seuils px…).
+   - Supprimer `_rotR` non utilisé (L-80).
+   - Fusion `extractRooms` / `extractRoomsPreprocessed` via un helper
+     `_setupPostExtractionUI(planId)` (~50 lignes dédupliquées).
+   - Renommage variables ambiguës (`am` → `amendments`, `_sig` →
+     `_createOpeningSignature`, etc.).
+5. **Fonction `_syncRoomToAllStores(name, updates)`** pour atomiser les
+   mutations parallèles sur `ingState.rooms` / `fpRoomAmendments` /
+   `fpData.rooms`. Évite une future régression du type "D-135 rider"
+   (amendments pas propagés).
+
+### Moyen terme (features)
+
+6. **R-11 Full round trip — `olm_state`** : chantier stratégique pour
+   la persistance des amendements entre sessions. Prérequis à toute
+   montée en charge utilisateur.
+7. **Commentaires markdown par pièce** (R-09 obsolète → D-100) : petit
+   chantier, utile, encore non attaqué.
+8. **Export PDF** (R-04 Export) : fond de plan raster + overlay
+   aménagement. Demande utilisateur récurrente.
+
+### Long terme (refondations)
+
+9. **Pipeline Préprocessé refondu (D-105)** : gros chantier incluant
+   ray-cast depuis seed + détection fenêtres combinée texture/couleur.
+   Sous-items encore tous à faire.
+10. **R-07 Packaging Windows sans admin** : préalable au déploiement
+    sur le poste cible.
+
+---

@@ -65,11 +65,17 @@
     var corridorByName = {};
     var seedByName = {};
     var doorsByName = {};
+    var wallsEditByName = {};
+    var planAreaByName = {};
     rooms.forEach(function(r) {
       if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
       corridorByName[r.name] = r.corridor_face_abs || "";
       if (r.seed_px) seedByName[r.name] = r.seed_px;
       if (r.doors) doorsByName[r.name] = r.doors;
+      wallsEditByName[r.name] = !!r.walls_user_edited;
+      if (typeof r.plan_area_m2 === "number" && r.plan_area_m2 > 0) {
+        planAreaByName[r.name] = r.plan_area_m2;
+      }
     });
 
     document.getElementById("fpCandidatesList").innerHTML =
@@ -113,6 +119,10 @@
         if (seedByName[r.name]) r.seed_px = seedByName[r.name];
         r.corridor_face_abs = corridorByName[r.name] || "";
         r.corridor_face = "south";
+        r.walls_user_edited = !!wallsEditByName[r.name];
+        if (planAreaByName[r.name] != null) {
+          r.plan_area_m2 = planAreaByName[r.name];
+        }
         // Si le backend renvoie openings avec has_door, on split.
         if (Array.isArray(r.openings) && r.openings.some(function(o){ return o.has_door; })) {
           var _doors = [];
@@ -166,13 +176,39 @@
   window.rvRenderCurrent = rvRenderCurrent;
   window.rvUpdateRoomInfo = rvUpdateRoomInfo;
   function rvUpdateRoomInfo() {
-    document.getElementById("rvRoomWidth").textContent = state.room_width_cm;
-    document.getElementById("rvRoomDepth").textContent = state.room_depth_cm;
-    var area = (state.room_width_cm * state.room_depth_cm / 10000).toFixed(1);
-    document.getElementById("rvRoomArea").textContent = area;
+    // Amend mode : Plan area reste figée (valeur cartouche), seul le Bbox
+    // évolue avec le resize utilisateur. rvRenderCurrent a déjà peuplé
+    // rvRoomPlanArea au dernier refresh ; on ne met à jour que Bbox area
+    // et Bbox size ici.
+    var w = state.room_width_cm || 0;
+    var d = state.room_depth_cm || 0;
+    var bboxAreaEl = document.getElementById("rvRoomBboxArea");
+    if (bboxAreaEl) bboxAreaEl.textContent = (w * d / 10000).toFixed(2);
+    var bboxSizeEl = document.getElementById("rvRoomBboxSize");
+    if (bboxSizeEl) bboxSizeEl.textContent = w + " × " + d;
   }
 
+  // Recompute and refresh the Floor properties panel (room count + total
+  // area m²) from fpRooms(). Extracted so it can be called on scale change
+  // in ingestion.js without waiting for an async match round-trip — cf.
+  // docs/INVESTIGATION_total_area_refresh.md.
+  function updateFloorProperties() {
+    var allRooms = fpRooms();
+    var totalArea = 0;
+    allRooms.forEach(function(r) {
+      totalArea += (r.width_cm || 0) * (r.depth_cm || 0) / 10000;
+    });
+    var roomsEl = document.getElementById("rvFloorRooms");
+    if (roomsEl) roomsEl.textContent = allRooms.length;
+    var areaEl = document.getElementById("rvFloorArea");
+    if (areaEl) areaEl.textContent = totalArea.toFixed(1);
+  }
+  window.updateFloorProperties = updateFloorProperties;
+
   function rvRenderCurrent() {
+    // Floor properties always refreshed (independent of selected room).
+    updateFloorProperties();
+
     var room = fpCurrent();
     if (!room) {
       document.getElementById("rvRoomLabel").textContent = "-";
@@ -180,15 +216,6 @@
       document.getElementById("rvCanvas").innerHTML = "";
       return;
     }
-
-    // Floor properties (computed once from all rooms)
-    var allRooms = fpRooms();
-    var totalArea = 0;
-    allRooms.forEach(function(r) {
-      totalArea += (r.width_cm || 0) * (r.depth_cm || 0) / 10000;
-    });
-    document.getElementById("rvFloorRooms").textContent = allRooms.length;
-    document.getElementById("rvFloorArea").textContent = totalArea.toFixed(1);
 
     // Update ingestion room list to reflect current selection
     if (window.updateIngRoomList) window.updateIngRoomList();
@@ -207,11 +234,17 @@
     document.getElementById("rvNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
 
-    // Room dimensions
-    document.getElementById("rvRoomWidth").textContent = roomData.width_cm || 0;
-    document.getElementById("rvRoomDepth").textContent = roomData.depth_cm || 0;
-    var area = ((roomData.width_cm || 0) * (roomData.depth_cm || 0) / 10000).toFixed(1);
-    document.getElementById("rvRoomArea").textContent = area;
+    // Room dimensions (D-135 rider : 3 champs distincts — Plan area =
+    // cartouche JSON immuable ; Bbox area/size = valeurs courantes du
+    // bbox, modifiables via scan ou resize utilisateur).
+    var w = roomData.width_cm || 0;
+    var d = roomData.depth_cm || 0;
+    var planArea = (typeof roomData.plan_area_m2 === "number" && roomData.plan_area_m2 > 0)
+      ? roomData.plan_area_m2.toFixed(2)
+      : "-";
+    document.getElementById("rvRoomPlanArea").textContent = planArea;
+    document.getElementById("rvRoomBboxArea").textContent = (w * d / 10000).toFixed(2);
+    document.getElementById("rvRoomBboxSize").textContent = w + " × " + d;
 
     // R-12 B: room already canonical in fpData (via fromStorage at load).
     var localRoom = roomData;
