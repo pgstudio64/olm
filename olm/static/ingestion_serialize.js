@@ -159,6 +159,11 @@
         roomObj.bbox_px = r.bbox_px.map(function (v) { return Math.round(v); });
       }
 
+      // D-135 : flag user-edit de la géométrie des murs. Persistant pour que
+      // la pièce rouverte pré-coche "Lock walls" et préserve le bbox réglé
+      // à la main au prochain Rescan.
+      if (r.walls_user_edited) roomObj.walls_user_edited = true;
+
       // canonical_top_face : recalculé à chaque export depuis la porte
       // principale (cohérence avec re-analyze qui modifie les portes).
       if (Array.isArray(r.doors) && r.doors.length > 0 && r.doors[0].face) {
@@ -213,6 +218,10 @@
       page_height_px: ingState.planH || 0,
       rooms: roomsDict,
     };
+
+    // D-135 : persiste "au moins un scan a été effectué". Sert de défaut
+    // pour la case Lock walls de la toolbar Floor au prochain chargement.
+    if (ingState.firstScanDone) out.first_scan_done = true;
 
     // D-95 : persistance de l'échelle dans les deux champs.
     if (ingState.scale && ingState.scale > 0) {

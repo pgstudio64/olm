@@ -763,6 +763,7 @@ def api_import_preprocessed():
             "image_size": [page_w, page_h],
             "image_path": overlay_path,
             "scale_cm_per_px": scale_cm_per_px,
+            "first_scan_done": bool(json_data.get("first_scan_done", False)),
         })
     except (json.JSONDecodeError, ValueError) as e:
         for p in _temp_paths:
