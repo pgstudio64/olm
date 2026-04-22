@@ -374,8 +374,9 @@ def api_plans():
     <plan_id>.json (metadata). The -SD variant is NOT listed as a
     separate plan — it's a component of its parent plan.
 
-    ``effective_mode`` is "preprocessed" when has_json AND json.mtime > png.mtime
-    (JSON was generated after the last PNG edit), "ocr" otherwise.
+    ``effective_mode`` is "preprocessed" when has_json is true, "ocr"
+    otherwise (D-140 — le check mtime a été supprimé car non-robuste aux
+    copies inter-machine / git checkout).
 
     Returns:
         { "plans": [{ "id": str, "has_png": bool, "has_json": bool,
@@ -412,10 +413,11 @@ def api_plans():
     for stem, info in sorted(stems.items()):
         if not info["has_png"]:
             continue
-        if info["has_json"] and info["json_mtime"] > info["png_mtime"]:
-            effective_mode = "preprocessed"
-        else:
-            effective_mode = "ocr"
+        # D-140 : `effective_mode = preprocessed` dès que le JSON existe.
+        # L'heuristique `json_mtime > png_mtime` était fragile (copie entre
+        # machines, git checkout, timezone) et déclenchait à tort le mode
+        # OCR quand les fichiers étaient copiés tels quels en prod.
+        effective_mode = "preprocessed" if info["has_json"] else "ocr"
         plans.append({
             "id": stem,
             "has_png": info["has_png"],
@@ -1542,12 +1544,18 @@ def api_floor_plan_match():
         results = []
 
         for r in data["rooms"]:
+            # D-141 : skip silencieux des entries non-enrichies (pas de
+            # "face"). Cas d'un JSON v3 Input minimal où le pipeline
+            # d'enrichissement (ray-cast / détection) n'a pas tourné ou
+            # n'a rien attaché. Sans ce filtre, un KeyError "face" casse
+            # l'endpoint match (symptôme "Error: 'face'" côté UI).
             windows = [
                 WindowSpec(
                     Face(w["face"]), w["offset_cm"], w["width_cm"],
                     origin=w.get("origin"),
                 )
                 for w in r.get("windows", [])
+                if "face" in w and "offset_cm" in w and "width_cm" in w
             ]
             openings = [
                 OpeningSpec(
@@ -1559,6 +1567,7 @@ def api_floor_plan_match():
                     origin=o.get("origin"),
                 )
                 for o in r.get("openings", [])
+                if "face" in o and "offset_cm" in o
             ]
             exclusions = [
                 ExclusionZone(
@@ -1670,6 +1679,8 @@ def api_coverage():
         # Build RoomSpec objects from JSON
         rooms = []
         for r in data["rooms"]:
+            # D-141 : skip silencieux des entries non-enrichies (cf.
+            # /api/floor-plan/match ci-dessus).
             windows = [
                 WindowSpec(
                     face=Face(w["face"]),
@@ -1677,6 +1688,7 @@ def api_coverage():
                     width_cm=w["width_cm"],
                 )
                 for w in r.get("windows", [])
+                if "face" in w and "offset_cm" in w and "width_cm" in w
             ]
             openings = [
                 OpeningSpec(
@@ -1688,6 +1700,7 @@ def api_coverage():
                     hinge_side=HingeSide(o.get("hinge_side", "left")),
                 )
                 for o in r.get("openings", [])
+                if "face" in o and "offset_cm" in o
             ]
             exclusions = [
                 ExclusionZone(

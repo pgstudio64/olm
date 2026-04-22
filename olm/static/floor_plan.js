@@ -98,11 +98,16 @@
     // state.doors (has_door=true) dans openings[]. Sinon les openings
     // canoniques sont interprétés comme des portes et écrasent la
     // collection state.room_openings au retour (bug save JSON).
+    // D-141 : skip les entries non-enrichies (sans face). Cf. commentaire
+    // détaillé dans ingestion_serialize.js.
     var apiRooms = rooms.map(function (r) {
-      var apiOpenings = (r.openings || []).map(function (o) {
+      var apiOpenings = (r.openings || []).filter(function (o) {
+        return o && o.face;
+      }).map(function (o) {
         return Object.assign({}, o, { has_door: false });
       });
       (r.doors || []).forEach(function (d) {
+        if (!d || !d.face) return;
         apiOpenings.push(Object.assign({}, d, {
           has_door: true,
           opens_inward: d.opens_inward !== false,

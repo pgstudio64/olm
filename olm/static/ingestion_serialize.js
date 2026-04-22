@@ -56,10 +56,18 @@
         : Math.round(((e && e.width_px) || 0) * scale);
     }
     var rooms = _canonRooms().map(function (r) {
-      var windows = (r.windows || []).map(function (w) {
+      // D-141 : skip les entries non-enrichies (sans face). Cas d'un
+      // JSON v3 Input minimal (doors avec seed_x/seed_y seulement) qui
+      // n'a pas encore reçu l'enrichissement ray-cast. Sans ce filtre,
+      // le backend match crash KeyError "face".
+      var windows = (r.windows || []).filter(function (w) {
+        return w && w.face;
+      }).map(function (w) {
         return { face: w.face, offset_cm: _offCm(w), width_cm: _widCm(w) };
       });
-      var openings = (r.openings || []).map(function (o) {
+      var openings = (r.openings || []).filter(function (o) {
+        return o && o.face;
+      }).map(function (o) {
         return {
           face: o.face,
           offset_cm: _offCm(o),
@@ -68,6 +76,7 @@
         };
       });
       (r.doors || []).forEach(function (d) {
+        if (!d || !d.face) return;   // skip doors non-enrichies
         openings.push({
           face: d.face,
           offset_cm: _offCm(d),
