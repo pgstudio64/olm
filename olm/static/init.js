@@ -688,6 +688,12 @@ async function init() {
     window.ingState.firstScanDone = false;
     var ingLwReset = document.getElementById("ingLockWalls");
     if (ingLwReset) ingLwReset.checked = false;
+    window.ingState.buildingId = '';
+    window.ingState.floorId    = '';
+    window.ingState.northAngleDeg = 0;
+    if (typeof window.updateFloorMetadataUI === 'function') {
+      window.updateFloorMetadataUI();
+    }
     // Hide plan-dependent sections, disable Review/Design
     if (window.updatePlanDependentUI) window.updatePlanDependentUI();
     // Switch to Import tab

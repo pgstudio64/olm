@@ -7,6 +7,14 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+### D-137 — Métadonnées Floor `building_id` / `floor_id` / `north_angle_deg` (2026-04-21)
+
+- Wiring complet des 3 champs racine JSON v3 : backend retour
+  (`/api/import/preprocessed`), seed `ingState`, sérialisation
+  conditionnelle, UI inputs dans le panneau Floor.
+- Spec documentait les champs depuis plusieurs versions ; implémentation
+  qui manquait désormais faite.
+
 ### D-136 — `room_sync_helpers.js` (2026-04-21)
 
 - Nouveau module `olm/static/room_sync_helpers.js` : source unique pour

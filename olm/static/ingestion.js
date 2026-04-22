@@ -511,6 +511,14 @@
         ingState.firstScanDone = false;
         var ingLwOcr = document.getElementById('ingLockWalls');
         if (ingLwOcr) ingLwOcr.checked = false;
+        // Métadonnées floor inchangées en OCR (pas de JSON source).
+        // L'utilisateur peut les saisir via le panneau Floor.
+        ingState.buildingId = ingState.buildingId || '';
+        ingState.floorId    = ingState.floorId || '';
+        ingState.northAngleDeg = ingState.northAngleDeg || 0;
+        if (typeof window.updateFloorMetadataUI === 'function') {
+          window.updateFloorMetadataUI();
+        }
         ingState.planW = data.image_size[0];
         ingState.planH = data.image_size[1];
         ingState.planUrl = data.image_path
@@ -550,6 +558,37 @@
         if (debugLog) debugLog.textContent = '[ERROR] ' + e;
       });
   }
+
+  // --- Floor metadata inputs ↔ ingState sync ---
+  function updateFloorMetadataUI() {
+    var b = document.getElementById('ingBuildingId');
+    if (b) b.value = ingState.buildingId || '';
+    var f = document.getElementById('ingFloorId');
+    if (f) f.value = ingState.floorId || '';
+    var n = document.getElementById('ingNorthAngleDeg');
+    if (n) n.value = (ingState.northAngleDeg != null && ingState.northAngleDeg !== 0)
+      ? String(ingState.northAngleDeg) : '';
+  }
+  window.updateFloorMetadataUI = updateFloorMetadataUI;
+  function _wireFloorMetadataInputs() {
+    var b = document.getElementById('ingBuildingId');
+    if (b) b.addEventListener('change', function () {
+      ingState.buildingId = (b.value || '').trim();
+      populateRoomsJson();
+    });
+    var f = document.getElementById('ingFloorId');
+    if (f) f.addEventListener('change', function () {
+      ingState.floorId = (f.value || '').trim();
+      populateRoomsJson();
+    });
+    var n = document.getElementById('ingNorthAngleDeg');
+    if (n) n.addEventListener('change', function () {
+      var v = parseFloat(n.value);
+      ingState.northAngleDeg = isFinite(v) ? v : 0;
+      populateRoomsJson();
+    });
+  }
+  document.addEventListener('DOMContentLoaded', _wireFloorMetadataInputs);
 
   // --- Room list (clickable, same style as Review) ---
   window.updateIngRoomList = updateIngRoomList;
@@ -1933,6 +1972,14 @@
         ingState.firstScanDone = !!data.first_scan_done;
         var ingLwInit = document.getElementById('ingLockWalls');
         if (ingLwInit) ingLwInit.checked = ingState.firstScanDone;
+        // Métadonnées floor (D-spec §1, jamais implémentées avant).
+        ingState.buildingId = data.building_id || '';
+        ingState.floorId    = data.floor_id || '';
+        ingState.northAngleDeg = typeof data.north_angle_deg === 'number'
+          ? data.north_angle_deg : 0;
+        if (typeof window.updateFloorMetadataUI === 'function') {
+          window.updateFloorMetadataUI();
+        }
         if (status) status.textContent = ingState.rooms.length + ' room(s) imported';
 
         _showPlanLoadedUI(planId);

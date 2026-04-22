@@ -7,6 +7,52 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-137 · Métadonnées Floor `building_id` / `floor_id` / `north_angle_deg` wirées end-to-end (2026-04-21)
+
+### Décision
+
+Les 3 champs racine du JSON v3 documentés dans
+[`docs/specs/PREPROCESSED_JSON_SPEC.md`](specs/PREPROCESSED_JSON_SPEC.md)
+§1 mais jusqu'ici non-implémentés passent en wiring complet :
+
+1. **Backend** ([`app.py`](../olm/server/app.py) `/api/import/preprocessed`) :
+   retourne `building_id` (string), `floor_id` (string),
+   `north_angle_deg` (float) lus depuis `json_data` — défauts `""` / `""`
+   / `0` si absents.
+2. **Frontend state** (`ingState.buildingId`, `ingState.floorId`,
+   `ingState.northAngleDeg`) : seed au load Preprocessed, inchangés au
+   load OCR (pas de source), reset à vide au Close plan.
+3. **Sérialisation v3** ([`ingestion_serialize.js`](../olm/static/ingestion_serialize.js))
+   : 3 champs écrits à la racine de l'objet `out` SEULEMENT si renseignés
+   (convention d'omission, cohérent avec `first_scan_done`).
+4. **UI** : section « Floor metadata » dans le panneau gauche Floor
+   sous « Floor properties », 3 inputs (Building / Floor / North (°)),
+   wiring bidirectionnel state ↔ inputs via `updateFloorMetadataUI()`
+   (exposé sur `window` pour call des handlers load/reset).
+
+### Justification
+
+Les champs étaient spécifiés depuis plusieurs versions mais jamais
+implémentés — ils disparaissaient à chaque round-trip Save/Load. L'user
+a ouvert un JSON test en IDE et constaté leur absence. Avec ce wiring,
+les métadonnées survivent à tous les cycles import/export et peuvent
+être ajoutées ou corrigées depuis l'UI sans éditer le JSON à la main.
+
+`north_angle_deg` reste purement métadonnée (voir spec §1) — n'affecte
+pas la géométrie OLS. Il est destiné aux outils aval (ensoleillement,
+orientation, ventilation) qui consommeront le JSON exporté.
+
+### Impact
+
+- **Code** : ~30 lignes ajoutées réparties sur 5 fichiers (app.py,
+  ingestion.js, ingestion_serialize.js, init.js, pattern_editor.html).
+- **Non-régression** : pass-through passif. Aucun call site existant
+  ne dépend de ces champs.
+- **Rétro-compatibilité JSON v3** : inchangée, les nouveaux champs
+  sont optionnels (convention d'omission).
+
+---
+
 ## D-136 · `room_sync_helpers.js` — source unique pour la mutation des 3 stores (2026-04-21)
 
 ### Décision

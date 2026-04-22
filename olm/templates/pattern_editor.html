@@ -200,6 +200,25 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <tr><td>Total area (m²)</td><td id="rvFloorArea">-</td></tr>
         </table>
 
+        <div class="section-title">Floor metadata</div>
+        <table style="margin-bottom:var(--sp-sm);font-size:11px;">
+          <tr>
+            <td style="padding-right:4px;">Building</td>
+            <td><input type="text" id="ingBuildingId" placeholder="e.g. B01" autocomplete="off"
+                style="width:100%;padding:2px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;"></td>
+          </tr>
+          <tr>
+            <td style="padding-right:4px;">Floor</td>
+            <td><input type="text" id="ingFloorId" placeholder="e.g. R+1" autocomplete="off"
+                style="width:100%;padding:2px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;"></td>
+          </tr>
+          <tr>
+            <td style="padding-right:4px;" title="Angle (°CW) entre le haut de l'image et le nord géographique">North (°)</td>
+            <td><input type="number" id="ingNorthAngleDeg" placeholder="0" step="0.1" min="-360" max="360"
+                style="width:100%;padding:2px 4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;"></td>
+          </tr>
+        </table>
+
         <div class="section-title">Room list</div>
         <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
           <input type="text" id="ingNewRoomId" placeholder="Room ID" autocomplete="off"
