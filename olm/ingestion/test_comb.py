@@ -52,6 +52,7 @@ BINARIZE_THRESHOLD = 110
 COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
+MIN_DOOR_ARC_HITS = 3   # min hits per direction to validate a door arc
 
 
 def _apply_detection_config(scale_cm_per_px: float) -> None:
@@ -65,6 +66,7 @@ def _apply_detection_config(scale_cm_per_px: float) -> None:
     global BINARIZE_THRESHOLD, COMB_STEP_PX, MAX_RAY_PX, CARTOUCHE_MARGIN_PX
     global COARSE_STEP_PX, RAY_MARGIN_PX, SNAP_SEARCH_PX
     global DOOR_PROBE_PX, DOOR_GROUP_GAP_PX, WALL_MARGIN_PX
+    global MIN_DOOR_ARC_HITS
     BINARIZE_THRESHOLD = cfg.binarize_threshold
     COMB_STEP_PX = cfg.comb_step_px
     MAX_RAY_PX = cfg.max_ray_px
@@ -75,6 +77,7 @@ def _apply_detection_config(scale_cm_per_px: float) -> None:
     DOOR_PROBE_PX = cfg.door_probe_depth_px
     DOOR_GROUP_GAP_PX = cfg.door_group_gap_px
     WALL_MARGIN_PX = cfg.door_wall_margin_px
+    MIN_DOOR_ARC_HITS = cfg.min_door_arc_hits
 
 # --- Tesseract OCR parameters ---
 # Upscale factor applied before OCR — small cartouche text (10-20 px) needs enlargement
@@ -98,6 +101,19 @@ _RE_ROOM_NUMBER = re.compile(
     r"|^\d[a-zA-Z]{2}$"   # 1 digit  + 2 letters:  "1AB"
 )
 _RE_SURFACE = re.compile(r"^\d+\.\d+$")                   # "14.28", "9.8" (the "m2" is a separate token)
+# Stragglers du cartouche que l'OCR détecte comme tokens séparés et
+# qui tombent souvent juste hors du cluster (window_h trop étroit) :
+# "m²" tokenisé à part de la surface. Cas observé : pièce 913 où
+# "26.10" est dans le cluster mais "m²" reste 30 px à droite, hors
+# window_h=25.
+#
+# Restriction stricte : ne JAMAIS y mettre des patterns qui matchent
+# des codes ("\d{1,2}" capture "14"), des surfaces ou des fragments
+# de lettres ("[a-zA-Z]{1,3}" capture "BU" du caption BULLE) — ces
+# tokens existent dans les pièces voisines ou les annotations
+# adjacentes et leur absorption fait déborder le bbox sur les murs
+# limitrophes (régression observée 916 → mur nord effacé).
+_RE_CARTOUCHE_STRAGGLER = re.compile(r"^(m2|m²|²)$")
 
 
 def load_image(path):
@@ -348,6 +364,30 @@ def find_seeds_by_ocr(image):
         all_y0 = min(w["y"] for w in cluster)
         all_x1 = max(w["x"] + w["w"] for w in cluster)
         all_y1 = max(w["y"] + w["h"] for w in cluster)
+
+        # B2 (D-148) : étendre le bbox aux stragglers OCR ("m²", "²",
+        # surfaces avec virgule, codes orphelins) qui tombent hors du
+        # cluster collecté (window_h trop étroit) mais juste à côté.
+        # Fenêtre d'absorption verticale = celle du cluster (window_v) ;
+        # horizontale = h_med × 5 autour du centre cluster — assez large
+        # pour capter "m²" à droite de la surface, mais pas assez pour
+        # déborder sur le cartouche voisin.
+        absorb_h = h_med * 5
+        for w in words:
+            if w in cluster:
+                continue
+            wcx, wcy = w["cx"], w["cy"]
+            if abs(wcx - ax) > absorb_h or abs(wcy - ay) > window_v:
+                continue
+            if not _RE_CARTOUCHE_STRAGGLER.match(w["text"]):
+                continue
+            wx0, wy0 = w["x"], w["y"]
+            wx1, wy1 = w["x"] + w["w"], w["y"] + w["h"]
+            if wx0 < all_x0: all_x0 = wx0
+            if wy0 < all_y0: all_y0 = wy0
+            if wx1 > all_x1: all_x1 = wx1
+            if wy1 > all_y1: all_y1 = wy1
+
         cartouche_bboxes.append((
             all_x0 - CARTOUCHE_MARGIN_PX,
             all_y0 - CARTOUCHE_MARGIN_PX,
@@ -998,7 +1038,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         # Contact on the wall itself (1px beyond the rectangle edge)
         wy = y1 + 1
         contact = sum(1 for x in range(x0, x1+1) if 0<=wy<binary.shape[0] and binary[wy,x])
-        if n < 3 or contact > face_len * 0.20: return None, []
+        if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall - DOOR_PROBE_PX
         pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
     elif face == "north":
@@ -1007,7 +1047,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         wall, n = Counter(h[1] for h in far).most_common(1)[0]
         wy = y0 - 1
         contact = sum(1 for x in range(x0, x1+1) if 0<=wy<binary.shape[0] and binary[wy,x])
-        if n < 3 or contact > face_len * 0.20: return None, []
+        if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall + DOOR_PROBE_PX
         pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
     elif face == "east":
@@ -1016,7 +1056,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         wall, n = Counter(h[0] for h in far).most_common(1)[0]
         wx = x1 + 1
         contact = sum(1 for y in range(y0, y1+1) if 0<=wx<binary.shape[1] and binary[y,wx])
-        if n < 3 or contact > face_len * 0.20: return None, []
+        if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall - DOOR_PROBE_PX
         pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
     elif face == "west":
@@ -1025,7 +1065,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         wall, n = Counter(h[0] for h in far).most_common(1)[0]
         wx = x0 - 1
         contact = sum(1 for y in range(y0, y1+1) if 0<=wx<binary.shape[1] and binary[y,wx])
-        if n < 3 or contact > face_len * 0.20: return None, []
+        if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall + DOOR_PROBE_PX
         pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
     else:
@@ -1129,6 +1169,12 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
     from olm.ingestion.extract import _classify_wall_direct
 
     thr = threshold or BINARIZE_THRESHOLD
+    # Scale fourni par le caller (drawing_scale ou scale_cm_per_px) ou
+    # auto-détecté plus bas. À l'étape de classification (avant l'auto-
+    # détection), on a besoin d'un scale réaliste pour que les seuils en
+    # cm de DEFAULT_DETECTION_CONFIG_CM se convertissent en px corrects.
+    # Sans scale fourni → fallback 0.5 (= comportement historique).
+    classify_scale = scale_cm_per_px if scale_cm_per_px is not None else 0.5
     logger.info(f"Ingestion: loading {image_path}")
     img_gray = load_image(image_path)
     logger.debug(f"  image size: {img_gray.width} × {img_gray.height} px")
@@ -1145,6 +1191,13 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
         }
 
     logger.info(f"Ingestion: processing {len(seeds)} room(s)")
+    # Aligne les constantes pixels du module sur le scale réel —
+    # sans cet appel, COMB_STEP_PX / MAX_RAY_PX / SNAP_SEARCH_PX /
+    # DOOR_PROBE_PX restent à leur valeur d'import (calibrées pour
+    # scale=0.5 cm/px), ce qui produit des bbox sous-mesurés sur les
+    # plans à scale réel ≠ 0.5. `extract_room_features` n'a pas ce
+    # problème car il calcule lui-même `comb_step_px`.
+    _apply_detection_config(classify_scale)
     gray_arr = np.array(img_gray)
     cleaned = erase_cartouches(gray_arr, cart_bboxes)
     binary = cleaned < thr
@@ -1158,8 +1211,21 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
         surface_m2 = seed_data[2] if len(seed_data) > 2 else 0.0
         other = [(ox, oy) for ox, oy in all_seed_positions
                  if (ox, oy) != (cx, cy)]
+        # door_width_px doit être en px au scale courant : la valeur par
+        # défaut de detect_room (23 px) suppose scale=0.5 et est
+        # complètement fausse à un autre scale (ex. plan big 0.95 cm/px →
+        # 23 px = 21 cm, cherche des arcs trop courts → micro-portes).
+        from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+        _cfg_px = DEFAULT_DETECTION_CONFIG_CM.to_px(classify_scale)
         bbox, hits, doors = detect_room(binary, cx, cy, COMB_STEP_PX,
-                                        other_seeds=other)
+                                        door_width_px=_cfg_px.default_door_width_px,
+                                        other_seeds=other,
+                                        scale_cm_per_px=classify_scale)
+
+        # Filtre largeur minimale porte (élimine les micro-portes parasites).
+        # Voir DetectionConfigCm.min_door_width_cm.
+        _min_door_w_px = _cfg_px.min_door_width_px
+        doors = [d for d in doors if d.get('width_px', 0) >= _min_door_w_px]
 
         x0, y0, x1, y1 = bbox
         width_px = x1 - x0
@@ -1171,7 +1237,8 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
         # Classify walls
         wall_segs = {}
         for face in ('north', 'south', 'east', 'west'):
-            segs, _ = _classify_wall_direct(binary, binary, bbox, face, 5)
+            segs, _ = _classify_wall_direct(binary, binary, bbox, face, 5,
+                                            scale_cm_per_px=classify_scale)
             wall_segs[face] = segs
 
         # Extract windows, openings, doors from wall segments
@@ -1252,6 +1319,10 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
         'image_size': (img_gray.size[0], img_gray.size[1]),
         'scale_cm_per_px': round(s, 3),
         'threshold': thr,
+        # Cart_bboxes en absolu pixels image — exposés au front pour
+        # debug overlay (D-148 + viz). Ils servent aussi au erase au scan
+        # initial. Liste de (x0, y0, x1, y1) déjà avec CARTOUCHE_MARGIN_PX.
+        'cart_bboxes_px': [list(map(int, cb)) for cb in cart_bboxes],
     }
 
 

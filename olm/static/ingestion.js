@@ -16,7 +16,8 @@
   var STUB_ROOM_AUTO_MARGIN_CM = 50;
 
   // Shared wall detection between contiguous rooms (merge checkboxes).
-  var SHARED_WALL_TOLERANCE_PX = 8;
+  // En cm pour rester scale-invariant (8 px @ scale 0.5 = 4 cm).
+  var SHARED_WALL_TOLERANCE_CM = 4;
 
   // UX timings.
   var DOUBLE_CLICK_DELAY_MS = 400;
@@ -33,8 +34,21 @@
   var WALL_ERASE_STROKE_WIDTH_PX = 2;
   var WALL_FEATURE_OFFSET_PX = 3;
 
-  // Floor bbox editor — minimum resizable dimension in image pixels.
-  var BBOX_RESIZE_MIN_PX = 50;
+  // Overlay visual constants — exprimés en pixels CSS. Multipliés par
+  // pxScale (unités viewBox par pixel CSS, calculé dans renderIngestion à
+  // partir de la taille CSS du SVG) pour que strokes, points et seeds
+  // gardent une taille visible constante quels que soient la résolution
+  // du plan et le niveau de zoom. Sans cette mise à l'échelle, sur un
+  // plan haute résolution (7320+ px) un stroke-width de 0.5 unité
+  // viewBox tombe sub-pixel CSS et devient invisible — symptôme observé
+  // sur test_floorplan_preprocessed_big après Rescan all.
+  var OVERLAY_RAY_STROKE = 0.5;
+  var OVERLAY_HIT_RADIUS = 1.5;
+  var OVERLAY_SEED_RADIUS = 3;
+
+  // Floor bbox editor — minimum resizable dimension en cm pour rester
+  // scale-invariant (50 px @ scale 0.5 = 25 cm).
+  var BBOX_RESIZE_MIN_CM = 25;
 
   // Auto-focus after plan load — padding ratio around the rooms bbox.
   var BBOX_AUTOFOCUS_PADDING_RATIO = 0.10;
@@ -82,10 +96,16 @@
       return { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
     }
     function slimDoor(d) {
-      return {
+      var s = {
         face: d.face, offset_cm: d.offset_cm, width_cm: d.width_cm,
         hinge_side: d.hinge_side, opens_inward: d.opens_inward !== false,
       };
+      // Remonte les seeds calculées par le backend pour qu'elles soient
+      // persistées (ingestion_serialize.js les lit) et réutilisées au
+      // prochain rescan comme ancrage.
+      if (typeof d.seed_x === 'number') s.seed_x = d.seed_x;
+      if (typeof d.seed_y === 'number') s.seed_y = d.seed_y;
+      return s;
     }
     var roomAbs = {
       corridor_face: corridor,
@@ -342,6 +362,7 @@
     hit:      '#ffff00',
     candidate:'rgba(255,255,0,0.3)',
     seed:     '#58c080',
+    door_seed:'#ff9800',
   };
 
   // --- Coordinate conversion: screen → SVG viewBox ---
@@ -519,6 +540,10 @@
         if (typeof window.updateFloorMetadataUI === 'function') {
           window.updateFloorMetadataUI();
         }
+        // Cart_bboxes pour debug overlay (mode OCR seulement). Affichés
+        // quand H-Rays ou V-Rays est coché, pour visualiser ce que le
+        // backend a effacé avant binarisation.
+        ingState.cartBboxesPx = data.cart_bboxes_px || [];
         ingState.planW = data.image_size[0];
         ingState.planH = data.image_size[1];
         ingState.planUrl = data.image_path
@@ -589,6 +614,20 @@
     });
   }
   document.addEventListener('DOMContentLoaded', _wireFloorMetadataInputs);
+
+  // --- Pre-fill drawing scale from APP_CONFIG (called by init.js after config loaded) ---
+  window.prefillDrawingScale = function () {
+    var dsField = document.getElementById('ingDrawingScale');
+    if (!dsField || dsField.value.trim()) return;  // already filled by user
+    var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale_text || '';
+    if (cfgDs) {
+      var cfgNum = parseDrawingScale(cfgDs);
+      if (cfgNum > 0) {
+        dsField.value = '1 : ' + cfgNum;
+        dsField.style.color = 'var(--text)';
+      }
+    }
+  };
 
   // --- Room list (clickable, same style as Review) ---
   window.updateIngRoomList = updateIngRoomList;
@@ -841,6 +880,21 @@
     var vb = ingState.vb;
     svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
 
+    // pxScale = unités viewBox par pixel CSS. Les constantes overlay
+    // définies en pixels CSS sont multipliées par pxScale pour rendre à
+    // taille visible constante quel que soit le plan et le zoom. Même
+    // mécanique que editor.js zf. Fallback sur la dernière taille connue
+    // si le SVG est masqué (onglet inactif → getBoundingClientRect renvoie 0).
+    var svgRect = svg.getBoundingClientRect();
+    if (svgRect.width > 0 && svgRect.height > 0) {
+      svg._lastPxW = svgRect.width;
+      svg._lastPxH = svgRect.height;
+    }
+    var pxW = svg._lastPxW || svgRect.width || 800;
+    var pxH = svg._lastPxH || svgRect.height || 600;
+    var svgScale = Math.min(pxW / vb.w, pxH / vb.h);
+    var pxScale = 1 / svgScale;
+
     var els = [];
 
     // Full-viewport background to avoid white edges when viewbox extends beyond image
@@ -868,6 +922,26 @@
     var show = ingState.show;
     var zoomRoom = ingState.zoomRoom;
 
+    // Cart_bboxes overlay (debug) — affichés quand H-Rays ou V-Rays sont
+    // cochés, pour visualiser la zone effacée par le backend avant
+    // binarisation en mode OCR. Si un cartouche déborde du bbox d'une
+    // pièce ou laisse du texte (m², ²) hors de la zone effacée, le ray-cast
+    // butera dessus et on le voit ici directement.
+    if ((show.vrays || show.hrays) &&
+        Array.isArray(ingState.cartBboxesPx) &&
+        ingState.cartBboxesPx.length) {
+      ingState.cartBboxesPx.forEach(function (cb) {
+        if (!cb || cb.length !== 4) return;
+        var cx0 = cb[0], cy0 = cb[1], cx1 = cb[2], cy1 = cb[3];
+        var cw = cx1 - cx0, ch = cy1 - cy0;
+        if (cw <= 0 || ch <= 0) return;
+        els.push('<rect x="' + cx0 + '" y="' + cy0 +
+          '" width="' + cw + '" height="' + ch +
+          '" fill="rgba(255,140,0,0.12)" stroke="#ff8c00"' +
+          ' stroke-width="0.8" stroke-dasharray="3 2"/>');
+      });
+    }
+
     // R-12 / D-122 P1 : ingState.rooms est en repère canonique. Le Floor
     // overlay rend dans le repère ABSOLU (raster). toStorage(room, scale)
     // retourne une pièce absolue avec offset_px / width_px déjà recalculés.
@@ -892,40 +966,59 @@
       var cx = seedPx ? seedPx[0] : (x0 + x1) / 2;
       var cy = seedPx ? seedPx[1] : (y0 + y1) / 2;
 
-      // Rays
+      // Rays — clippés aux bornes du bbox pièce. Le comb retourne tous
+      // les hits (y compris ceux au-delà du bbox dans toutes les
+      // directions). Sans clip, le rendu trace une ligne seed→hit qui
+      // déborde largement du bbox sur les plans haute résolution. On
+      // ne dessine que les hits qui définissent la bbox courant.
       if (show.vrays || show.hrays) {
+        var raySW = (OVERLAY_RAY_STROKE * pxScale).toFixed(2);
+        function _hitInBbox(hx, hy) {
+          return hx >= x0 && hx <= x1 && hy >= y0 && hy <= y1;
+        }
         (room.hits || []).forEach(function (hit) {
           var hx = hit[0], hy = hit[1];
+          if (!_hitInBbox(hx, hy)) return;
           if (hy < cy && show.vrays) {
             els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
               '" y2="' + hy + '" stroke="' + COLORS.vray_n +
-              '" stroke-width="0.5"/>');
+              '" stroke-width="' + raySW + '"/>');
           } else if (hy > cy && show.vrays) {
             els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
               '" y2="' + hy + '" stroke="' + COLORS.vray_s +
-              '" stroke-width="0.5"/>');
+              '" stroke-width="' + raySW + '"/>');
           } else if (hx < cx && show.hrays) {
             els.push('<line x1="' + cx + '" y1="' + hy + '" x2="' + hx +
               '" y2="' + hy + '" stroke="' + COLORS.hray_w +
-              '" stroke-width="0.5"/>');
+              '" stroke-width="' + raySW + '"/>');
           } else if (hx > cx && show.hrays) {
             els.push('<line x1="' + cx + '" y1="' + hy + '" x2="' + hx +
               '" y2="' + hy + '" stroke="' + COLORS.hray_e +
-              '" stroke-width="0.5"/>');
+              '" stroke-width="' + raySW + '"/>');
           }
         });
-        // Hits as dots
+        // Hits as dots — même clip que rays.
+        var hitR = (OVERLAY_HIT_RADIUS * pxScale).toFixed(2);
         (room.hits || []).forEach(function (hit) {
           var hx = hit[0], hy = hit[1];
+          if (!_hitInBbox(hx, hy)) return;
           var isV = (hy !== cy), isH = (hx !== cx);
           if ((isV && show.vrays) || (isH && show.hrays)) {
             els.push('<circle cx="' + hx + '" cy="' + hy +
-              '" r="1.5" fill="' + COLORS.hit + '"/>');
+              '" r="' + hitR + '" fill="' + COLORS.hit + '"/>');
           }
         });
-        // Seed
+        // Seed pièce
+        var seedR = (OVERLAY_SEED_RADIUS * pxScale).toFixed(2);
         els.push('<circle cx="' + cx + '" cy="' + cy +
-          '" r="3" fill="' + COLORS.seed + '"/>');
+          '" r="' + seedR + '" fill="' + COLORS.seed + '"/>');
+        // Seeds de portes (orange) — vérifie visuellement que l'ancrage
+        // seed → arc de porte se positionne bien.
+        (room.doors || []).forEach(function (d) {
+          if (typeof d.seed_x !== 'number' || typeof d.seed_y !== 'number') return;
+          els.push('<circle cx="' + d.seed_x + '" cy="' + d.seed_y +
+            '" r="' + seedR + '" fill="' + COLORS.door_seed + '"/>');
+        });
       }
 
       // Room bbox
@@ -1053,7 +1146,9 @@
 
     // Merge checkboxes between contiguous rooms
     if (show.bbox && !zoomRoom) {
-      var MERGE_TOL = SHARED_WALL_TOLERANCE_PX;
+      var MERGE_TOL = ingState.scale > 0
+        ? Math.round(SHARED_WALL_TOLERANCE_CM / ingState.scale)
+        : 8;
       var pairs = [];
       for (var i = 0; i < ingState.rooms.length; i++) {
         var ri = ingState.rooms[i];
@@ -1427,15 +1522,7 @@
     // Drawing scale field: recalculate room dimensions on change
     var dsField = document.getElementById('ingDrawingScale');
     if (dsField) {
-      // Pre-fill from config if available
-      var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale_text || '';
-      if (cfgDs) {
-        var cfgNum = parseDrawingScale(cfgDs);
-        if (cfgNum > 0) {
-          dsField.value = '1 : ' + cfgNum;
-          dsField.style.color = 'var(--text)';
-        }
-      }
+      // Pre-fill deferred until APP_CONFIG is loaded — see prefillDrawingScale()
 
       // On focus: select only the number part (after "1 : ")
       dsField.addEventListener('focus', function() {
@@ -1607,7 +1694,9 @@
       var dx = p.x - be.dragStart.mouseX;
       var dy = p.y - be.dragStart.mouseY;
       var orig = be.dragStart.bbox;
-      var MIN_PX = BBOX_RESIZE_MIN_PX;
+      var MIN_PX = ingState.scale > 0
+        ? Math.round(BBOX_RESIZE_MIN_CM / ingState.scale)
+        : 50;
       var room = ingState.rooms.find(function(r) { return r.name === be.selectedName; });
       if (!room) return;
       var nx0 = orig[0], ny0 = orig[1], nx1 = orig[2], ny1 = orig[3];
@@ -1760,6 +1849,8 @@
             scale_cm_per_px: ingState.scale,
             door_width_cm: doorWidthCm,
             clip_to_bbox: lockWallsFloor,
+            mode: (ingState._selectedPlan && ingState._selectedPlan.mode)
+                  || 'ocr',
             rooms: [],
           };
           var validRooms = [];
@@ -1836,7 +1927,20 @@
               return !deleted.has(_opSignature('opening', o));
             });
             // Portes auto redétectées seulement si aucune manuelle n'existe.
-            var newDoors = preservedDoors.length ? [] : canon.doors;
+            // Mode preprocessed : `extract_room_features` ne re-détecte pas
+            // les portes (payload `doors_px=[]`), donc `canon.doors` est
+            // vide. Sans précaution, le merge effacerait les portes auto
+            // chargées depuis le JSON. → Si le backend ne renvoie aucune
+            // porte ET qu'il n'y a pas de portes manuelles à préserver,
+            // garder les anciennes portes auto telles quelles.
+            var newDoors;
+            if (preservedDoors.length) {
+              newDoors = [];
+            } else if (canon.doors && canon.doors.length) {
+              newDoors = canon.doors;
+            } else {
+              newDoors = prevDr.filter(function (d) { return d.origin !== 'manual'; });
+            }
 
             var mergedW = newW.concat(manualW);
             var mergedOpenings = newO.concat(manualO);
@@ -1869,6 +1973,12 @@
               openings: mergedOpenings,
               doors: mergedDoors,
             };
+            // Hits du ray-cast — propagés dans le store pour que H-Rays /
+            // V-Rays affichent les rayons après rescan-all (sans cette
+            // ligne, `ingState.rooms[i].hits` reste vide → 0 ray rendu).
+            if (Array.isArray(res.hits)) {
+              updates.hits = res.hits;
+            }
             if (reanchored) {
               updates.exclusion_zones = reanchored.exclusion_zones;
               updates.transparent_zones = reanchored.transparent_zones;
@@ -1957,6 +2067,10 @@
         ingState.rooms = (data.rooms || []).map(function (r) {
           return window.canonicalIO.fromStorage(r, _impScale);
         });
+        // Mode préprocessé : pas de cart_bboxes (cartouches déjà retirés
+        // dans le PNG -SD). Reset pour ne pas hériter d'un import OCR
+        // précédent.
+        ingState.cartBboxesPx = [];
         // D-135 rider : snapshot immutable surface cartouche → plan_area_m2.
         // Voir commentaire équivalent dans le pipeline OCR ci-dessus.
         ingState.rooms.forEach(function (r) {

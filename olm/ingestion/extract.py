@@ -29,15 +29,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BINARIZE_THRESHOLD = 180     # grayscale threshold (< = wall)
-MORPH_DILATE_PX = 1          # morphological dilation for closing micro-gaps
 RAY_FAN_STEP = 3             # sample every N pixels along the fan (3 = 3x faster)
-WALL_DEPTH_PX = 8            # how far to probe into the wall for texture (~30cm)
-MIN_OPENING_PX = 15          # minimum width of a detected opening in px
-MIN_OBSTACLE_PX = 10         # minimum width of a detected obstacle
 DOOR_ARC_R2_THRESHOLD = 0.7  # R² threshold for arc detection
-MODE_TOLERANCE_PX = 5        # distance from mode to count as "wall"
-SNAP_SEARCH_PX = 6           # search ±6px around current edge for wall snap
 ORTHO_ANGLE_TOLERANCE = 5    # degrees tolerance for orthogonal filter
 
 
@@ -208,8 +201,16 @@ def clean_text_from_image(image: Image.Image,
 # Step 3 — Binarize
 # ---------------------------------------------------------------------------
 
-def binarize(image: Image.Image) -> tuple[np.ndarray, np.ndarray]:
+def binarize(image: Image.Image,
+             threshold: int = 180,
+             morph_dilate_px: int = 1,
+             ) -> tuple[np.ndarray, np.ndarray]:
     """Binarize image into two variants.
+
+    Args:
+        image: grayscale (or convertible) PIL image.
+        threshold: grayscale cutoff (pixels < threshold → wall).
+        morph_dilate_px: number of dilation passes (MaxFilter 3×3).
 
     Returns:
         binary_dilated: walls dilated (for ray-cast — closes micro-gaps)
@@ -217,13 +218,13 @@ def binarize(image: Image.Image) -> tuple[np.ndarray, np.ndarray]:
                     multi-line window patterns)
     """
     gray = np.array(image.convert("L"))
-    binary_raw = gray < BINARIZE_THRESHOLD
+    binary_raw = gray < threshold
 
     # Dilated version for ray-cast
     binary_dilated = binary_raw.copy()
-    if MORPH_DILATE_PX > 0:
+    if morph_dilate_px > 0:
         bin_img = Image.fromarray((binary_raw * 255).astype(np.uint8))
-        for _ in range(MORPH_DILATE_PX):
+        for _ in range(morph_dilate_px):
             bin_img = bin_img.filter(ImageFilter.MaxFilter(3))
         binary_dilated = np.array(bin_img) > 127
 
@@ -520,7 +521,7 @@ def detect_room_three_phase(binary: np.ndarray, binary_raw: np.ndarray,
 # ---------------------------------------------------------------------------
 
 def _probe_wall_texture(binary: np.ndarray, wall_x: int, wall_y: int,
-                        dx: int, dy: int, depth: int = WALL_DEPTH_PX
+                        dx: int, dy: int, depth: int,
                         ) -> list[bool]:
     """Probe pixels through the wall cross-section to get the texture profile.
 
@@ -556,150 +557,6 @@ def _count_transitions(profile: list[bool]) -> int:
         if profile[i - 1] and not profile[i]:
             count += 1
     return count
-
-
-def classify_wall_segments(binary: np.ndarray, binary_raw: np.ndarray,
-                           cx: int, cy: int,
-                           direction: str, distances: np.ndarray,
-                           mode: int,
-                           text_bboxes: list = None) -> list[WallSegment]:
-    """Classify segments along one wall into wall/window/opening/door.
-
-    Uses:
-      - distance profile (§6.4): openings (> mode), obstacles (< mode)
-      - texture profile on binary_raw (§6.6): wall vs window
-      - arc detection (§6.5): curved profile near openings
-
-    Args:
-        binary: dilated binary (used for distance-based classification)
-        binary_raw: raw binary without dilation (preserves window lines)
-        text_bboxes: list of (x0, y0, x1, y1) text regions to skip
-    """
-    n = len(distances)
-    half = n // 2
-    tolerance = MODE_TOLERANCE_PX
-    if text_bboxes is None:
-        text_bboxes = []
-
-    # Classify each ray position
-    ray_kinds = []  # "wall", "window", "opening", "short" (obstacle/arc)
-    for i in range(n):
-        d = distances[i]
-        if d > mode + tolerance:
-            ray_kinds.append("opening")
-        elif d < mode - tolerance:
-            ray_kinds.append("short")
-        else:
-            # Compute the wall hit point
-            if direction == "north":
-                wall_x = cx - half + i
-                wall_y = cy - d
-            elif direction == "south":
-                wall_x = cx - half + i
-                wall_y = cy + d
-            elif direction == "west":
-                wall_x = cx - d
-                wall_y = cy - half + i
-            else:  # east
-                wall_x = cx + d
-                wall_y = cy - half + i
-
-            # Skip texture probe if wall hit is inside a text bbox
-            # (text cleaning may have erased window lines there)
-            in_text = False
-            for tx0, ty0, tx1, ty1 in text_bboxes:
-                if tx0 <= wall_x <= tx1 and ty0 <= wall_y <= ty1:
-                    in_text = True
-                    break
-
-            if in_text:
-                ray_kinds.append("skip")  # will inherit from neighbors
-            else:
-                if direction == "north":
-                    texture = _probe_wall_texture(binary_raw, wall_x, wall_y, 0, -1)
-                elif direction == "south":
-                    texture = _probe_wall_texture(binary_raw, wall_x, wall_y, 0, 1)
-                elif direction == "west":
-                    texture = _probe_wall_texture(binary_raw, wall_x, wall_y, -1, 0)
-                else:
-                    texture = _probe_wall_texture(binary_raw, wall_x, wall_y, 1, 0)
-
-                transitions = _count_transitions(texture)
-                if transitions >= 2:
-                    ray_kinds.append("window")
-                else:
-                    ray_kinds.append("wall")
-
-    # Fill "skip" rays with the nearest non-skip neighbor's kind
-    _fill_skips(ray_kinds)
-
-    # Group contiguous same-kind rays into segments
-    segments = []
-    if not ray_kinds:
-        return segments
-
-    seg_start = 0
-    seg_kind = ray_kinds[0]
-    for i in range(1, n):
-        if ray_kinds[i] != seg_kind:
-            if i - seg_start >= 3:  # minimum segment width
-                segments.append(WallSegment(
-                    start_px=seg_start,
-                    end_px=i,
-                    kind=seg_kind,
-                ))
-            seg_start = i
-            seg_kind = ray_kinds[i]
-    # Last segment
-    if n - seg_start >= 3:
-        segments.append(WallSegment(
-            start_px=seg_start,
-            end_px=n,
-            kind=seg_kind,
-        ))
-
-    # Refine: check for door arcs adjacent to openings
-    for idx, seg in enumerate(segments):
-        if seg.kind != "opening":
-            continue
-        # Check left neighbor for arc
-        if idx > 0 and segments[idx - 1].kind == "short":
-            arc_seg = segments[idx - 1]
-            if _detect_arc_profile(distances, arc_seg.start_px,
-                                   arc_seg.end_px, mode):
-                seg.has_arc = True
-                seg.hinge_side = "left"
-                seg.kind = "door"
-                arc_seg.kind = "door_arc"
-        # Check right neighbor for arc
-        if idx < len(segments) - 1 and segments[idx + 1].kind == "short":
-            arc_seg = segments[idx + 1]
-            if _detect_arc_profile(distances, arc_seg.start_px,
-                                   arc_seg.end_px, mode):
-                if not seg.has_arc:  # not already assigned from left
-                    seg.has_arc = True
-                    seg.hinge_side = "right"
-                    seg.kind = "door"
-                arc_seg.kind = "door_arc"
-
-    # TODO: obstacle detection disabled — needs a second pass after
-    # room contours are established (not during wall classification)
-    # Convert remaining "short" segments to "wall" for now
-    for seg in segments:
-        if seg.kind == "short":
-            seg.kind = "wall"
-
-    # Filter out arc segments and very small segments
-    result = [s for s in segments
-              if s.kind in ("wall", "window", "opening", "door")
-              and ((s.end_px - s.start_px) >= MIN_OPENING_PX
-                   or s.kind == "wall")]
-
-    # Merge adjacent segments of the same kind (fixes fragmentation
-    # caused by text cleaning gaps in the middle of windows/walls)
-    result = _merge_adjacent_segments(result)
-
-    return result
 
 
 def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
@@ -759,7 +616,8 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
         # lines and the wall — dilation closes this gap and prevents
         # multi-line window detection.
         has_wall = False
-        for delta in range(-3, 4):  # search ±3 px around wall position
+        _snap_r = _cfg_local.snap_search_px
+        for delta in range(-_snap_r, _snap_r + 1):
             px = wx + probe_dx * delta
             py = wy + probe_dy * delta
             if 0 <= px < w and 0 <= py < h and binary_raw[py, px]:
@@ -1041,8 +899,16 @@ def extract_rooms(image: Image.Image,
     # Step 2: Clean image
     cleaned = clean_text_from_image(image, texts)
 
-    # Step 3: Binarize (two versions)
-    binary, binary_raw = binarize(cleaned)
+    # Step 3: Binarize (two versions) — dilation from cm config.
+    # Threshold stays at 180 (OCR scans are lighter than preprocessed plans
+    # which use binarize_threshold=110 via extract_room_features).
+    from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+    _cfg = DEFAULT_DETECTION_CONFIG_CM.to_px(scale_cm_per_px)
+    binary, binary_raw = binarize(
+        cleaned,
+        threshold=180,
+        morph_dilate_px=_cfg.morph_dilate_px,
+    )
     logger.info("Binarized image: %s, wall pixels: %d (dilated), %d (raw)",
                 binary.shape, np.sum(binary), np.sum(binary_raw))
 
@@ -1052,7 +918,7 @@ def extract_rooms(image: Image.Image,
 
     # Build expanded text bboxes for skip zones (margin accounts for
     # cleaning area that may have erased window lines)
-    text_margin = 10
+    text_margin = _cfg.text_skip_margin_px
     text_bboxes = [
         (min(t.bbox_px[0], t.bbox_px[2]) - text_margin,
          min(t.bbox_px[1], t.bbox_px[3]) - text_margin,
@@ -1112,71 +978,6 @@ def extract_rooms(image: Image.Image,
         rooms.append(room)
 
     return rooms
-
-
-def _build_exclusions(walls: dict, bbox: tuple, cx: int, cy: int,
-                      profiles: dict, scale: float) -> list[dict]:
-    """Convert 'obstacle' wall segments into exclusion zone dicts.
-
-    An obstacle segment on a wall means rays hit something closer than
-    the wall. The exclusion zone is between the obstacle hit distance
-    and the wall, at the position along the wall.
-    """
-    x0, y0, x1, y1 = bbox
-    room_w = x1 - x0
-    room_h = y1 - y0
-    exclusions = []
-
-    for face, segments in walls.items():
-        distances, mode = profiles[face]
-        n = len(distances)
-
-        for seg in segments:
-            if seg.kind != "obstacle":
-                continue
-
-            # Average distance of the obstacle rays
-            seg_distances = distances[seg.start_px:seg.end_px]
-            if len(seg_distances) == 0:
-                continue
-            obs_dist = int(np.mean(seg_distances))
-            obs_depth = mode - obs_dist  # how far the obstacle protrudes
-
-            if obs_depth < MIN_OBSTACLE_PX:
-                continue
-
-            half = n // 2
-            if face in ("north", "south"):
-                # Position along x axis
-                ex_x0 = cx - half + seg.start_px - x0
-                ex_w = seg.end_px - seg.start_px
-                if face == "north":
-                    ex_y0 = 0
-                else:
-                    ex_y0 = room_h - obs_depth
-                ex_h = obs_depth
-                exclusions.append({
-                    "x_cm": round(ex_x0 * scale),
-                    "y_cm": round(ex_y0 * scale),
-                    "width_cm": round(ex_w * scale),
-                    "depth_cm": round(ex_h * scale),
-                })
-            else:  # east, west
-                ex_y0 = cy - half + seg.start_px - y0
-                ex_h = seg.end_px - seg.start_px
-                if face == "west":
-                    ex_x0 = 0
-                else:
-                    ex_x0 = room_w - obs_depth
-                ex_w = obs_depth
-                exclusions.append({
-                    "x_cm": round(ex_x0 * scale),
-                    "y_cm": round(ex_y0 * scale),
-                    "width_cm": round(ex_w * scale),
-                    "depth_cm": round(ex_h * scale),
-                })
-
-    return exclusions
 
 
 def _find_nearest(texts: list[DetectedText], cx: int, cy: int,
@@ -1584,6 +1385,8 @@ def extract_rooms_from_preprocessed(
                     dd[k] = d[k]
             # Champs Input (seed de porte) — convention uniforme avec le
             # seed de pièce (seed_x/seed_y, cf. PREPROCESSED_JSON_SPEC §2.3).
+            # Coords absolues image, fournies par le JSON Input. Jamais
+            # générées ni modifiées en aval.
             if "seed_x" in d and "seed_y" in d:
                 dd["seed_x"] = int(d["seed_x"])
                 dd["seed_y"] = int(d["seed_y"])
@@ -1606,6 +1409,14 @@ def extract_rooms_from_preprocessed(
         openings = [_enrich_px_cm(o) for o in p["openings_raw"] if isinstance(o, dict)]
         windows = [_enrich_px_cm(w) for w in p["windows_raw"] if isinstance(w, dict)]
         doors = [_enrich_px_cm(d) for d in doors]
+
+        # Filtre largeur minimale porte (élimine les micro-portes du JSON
+        # producer). Un seuil cm-aware → comportement strictement identique
+        # entre plans à différentes résolutions. Voir
+        # DetectionConfigCm.min_door_width_cm.
+        from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
+        _min_door_width_cm = _ddc.min_door_width_cm
+        doors = [d for d in doors if d.get("width_cm", 0) >= _min_door_width_cm]
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
@@ -1691,6 +1502,7 @@ def extract_room_features(
     step_px: int = 5,
     binary_precomputed: np.ndarray | None = None,
     clip_to_bbox: bool = False,
+    cartouche_bboxes_px: list | None = None,
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105).
 
@@ -1733,6 +1545,15 @@ def extract_room_features(
             de trouver les vrais murs au-delà. Use case : Lock bbox depuis
             le frontend après un resize manuel de pièce. Default False
             pour non-régression sur le pipeline d'ingestion initial.
+        cartouche_bboxes_px: liste de bboxes (x0, y0, x1, y1) absolus en
+            pixels image identifiant les cartouches OCR à blanchir avant
+            binarisation. Utilisé en mode OCR pour reproduire le
+            pré-traitement appliqué au scan initial (`erase_cartouches`).
+            Sans cette étape, le seed tombe sur du texte solide et les
+            rays butent immédiatement → bbox réduite à des bandes. En
+            pipeline batch (`binary_precomputed` fourni), l'erase doit
+            être fait en amont sur la binaire globale ; le param est
+            ignoré ici. Default None.
 
     Returns:
         {
@@ -1785,6 +1606,13 @@ def extract_room_features(
             auto_door_rects_px.append([
                 int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])
             ])
+
+    if cartouche_bboxes_px:
+        for cb in cartouche_bboxes_px:
+            if cb is None or len(cb) != 4:
+                continue
+            mask_rects_px.append(
+                (int(cb[0]), int(cb[1]), int(cb[2]), int(cb[3])))
 
     if bbox_px and transparent_zones_cm:
         bx0, by0 = bbox_px[0], bbox_px[1]
@@ -1933,9 +1761,14 @@ def extract_room_features(
     # (JSON existant), on les préserve côté frontend.
     doors_out: list[dict] = []
     if not doors_px:
+        # Filtre largeur minimale porte (cf. DetectionConfigCm.min_door_width_cm).
+        from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
+        _min_door_w_px = _ddc.to_px(scale_cm_per_px).min_door_width_px
         for d in (_doors_detected or []):
             off = int(d.get("offset_px", 0))
             wpx = int(d.get("width_px", 0))
+            if wpx < _min_door_w_px:
+                continue
             doors_out.append({
                 "face": d.get("face"),
                 "offset_px": off,

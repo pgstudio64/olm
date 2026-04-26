@@ -46,6 +46,7 @@
       scale: 0.5,
       threshold: 110,
       rooms: [],
+      cartBboxesPx: [],
       show: {
         bbox: true, window: true, door: true, opening: true,
         names: true, vrays: false, hrays: false, candidates: false,
