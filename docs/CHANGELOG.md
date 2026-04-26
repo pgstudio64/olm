@@ -3,6 +3,23 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Wall classifier : détection des fenêtres en mode preprocessed sur
+  plans haute résolution (dernier seuil px hardcodé migré en cm).
+- Mode OCR : l'échelle par défaut (drawing_scale_text du config) est
+  maintenant correctement pré-remplie dans le formulaire.
+
+### Changed
+
+- `binarize()` accepte `threshold` et `morph_dilate_px` en paramètres
+  (plus de constantes globales px).
+- Nouveau champ `text_skip_margin_cm` dans `DetectionConfigCm`.
+- Nettoyage : ~200 lignes de code mort supprimées (fonctions et
+  constantes px inutilisées).
+
 ---
 
 ## [v0.4.5] — 2026-04-21

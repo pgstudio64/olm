@@ -411,6 +411,8 @@
           // les murs — le bbox user est préservé.
           var lockWallsElFetch = document.getElementById("rvLockWalls");
           var lockWallsFlag = !!(lockWallsElFetch && lockWallsElFetch.checked);
+          var planMode = (ingst._selectedPlan && ingst._selectedPlan.mode)
+                         || 'ocr';
           var resp = await fetch("/api/room/reanalyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -423,6 +425,7 @@
               doors: doorsPx,
               door_width_cm: doorWidthCm,
               clip_to_bbox: lockWallsFlag,
+              mode: planMode,
             }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);

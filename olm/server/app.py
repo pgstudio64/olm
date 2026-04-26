@@ -1162,6 +1162,7 @@ def api_room_reanalyze():
         door_width_cm = int(data.get("door_width_cm", 90))
         threshold = int(data.get("threshold", 110))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
+        mode = (data.get("mode") or "preprocessed").lower()
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1178,6 +1179,15 @@ def api_room_reanalyze():
         from PIL import Image as _PILImage
         from olm.ingestion.extract import extract_room_features
         img = _PILImage.open(plan_path).convert("L")
+
+        # Mode OCR : reproduire l'erase cartouches du scan initial
+        # (test_comb.extract_all_rooms). Sans ça, les seeds tombent sur du
+        # texte solide et les rays butent immédiatement.
+        cart_bboxes_px: list = []
+        if mode == "ocr":
+            from olm.ingestion.test_comb import find_seeds_by_ocr
+            _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
+
         result = extract_room_features(
             img,
             (int(seed_px[0]), int(seed_px[1])),
@@ -1188,6 +1198,7 @@ def api_room_reanalyze():
             door_width_cm=door_width_cm,
             threshold=threshold,
             clip_to_bbox=clip_to_bbox,
+            cartouche_bboxes_px=cart_bboxes_px,
         )
         return jsonify(result)
     except Exception as e:
@@ -1371,6 +1382,7 @@ def api_room_reanalyze_batch():
         door_width_cm = int(data.get("door_width_cm", 90))
         rooms = data.get("rooms") or []
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
+        mode = (data.get("mode") or "preprocessed").lower()
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1391,6 +1403,18 @@ def api_room_reanalyze_batch():
         # room-locaux (portes + zones transparentes) sont zéro-outés
         # localement par `extract_room_features` via `binary_precomputed`.
         _gray_global = _np.asarray(img)
+
+        # Mode OCR : reproduire l'erase cartouches du scan initial
+        # (test_comb.extract_all_rooms) AVANT la binarisation globale.
+        # Sans ça, les cartouches survivent comme paquets de pixels solides
+        # et les seeds tombent dessus → bbox réduite à des bandes étroites.
+        if mode == "ocr":
+            from olm.ingestion.test_comb import (
+                find_seeds_by_ocr, erase_cartouches,
+            )
+            _seeds, _cart_bboxes_px = find_seeds_by_ocr(img)
+            _gray_global = erase_cartouches(_gray_global, _cart_bboxes_px)
+
         _binary_raw_global = _gray_global < threshold
         _binary_global = remove_non_ortho(_binary_raw_global)
 

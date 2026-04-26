@@ -236,6 +236,13 @@
     // Use amended data if available
     var roomData = fpRoomAmendments[room.name] || room;
 
+    // Charge le seed + les hits depuis ingState pour la vue Room — sans ça,
+    // V-Rays / H-Rays ne dessinent rien tant qu'on n'a pas cliqué sur
+    // "Adjust room" ou relancé un Rescan dans la vue Room.
+    if (typeof window.loadRoomHitsAndSeedFromIngState === "function") {
+      window.loadRoomHitsAndSeedFromIngState(roomData);
+    }
+
     // Render room SVG in canvas (empty room, no blocks)
     var reviewSubtab = document.getElementById("tabFpReview");
     if (reviewSubtab && reviewSubtab.classList.contains("active")) {

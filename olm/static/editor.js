@@ -1931,6 +1931,42 @@ var ROOM_AMEND_DISABLE_IDS = [
   "gapIntra",
 ];
 
+// Charge dans state.room_seed_cm + state.room_hits ce qui est nécessaire au
+// rendu V-Rays / H-Rays de la vue Room. Lit ingState.rooms[i] (peuplé par
+// le scan ou rescan all dans Floor) et convertit en repère room-local cm.
+// Appelé à 2 endroits : navigation simple vers une pièce (rvRenderCurrent)
+// et entrée en édition (enterRoomAmendMode).
+function loadRoomHitsAndSeedFromIngState(room) {
+  state.room_hits = null;
+  state.room_seed_cm = null;
+  var ing = window.ingState;
+  if (!ing || !ing.scale || !room || !room.bbox_px || !ing.rooms) return;
+  var ingRoom = ing.rooms.find(function (x) { return x.name === room.name; });
+  if (!ingRoom) return;
+  var bx0 = room.bbox_px[0], by0 = room.bbox_px[1];
+  var sc = ing.scale;
+  var absW = (room.bbox_px[2] - room.bbox_px[0]) * sc;
+  var absD = (room.bbox_px[3] - room.bbox_px[1]) * sc;
+  var cf = room.corridor_face_abs || "";
+  var rotP = window.canonicalIO.rotatePoint;
+  var seedPx = ingRoom.seed_px || ingRoom.seed;
+  if (seedPx) {
+    var sC = rotP(
+      { x: (seedPx[0] - bx0) * sc, y: (seedPx[1] - by0) * sc },
+      cf, absW, absD);
+    state.room_seed_cm = { x_cm: sC.x, y_cm: sC.y };
+  }
+  if (ingRoom.hits && ingRoom.hits.length) {
+    state.room_hits = ingRoom.hits.map(function (h) {
+      var pC = rotP(
+        { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
+        cf, absW, absD);
+      return { x_cm: pC.x, y_cm: pC.y };
+    });
+  }
+}
+window.loadRoomHitsAndSeedFromIngState = loadRoomHitsAndSeedFromIngState;
+
 function enterRoomAmendMode(room) {
   // Stay in Review — edit room in-place
   state.roomAmendMode = {
@@ -1959,38 +1995,8 @@ function enterRoomAmendMode(room) {
   state.corridor_face_abs = room.corridor_face_abs || "";
   state.walls_user_edited = !!room.walls_user_edited;
 
-  // Hits (pour V/H-rays debug). Convertis en room-local cm.
-  state.room_hits = null;
-  state.room_seed_cm = null;
-  var _ing = window.ingState;
-  if (_ing && _ing.scale && room.bbox_px && _ing.rooms) {
-    var _ingRoom = _ing.rooms.find(function (x) { return x.name === room.name; });
-    if (_ingRoom) {
-      var bx0 = room.bbox_px[0], by0 = room.bbox_px[1];
-      var sc = _ing.scale;
-      var absW2 = (room.bbox_px[2] - room.bbox_px[0]) * sc;
-      var absD2 = (room.bbox_px[3] - room.bbox_px[1]) * sc;
-      // D-122 P3/P6 : rotation hits/seed via canonicalIO.rotatePoint
-      // (source unique ; cf2 = corridor absolu, jamais "south" canon).
-      var cf2 = room.corridor_face_abs || "";
-      var _rotP2 = window.canonicalIO.rotatePoint;
-      var seedPx = _ingRoom.seed_px || _ingRoom.seed;
-      if (seedPx) {
-        var sC2 = _rotP2(
-          { x: (seedPx[0] - bx0) * sc, y: (seedPx[1] - by0) * sc },
-          cf2, absW2, absD2);
-        state.room_seed_cm = { x_cm: sC2.x, y_cm: sC2.y };
-      }
-      if (_ingRoom.hits && _ingRoom.hits.length) {
-        state.room_hits = _ingRoom.hits.map(function (h) {
-          var pC = _rotP2(
-            { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
-            cf2, absW2, absD2);
-          return { x_cm: pC.x, y_cm: pC.y };
-        });
-      }
-    }
-  }
+  // Hits + seed pour V/H-rays debug — chargés depuis ingState.rooms.
+  loadRoomHitsAndSeedFromIngState(room);
 
   // Inject overlay for visual reference, aligned to room bbox
   if (window.fpOverlay) {

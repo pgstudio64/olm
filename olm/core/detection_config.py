@@ -55,9 +55,22 @@ class DetectionConfigCm:
     door_group_gap_cm: float = 75.0          # gap max entre pixels d'un arc
     door_wall_margin_cm: float = 9.0         # marge anti-mur perp
     default_door_width_cm: float = 90.0
+    # Largeur minimale d'arc de porte détectable (en cm). Sous ce seuil,
+    # `_detect_doors_on_face` rejette le candidat. Les hits étant espacés
+    # de `comb_step_cm`, le nombre minimal de hits = round(value /
+    # comb_step_cm). Ex. : 45 cm / 15 cm = 3 hits, équivalent au
+    # historique `n < 3`.
+    min_door_arc_width_cm: float = 45.0
+    # Largeur minimale d'une vraie porte. Une porte sous ce seuil est
+    # filtrée (côté OCR : reclassée wall ; côté preprocessed : rejetée
+    # au chargement JSON). Élimine les micro-portes parasites issues
+    # du JSON producer ou d'erreurs de classification.
+    min_door_width_cm: float = 70.0
 
     # --- Divers ---
     cartouche_margin_cm: float = 3.0
+    text_skip_margin_cm: float = 6.0    # marge autour des bbox texte pour
+                                         # skip zones (wall classifier)
 
     def to_px(self, scale_cm_per_px: float) -> "DetectionConfigPx":
         """Convertit les valeurs cm en px au scale courant."""
@@ -84,7 +97,13 @@ class DetectionConfigCm:
             door_group_gap_px=_px(self.door_group_gap_cm),
             door_wall_margin_px=_px(self.door_wall_margin_cm),
             default_door_width_px=_px(self.default_door_width_cm),
+            # Hits = compte (pas de pixels). Espacement entre hits = comb_step_cm.
+            min_door_arc_hits=max(1, int(round(
+                self.min_door_arc_width_cm / self.comb_step_cm
+            ))),
+            min_door_width_px=_px(self.min_door_width_cm),
             cartouche_margin_px=_px(self.cartouche_margin_cm),
+            text_skip_margin_px=_px(self.text_skip_margin_cm),
         )
 
     @classmethod
@@ -127,8 +146,11 @@ class DetectionConfigPx:
     door_group_gap_px: int
     door_wall_margin_px: int
     default_door_width_px: int
+    min_door_arc_hits: int
+    min_door_width_px: int
 
     cartouche_margin_px: int
+    text_skip_margin_px: int
 
 
 DEFAULT_DETECTION_CONFIG_CM = DetectionConfigCm()

@@ -2,6 +2,7 @@
 
 async function init() {
   await loadAppConfig();
+  if (typeof window.prefillDrawingScale === 'function') window.prefillDrawingScale();
   await loadAllBlockDefs();
   await loadBlockDefs();
   await loadSpacingConfigs();

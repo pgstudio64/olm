@@ -7,6 +7,238 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-150 · Dernier seuil px hardcodé + nettoyage code mort extract.py + fix race condition scale OCR (2026-04-27)
+
+### Décision
+
+**1. Fix snap search hardcodé (`extract.py:762`)** :
+`_classify_wall_direct` cherchait le mur dans un rayon fixe de ±3 px
+(`range(-3, 4)`). À 0,78 cm/px (plan big), 3 px = 2,3 cm — insuffisant
+pour trouver le mur → face entière classifiée "opening". Fix : utilise
+`_cfg_local.snap_search_px` (issu de `snap_search_cm = 18.0`), déjà
+calculé mais jamais branché. Dernier seuil px hardcodé dans le
+classifier.
+
+**2. Nettoyage code mort** :
+- Suppression `classify_wall_segments()` (~140 lignes, jamais appelé —
+  remplacé par `_classify_wall_direct` depuis D-108).
+- Suppression `_build_exclusions()` (~60 lignes, jamais appelé).
+- Suppression 5 constantes px mortes : `WALL_DEPTH_PX`,
+  `MIN_OPENING_PX`, `MIN_OBSTACLE_PX`, `MODE_TOLERANCE_PX`,
+  `SNAP_SEARCH_PX`.
+- `_probe_wall_texture` : `depth` n'a plus de défaut px (l'unique
+  appelant actif passe `_cfg_local.wall_depth_px`).
+
+**3. Migration des 2 dernières constantes px actives** :
+- `BINARIZE_THRESHOLD = 180` et `MORPH_DILATE_PX = 1` → paramètres de
+  `binarize(threshold, morph_dilate_px)`. Le caller `extract_rooms`
+  calcule `morph_dilate_px` depuis `DetectionConfigCm.morph_dilate_cm`.
+  Le threshold OCR (180) reste distinct du threshold preprocessed (110).
+- `text_margin = 10` → `text_skip_margin_cm = 6.0` (nouveau champ
+  `DetectionConfigCm`, converti en px via `to_px()`).
+
+**4. Fix race condition scale OCR** (`ingestion.js` + `init.js`) :
+Le pré-remplissage du champ `ingDrawingScale` depuis
+`APP_CONFIG.ingestion.drawing_scale_text` se faisait dans un handler
+`DOMContentLoaded` enregistré AVANT le chargement du config (handler de
+`init.js`). Résultat : champ vide → backend reçoit `scale=None` →
+fallback 0,5 cm/px → pièces minuscules. Fix : pré-remplissage extrait
+en `prefillDrawingScale()`, appelé depuis `init()` après
+`loadAppConfig()`.
+
+### Justification
+
+L'invariant « comportement identique standard/big » était violé par le
+seul seuil px restant dans le classifier. Le nettoyage du code mort
+réduit la surface de maintenance (~200 lignes) et élimine les
+constantes qui pouvaient créer de la confusion.
+
+### Impact
+
+- `extract.py` : ~200 lignes supprimées, `binarize()` paramétré.
+- `detection_config.py` : +1 champ `text_skip_margin_cm`.
+- `ingestion.js` : `prefillDrawingScale()` exposé.
+- `init.js` : appel après config chargé.
+
+---
+
+## D-149 · Frontend cm-only + filtre `min_door_width_cm` + patch homothétique big JSON (2026-04-26)
+
+### Décision
+
+Migration des constantes métier frontend en cm + ajout d'un filtre
+largeur minimale pour les portes au scan OCR et au load preprocessed
++ régénération du JSON `test_floorplan_preprocessed_big` par homothétie
+depuis le standard.
+
+**1. Frontend cm-only (`olm/static/ingestion.js`) :**
+- `SHARED_WALL_TOLERANCE_CM = 4` (au lieu de `_PX = 8`) — tolérance
+  d'adjacence pour fusion de murs entre pièces. Conversion dynamique
+  en px à l'usage via `ingState.scale`.
+- `BBOX_RESIZE_MIN_CM = 25` (au lieu de `_PX = 50`) — taille minimale
+  bbox éditable.
+
+**2. Backend OCR `n < 3` → seuil cm (`olm/core/detection_config.py` +
+`olm/ingestion/test_comb.py`) :**
+- Ajout `min_door_arc_width_cm = 45.0` dans `DetectionConfigCm`.
+- Exposé en `min_door_arc_hits` dans `DetectionConfigPx` (= entier de
+  hits, calculé `round(min_door_arc_width_cm / comb_step_cm)`).
+- `_apply_detection_config` met à jour le global `MIN_DOOR_ARC_HITS`.
+- `_detect_doors_on_face` utilise `MIN_DOOR_ARC_HITS` au lieu du
+  hardcode `n < 3` (4 occurrences). Comportement strictement identique
+  au scale 0.5 cm/px historique (45/15 = 3) ; correctement scale-invariant
+  pour autres résolutions.
+
+**3. Filtre `min_door_width_cm = 70` (`detection_config.py`,
+`test_comb.py`, `extract.py`) :**
+- Ajouté à `DetectionConfigCm` ; exposé en `min_door_width_px` dans
+  `DetectionConfigPx`.
+- Appliqué côté OCR scan initial (`extract_all_rooms`) après
+  `detect_room` : portes `width_px < min_door_width_px` rejetées.
+- Appliqué côté load preprocessed (`extract_rooms_from_preprocessed`)
+  après `_enrich_px_cm` : portes `width_cm < min_door_width_cm`
+  rejetées. Élimine les micro-portes dans les JSON producer corrompus.
+- Symétrique aux filtres `min_opening_width_cm` et `min_window_width_cm`
+  déjà existants côté OCR.
+
+**4. `door_width_px` correctement transmis (`test_comb.py:1214`) :**
+- `detect_room` était appelé sans `door_width_px`, retombait sur la
+  valeur par défaut `23` (= 90 cm à scale 0.5). Sur les autres scales,
+  l'algorithme cherchait des arcs de mauvaise taille → micro-portes.
+- Désormais : `door_width_px=cfg.default_door_width_px` à chaque appel.
+
+**5. Patch homothétique `test_floorplan_preprocessed_big.json` :**
+- Le JSON v2 d'origine contenait 38 micro-portes (width 6-8 px = 3-4 cm)
+  produit par un outil tiers buggé.
+- Régénéré par homothétie depuis le standard (×3.8125 = 7320/1920) +
+  recalibration de `drawing_scale_measured` à 0.7773 cm/px (= 2.9633/3.8125).
+- Backup en `.bak`. Standard et big donnent maintenant le même nombre
+  de portes/fenêtres/ouvertures avec dimensions équivalentes au cm près.
+
+**6. Préservation auto windows/openings au rescan : tenté puis reverté.**
+- Tentative : symétrique de `newDoors`, conserver les pré-existantes
+  si canon vide.
+- Reverté : la préservation cohabitait visuellement avec les openings
+  parasites générés par `extract_room_features` (wall classifier qui
+  échoue sur PNG `-SD` haute résolution) → résultat plus chargé sans
+  résoudre le bug racine. Patches symptomatiques abandonnés au profit
+  d'une vraie investigation à venir.
+
+**7. Rays clippés au bbox au rendu Floor :**
+- Le comb retourne tous les hits collectés, certains au-delà du bbox
+  de la pièce. Sans clip, le rendu trace des rays qui débordent
+  largement (visible sur plans HD avec `pxScale` qui rend les rays
+  visibles). Filtre `_hitInBbox` au rendu nettoie l'overlay sans
+  modifier la donnée.
+
+### Justification
+
+Tous ces points dérivent de l'invariant cm-everywhere et de la nécessité
+que `test_floorplan_preprocessed.json` (standard) et
+`test_floorplan_preprocessed_big.json` (big = haute résolution, mêmes
+pièces) produisent un comportement strictement identique en mode
+preprocessed.
+
+### Impact
+
+- Standard et big chargés en preprocessed produisent le même nombre
+  de portes (19), ouvertures (53), fenêtres (66), au cm près.
+- Mode OCR cartouches : scan initial et rescans détectent les mêmes
+  ouvertures (cf. D-148).
+- Régression connue non résolue (cf. TODO) : `extract_room_features`
+  classifie mal les fenêtres sur PNG `-SD` haute résolution → Rescan
+  all sur big génère des openings parasites couvrant des murs entiers.
+  Workaround temporaire : ne pas faire Rescan all sur big.
+- Non-régression : 135/142 tests Python passent (mêmes 7 échecs
+  pré-existants v0.4.5).
+
+### À faire en suivant
+
+Cf. `docs/TODO.md` :
+- Filtre `min_opening_width_cm` au load preprocessed (symétrique).
+- Investiguer le wall classifier sur PNG `-SD` HD.
+- Format JSON v3 cm primary (déprécier `*_px` métier).
+- Caches runtime stale dans `test_comb.py` (renommer ou refactor).
+- Gel UI sur ArrowRight dernière pièce dans Room.
+
+### Status
+
+**Non commité fin de session 2026-04-26.** En pause après plusieurs
+tentatives de patches symptomatiques sur le rescan big preprocessed.
+
+---
+
+## D-148 · Rescan en mode OCR : reproduire l'erase cartouches + transmettre le scale au scan initial (2026-04-26)
+
+### Décision
+
+Deux corrections couplées, livrées comme unité hors replay v0.4.5
+(préalable à la reprise de D-143).
+
+**1. Backend — erase cartouches au rescan en mode OCR.**
+
+- Le payload des endpoints `/api/room/reanalyze` et
+  `/api/room/reanalyze_batch` reçoit désormais un champ
+  `mode: "ocr" | "preprocessed"` (défaut serveur `"preprocessed"`).
+- En mode `"ocr"`, le backend appelle `find_seeds_by_ocr(img)` pour
+  obtenir les cartouches puis les blanchit AVANT la binarisation —
+  unitaire via le nouveau paramètre `cartouche_bboxes_px` de
+  `extract_room_features` (qui les ajoute à ses `mask_rects_px`),
+  batch via `erase_cartouches(_gray_global, cart_bboxes)` en place
+  avant la binarisation globale partagée.
+- Frontend (`ingestion.js`, `init_rvtool.js`) : le payload des deux
+  endpoints inclut `mode = ingState._selectedPlan.mode` (toujours
+  défini après sélection via le dropdown).
+
+**2. Backend — transmettre `scale_cm_per_px` à `_classify_wall_direct`
+dans `extract_all_rooms`.**
+
+`extract_all_rooms` ([test_comb.py:1174](../olm/ingestion/test_comb.py#L1174))
+appelait `_classify_wall_direct(binary, binary, bbox, face, 5)` sans
+transmettre le `scale_cm_per_px`, retombant donc sur la valeur par
+défaut `0.5`. Sur un plan à scale réel ≠ 0.5, les seuils en cm de
+`DEFAULT_DETECTION_CONFIG_CM` étaient convertis en px avec un mauvais
+ratio → seuils trop larges → openings absorbés au lieu d'être
+détectés. Désormais la fonction passe le `classify_scale =
+scale_cm_per_px or 0.5` (fallback historique préservé si le caller
+ne fournit pas de scale et qu'on est avant l'auto-détection).
+
+### Justification
+
+Symptôme initial : sur `test_floorplan_ocr.png` (mode OCR, pas de
+JSON), un Rescan all sans Lock walls réduisait toutes les pièces à
+des bandes étroites. Cause : `extract_room_features` ne reproduisait
+pas le pré-traitement cartouches du scan initial (`extract_all_rooms`)
+→ seed sur du texte solide → rays butent immédiatement.
+
+Symptôme corollaire découvert pendant le fix : le scan initial trouvait
+0 ouvertures là où les rescans en trouvaient 4. Cause : seuils de
+classification calculés à scale 0.5 par défaut au lieu du scale réel
+(3.675 cm/px sur ce plan, ×7.35).
+
+### Impact
+
+- Mode OCR : Rescan-all et Rescan-unit donnent des bbox numériquement
+  identiques au scan initial (sur la pièce 901 de `test_floorplan_ocr`
+  : bbox (147, 624, 224, 782) inchangée vs rescan).
+- Mode OCR : scan initial et rescans détectent les **mêmes**
+  windows / openings (4 openings sur 901 : N, S, 2× W).
+- Mode préprocessé : aucun impact — le défaut serveur reste
+  `"preprocessed"`, le erase OCR n'est pas exécuté, et les `-SD.png`
+  ont déjà leurs cartouches blanchis externellement.
+- Non-régression : 135/142 tests Python passent (mêmes 7 échecs
+  pré-existants sur la baseline v0.4.5).
+
+### À faire en unité séparée (TODO.md)
+
+Sémantique de Rescan all (Floor) : aujourd'hui = re-extract features
+sur les pièces déjà détectées avec leurs seeds/bboxes. Sémantique
+attendue par l'utilisateur = re-OCR + redécouverte complète des
+pièces (équivalent réouverture). Refonte non-triviale (nécessite
+consolidation des amendments user côté JS).
+
+---
+
 ## D-142 · `remove_non_ortho` travaille en local par composant (2026-04-21)
 
 ### Décision
