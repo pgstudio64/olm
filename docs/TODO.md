@@ -1,217 +1,42 @@
 # TODO — OLM (Office Layout Matching)
 
-## ⚠ Session 2026-04-26 (en pause) : D-148 cartouches OCR + cm-only frontend + filtre `min_door_width_cm` + patch homothétique big JSON
+## Contexte replay v0.4.5 (2026-04-26 → 2026-04-27)
 
-**État working tree** : 11 fichiers modifiés non commités (~530 lignes
-ajoutées). Voir « Récap session 2026-04-26 » plus bas pour le détail.
+Rollback sur v0.4.5 (`be08ec0`) après régressions D-143→D-147. Replay
+sélectif en cours. État actuel : **`eb9897a`** (D-148 + D-149 + D-150).
 
-**Pourquoi en pause** : tentative de fix successifs sur le rescan all en
-mode preprocessed sur `test_floorplan_preprocessed_big`. Chaque patch
-révèle un nouvel edge case. La racine commune (`extract_room_features`
-classifie mal les fenêtres sur PNG `-SD` haute résolution → openings
-parasites couvrant tout un mur) demande une vraie investigation, pas
-des patches symptomatiques. Reprise après /clear.
-
-**Backups préservés** :
-- Branche git `backup-pre-replay` (à `72cd9a6`, D-143).
-- `git stash@{0}` (working tree complet pré-reset, label `session pre-replay full backup`).
-- `/tmp/olm-pre-replay/` (copies isolées : `config.json`, JSON test, diff
-  non commités, patch commits depuis v0.4.5, `extract.py` D-147).
-- `project/plans/test_floorplan_preprocessed_big.json.bak` (big JSON
-  d'origine, avant patch homothétique).
-
-**Pourquoi** : sessions précédentes (D-143 commité + D-144→D-147 non commités)
-ont accumulé régressions sur la détection de portes (micro-portes, bbox 922
-trop large, seeds invisibles, openings au lieu de portes, rays mal placés).
-Décision : repartir de la dernière release publiée et rejouer chaque unité
-atomique en testant après chaque application.
-
-**Plan détaillé** : `~/.claude/plans/est-il-possible-de-repartir-zippy-elephant.md`.
-
-**Backups préservés** :
-- Branche git `backup-pre-replay` (à `72cd9a6`, D-143).
-- `git stash@{0}` (working tree complet pré-reset, label `session pre-replay full backup`).
-- `/tmp/olm-pre-replay/` (copies isolées : `config.json`, JSON test, diff
-  non commités, patch commits depuis v0.4.5, `extract.py` D-147).
-
-**Unités à rejouer** (ordre) :
-
-| Unité | Origine | Statut |
+| Unité | Statut | Notes |
 |---|---|---|
-| D-143 | commit `72cd9a6` | à cherry-pick |
-| D-144 (overlays CSS-px) | non commité | hunks à réappliquer (ingestion.js, render_shared.js, editor.js) |
-| D-145 (binary_for_arcs + seeds anchoring) | non commité | hunks à réappliquer (extract.py, test_comb.py, app.py, ingestion.js, init_rvtool.js) |
-| D-146 (flèches désactivées Room amend) | non commité | hunk floor_plan.js |
-| `project/config.json` | non commité | drawing_scale_text "1 : 350" → "1 : 430" |
-| **D-147 (R²-fit detection)** | non commité | **NE PAS rejouer** — cassé. Reconcevoir après stabilisation. |
+| D-143 (classify_step_cm) | **À rejouer** | `git cherry-pick 72cd9a6` — pas dans le code actuel |
+| D-144 (pxScale overlays) | **Déjà appliqué** | pxScale présent dans ingestion.js |
+| D-145 (binary_for_arcs + seeds anchoring) | **À rejouer** | `binary_for_arcs`, `binary_raw_precomputed`, `_seed_scan_range` absents |
+| D-146 (flèches désactivées Room amend) | **À rejouer** | hunk floor_plan.js |
+| D-147 (R²-fit detection) | **NE PAS rejouer** | cassé — reconcevoir après stabilisation |
+| D-148 (cartouches OCR rescan) | **Commité** | eb9897a |
+| D-149 (cm-only frontend) | **Commité** | eb9897a |
+| D-150 (snap search + dead code cleanup) | **Commité** | eb9897a |
 
-**Bugs identifiés sur la baseline v0.4.5 (= pré-existants)** :
+**Backups** : branche `backup-pre-replay` (à `72cd9a6`), stash pré-reset,
+`/tmp/olm-pre-replay/`.
 
-- ~~*Rescan-all en mode OCR* : `extract_room_features` ne re-erase pas les
-  cartouches → seed au centre du texte → rays butent immédiatement → bbox
-  réduite à des bandes étroites.~~ **Fixé 2026-04-26** (unité hors replay,
-  D-148) : flag `mode` passé au backend, OCR + erase reproduit avant
-  binarisation côté `/api/room/reanalyze` et `/api/room/reanalyze_batch`,
-  param `cartouche_bboxes_px` ajouté à `extract_room_features`. Bug
-  corollaire `_classify_wall_direct` appelé sans scale dans
-  `extract_all_rooms` également fixé (seuils en cm correctement convertis
-  en px → scan initial trouve les mêmes ouvertures que les rescans).
-- *Rescan all (Floor) ne fait pas un re-OCR complet* : le bouton itère
-  sur `ingState.rooms` (pièces déjà détectées) et ré-extrait leurs
-  features avec leurs seeds/bboxes existants. Sémantique actuelle =
-  « re-extract features ». Sémantique attendue par l'user =
-  « réouverture complète » (re-OCR + redécouverte des pièces).
-  Refonte non-triviale : nécessite un endpoint qui reproduit
-  `extract_all_rooms` avec consolidation côté JS des amendments
-  (manual edits, deleted_auto_signatures). À traiter en unité séparée.
-- *H-rays débordants en vue Room sur certaines pièces* (observé sur
-  900 dans test_floorplan_preprocessed_big) : les rays horizontaux
-  s'étendent largement au-delà de la pièce (jusqu'à ~×100 la largeur),
-  alors que les V-rays restent contenus. Présent aussi via Adjust
-  room → bug pré-existant dans la classification ou la donnée des hits
-  (rotation canonique vs absolue, hits diagonaux mal classés H/V, ou
-  hits réels du comb à des distances anormales). Hors scope session
-  D-148. À investiguer en unité séparée.
+**Plan de replay détaillé** :
+`~/.claude/plans/est-il-possible-de-repartir-zippy-elephant.md`.
 
-**Chantiers identifiés mais non traités dans la session 2026-04-26 (cm-only)** :
+**Bugs connus** :
+- *H-rays débordants* (room 900 big) : rays H s'étendent ×100 au-delà de la pièce
+- *Gel UI ArrowRight* sur dernière pièce en Room view
+- *Rescan all (Floor) ne re-OCR pas* : sémantique = re-extract features, pas réouverture complète
 
-- *Format JSON v3 en cm primary*. Aujourd'hui les portes / ouvertures /
-  fenêtres sont stockées avec `offset_px` / `width_px` (avec `*_cm`
-  calculés au load via `_enrich_px_cm`). Cible : cm primary (source de
-  vérité), px dérivé à l'usage. Concerne `slimDoor` / `slim`,
-  `_enrich_px_cm`, `_syncPx`, et la spec `PREPROCESSED_JSON_SPEC.md`.
-  Garder fallback compat pour anciens JSON. Champs raster légitimement
-  px : `bbox_px`, `seed_x/seed_y` (room et door), `page_*_px`.
-- *Considérer l'utilisation des couleurs vert/bleu pour améliorer la
-  détection en mode preprocessed*. Aujourd'hui ces couleurs servent
-  uniquement à identifier `corridor_face` et `exterior_faces`. On
-  pourrait les utiliser pour valider/fusionner les portes (sur face
-  verte du couloir), confirmer les fenêtres (sur face bleue extérieure).
-- *Caches runtime des constantes px dans `test_comb.py`*
-  (`COMB_STEP_PX`, `MAX_RAY_PX`, `CARTOUCHE_MARGIN_PX`, etc.) : leur
-  valeur initiale au moment de l'import est un placeholder périmé
-  (non aligné sur un scale particulier). Elles sont écrasées par
-  `_apply_detection_config(scale)` avant tout usage légitime, mais
-  un chemin d'appel qui les lirait sans avoir appelé init bosserait
-  avec des valeurs stale. Soit renommer en `_*_CACHE` + ajouter
-  une garde « scale non-initialisé », soit refactor pour passer
-  `cfg` en argument et supprimer les globales.
-- *Régénérer `test_floorplan_preprocessed_big.json`*. Le JSON actuel
-  contient 38 micro-portes (width 6-8 px = ~3-4 cm) à la place des
-  vraies portes (~70-90 cm). Le filtre `min_door_width_cm = 70` les
-  élimine au load mais ne les remplace pas par les vraies. Méthode
-  proposée : recopier `test_floorplan_preprocessed.json` et multiplier
-  toutes les coords px par 3.8125 (= 7320/1920) pour produire un
-  big homothétique parfait, OU re-OCR du PNG big.
-- *Filtre `min_opening_width_cm` au load preprocessed*. Symétrique du
-  filtre porte ajouté dans D-148 cm-only mais pour les ouvertures.
-  Le seuil existe déjà dans `DetectionConfigCm.min_opening_width_cm`
-  et est appliqué côté OCR (`_classify_wall_direct`). À ajouter au
-  load preprocessed dans `extract_rooms_from_preprocessed` : rejeter
-  les ouvertures dont `width_cm < min_opening_width_cm`. Idem pour
-  fenêtres (`min_window_width_cm`).
-- ~~*`extract_room_features` : wall classifier rate les fenêtres sur PNG
-  `-SD` haute résolution*~~ **Fixé D-150** : cause racine = `range(-3, 4)`
-  hardcodé dans `_classify_wall_direct` (±3 px au lieu de
-  `snap_search_px` issu de la config cm). À 0,78 cm/px, 3 px = 2,3 cm
-  → mur non trouvé → classifié "opening". Fix : utilise
-  `_cfg_local.snap_search_px`. Testé : room 915 big → 2 fenêtres,
-  0 opening (identique au standard).
-- ~~*Préservation auto windows/openings au rescan quand canon vide*~~
-  **Tenté puis reverté 2026-04-26** : cohabitait avec les openings
-  parasites. Le wall classifier est désormais fixé (D-150) — cette
-  préservation n'est plus nécessaire.
-- *Gel UI total quand on appuie ArrowRight sur la dernière pièce
-  dans la vue Room* (uniquement Room view). Pas d'erreur dans la
-  console, freeze JS complet, doit tuer l'onglet. Sur le wrap N-1 → 0
-  via `fpGo(1)`. Reproductible. Hypothèse : récursion synchrone dans
-  `firstCand.click()` ([floor_plan.js:351](olm/static/floor_plan.js#L351)).
-  À investiguer en unité séparée.
-
-**Audit complet pré-reset** des bugs accumulés (D-143 → D-147) disponible
-dans la session précédente — résumé : seeds des portes droppés par
-`computeCanonicalReanalyzeResult.feat()` ([ingestion.js:145](olm/static/ingestion.js#L145))
-au canonicalize, divergence dim/hits sur Lock walls ON, mode `_compute_mode`
-fallback 90e percentile = max_dist clamp.
+**Chantiers identifiés (non traités)** :
+- *Format JSON v3 en cm primary* (portes/ouvertures/fenêtres : `offset_px`/`width_px` → cm source de vérité)
+- *Couleurs vert/bleu pour améliorer détection preprocessed* (valider portes sur face verte, fenêtres sur face bleue)
+- *Caches runtime px dans `test_comb.py`* (globales stale si scale non initialisé)
+- *Régénérer `test_floorplan_preprocessed_big.json`* (38 micro-portes filtrées mais pas remplacées)
+- *Filtre `min_opening_width_cm` au load preprocessed* (symétrique du filtre porte D-148)
 
 ---
 
-## Récap session 2026-04-26 (modifs non commitées)
-
-11 fichiers modifiés. Tests pytest : 7 échecs pré-existants, aucune
-nouvelle régression.
-
-**Backend** :
-- `olm/core/detection_config.py` : ajout `min_door_arc_width_cm = 45.0`
-  (= 3 × `comb_step_cm`, équivalent au hardcode `n < 3`) et
-  `min_door_width_cm = 70.0` (filtre micro-portes). Exposés dans
-  `DetectionConfigPx` comme `min_door_arc_hits` et `min_door_width_px`.
-- `olm/ingestion/test_comb.py` :
-  - `MIN_DOOR_ARC_HITS` exposé via `_apply_detection_config` ; hardcode
-    `n < 3` (4 occurrences) remplacé.
-  - Filtre `min_door_width_px` appliqué après `detect_room` dans
-    `extract_all_rooms`.
-  - `door_width_px` correctement passé à `detect_room` (ne retombe
-    plus sur la valeur par défaut `23` qui correspondait à scale 0.5).
-- `olm/ingestion/extract.py` :
-  - Param `cartouche_bboxes_px` ajouté à `extract_room_features` (D-148
-    : reproduit l'erase au scan initial pour le rescan-OCR).
-  - Filtre `min_door_width_cm` appliqué au load preprocessed dans
-    `extract_rooms_from_preprocessed`.
-- `olm/server/app.py` : champ `mode` lu dans le payload des endpoints
-  `/api/room/reanalyze` et `/api/room/reanalyze_batch` ; en mode `"ocr"`,
-  OCR + erase cartouches reproduit avant binarisation (D-148).
-
-**Frontend** :
-- `olm/static/ingestion.js` :
-  - Constantes overlay CSS-px : `OVERLAY_RAY_STROKE`, `OVERLAY_HIT_RADIUS`,
-    `OVERLAY_SEED_RADIUS`. `pxScale` calculé dans `renderIngestion`. Tout
-    rendu d'overlay multiplié par `pxScale` (rays visibles sur plans HD).
-  - Couleur `door_seed: '#ff9800'` ; cercle orange dessiné par porte avec
-    `seed_x/y` quand H/V-Rays cochés.
-  - `slimDoor` propage `seed_x/y` au Save.
-  - Champ `mode` envoyé au backend pour `/reanalyze` et `/reanalyze_batch`.
-  - Cart_bboxes overlay (orange dashed) affichés quand H/V-Rays cochés
-    en mode OCR.
-  - `SHARED_WALL_TOLERANCE_CM = 4` (au lieu de `_PX = 8`) : conversion
-    dynamique en px à l'usage.
-  - `BBOX_RESIZE_MIN_CM = 25` (idem).
-  - Post-batch : `updates.hits = res.hits` ; préservation auto des doors
-    quand `canon.doors` vide (uniquement, pas windows/openings —
-    tentative reverté faute de résoudre le bug racine).
-  - Rays clippés au bbox de la pièce au rendu (visualisation propre).
-- `olm/static/floor_plan.js` : `loadRoomHitsAndSeedFromIngState(roomData)`
-  appelé dans `rvRenderCurrent` → V/H-Rays visibles en vue Room par
-  simple navigation (sans Adjust room).
-- `olm/static/editor.js` : helper `loadRoomHitsAndSeedFromIngState`
-  factorisé.
-- `olm/static/init_rvtool.js` : champ `mode` dans payload rescan unitaire.
-- `olm/static/store.js` : `cartBboxesPx: []` dans defaultIngestion.
-
-**Données** :
-- `project/plans/test_floorplan_preprocessed_big.json` patché par
-  homothétie depuis le standard (×3.8125) + `drawing_scale_measured`
-  recalibré à 0.7773 cm/px. Backup en `.bak`. Le big JSON contenait
-  des micro-portes (width 6-8 px) ; le patch les remplace par les
-  portes correctes du standard à l'échelle big.
-
-**Doc** :
-- `docs/Decisions.md` : entrée D-148 cartouches OCR + scale fix.
-
-**Bug racine non résolu** : `extract_room_features` wall classifier
-échoue sur PNG `-SD` haute résolution (test_floorplan_preprocessed_big
-à scale 0.78 cm/px). Le rescan all génère des openings parasites
-couvrant des murs entiers (ex. `OPENING N 0/218` sur room 915) au
-lieu de détecter les fenêtres comme texture window. Mes patches de
-préservation côté frontend (windows/openings auto préservées au
-rescan) cohabitent avec ces openings parasites → affichage chargé.
-Décision : arrêter les patches symptomatiques. À traiter en unité
-dédiée (cf. point « `extract_room_features` : wall classifier rate
-les fenêtres » plus haut).
-
----
-
-Dernière mise à jour : 2026-04-21 (D-142 : `remove_non_ortho` O(N×pixels) → O(somme_bbox) ; D-141 : skip des ouvertures sans `face` dans la chaîne match ; D-140 : `effective_mode = preprocessed` dès `has_json` ; D-139 : hotfix `/test_rooms.json` 404 + tolérance dict/array dans `fpLoadAndMatch` ; D-138 : seed de porte `label_x/y` → `seed_x/y` + round-trip rétabli ; D-137 : building_id / floor_id / north_angle_deg wirés end-to-end ; D-136 : `room_sync_helpers.js` source unique mutation 3 stores + UX fixes série B + bloc EDITOR_CONSTANTS ; D-135 : Rescan / Lock walls + flags `walls_user_edited` & `first_scan_done` + fix propagation amendments batch ; D-134 : canonAngle ; D-124 → D-133 : re-ancrage zones, perf Re-analyze, R-14 P1-P7, R-13 étape 3)
+Dernière mise à jour : 2026-04-27 (D-150 : snap search cm-only + cleanup 200 lignes code mort ; D-149 : race condition OCR scale ; D-148 : cartouches OCR rescan)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
