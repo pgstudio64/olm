@@ -905,7 +905,9 @@
     if (ingState.overlayVisible && ingState.planUrl) {
       els.push('<image href="' + ingState.planUrl +
         '" x="0" y="0" width="' + W + '" height="' + H +
-        '" opacity="' + ingState.opacity + '" />');
+        '" opacity="' + ingState.opacity +
+        '" image-rendering="pixelated"' +
+        ' style="image-rendering:pixelated;image-rendering:crisp-edges" />');
     }
 
     // Grid: 10cm dots + 1m lines (same style as pattern editor)
