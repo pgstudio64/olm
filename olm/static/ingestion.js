@@ -1944,8 +1944,13 @@
               newDoors = prevDr.filter(function (d) { return d.origin !== 'manual'; });
             }
 
-            var mergedW = newW.concat(manualW);
-            var mergedOpenings = newO.concat(manualO);
+            // D-152 : clamp identique au single-room Rescan (init_rvtool)
+            // pour que les fenêtres ne débordent pas au-delà des dims room.
+            var _clW = canon.width_cm || 0;
+            var _clD = canon.depth_cm || 0;
+            var _clamp = window.clampOpeningsToDims || function (a) { return a; };
+            var mergedW = _clamp(newW.concat(manualW), _clW, _clD);
+            var mergedOpenings = _clamp(newO.concat(manualO), _clW, _clD);
             var mergedDoors = newDoors.concat(preservedDoors);
 
             // D-124 : re-ancrage des zones avant mutation du bbox.
