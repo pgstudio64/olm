@@ -7,6 +7,37 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-153 · Seeds portes préservées dans canonicalisation + filtre min_opening_width_cm (2026-04-27)
+
+### Décision
+
+Deux corrections post-replay :
+
+1. `computeCanonicalReanalyzeResult` (ingestion.js) : `feat()` ne
+   recopiait pas `seed_x`/`seed_y` des portes. Après un re-analyze,
+   les seeds étaient perdues et invisibles dans le SVG. Fix : copie
+   conditionnelle dans le bloc `doorsCanon`.
+
+2. `extract_rooms_from_preprocessed` (extract.py) : filtre
+   `min_opening_width_cm` appliqué aux openings, symétrique au filtre
+   `min_door_width_cm` ajouté en D-148 pour les portes. Élimine les
+   micro-ouvertures du JSON producer.
+
+### Justification
+
+(1) Les seeds de portes sont nécessaires pour l'ancrage visuel et le
+rescan ciblé. Leur perte au passage canonique cassait le feedback UI.
+(2) Cohérence : si les micro-portes sont filtrées, les micro-ouvertures
+doivent l'être aussi (seuil : 24 cm, cf. `DetectionConfigCm`).
+
+### Impact
+
+- `olm/static/ingestion.js` : 2 lignes ajoutées dans `doorsCanon` map.
+- `olm/ingestion/extract.py` : 2 lignes ajoutées après le filtre porte.
+- Affecte le load preprocessed et le re-analyze.
+
+---
+
 ## D-152 · extract_rooms_from_preprocessed utilise drawing_scale_measured (2026-04-27)
 
 ### Décision

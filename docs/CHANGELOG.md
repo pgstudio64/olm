@@ -7,6 +7,11 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Fixed
 
+- **Seeds portes post-canonicalisation** : `computeCanonicalReanalyzeResult`
+  perdait `seed_x`/`seed_y` des portes après un re-analyze. Les seeds sont
+  maintenant préservées dans le mapping canonique.
+- **Filtre min_opening_width_cm** : les micro-ouvertures (< 24 cm) du JSON
+  preprocessed sont filtrées au chargement, symétriquement au filtre porte.
 - **Scale load preprocessed** : `extract_rooms_from_preprocessed` utilisait
   une médiane bbox/surface (0.95 sur big) au lieu de `drawing_scale_measured`
   (0.78). Les fenêtres apparaissaient ~22% plus larges au chargement

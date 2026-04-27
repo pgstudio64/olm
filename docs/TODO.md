@@ -32,11 +32,12 @@ sélectif en cours. État actuel : **`eb9897a`** (D-148 + D-149 + D-150).
 - *Couleurs vert/bleu pour améliorer détection preprocessed* (valider portes sur face verte, fenêtres sur face bleue)
 - ~~*Caches runtime px dans `test_comb.py`* (globales stale si scale non initialisé)~~ → D-151 fixe `_group_pixels` ; vérifier s'il reste d'autres default args stale
 - ~~*Régénérer `test_floorplan_preprocessed_big.json`*~~ → D-151 : 18/19 portes enrichies avec seed_x/seed_y (904 sans seed : arc non détectable)
-- *Filtre `min_opening_width_cm` au load preprocessed* (symétrique du filtre porte D-148)
+- ~~*Filtre `min_opening_width_cm` au load preprocessed*~~ → D-153
+- ~~*Seeds portes invisibles post-canonicalisation*~~ → D-153
 
 ---
 
-Dernière mise à jour : 2026-04-27 (D-151 : fix _group_pixels stale default + seeds big JSON)
+Dernière mise à jour : 2026-04-27 (D-153 : seeds portes + filtre min_opening_width_cm)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 
