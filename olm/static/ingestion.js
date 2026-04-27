@@ -136,10 +136,13 @@
       return feat(o);
     });
     var doorsCanon = (canon.doors || []).map(function (d) {
-      return feat(d, {
+      var extra = {
         hinge_side: d.hinge_side,
         opens_inward: d.opens_inward !== false,
-      });
+      };
+      if (typeof d.seed_x === 'number') extra.seed_x = d.seed_x;
+      if (typeof d.seed_y === 'number') extra.seed_y = d.seed_y;
+      return feat(d, extra);
     });
 
     // --- 2) Post-traitement points / rectangles relatifs au bbox ---

@@ -1423,13 +1423,14 @@ def extract_rooms_from_preprocessed(
         windows = [_enrich_px_cm(w) for w in p["windows_raw"] if isinstance(w, dict)]
         doors = [_enrich_px_cm(d) for d in doors]
 
-        # Filtre largeur minimale porte (élimine les micro-portes du JSON
-        # producer). Un seuil cm-aware → comportement strictement identique
-        # entre plans à différentes résolutions. Voir
-        # DetectionConfigCm.min_door_width_cm.
+        # Filtres largeur minimale (élimine les micro-ouvertures du JSON
+        # producer). Seuils cm-aware → comportement identique entre plans
+        # à différentes résolutions. Voir DetectionConfigCm.
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
         _min_door_width_cm = _ddc.min_door_width_cm
         doors = [d for d in doors if d.get("width_cm", 0) >= _min_door_width_cm]
+        _min_opening_width_cm = _ddc.min_opening_width_cm
+        openings = [o for o in openings if o.get("width_cm", 0) >= _min_opening_width_cm]
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
