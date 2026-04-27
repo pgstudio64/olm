@@ -1400,8 +1400,10 @@ def api_room_reanalyze_batch():
 
         # D-123 perf : binarisation + remove_non_ortho partagées sur toute
         # l'image. ~200-300 ms × N pièces → 1 seule invocation. Les masques
-        # room-locaux (portes + zones transparentes) sont zéro-outés
-        # localement par `extract_room_features` via `binary_precomputed`.
+        # room-locaux (zones transparentes) sont zéro-outés localement par
+        # `extract_room_features` via `binary_precomputed`.
+        # D-145 : on partage AUSSI la binaire pré-`remove_non_ortho`
+        # (`binary_raw_precomputed`) pour la détection d'arcs de porte.
         _gray_global = _np.asarray(img)
 
         # Mode OCR : reproduire l'erase cartouches du scan initial
@@ -1437,10 +1439,11 @@ def api_room_reanalyze_batch():
                     tuple(int(v) for v in bbox_px),
                     scale,
                     transparent_zones_cm=r.get("transparent_zones") or [],
-                    doors_px=[],
+                    doors_px=r.get("doors") or [],
                     door_width_cm=door_width_cm,
                     threshold=threshold,
                     binary_precomputed=_binary_global,
+                    binary_raw_precomputed=_binary_raw_global,
                     clip_to_bbox=clip_to_bbox,
                 )
                 results.append({"name": name, **features})

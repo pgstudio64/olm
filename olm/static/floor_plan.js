@@ -938,6 +938,13 @@
       var inReview = reviewSubtab && reviewSubtab.classList.contains("active");
       if (!inDesign && !inReview) return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      // D-146 : en mode Room amend (édition d'une pièce), désactiver la
+      // navigation flèches gauche/droite entre pièces — évite la perte
+      // silencieuse des modifications en cours quand l'user passe à la
+      // pièce suivante sans savoir qu'il sort du mode édition.
+      var inRoomAmend = !!(window.editorState &&
+        window.editorState.roomAmendMode);
+      if (inRoomAmend) return;
       if (e.key === "ArrowLeft") { e.preventDefault(); fpGo(-1); }
       else if (e.key === "ArrowRight") { e.preventDefault(); fpGo(1); }
       else if (inDesign && (e.key === "ArrowUp" || e.key === "ArrowDown")) {

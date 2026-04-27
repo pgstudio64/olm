@@ -56,6 +56,10 @@ let state = {
   isPanning: false,
   panStart: { x: 0, y: 0 },
 };
+// Exposé en lecture pour les autres modules (floor_plan.js consulte
+// roomAmendMode pour désactiver sa navigation flèches quand on édite
+// une pièce).
+window.editorState = state;
 
 function markDirty() {
   if (!state.dirty) {

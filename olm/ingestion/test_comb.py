@@ -1018,8 +1018,55 @@ def _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX):
     return groups
 
 
-def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
+def _seed_scan_range(x0, y0, x1, y1, face, face_seeds, door_width_px,
+                     tolerance, margin):
+    """Return the list of along-the-wall coordinates to scan for arc pixels.
+
+    Default (no seeds) = full face minus a margin at each end — the
+    original behavior used when door positions are unknown (OCR mode
+    or legacy preprocessed JSON without seed_x/seed_y).
+
+    When `face_seeds` is given (D-145 seed-anchored scan), restrict the
+    scan to the union of small windows of ± (door_width_px × (1+tol))
+    around each seed. Narrows detection to expected door zones and
+    avoids arc fragments elsewhere being mistaken for micro-doors.
+    """
+    if face in ("south", "north"):
+        full_start, full_end = x0 + margin, x1 - margin + 1
+    else:
+        full_start, full_end = y0 + margin, y1 - margin + 1
+
+    if not face_seeds:
+        return list(range(full_start, full_end))
+
+    radius = max(1, int(round(door_width_px * (1 + tolerance))))
+    coords: set[int] = set()
+    for s in face_seeds:
+        key = "seed_x" if face in ("south", "north") else "seed_y"
+        c = s.get(key)
+        if c is None:
+            continue
+        lo = max(full_start, int(c) - radius)
+        hi = min(full_end, int(c) + radius + 1)
+        coords.update(range(lo, hi))
+    return sorted(coords)
+
+
+def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
+                          face_seeds=None, binary_arcs=None):
     """Detect door swings on one face of the rectangle.
+
+    Args:
+        binary: cleaned binary (post `remove_non_ortho`). Used for the
+            wall-contact heuristic and for the far-hits distance check.
+        binary_arcs: (OPT, D-145) pre-`remove_non_ortho` binary used to
+            scan the arc pixels. Preserves the curved arc that `binary`
+            loses to `remove_non_ortho`. When None, falls back to
+            `binary` (legacy behavior — arcs may be missed).
+        face_seeds: (OPT, D-145) list of `{seed_x, seed_y}` anchoring
+            the arc scan near expected door positions. When provided,
+            the along-wall scan is restricted to small windows around
+            each seed; false positives outside those windows are avoided.
 
     Returns:
         (new_edge, door_infos) or (None, []).
@@ -1030,6 +1077,9 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
     max_dist = door_width_px * (1 + tolerance)
     m = WALL_MARGIN_PX
     face_len = (x1 - x0) if face in ("south", "north") else (y1 - y0)
+    scan = _seed_scan_range(x0, y0, x1, y1, face, face_seeds,
+                            door_width_px, tolerance, m)
+    arc_bin = binary_arcs if binary_arcs is not None else binary
 
     if face == "south":
         far = [h for h in hits if h[1] > y1 and min_dist <= h[1] - y1 <= max_dist]
@@ -1040,7 +1090,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         contact = sum(1 for x in range(x0, x1+1) if 0<=wy<binary.shape[0] and binary[wy,x])
         if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall - DOOR_PROBE_PX
-        pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
+        pixels = [x for x in scan if 0<=probe<arc_bin.shape[0] and arc_bin[probe,x]]
     elif face == "north":
         far = [h for h in hits if h[1] < y0 and min_dist <= y0 - h[1] <= max_dist]
         if not far: return None, []
@@ -1049,7 +1099,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         contact = sum(1 for x in range(x0, x1+1) if 0<=wy<binary.shape[0] and binary[wy,x])
         if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall + DOOR_PROBE_PX
-        pixels = [x for x in range(x0+m, x1-m+1) if 0<=probe<binary.shape[0] and binary[probe,x]]
+        pixels = [x for x in scan if 0<=probe<arc_bin.shape[0] and arc_bin[probe,x]]
     elif face == "east":
         far = [h for h in hits if h[0] > x1 and min_dist <= h[0] - x1 <= max_dist]
         if not far: return None, []
@@ -1058,7 +1108,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         contact = sum(1 for y in range(y0, y1+1) if 0<=wx<binary.shape[1] and binary[y,wx])
         if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall - DOOR_PROBE_PX
-        pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
+        pixels = [y for y in scan if 0<=probe<arc_bin.shape[1] and arc_bin[y,probe]]
     elif face == "west":
         far = [h for h in hits if h[0] < x0 and min_dist <= x0 - h[0] <= max_dist]
         if not far: return None, []
@@ -1067,7 +1117,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
         contact = sum(1 for y in range(y0, y1+1) if 0<=wx<binary.shape[1] and binary[y,wx])
         if n < MIN_DOOR_ARC_HITS or contact > face_len * 0.20: return None, []
         probe = wall + DOOR_PROBE_PX
-        pixels = [y for y in range(y0+m, y1-m+1) if 0<=probe<binary.shape[1] and binary[y,probe]]
+        pixels = [y for y in scan if 0<=probe<arc_bin.shape[1] and arc_bin[y,probe]]
     else:
         return None, []
 
@@ -1076,12 +1126,28 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
     size = (x1 - x0) if face in ("south", "north") else (y1 - y0)
     doors = []
     for g in groups:
-        offset = min(g) - origin
         width = max(g) - min(g) + 1
+        offset = min(g) - origin
         hinge_side = "left" if (offset < size / 2) else "right"
         # Hinge/free jamb positions (absolute px on the wall)
         jamb_hinge = min(g)
         jamb_free = max(g)
+        # D-145 : seed au centre de l'arc détecté, légèrement en retrait
+        # du mur (position du probe). Permet au prochain rescan de
+        # scoper la recherche autour de cette position.
+        mid = (jamb_hinge + jamb_free) / 2
+        if face == "south":
+            seed_x = int(round(mid))
+            seed_y = int(round(wall - DOOR_PROBE_PX))
+        elif face == "north":
+            seed_x = int(round(mid))
+            seed_y = int(round(wall + DOOR_PROBE_PX))
+        elif face == "east":
+            seed_x = int(round(wall - DOOR_PROBE_PX))
+            seed_y = int(round(mid))
+        else:  # west
+            seed_x = int(round(wall + DOOR_PROBE_PX))
+            seed_y = int(round(mid))
         # Door opens inward: the arc is inside the room (between seed
         # and the wall), so the rectangle had to expand outward to
         # reach the real wall behind the arc.
@@ -1094,14 +1160,27 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance):
             "jamb_hinge_px": jamb_hinge,
             "jamb_free_px": jamb_free,
             "wall_px": wall,
+            "seed_x": seed_x,
+            "seed_y": seed_y,
         })
 
     return wall, doors
 
 
 def expand_door_arcs(binary, rect, hits, cx, cy,
-                     door_width_px=23, tolerance=0.35):
+                     door_width_px=23, tolerance=0.35,
+                     door_seeds=None, binary_arcs=None):
     """Phase 3: detect door swings and expand the rectangle.
+
+    Args:
+        binary: cleaned binary used for contact / far-hit checks.
+        binary_arcs: (OPT, D-145) pre-`remove_non_ortho` binary used to
+            scan the arc pixels. Falls back to `binary` when not given.
+        door_seeds: (OPT, D-145) list of `{face, seed_x, seed_y}`. When
+            given, only faces that have at least one seed are scanned,
+            and the scan on each such face is restricted to the area
+            around its seeds (see `_seed_scan_range`). When None, every
+            face is scanned over its full width (OCR / legacy behavior).
 
     Returns:
         (expanded_rect, doors) where doors = list of door_info dicts.
@@ -1109,10 +1188,24 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
     x0, y0, x1, y1 = rect
     doors = []
 
+    seeds_by_face: dict[str, list] = {}
+    if door_seeds:
+        for s in door_seeds:
+            f = s.get("face")
+            if f in ("south", "north", "east", "west"):
+                seeds_by_face.setdefault(f, []).append(s)
+
     for face in ("south", "north", "east", "west"):
+        face_seeds = seeds_by_face.get(face)
+        # D-145 : when seeds are provided but none target this face, we
+        # trust that no door exists there and skip the scan — avoids
+        # false positives on faces where the user knows there are none.
+        if door_seeds is not None and not face_seeds:
+            continue
         new_edge, face_doors = _detect_doors_on_face(
             binary, (x0, y0, x1, y1), hits, face,
-            door_width_px, tolerance)
+            door_width_px, tolerance, face_seeds=face_seeds,
+            binary_arcs=binary_arcs)
         if new_edge is not None:
             if face == "south": y1 = new_edge
             elif face == "north": y0 = new_edge
@@ -1124,8 +1217,21 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
 
 
 def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
-                scale_cm_per_px: float | None = None):
-    """Detect a room rectangle: comb → hits → largest rectangle → door arc expansion."""
+                scale_cm_per_px: float | None = None,
+                binary_for_arcs=None, door_seeds=None):
+    """Detect a room rectangle: comb ��� hits → largest rectangle → door arc expansion.
+
+    Args:
+        binary: cleaned binary (post `remove_non_ortho`) — used for
+            comb ray-cast, rectangle fitting and `snap_through_white`.
+        binary_for_arcs: (OPT, D-145) pre-`remove_non_ortho` binary —
+            used by `expand_door_arcs` to preserve door arc pixels that
+            would be removed as non-orthogonal. Falls back to `binary`.
+        door_seeds: (OPT, D-145) list of `{face, seed_x, seed_y}` used
+            as anchors to scope the arc scan locally instead of
+            scanning the whole face. `expand_door_arcs` ignores faces
+            not listed when a non-None list is provided.
+    """
     if scale_cm_per_px is not None:
         _apply_detection_config(scale_cm_per_px)
     all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
@@ -1139,9 +1245,13 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     # Expand each edge outward through fully white lines
     rect = snap_through_white(binary, rect)
 
-    # Phase 3: door arc expansion
+    # Phase 3: door arc expansion — `binary` (cleaned) is used for the
+    # contact/far-hit heuristics; `binary_for_arcs` (pre-clean, D-145)
+    # is used only for the arc-pixel scan so arcs survive the scan.
     rect, doors = expand_door_arcs(binary, rect, all_hits, cx, cy,
-                                   door_width_px=door_width_px)
+                                   door_width_px=door_width_px,
+                                   door_seeds=door_seeds,
+                                   binary_arcs=binary_for_arcs)
 
     return rect, all_hits, doors
 

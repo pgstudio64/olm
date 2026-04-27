@@ -1499,12 +1499,13 @@ def extract_room_features(
     doors_px: list | None = None,
     door_width_cm: int = 90,
     threshold: int = 110,
-    step_px: int = 5,
+    classify_step_cm: float = 15.0,
     binary_precomputed: np.ndarray | None = None,
+    binary_raw_precomputed: np.ndarray | None = None,
     clip_to_bbox: bool = False,
     cartouche_bboxes_px: list | None = None,
 ) -> dict:
-    """Ré-analyse complète d'UNE pièce (D-104 / D-105).
+    """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145).
 
     Pipeline :
     1. Peint en blanc les zones transparentes utilisateur + des zones auto
@@ -1531,14 +1532,22 @@ def extract_room_features(
         door_width_cm: largeur (et profondeur) de la zone transparente
             auto aux portes. Défaut = `default_door_width_cm` = 90.
         threshold: seuil binarisation.
-        step_px: pas de classify_wall_direct.
-        binary_precomputed: (OPT, D-123 perf) binaire global (bool ndarray
-            H×W) déjà cleaned par `remove_non_ortho`. Si fourni, cet
-            appel saute binarisation + remove_non_ortho (gain dominant
-            en batch). Les masques room-locaux (doors + transparent_zones)
-            sont appliqués par zéro-out sur une copie locale — pas de
-            re-binarisation globale ni de re-clean. Voir
-            `/api/room/reanalyze_batch`.
+        classify_step_cm: pas de classify_wall_direct (converti en px au
+            runtime via `scale_cm_per_px`). Défaut 15 cm = aligné sur
+            `DetectionConfigCm.comb_step_cm`. Exprimé en cm pour rester
+            résolution-indépendant (principe D-108).
+        binary_precomputed: (OPT, D-123 perf) binaire globale **post**
+            `remove_non_ortho` (bool ndarray H×W). Utilisée pour le
+            ray-cast / classification des murs. Les masques
+            `transparent_zones_cm` sont appliqués par zéro-out sur une
+            copie locale.
+        binary_raw_precomputed: (OPT, D-145) binaire globale **pré**
+            `remove_non_ortho`. Utilisée pour la détection d'arcs de
+            porte (qui seraient supprimés par remove_non_ortho). Si
+            None et `binary_precomputed` est fourni, fallback sur la
+            binaire cleaned — dégrade la détection d'arc mais conserve
+            la compat. En pipeline classique (sans précomputé), calculée
+            localement.
         clip_to_bbox: (D-132) Si True, les pixels hors de `bbox_px` sont
             forcés solides (True) dans le binary local avant ray-cast.
             Les rays s'arrêtent donc aux bords du bbox utilisateur au lieu
@@ -1570,42 +1579,11 @@ def extract_room_features(
         image = image.convert("L")
     seed_x, seed_y = int(seed_px[0]), int(seed_px[1])
     px_per_cm = 1.0 / scale_cm_per_px
-    door_dw_px = max(1, int(round(door_width_cm * px_per_cm)))
 
-    # --- 1. Collecte des rectangles de masque (portes + zones transparentes) ---
-    # D-123 : rassemblés dans une liste unique, appliqués soit via PIL
-    # (pipeline classique) soit via zéro-out numpy (pipeline batch partagé).
+    # --- 1. Collecte des rectangles de masque (zones transparentes user) ---
+    # D-145 : `doors_px` ne crée plus de masques — ils supprimaient les
+    # arcs et rendaient la détection de portes impossible.
     mask_rects_px: list[tuple[int, int, int, int]] = []
-    auto_door_rects_px: list[list[int]] = []
-
-    if bbox_px and doors_px:
-        bx0, by0, bx1, by1 = bbox_px
-        for d in doors_px:
-            face = d.get("face")
-            off_px = d.get("offset_px", 0)
-            wpx = d.get("width_px", door_dw_px)
-            if face == "south":
-                cx = bx0 + off_px + wpx / 2
-                rect = (cx - door_dw_px / 2, by1 - door_dw_px,
-                        cx + door_dw_px / 2, by1)
-            elif face == "north":
-                cx = bx0 + off_px + wpx / 2
-                rect = (cx - door_dw_px / 2, by0,
-                        cx + door_dw_px / 2, by0 + door_dw_px)
-            elif face == "west":
-                cy = by0 + off_px + wpx / 2
-                rect = (bx0, cy - door_dw_px / 2,
-                        bx0 + door_dw_px, cy + door_dw_px / 2)
-            elif face == "east":
-                cy = by0 + off_px + wpx / 2
-                rect = (bx1 - door_dw_px, cy - door_dw_px / 2,
-                        bx1, cy + door_dw_px / 2)
-            else:
-                continue
-            mask_rects_px.append(rect)
-            auto_door_rects_px.append([
-                int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])
-            ])
 
     if cartouche_bboxes_px:
         for cb in cartouche_bboxes_px:
@@ -1626,17 +1604,21 @@ def extract_room_features(
                     (zx_abs, zy_abs, zx_abs + zw, zy_abs + zh))
 
     # --- 2. Binarisation ---
+    # D-145 : on distingue deux binaires.
+    #   binary            → cleaned par remove_non_ortho ; utilisé pour
+    #                       le comb (détection bbox).
+    #   binary_for_arcs   → pré-clean ; utilisé par `expand_door_arcs`
+    #                       pour le profil de distances avec arcs préservés.
     if binary_precomputed is not None:
-        # D-123 : base binaire déjà cleaned partagée → copie + zéro-out local.
-        # Les masques sont forcés à False dans la copie room-scoped ; c'est
-        # équivalent fonctionnellement à drawr.rectangle(fill=255) avant
-        # binarisation + remove_non_ortho, sauf pour un cas-limite : un
-        # composant non-orthogonal partiellement recouvert par un masque.
-        # Dans le pipeline classique, le masque coupe le composant avant
-        # remove_non_ortho et le reste peut devenir orthogonal ; ici, si
-        # le composant était non-ortho dans la base, il a déjà été retiré
-        # globalement. Diff négligeable sur des plans réels (masques petits).
+        # Pipeline batch D-123 — binaire cleaned partagée entre pièces.
         binary = binary_precomputed.copy()
+        if binary_raw_precomputed is not None:
+            binary_for_arcs = binary_raw_precomputed.copy()
+        else:
+            # Pas de raw partagé fourni → les arcs ne seront pas dans
+            # `binary` (déjà cleaned). Détection d'arc dégradée, mais on
+            # maintient le contrat pour les callers pré-D-145.
+            binary_for_arcs = binary
         if mask_rects_px:
             H, W = binary.shape
             for (x0, y0, x1, y1) in mask_rects_px:
@@ -1646,16 +1628,18 @@ def extract_room_features(
                 iy1 = min(H, int(round(y1)))
                 if ix1 > ix0 and iy1 > iy0:
                     binary[iy0:iy1, ix0:ix1] = False
+                    if binary_for_arcs is not binary:
+                        binary_for_arcs[iy0:iy1, ix0:ix1] = False
         binary_raw = binary
     else:
-        # Pipeline classique : copie PIL + drawing + binarisation + cleanup.
+        # Pipeline classique : masquage PIL + binarisation + cleanup.
         working = image.copy()
         draw = _PILDraw.Draw(working)
         for rect in mask_rects_px:
             draw.rectangle(rect, fill=255)
         gray = np.asarray(working)
-        binary_raw = gray < threshold
-        binary = remove_non_ortho(binary_raw)
+        binary_for_arcs = gray < threshold
+        binary = remove_non_ortho(binary_for_arcs)
         binary_raw = binary
 
     # --- D-132 : clip_to_bbox — force solides tous les pixels hors bbox_px
@@ -1679,19 +1663,43 @@ def extract_room_features(
     # --- 3. Detection du bbox via l'algo comb (test_comb.detect_room,
     # même algo que l'import OCR — éprouvé et plus robuste que
     # detect_room_three_phase).
+    # D-145 : on passe binary_for_arcs et door_seeds pour que
+    # expand_door_arcs utilise la binaire pré-clean et scope le scan
+    # autour des seeds de portes connus.
     from olm.ingestion.test_comb import detect_room as _comb_detect_room
     px_per_cm_f = 1.0 / scale_cm_per_px
     step_cm = 10
     comb_step_px = max(1, int(round(step_cm * px_per_cm_f)))
     door_px = max(1, int(round(door_width_cm * px_per_cm_f)))
+
+    # Construire door_seeds à partir de doors_px pour scoper le scan
+    # d'arcs de portes (D-145). Seules les entrées avec seed_x/seed_y
+    # sont utilisées ; les autres sont ignorées.
+    door_seeds: list[dict] | None = None
+    if doors_px:
+        ds = []
+        for d in doors_px:
+            f = d.get("face")
+            sx = d.get("seed_x")
+            sy = d.get("seed_y")
+            if f and sx is not None and sy is not None:
+                ds.append({"face": f, "seed_x": int(sx), "seed_y": int(sy)})
+        if ds:
+            door_seeds = ds
+
     bbox_new, all_hits, _doors_detected = _comb_detect_room(
         binary, seed_x, seed_y, comb_step_px,
         door_width_px=door_px, other_seeds=None,
         scale_cm_per_px=scale_cm_per_px,
+        binary_for_arcs=binary_for_arcs,
+        door_seeds=door_seeds,
     )
     nx0, ny0, nx1, ny1 = bbox_new
 
     # --- Classification murs sur le bbox détecté ---
+    # step_px dérivé de classify_step_cm au scale courant (D-108 : tous
+    # les paramètres de détection en cm, convertis à l'exécution).
+    step_px = max(1, int(round(classify_step_cm * px_per_cm_f)))
     walls: dict[str, list] = {}
     for face in ("north", "south", "east", "west"):
         segs, _ = _classify_wall_direct(
@@ -1786,5 +1794,7 @@ def extract_room_features(
         "openings": openings,
         "doors": doors_out,
         "hits": hits,
-        "auto_door_masks_px": auto_door_rects_px,
+        # D-145 : plus de masquage auto des portes → liste vide. Clé
+        # conservée pour compat frontend (overlay debug dans editor.js).
+        "auto_door_masks_px": [],
     }

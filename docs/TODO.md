@@ -7,10 +7,10 @@ sélectif en cours. État actuel : **`eb9897a`** (D-148 + D-149 + D-150).
 
 | Unité | Statut | Notes |
 |---|---|---|
-| D-143 (classify_step_cm) | **À rejouer** | `git cherry-pick 72cd9a6` — pas dans le code actuel |
+| D-143 (classify_step_cm) | **Rejoué** | `classify_step_cm=15.0` + `image-rendering: pixelated` |
 | D-144 (pxScale overlays) | **Déjà appliqué** | pxScale présent dans ingestion.js |
-| D-145 (binary_for_arcs + seeds anchoring) | **À rejouer** | `binary_for_arcs`, `binary_raw_precomputed`, `_seed_scan_range` absents |
-| D-146 (flèches désactivées Room amend) | **À rejouer** | hunk floor_plan.js |
+| D-145 (binary_for_arcs + seeds anchoring) | **Rejoué** | dual binary, `_seed_scan_range`, seed_x/seed_y, batch raw |
+| D-146 (flèches désactivées Room amend) | **Rejoué** | `window.editorState` + guard floor_plan.js |
 | D-147 (R²-fit detection) | **NE PAS rejouer** | cassé — reconcevoir après stabilisation |
 | D-148 (cartouches OCR rescan) | **Commité** | eb9897a |
 | D-149 (cm-only frontend) | **Commité** | eb9897a |

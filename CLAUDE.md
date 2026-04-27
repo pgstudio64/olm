@@ -243,6 +243,10 @@ Le projet OLM est issu de AI-OLO (`~/AI-OLO/`). Les sous-projets R&D restent dan
 
 ---
 
+## Alerte contexte à 70 %
+
+Prévenir l'utilisateur dès que la fenêtre de contexte atteint ~70 % d'utilisation. Lui proposer de faire un /clear propre (checklist ci-dessous) avant de risquer la compression automatique.
+
 ## Checklist pré-clear (avant chaque /clear ou fin de session)
 
 Avant de perdre le contexte de conversation, vérifier systématiquement :

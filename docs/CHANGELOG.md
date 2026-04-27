@@ -20,6 +20,18 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Nettoyage : ~200 lignes de code mort supprimées (fonctions et
   constantes px inutilisées).
 
+### Replay D-143/D-145/D-146 (2026-04-27)
+
+- **D-143** : `classify_step_cm` scale-aware (ex-`step_px=5` hardcodé)
+  + `image-rendering: pixelated` sur l'overlay SVG du plan.
+- **D-145** : dual binary (`binary_for_arcs` pré-`remove_non_ortho`)
+  pour préserver les arcs de porte ; `_seed_scan_range` pour scoper
+  la détection d'arc autour des seeds ; `seed_x`/`seed_y` émis dans
+  la sortie porte ; `auto_door_masks_px` supprimé (liste vide) ;
+  batch partage `binary_raw_precomputed`.
+- **D-146** : flèches ←/→ désactivées en Room amend mode
+  (`window.editorState` exposé, guard dans `floor_plan.js`).
+
 ---
 
 ## [v0.4.5] — 2026-04-21
