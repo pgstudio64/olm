@@ -7,6 +7,11 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Fixed
 
+- **Scale load preprocessed** : `extract_rooms_from_preprocessed` utilisait
+  une médiane bbox/surface (0.95 sur big) au lieu de `drawing_scale_measured`
+  (0.78). Les fenêtres apparaissaient ~22% plus larges au chargement
+  qu'après rescan. Fix : `drawing_scale_measured` prioritaire dans la
+  chaîne de scale.
 - **Door arc grouping** : `_group_pixels` utilisait un default argument
   capturé à l'import (`DOOR_GROUP_GAP_PX=25`) au lieu de la valeur
   mise à jour par `_apply_detection_config`. Sur les plans à scale

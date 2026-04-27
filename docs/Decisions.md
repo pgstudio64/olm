@@ -7,6 +7,39 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-152 · extract_rooms_from_preprocessed utilise drawing_scale_measured (2026-04-27)
+
+### Décision
+
+`extract_rooms_from_preprocessed` utilisait une échelle déduite par médiane
+des rapports surface/bbox (0.9519 sur big plan), alors que
+`drawing_scale_measured` (0.7773) était disponible dans le JSON et utilisé
+par le frontend. Les `offset_cm`/`width_cm` des fenêtres/ouvertures/portes
+étaient donc enrichis avec un scale faux de 22%, produisant un rendu
+incohérent entre le chargement initial et un rescan.
+
+Fix : `drawing_scale_measured` est maintenant lu et injecté dans la chaîne
+de priorités : `_override_cm_per_px` > `drawing_scale_measured` > médiane >
+fallback 0.5.
+
+### Justification
+
+Le rendu utilise `offset_cm`/`width_cm` (pas les px) pour positionner les
+fenêtres à l'écran. Un écart de 22% dans le scale source rend les fenêtres
+visiblement plus larges au chargement qu'après un rescan. La médiane est un
+estimateur brut, non nécessaire quand un scale mesuré est explicitement
+disponible.
+
+### Impact
+
+- `olm/ingestion/extract.py` : 7 lignes ajoutées dans
+  `extract_rooms_from_preprocessed` (parsing de `drawing_scale_measured`).
+- Affecte le load initial de TOUS les plans preprocessed ayant un
+  `drawing_scale_measured` dans le JSON.
+- Comportement inchangé si le champ est absent (fallback médiane conservé).
+
+---
+
 ## D-151 · Fix _group_pixels stale default + enrichissement seeds big JSON (2026-04-27)
 
 ### Décision
