@@ -1121,7 +1121,7 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
     else:
         return None, []
 
-    groups = _group_pixels(pixels)
+    groups = _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX)
     origin = x0 if face in ("south", "north") else y0
     size = (x1 - x0) if face in ("south", "north") else (y1 - y0)
     doors = []

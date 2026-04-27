@@ -7,10 +7,20 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Fixed
 
+- **Door arc grouping** : `_group_pixels` utilisait un default argument
+  capturé à l'import (`DOOR_GROUP_GAP_PX=25`) au lieu de la valeur
+  mise à jour par `_apply_detection_config`. Sur les plans à scale
+  ≠ 0.5 cm/px, les arcs de porte étaient fragmentés en micro-portes.
+  Fix : passage explicite de la globale au call site.
 - Wall classifier : détection des fenêtres en mode preprocessed sur
   plans haute résolution (dernier seuil px hardcodé migré en cm).
 - Mode OCR : l'échelle par défaut (drawing_scale_text du config) est
   maintenant correctement pré-remplie dans le formulaire.
+
+### Data
+
+- `test_floorplan_preprocessed_big.json` : 18/19 portes enrichies
+  avec `seed_x`/`seed_y` (détection d'arc post-fix).
 
 ### Changed
 

@@ -7,6 +7,36 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-151 · Fix _group_pixels stale default + enrichissement seeds big JSON (2026-04-27)
+
+### Décision
+
+`_group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX)` capturait la valeur
+initiale (25) à la définition, ignorant la mise à jour par
+`_apply_detection_config`. Fix : passage explicite de la globale au
+call site (`_detect_doors_on_face:1124`).
+
+Enrichissement : détection d'arcs lancée sur les 30 pièces du big plan.
+18/19 portes enrichies avec `seed_x`/`seed_y`. Seule 904 sans seed
+(arc non détectable dans le -SD).
+
+### Justification
+
+Sur les plans à scale ≠ 0.5 cm/px (ex. big à 0.7773), `max_gap=25`
+fragmentait les arcs en micro-groupes (pièce 915 : 2 portes de 8 et
+7 px au lieu d'une de 103 px). Après fix, le gap correct (~97 px)
+regroupe correctement l'arc.
+
+### Impact
+
+- `olm/ingestion/test_comb.py` : 1 ligne modifiée.
+- `project/plans/test_floorplan_preprocessed_big.json` : 18 portes
+  enrichies avec seed_x/seed_y.
+- Régression potentielle : aucune (passage explicite d'une valeur
+  déjà calculée correctement par `_apply_detection_config`).
+
+---
+
 ## D-150 · Dernier seuil px hardcodé + nettoyage code mort extract.py + fix race condition scale OCR (2026-04-27)
 
 ### Décision
