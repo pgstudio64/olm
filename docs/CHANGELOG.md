@@ -5,6 +5,8 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.4.6] — 2026-04-29
+
 ### Fixed
 
 - **Scale OCR auto-calibré** : le scale est maintenant calculé à partir des
