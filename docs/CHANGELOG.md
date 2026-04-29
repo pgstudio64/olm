@@ -5,6 +5,14 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **D-157 Import preprocessed sans bbox : détection complète** : quand le JSON
+  preprocessed v3 ne contient pas de `bbox_px`, l'import exécute désormais le
+  pipeline complet `extract_room_features` (ray-cast + fenêtres + ouvertures +
+  portes) au lieu de créer un bbox carré fallback vide. Comportement aligné sur
+  le pipeline OCR.
+
 ## [v0.4.7] — 2026-04-29
 
 ### Fixed

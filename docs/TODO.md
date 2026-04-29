@@ -31,6 +31,12 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - ~~*Fenêtres sud/est invisibles en Floor view*~~ → D-156 : bug JS string concat dans `drawWallFeature` (`parseFloat`)
 - ~~*Preprocessed : aucune fenêtre après rescan*~~ → D-156 : `color_img` chargé depuis -SD, pas depuis overlay
 - ~~*Fausses fenêtres sur murs intérieurs preprocessed*~~ → D-156 : filtre extérieur bleu + suppression fallback full-face
+- ~~*Import preprocessed sans bbox : pièces carrées sans features*~~ → D-157 : `extract_room_features` complet à l'import (ray-cast + fenêtres + ouvertures + portes)
+
+**Défauts production restants (2026-04-29)** :
+- *D2 — Door seeds invisibles en Floor* : les seeds de portes ne sont pas affichés quand les rays sont activés en vue Floor
+- *D4 — Portes mal identifiées / pièce réduite côté sud* : détection de portes imprécise, bbox tronqué au sud sur certaines pièces
+- *D8 — Rays invisibles en Floor après Rescan All* : après un Rescan All en vue Floor, les rays ne s'affichent pas (mais visibles après rescan individuel en Room)
 
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
@@ -39,7 +45,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 
 ---
 
-Dernière mise à jour : 2026-04-29 (D-156 : filtrage fenêtres extérieur + fix rendu sud/est)
+Dernière mise à jour : 2026-04-29 (D-157 : import preprocessed détection complète)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 

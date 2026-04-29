@@ -1355,35 +1355,62 @@ def extract_rooms_from_preprocessed(
             "l'échelle — fallback cm_per_px=0.5 (ray-cast requis pour affiner)"
         )
 
+    # D-157 : analyse complète à l'import pour les pièces sans bbox_px.
+    # Pipeline identique au Rescan : ray-cast (bbox) + classification
+    # murs (fenêtres, ouvertures, portes). L'image -SD est chargée et
+    # binarisée une seule fois (partagée entre toutes les pièces).
+    needs_detect = [p for p in parsed_rooms if not p["bbox_px_opt"]]
+    _import_features: dict[str, dict] = {}
+    if needs_detect:
+        from PIL import Image as _PILImage
+        from olm.ingestion.test_comb import _apply_detection_config
+        _apply_detection_config(scale_cm_per_px)
+        _img_sd = _PILImage.open(enhanced_png_path).convert("L")
+        _gray = np.asarray(_img_sd)
+        _bin_raw = _gray < 110
+        _bin = remove_non_ortho(_bin_raw)
+        # Image couleur pour filtrage fenêtres/extérieur (D-156).
+        _color_img = _PILImage.open(enhanced_png_path)
+        _all_seeds = [(p["seed_x"], p["seed_y"]) for p in parsed_rooms]
+        for p in needs_detect:
+            sx, sy = p["seed_x"], p["seed_y"]
+            _other = [s for s in _all_seeds if s != (sx, sy)]
+            features = extract_room_features(
+                _img_sd, (sx, sy), None, scale_cm_per_px,
+                threshold=110,
+                binary_precomputed=_bin,
+                binary_raw_precomputed=_bin_raw,
+                color_image=_color_img,
+                other_seeds=_other or None,
+            )
+            p["bbox_px_opt"] = tuple(features["bbox_px"])
+            _import_features[p["room_id"]] = features
+            logger.info(
+                "Room %s : import detect → bbox %s, %d win, %d open, %d door",
+                p["room_id"], features["bbox_px"],
+                len(features.get("windows", [])),
+                len(features.get("openings", [])),
+                len(features.get("doors", [])),
+            )
+
     result = []
     for p in parsed_rooms:
         seed_x, seed_y = p["seed_x"], p["seed_y"]
         surface_m2 = p["surface_m2"]
-        area_cm2 = surface_m2 * 10_000.0
 
-        # Si bbox_px fourni dans le JSON → skip ray-cast, utiliser tel quel.
-        # Sinon → bbox dégénérée (seed seul), le ray-cast s'exécutera en aval.
-        if p["bbox_px_opt"]:
-            bbox_px = p["bbox_px_opt"]
+        bbox_px = p["bbox_px_opt"]
+        if bbox_px:
             w_px = max(1, bbox_px[2] - bbox_px[0])
             h_px = max(1, bbox_px[3] - bbox_px[1])
             width_cm = int(round(w_px * scale_cm_per_px))
             depth_cm = int(round(h_px * scale_cm_per_px))
         else:
-            # Dimensions estimées : pièce carrée depuis la surface
+            # Fallback ultime (ne devrait plus arriver grâce au ray-cast).
+            area_cm2 = surface_m2 * 10_000.0
             side_cm = math.sqrt(max(area_cm2, 1.0))
             width_cm = int(round(side_cm))
             depth_cm = int(round(side_cm))
-            if scale_cm_per_px > 0 and side_cm > 0:
-                half_px = (side_cm / scale_cm_per_px) / 2.0
-                bbox_px = (
-                    int(seed_x - half_px),
-                    int(seed_y - half_px),
-                    int(seed_x + half_px),
-                    int(seed_y + half_px),
-                )
-            else:
-                bbox_px = (seed_x, seed_y, seed_x, seed_y)
+            bbox_px = (seed_x, seed_y, seed_x, seed_y)
 
         # Doors : transfère tels quels s'ils ont déjà les champs enrichis (face,
         # offset_px, width_px, etc.), sinon laisse la structure minimale Input.
@@ -1431,6 +1458,15 @@ def extract_rooms_from_preprocessed(
         doors = [d for d in doors if d.get("width_cm", 0) >= _min_door_width_cm]
         _min_opening_width_cm = _ddc.min_opening_width_cm
         openings = [o for o in openings if o.get("width_cm", 0) >= _min_opening_width_cm]
+
+        # D-157 : override par les features détectées à l'import.
+        # extract_room_features retourne windows/openings/doors déjà enrichis
+        # (offset_cm, width_cm) et filtrés — on les substitue directement.
+        _feat = _import_features.get(p["room_id"])
+        if _feat:
+            windows = _feat.get("windows", [])
+            openings = _feat.get("openings", [])
+            doors = _feat.get("doors", [])
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
@@ -1520,6 +1556,7 @@ def extract_room_features(
     cartouche_bboxes_px: list | None = None,
     color_image: "Image.Image | None" = None,
     exterior_rgb: tuple = (135, 206, 235),
+    other_seeds: list[tuple[int, int]] | None = None,
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145 / D-156).
 
@@ -1592,6 +1629,9 @@ def extract_room_features(
         exterior_rgb: couleur RGB de la zone extérieure (défaut sky blue
             ``(135, 206, 235)``). Configurable via
             ``ingestion.preprocessed_exterior_rgb`` dans config.json.
+        other_seeds: (OPT) liste de (x, y) des seeds des autres pièces.
+            Passée à `detect_room` pour empêcher les rays de traverser
+            les pièces voisines. Utilisé en pipeline batch. Default None.
 
     Returns:
         {
@@ -1718,7 +1758,7 @@ def extract_room_features(
 
     bbox_new, all_hits, _doors_detected = _comb_detect_room(
         binary, seed_x, seed_y, comb_step_px,
-        door_width_px=door_px, other_seeds=None,
+        door_width_px=door_px, other_seeds=other_seeds,
         scale_cm_per_px=scale_cm_per_px,
         binary_for_arcs=binary_for_arcs,
         door_seeds=door_seeds,

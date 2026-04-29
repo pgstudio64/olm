@@ -7,6 +7,24 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-157 · Import preprocessed : détection complète sans bbox_px (2026-04-29)
+
+### Décision
+
+Quand un JSON preprocessed v3 ne contient pas de `bbox_px` pour une pièce, l'import (`extract_rooms_from_preprocessed`) exécute désormais le pipeline complet `extract_room_features` (ray-cast bbox + classification murs → fenêtres, ouvertures, portes) au lieu de créer un bbox carré fallback vide.
+
+### Justification
+
+En production, les JSON preprocessed n'ont pas de `bbox_px` (champ Save-only). L'ancien comportement créait des bbox carrés `sqrt(surface)` sans features — les pièces apparaissaient sans fenêtres ni portes. L'utilisateur devait faire un Rescan All pour obtenir des résultats exploitables. Le comportement attendu est que l'import produise des résultats complets, comme le fait le pipeline OCR.
+
+### Impact
+
+- `olm/ingestion/extract.py` : bloc D-157 (lignes ~1358-1394) appelle `extract_room_features` pour chaque pièce sans bbox, avec `other_seeds` des voisins. Les features détectées (windows, openings, doors) sont injectées dans le room_dict (lignes ~1462-1469), remplaçant les champs `_raw` vides du JSON.
+- Image `-SD` binarisée une seule fois (partagée entre toutes les pièces, comme le batch rescan D-123).
+- Aucune régression sur les JSON avec bbox existants (le bloc est skip si toutes les pièces ont déjà un bbox).
+
+---
+
 ## D-156 · Filtrage fenêtres par zone extérieure + fix rendu sud/est (2026-04-29)
 
 ### Décision
