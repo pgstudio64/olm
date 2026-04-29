@@ -80,6 +80,25 @@ def _get_detection_overrides() -> dict | None:
         return None
 
 
+_DEFAULT_EXTERIOR_RGB = (135, 206, 235)
+
+
+def _get_exterior_rgb() -> tuple:
+    """Read preprocessed exterior RGB from config.json (D-156)."""
+    _root = os.path.dirname(BASE_DIR)
+    _config_path = os.path.join(_root, "project", "config.json")
+    if os.path.exists(_config_path):
+        try:
+            with open(_config_path, encoding="utf-8") as _f:
+                rgb = json.load(_f).get("ingestion", {}).get(
+                    "preprocessed_exterior_rgb")
+            if rgb and len(rgb) == 3:
+                return tuple(int(v) for v in rgb)
+        except Exception:
+            pass
+    return _DEFAULT_EXTERIOR_RGB
+
+
 @app.route("/static/<path:filename>")
 def serve_static(filename: str):
     """Serve static files from the static/ folder."""
@@ -799,6 +818,11 @@ def api_import_preprocessed():
             "image_size": [page_w, page_h],
             "image_path": overlay_path,
             "scale_cm_per_px": scale_cm_per_px,
+            # D-156 : le frontend utilise drawing_scale_text pour pré-remplir
+            # le champ scale (évite le back-calcul erroné 1:157 au lieu de
+            # 1:300 quand measured=1.33 cm/px et DPI présumé=300).
+            "drawing_scale_text": str(
+                json_data.get("drawing_scale_text", "")),
             "first_scan_done": bool(json_data.get("first_scan_done", False)),
             "building_id":  str(json_data.get("building_id", "")),
             "floor_id":     str(json_data.get("floor_id", "")),
@@ -898,9 +922,12 @@ def api_spacing():
 
 @app.route("/api/config", methods=["GET"])
 def api_config_get():
-    """Return the full configuration."""
+    """Return the full configuration (+ OLM version)."""
     from olm.core import app_config
-    return jsonify(app_config._cfg)
+    from olm import __version__
+    cfg = dict(app_config._cfg)
+    cfg["olm_version"] = __version__
+    return jsonify(cfg)
 
 
 @app.route("/api/config", methods=["POST"])
@@ -1208,15 +1235,24 @@ def api_room_reanalyze():
         from olm.ingestion.extract import extract_room_features
         img = _PILImage.open(plan_path).convert("L")
 
+        # D-156 : image couleur pour filtrage fenêtres/extérieur.
+        # En mode preprocessed, le -SD (plan_path) porte les zones colorées
+        # (bleu extérieur, vert corridor). L'overlay est le plan officiel
+        # (souvent grayscale). En OCR le plan_path n'a pas de zones colorées.
+        color_img = None
+        if mode != "ocr" and plan_path and os.path.exists(plan_path):
+            color_img = _PILImage.open(plan_path)
+
+        # D-156 : appliquer la config de détection quel que soit le mode.
+        from olm.ingestion.test_comb import _apply_detection_config
+        _apply_detection_config(scale, _get_detection_overrides())
+
         # Mode OCR : reproduire l'erase cartouches du scan initial
         # (test_comb.extract_all_rooms). Sans ça, les seeds tombent sur du
         # texte solide et les rays butent immédiatement.
         cart_bboxes_px: list = []
         if mode == "ocr":
-            from olm.ingestion.test_comb import (
-                find_seeds_by_ocr, _apply_detection_config,
-            )
-            _apply_detection_config(scale, _get_detection_overrides())
+            from olm.ingestion.test_comb import find_seeds_by_ocr
             _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
 
         result = extract_room_features(
@@ -1230,6 +1266,8 @@ def api_room_reanalyze():
             threshold=threshold,
             clip_to_bbox=clip_to_bbox,
             cartouche_bboxes_px=cart_bboxes_px,
+            color_image=color_img,
+            exterior_rgb=_get_exterior_rgb(),
         )
         return jsonify(result)
     except Exception as e:
@@ -1429,6 +1467,15 @@ def api_room_reanalyze_batch():
         # Chargement unique : l'image est partagée entre toutes les pièces.
         img = _PILImage.open(plan_path).convert("L")
 
+        # D-156 : image couleur overlay pour filtrage fenêtres/extérieur.
+        # Uniquement en mode preprocessed (cf. commentaire single reanalyze).
+        # D-156 : image couleur pour filtrage fenêtres/extérieur.
+        # En mode preprocessed, le -SD (plan_path) porte les zones colorées
+        # (bleu extérieur, vert corridor). En OCR pas de zones colorées.
+        color_img = None
+        if mode != "ocr" and plan_path and os.path.exists(plan_path):
+            color_img = _PILImage.open(plan_path)
+
         # D-123 perf : binarisation + remove_non_ortho partagées sur toute
         # l'image. ~200-300 ms × N pièces → 1 seule invocation. Les masques
         # room-locaux (zones transparentes) sont zéro-outés localement par
@@ -1437,6 +1484,12 @@ def api_room_reanalyze_batch():
         # (`binary_raw_precomputed`) pour la détection d'arcs de porte.
         _gray_global = _np.asarray(img)
 
+        # D-156 : appliquer la config de détection quel que soit le mode.
+        # Les constantes (ray margins, seuils portes…) doivent être
+        # ajustées au scale du plan avant tout ray-cast.
+        from olm.ingestion.test_comb import _apply_detection_config
+        _apply_detection_config(scale, _get_detection_overrides())
+
         # Mode OCR : reproduire l'erase cartouches du scan initial
         # (test_comb.extract_all_rooms) AVANT la binarisation globale.
         # Sans ça, les cartouches survivent comme paquets de pixels solides
@@ -1444,9 +1497,7 @@ def api_room_reanalyze_batch():
         if mode == "ocr":
             from olm.ingestion.test_comb import (
                 find_seeds_by_ocr, erase_cartouches,
-                _apply_detection_config,
             )
-            _apply_detection_config(scale, _get_detection_overrides())
             _seeds, _cart_bboxes_px = find_seeds_by_ocr(img)
             _gray_global = erase_cartouches(_gray_global, _cart_bboxes_px)
 
@@ -1478,6 +1529,8 @@ def api_room_reanalyze_batch():
                     binary_precomputed=_binary_global,
                     binary_raw_precomputed=_binary_raw_global,
                     clip_to_bbox=clip_to_bbox,
+                    color_image=color_img,
+                    exterior_rgb=_get_exterior_rgb(),
                 )
                 results.append({"name": name, **features})
             except Exception as e:

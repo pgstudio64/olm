@@ -418,6 +418,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               plan_path: ingst.planPathEnhanced,
+              overlay_path: ingst.planPath || '',
               seed_px: seedPx,
               bbox_px: effBbox,
               scale_cm_per_px: ingst.scale,
