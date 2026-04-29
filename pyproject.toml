@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "olm"
-version = "0.4.0"
+version = "0.4.7"
 description = "Office Layout Matching — local tool for matching desk layout patterns to floor plan rooms"
 readme = "README.md"
 license = "MIT"

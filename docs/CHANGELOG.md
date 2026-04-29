@@ -5,6 +5,8 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.4.7] — 2026-04-29
+
 ### Fixed
 
 - **D-157 Import preprocessed sans bbox : détection complète** : quand le JSON
@@ -12,11 +14,6 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   pipeline complet `extract_room_features` (ray-cast + fenêtres + ouvertures +
   portes) au lieu de créer un bbox carré fallback vide. Comportement aligné sur
   le pipeline OCR.
-
-## [v0.4.7] — 2026-04-29
-
-### Fixed
-
 - **D-156 Fenêtres sud/est invisibles en Floor** : `drawWallFeature` recevait
   `sFeatureOff` comme string (`.toFixed(2)`). L'opérateur `+` faisait une
   concaténation JS (`782 + "3.00"` = `"7823.00"`). Les fenêtres sud et est
