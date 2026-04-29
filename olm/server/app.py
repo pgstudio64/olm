@@ -413,10 +413,10 @@ def api_plans():
     for stem, info in sorted(stems.items()):
         if not info["has_png"]:
             continue
-        # D-140 : `effective_mode = preprocessed` dès que le JSON existe.
-        # L'heuristique `json_mtime > png_mtime` était fragile (copie entre
-        # machines, git checkout, timezone) et déclenchait à tort le mode
-        # OCR quand les fichiers étaient copiés tels quels en prod.
+        # effective_mode : "preprocessed" dès que le JSON existe (pour
+        # le chargement), "ocr" sinon. Le mode source (ocr/preprocessed)
+        # pour le rescan est lu depuis le champ "mode" du JSON par
+        # /api/import/preprocessed et propagé au frontend (D-154).
         effective_mode = "preprocessed" if info["has_json"] else "ocr"
         plans.append({
             "id": stem,
@@ -765,7 +765,7 @@ def api_import_preprocessed():
 
         return jsonify({
             "rooms": rooms,
-            "mode": "preprocessed",
+            "mode": json_data.get("mode", "preprocessed"),
             "overlay_path": overlay_path,
             "enhanced_path": enhanced_path,
             "image_size": [page_w, page_h],
@@ -1185,7 +1185,10 @@ def api_room_reanalyze():
         # texte solide et les rays butent immédiatement.
         cart_bboxes_px: list = []
         if mode == "ocr":
-            from olm.ingestion.test_comb import find_seeds_by_ocr
+            from olm.ingestion.test_comb import (
+                find_seeds_by_ocr, _apply_detection_config,
+            )
+            _apply_detection_config(scale)
             _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
 
         result = extract_room_features(
@@ -1413,7 +1416,9 @@ def api_room_reanalyze_batch():
         if mode == "ocr":
             from olm.ingestion.test_comb import (
                 find_seeds_by_ocr, erase_cartouches,
+                _apply_detection_config,
             )
+            _apply_detection_config(scale)
             _seeds, _cart_bboxes_px = find_seeds_by_ocr(img)
             _gray_global = erase_cartouches(_gray_global, _cart_bboxes_px)
 
