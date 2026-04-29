@@ -252,6 +252,24 @@ function renderFloorplanSettings() {
       saveConfigField(["ingestion", "render_dpi"], parseInt(this.value) || 300);
     };
   }
+  // OCR Detection overrides (D-155)
+  var cmEl = document.getElementById("cfgCartoucheMargin");
+  if (cmEl) {
+    cmEl.value = ing.cartouche_margin_cm != null ? ing.cartouche_margin_cm : 3.0;
+    cmEl.onchange = function() {
+      saveConfigField(["ingestion", "cartouche_margin_cm"],
+                      parseFloat(this.value) || 3.0);
+    };
+  }
+  var tsEl = document.getElementById("cfgTextSkipMargin");
+  if (tsEl) {
+    tsEl.value = ing.text_skip_margin_cm != null ? ing.text_skip_margin_cm : 6.0;
+    tsEl.onchange = function() {
+      saveConfigField(["ingestion", "text_skip_margin_cm"],
+                      parseFloat(this.value) || 6.0);
+    };
+  }
+
   var ext = ing.preprocessed_exterior_rgb || [135, 206, 235];
   var cor = ing.preprocessed_corridor_rgb || [193, 247, 179];
 

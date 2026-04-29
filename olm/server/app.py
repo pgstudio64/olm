@@ -58,6 +58,28 @@ def _get_plans_dir() -> str:
 PLANS_DIR = _get_plans_dir()
 
 
+def _get_detection_overrides() -> dict | None:
+    """Read OCR detection overrides from config.json (D-155).
+
+    Returns a dict suitable for ``DetectionConfigCm.from_dict`` or None
+    if no overrides are configured.
+    """
+    _root = os.path.dirname(BASE_DIR)
+    _config_path = os.path.join(_root, "project", "config.json")
+    if not os.path.exists(_config_path):
+        return None
+    try:
+        with open(_config_path, encoding="utf-8") as _f:
+            _ing = json.load(_f).get("ingestion", {})
+        overrides = {}
+        for key in ("cartouche_margin_cm", "text_skip_margin_cm"):
+            if key in _ing:
+                overrides[key] = float(_ing[key])
+        return overrides or None
+    except Exception:
+        return None
+
+
 @app.route("/static/<path:filename>")
 def serve_static(filename: str):
     """Serve static files from the static/ folder."""
@@ -276,7 +298,8 @@ def api_ingestion_extract():
         from test_comb import extract_all_rooms
 
         result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
-                                   threshold=threshold)
+                                   threshold=threshold,
+                                   detection_overrides=_get_detection_overrides())
 
         # Clean up temp file if created
         if 'image' in request.files:
@@ -343,7 +366,8 @@ def api_ingestion_debug():
             from test_comb import extract_all_rooms
 
             result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
-                                       threshold=threshold)
+                                       threshold=threshold,
+                                       detection_overrides=_get_detection_overrides())
 
             # Clean up temp file if created
             if 'image' in request.files:
@@ -531,6 +555,7 @@ def api_import_ocr():
     _default_scale: float = 0.5
     _default_threshold: int = 110
     _pdf_render_dpi: int = 200
+    _detection_overrides: dict | None = None
     if os.path.exists(_config_path):
         with open(_config_path, encoding="utf-8") as _f:
             _cfg = json.load(_f)
@@ -538,6 +563,7 @@ def api_import_ocr():
         _default_scale = float(_ing.get("scale_cm_per_px", _default_scale))
         _default_threshold = int(_ing.get("threshold", _default_threshold))
         _pdf_render_dpi = int(_ing.get("pdf_render_dpi", _pdf_render_dpi))
+        # D-155 : detection overrides via _get_detection_overrides()
 
     try:
         # Drawing scale (e.g. "1 : 100") takes priority over raw scale_cm_per_px
@@ -595,7 +621,9 @@ def api_import_ocr():
         sys.path.insert(0, os.path.join(BASE_DIR, "ingestion"))
         from test_comb import extract_all_rooms  # noqa: PLC0415
 
-        result = extract_all_rooms(plan_path, scale_cm_per_px=scale, threshold=threshold)
+        result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
+                                   threshold=threshold,
+                                   detection_overrides=_get_detection_overrides())
 
         if use_temp:
             # Déplacer le PNG temporaire vers le dossier overlays persistant
@@ -1188,7 +1216,7 @@ def api_room_reanalyze():
             from olm.ingestion.test_comb import (
                 find_seeds_by_ocr, _apply_detection_config,
             )
-            _apply_detection_config(scale)
+            _apply_detection_config(scale, _get_detection_overrides())
             _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
 
         result = extract_room_features(
@@ -1418,7 +1446,7 @@ def api_room_reanalyze_batch():
                 find_seeds_by_ocr, erase_cartouches,
                 _apply_detection_config,
             )
-            _apply_detection_config(scale)
+            _apply_detection_config(scale, _get_detection_overrides())
             _seeds, _cart_bboxes_px = find_seeds_by_ocr(img)
             _gray_global = erase_cartouches(_gray_global, _cart_bboxes_px)
 

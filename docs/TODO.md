@@ -30,7 +30,7 @@ sélectif terminé. D-154 + D-155 ajoutés post-replay.
 - ~~*Overlay invisible sur plans haute résolution*~~ → D-155 : pxScale appliqué à tous les strokes/fonts
 
 **Chantiers identifiés (non traités)** :
-- *Paramètres OCR dans Settings* : exposer `cartouche_margin_cm` et `text_skip_margin_cm` dans la section Ingestion (sous-section OCR) pour permettre l'ajustement selon la résolution du plan. Actuellement valeurs fixes (3.0 / 6.0 cm) avec plancher 5 px — suffisant pour les plans testés mais non garanti pour des résolutions arbitraires.
+- ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
 - *Format JSON v3 en cm primary* (portes/ouvertures/fenêtres : `offset_px`/`width_px` → cm source de vérité)
 - *Couleurs vert/bleu pour améliorer détection preprocessed* (valider portes sur face verte, fenêtres sur face bleue)
 

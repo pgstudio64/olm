@@ -65,14 +65,24 @@ MIN_CALIB_DIM_PX = 20
 CALIB_EDGE_MARGIN_PX = 5
 
 
-def _apply_detection_config(scale_cm_per_px: float) -> None:
+def _apply_detection_config(scale_cm_per_px: float,
+                            config_overrides: dict | None = None) -> None:
     """Met à jour les constantes px du module depuis la detection_config.
 
     À appeler au début d'une exécution quand le scale est connu. Modifie
     l'état module (acceptable en contexte outil local mono-thread).
+
+    Args:
+        scale_cm_per_px: Échelle cm par pixel.
+        config_overrides: Dict partiel de valeurs cm écrasant les défauts
+            (ex. ``{"cartouche_margin_cm": 5.0}``). Clés inconnues ignorées.
     """
-    from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
-    cfg = DEFAULT_DETECTION_CONFIG_CM.to_px(scale_cm_per_px)
+    from olm.core.detection_config import (
+        DEFAULT_DETECTION_CONFIG_CM, DetectionConfigCm,
+    )
+    base = (DetectionConfigCm.from_dict(config_overrides)
+            if config_overrides else DEFAULT_DETECTION_CONFIG_CM)
+    cfg = base.to_px(scale_cm_per_px)
     global BINARIZE_THRESHOLD, COMB_STEP_PX, MAX_RAY_PX, CARTOUCHE_MARGIN_PX
     global COARSE_STEP_PX, RAY_MARGIN_PX, SNAP_SEARCH_PX
     global DOOR_PROBE_PX, DOOR_GROUP_GAP_PX, WALL_MARGIN_PX
@@ -1270,13 +1280,16 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
 # Exclusion zones are entered manually in the Review phase.
 
 
-def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
+def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
+                      detection_overrides=None):
     """Run the full extraction pipeline on a floor plan image.
 
     Args:
         image_path: path to the raster floor plan image
         scale_cm_per_px: cm per pixel (estimated if not provided)
         threshold: binarization threshold (default BINARIZE_THRESHOLD)
+        detection_overrides: dict of DetectionConfigCm overrides from user
+            settings (ex. ``{"cartouche_margin_cm": 5.0}``)
 
     Returns:
         dict with:
@@ -1303,7 +1316,7 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
     # find_seeds_by_ocr — sans ça, CARTOUCHE_MARGIN_PX reste à sa
     # valeur d'import (1 px), ce qui produit des bboxes cartouche trop
     # serrées et laisse du texte dans l'image binarisée.
-    _apply_detection_config(classify_scale)
+    _apply_detection_config(classify_scale, detection_overrides)
 
     seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
 

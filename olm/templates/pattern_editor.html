@@ -110,6 +110,21 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </div>
     </div>
     <div class="settings-section">
+      <div class="section-title">OCR Detection</div>
+      <div class="settings-grid">
+        <label class="settings-label">Cartouche margin (cm)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgCartoucheMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
+          <span style="font-size:9px;color:var(--text-dim);">Margin around room labels for cartouche erasure</span>
+        </div>
+        <label class="settings-label">Text skip margin (cm)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgTextSkipMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
+          <span style="font-size:9px;color:var(--text-dim);">Margin around text bboxes for wall classifier</span>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-title">Standard colors</div>
       <div class="settings-grid">
         <label class="settings-label">Exterior</label>
