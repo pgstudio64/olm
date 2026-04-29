@@ -54,6 +54,16 @@ MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
 MIN_DOOR_ARC_HITS = 3   # min hits per direction to validate a door arc
 
+# --- Scale auto-calibration from OCR surfaces ---
+# Minimum annotated surface (m²) for a room to be used in scale calibration.
+# Rooms below this threshold are more likely to have incorrect bboxes.
+MIN_CALIB_SURFACE_M2 = 8.0
+# Minimum bbox dimension (px) for calibration eligibility.
+MIN_CALIB_DIM_PX = 20
+# Margin from image edge (px) — rooms touching the edge likely have a
+# truncated bbox and should not be used for calibration.
+CALIB_EDGE_MARGIN_PX = 5
+
 
 def _apply_detection_config(scale_cm_per_px: float) -> None:
     """Met à jour les constantes px du module depuis la detection_config.
@@ -1289,6 +1299,12 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
     img_gray = load_image(image_path)
     logger.debug(f"  image size: {img_gray.width} × {img_gray.height} px")
 
+    # Aligne les constantes pixels du module sur le scale réel AVANT
+    # find_seeds_by_ocr — sans ça, CARTOUCHE_MARGIN_PX reste à sa
+    # valeur d'import (1 px), ce qui produit des bboxes cartouche trop
+    # serrées et laisse du texte dans l'image binarisée.
+    _apply_detection_config(classify_scale)
+
     seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
 
     if not seeds:
@@ -1301,13 +1317,6 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
         }
 
     logger.info(f"Ingestion: processing {len(seeds)} room(s)")
-    # Aligne les constantes pixels du module sur le scale réel —
-    # sans cet appel, COMB_STEP_PX / MAX_RAY_PX / SNAP_SEARCH_PX /
-    # DOOR_PROBE_PX restent à leur valeur d'import (calibrées pour
-    # scale=0.5 cm/px), ce qui produit des bbox sous-mesurés sur les
-    # plans à scale réel ≠ 0.5. `extract_room_features` n'a pas ce
-    # problème car il calcule lui-même `comb_step_px`.
-    _apply_detection_config(classify_scale)
     gray_arr = np.array(img_gray)
     cleaned = erase_cartouches(gray_arr, cart_bboxes)
     binary = cleaned < thr
@@ -1396,24 +1405,35 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None):
                      f"win={len(windows)} open={len(openings)} door={len(doors)}")
         rooms.append(room)
 
-    # Auto-detect scale from simple rooms (1 door, no opening, surface > 0)
-    if scale_cm_per_px is None:
-        scale_samples = []
-        for r in rooms:
-            if (r['surface_m2'] > 0
-                    and len(r['doors']) == 1
-                    and len(r['openings']) == 0
-                    and r['width_px'] > 10 and r['height_px'] > 10):
-                area_cm2 = r['surface_m2'] * 10000
-                area_px2 = r['width_px'] * r['height_px']
-                scale_samples.append((area_cm2 / area_px2) ** 0.5)
-        if scale_samples:
-            scale_samples.sort()
-            s = scale_samples[len(scale_samples) // 2]  # median
-        else:
-            s = 0.5  # fallback
+    # Auto-calibrate scale from OCR-annotated surfaces (D-155).
+    # Always run regardless of scale_cm_per_px: the annotated surfaces on the
+    # plan are ground truth, while the provided scale may assume a wrong DPI.
+    img_w, img_h = img_gray.size
+    scale_samples = []
+    for r in rooms:
+        x0, y0, x1, y1 = r['bbox_px']
+        at_edge = (x0 < CALIB_EDGE_MARGIN_PX or y0 < CALIB_EDGE_MARGIN_PX
+                   or x1 > img_w - CALIB_EDGE_MARGIN_PX
+                   or y1 > img_h - CALIB_EDGE_MARGIN_PX)
+        if (r['surface_m2'] >= MIN_CALIB_SURFACE_M2
+                and r['width_px'] > MIN_CALIB_DIM_PX
+                and r['height_px'] > MIN_CALIB_DIM_PX
+                and not at_edge):
+            area_cm2 = r['surface_m2'] * 10000
+            area_px2 = r['width_px'] * r['height_px']
+            scale_samples.append((area_cm2 / area_px2) ** 0.5)
+    if scale_samples:
+        scale_samples.sort()
+        s = scale_samples[len(scale_samples) // 2]  # median
+        logger.info(
+            "Scale auto-calibrated from %d room surface(s): %.4f cm/px"
+            " (hint was %.4f)",
+            len(scale_samples), s, scale_cm_per_px or 0.0,
+        )
     else:
-        s = scale_cm_per_px
+        s = scale_cm_per_px if scale_cm_per_px is not None else 0.5
+        logger.info("No rooms eligible for scale calibration — using %.4f cm/px",
+                     s)
 
     # Apply scale to all rooms
     for r in rooms:

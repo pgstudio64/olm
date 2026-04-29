@@ -1,9 +1,9 @@
 # TODO — OLM (Office Layout Matching)
 
-## Contexte replay v0.4.5 (2026-04-26 → 2026-04-27)
+## Contexte replay v0.4.5 (2026-04-26 → 2026-04-29)
 
 Rollback sur v0.4.5 (`be08ec0`) après régressions D-143→D-147. Replay
-sélectif en cours. État actuel : **`eb9897a`** (D-148 + D-149 + D-150).
+sélectif terminé. D-154 + D-155 ajoutés post-replay.
 
 | Unité | Statut | Notes |
 |---|---|---|
@@ -25,19 +25,18 @@ sélectif en cours. État actuel : **`eb9897a`** (D-148 + D-149 + D-150).
 **Bugs connus** :
 - *H-rays débordants* (room 900 big) : rays H s'étendent ×100 au-delà de la pièce
 - *Gel UI ArrowRight* sur dernière pièce en Room view
-- *Rescan all (Floor) ne re-OCR pas* : sémantique = re-extract features, pas réouverture complète
+- ~~*Rescan all (Floor) ne re-OCR pas*~~ → D-154 : mode source persistant dans le JSON, propagé au batch rescan
+- ~~*Scale OCR faux (DPI inconnu)*~~ → D-155 : auto-calibration depuis surfaces annotées
+- ~~*Overlay invisible sur plans haute résolution*~~ → D-155 : pxScale appliqué à tous les strokes/fonts
 
 **Chantiers identifiés (non traités)** :
+- *Paramètres OCR dans Settings* : exposer `cartouche_margin_cm` et `text_skip_margin_cm` dans la section Ingestion (sous-section OCR) pour permettre l'ajustement selon la résolution du plan. Actuellement valeurs fixes (3.0 / 6.0 cm) avec plancher 5 px — suffisant pour les plans testés mais non garanti pour des résolutions arbitraires.
 - *Format JSON v3 en cm primary* (portes/ouvertures/fenêtres : `offset_px`/`width_px` → cm source de vérité)
 - *Couleurs vert/bleu pour améliorer détection preprocessed* (valider portes sur face verte, fenêtres sur face bleue)
-- ~~*Caches runtime px dans `test_comb.py`* (globales stale si scale non initialisé)~~ → D-151 fixe `_group_pixels` ; vérifier s'il reste d'autres default args stale
-- ~~*Régénérer `test_floorplan_preprocessed_big.json`*~~ → D-151 : 18/19 portes enrichies avec seed_x/seed_y (904 sans seed : arc non détectable)
-- ~~*Filtre `min_opening_width_cm` au load preprocessed*~~ → D-153
-- ~~*Seeds portes invisibles post-canonicalisation*~~ → D-153
 
 ---
 
-Dernière mise à jour : 2026-04-27 (D-153 : seeds portes + filtre min_opening_width_cm)
+Dernière mise à jour : 2026-04-29 (D-155 : auto-calibration scale OCR + overlay pxScale)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 

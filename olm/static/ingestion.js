@@ -30,21 +30,28 @@
   var BUTTON_ZOOM_IN_FACTOR = 0.7;
   var BUTTON_ZOOM_OUT_FACTOR = 1.4;
 
-  // Wall-feature rendering (doors / openings / windows outside the bbox).
-  var WALL_ERASE_STROKE_WIDTH_PX = 2;
-  var WALL_FEATURE_OFFSET_PX = 3;
-
   // Overlay visual constants — exprimés en pixels CSS. Multipliés par
   // pxScale (unités viewBox par pixel CSS, calculé dans renderIngestion à
   // partir de la taille CSS du SVG) pour que strokes, points et seeds
   // gardent une taille visible constante quels que soient la résolution
-  // du plan et le niveau de zoom. Sans cette mise à l'échelle, sur un
-  // plan haute résolution (7320+ px) un stroke-width de 0.5 unité
-  // viewBox tombe sub-pixel CSS et devient invisible — symptôme observé
-  // sur test_floorplan_preprocessed_big après Rescan all.
+  // du plan et le niveau de zoom (D-155).
   var OVERLAY_RAY_STROKE = 0.5;
   var OVERLAY_HIT_RADIUS = 1.5;
   var OVERLAY_SEED_RADIUS = 3;
+  var OVERLAY_BBOX_STROKE = 1.5;
+  var OVERLAY_WIN_STROKE = 1.5;
+  var OVERLAY_OPEN_STROKE = 1;
+  var OVERLAY_DOOR_STROKE = 1;
+  var OVERLAY_NAME_FONT = 16;
+  var OVERLAY_CART_STROKE = 0.8;
+  var OVERLAY_SELECT_STROKE = 2;
+  var OVERLAY_HANDLE_SIZE = 10;
+  var OVERLAY_MERGE_STROKE = 1;
+
+  // Wall-feature rendering (doors / openings / windows outside the bbox).
+  // Also scaled by pxScale at render time.
+  var WALL_ERASE_STROKE_WIDTH = 2;
+  var WALL_FEATURE_OFFSET = 3;
 
   // Floor bbox editor — minimum resizable dimension en cm pour rester
   // scale-invariant (50 px @ scale 0.5 = 25 cm).
@@ -898,6 +905,19 @@
     var svgScale = Math.min(pxW / vb.w, pxH / vb.h);
     var pxScale = 1 / svgScale;
 
+    // Pre-compute scaled overlay sizes (D-155)
+    var sBbox    = (OVERLAY_BBOX_STROKE * pxScale).toFixed(2);
+    var sWin     = (OVERLAY_WIN_STROKE * pxScale).toFixed(2);
+    var sOpen    = (OVERLAY_OPEN_STROKE * pxScale).toFixed(2);
+    var sDoor    = (OVERLAY_DOOR_STROKE * pxScale).toFixed(2);
+    var sName    = (OVERLAY_NAME_FONT * pxScale).toFixed(1);
+    var sCart    = (OVERLAY_CART_STROKE * pxScale).toFixed(2);
+    var sSel     = (OVERLAY_SELECT_STROKE * pxScale).toFixed(2);
+    var sHandle  = Math.round(OVERLAY_HANDLE_SIZE * pxScale);
+    var sMerge   = (OVERLAY_MERGE_STROKE * pxScale).toFixed(2);
+    var sEraseW  = (WALL_ERASE_STROKE_WIDTH * pxScale).toFixed(2);
+    var sFeatureOff = (WALL_FEATURE_OFFSET * pxScale).toFixed(2);
+
     var els = [];
 
     // Full-viewport background to avoid white edges when viewbox extends beyond image
@@ -940,10 +960,11 @@
         var cx0 = cb[0], cy0 = cb[1], cx1 = cb[2], cy1 = cb[3];
         var cw = cx1 - cx0, ch = cy1 - cy0;
         if (cw <= 0 || ch <= 0) return;
+        var cDash = (3 * pxScale).toFixed(1) + ' ' + (2 * pxScale).toFixed(1);
         els.push('<rect x="' + cx0 + '" y="' + cy0 +
           '" width="' + cw + '" height="' + ch +
           '" fill="rgba(255,140,0,0.12)" stroke="#ff8c00"' +
-          ' stroke-width="0.8" stroke-dasharray="3 2"/>');
+          ' stroke-width="' + sCart + '" stroke-dasharray="' + cDash + '"/>');
       });
     }
 
@@ -1030,7 +1051,7 @@
       if (show.bbox) {
         els.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w +
           '" height="' + h + '" fill="none" stroke="' + COLORS.bbox +
-          '" stroke-width="1.5"/>');
+          '" stroke-width="' + sBbox + '"/>');
       }
 
       // Windows (cyan, round linecap — same as renderRoomElements)
@@ -1039,7 +1060,7 @@
           if (win.offset_px == null || win.width_px == null ||
               isNaN(win.offset_px) || isNaN(win.width_px)) return;
           drawWallFeature(els, x0, y0, x1, y1, win.face,
-            win.offset_px, win.width_px, '#50b8d0', 1.5, '', ' stroke-linecap="round"');
+            win.offset_px, win.width_px, '#50b8d0', sWin, '', ' stroke-linecap="round"', sFeatureOff);
         });
       }
 
@@ -1048,9 +1069,10 @@
         (room.openings || []).forEach(function (op) {
           if (op.offset_px == null || op.width_px == null ||
               isNaN(op.offset_px) || isNaN(op.width_px)) return;
-          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, op.face, op.offset_px, op.width_px);
+          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, op.face, op.offset_px, op.width_px, sEraseW);
+          var opDash = (4 * pxScale).toFixed(1) + ' ' + (3 * pxScale).toFixed(1);
           drawWallFeature(els, x0, y0, x1, y1, op.face,
-            op.offset_px, op.width_px, '#80c060', 1, '4 3', '');
+            op.offset_px, op.width_px, '#80c060', sOpen, opDash, '', sFeatureOff);
         });
       }
 
@@ -1079,7 +1101,7 @@
             return;
           }
           // Erase wall under the door bay so the opening shows through the bbox
-          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, d.face, doorOffsetFromStart, doorWidth);
+          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, d.face, doorOffsetFromStart, doorWidth, sEraseW);
           var swing = d.hinge_side || 'left';
           var inward = d.opens_inward !== false;
           // Resolve hinge/free coords from jambs + swing + face convention
@@ -1105,7 +1127,7 @@
         var mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
         els.push('<text x="' + mx + '" y="' + my +
           '" text-anchor="middle" dominant-baseline="central" fill="' +
-          COLORS.name + '" font-size="16" font-weight="bold" font-family="monospace" style="pointer-events:none;">' +
+          COLORS.name + '" font-size="' + sName + '" font-weight="bold" font-family="monospace" style="pointer-events:none;">' +
           room.name + '</text>');
       }
 
@@ -1127,12 +1149,13 @@
         var bx0 = selRoom.bbox_px[0], by0 = selRoom.bbox_px[1];
         var bx1 = selRoom.bbox_px[2], by1 = selRoom.bbox_px[3];
         // Selection dashed border
+        var selDash = (4 * pxScale).toFixed(1) + ' ' + (4 * pxScale).toFixed(1);
         els.push('<rect x="' + bx0 + '" y="' + by0 +
           '" width="' + (bx1 - bx0) + '" height="' + (by1 - by0) +
-          '" fill="none" stroke="#58c080" stroke-width="2" stroke-dasharray="4 4"' +
+          '" fill="none" stroke="#58c080" stroke-width="' + sSel + '" stroke-dasharray="' + selDash + '"' +
           ' style="pointer-events:none;"/>');
-        // Corner handles (10 SVG units square)
-        var hs = 10;
+        // Corner handles
+        var hs = sHandle;
         var corners = [
           { h: 'nw', cx: bx0, cy: by0, cur: 'nw-resize' },
           { h: 'ne', cx: bx1, cy: by0, cur: 'ne-resize' },
@@ -1182,18 +1205,21 @@
       pairs.forEach(function(p) {
         var key = p.a + '|' + p.b;
         var checked = ingState.merges[key] || false;
-        var sz = 10;
+        var sz = sHandle;
+        var mRx = (2 * pxScale).toFixed(1);
         var fill = checked ? '#c8a050' : 'rgba(30,30,30,0.7)';
         var stroke = checked ? '#c8a050' : '#6e6a62';
         els.push('<rect x="' + (p.x - sz/2) + '" y="' + (p.y - sz/2) +
-          '" width="' + sz + '" height="' + sz + '" rx="2" fill="' + fill +
-          '" stroke="' + stroke + '" stroke-width="1" style="cursor:pointer;" data-merge="' + key + '">' +
+          '" width="' + sz + '" height="' + sz + '" rx="' + mRx + '" fill="' + fill +
+          '" stroke="' + stroke + '" stroke-width="' + sMerge + '" style="cursor:pointer;" data-merge="' + key + '">' +
           '<title>Add the combination of the two adjacent rooms to the list of rooms to be designed as if the wall between the two would have been removed</title>' +
           '</rect>');
         if (checked) {
-          els.push('<text x="' + p.x + '" y="' + (p.y + 1) +
+          var mFont = (10 * pxScale).toFixed(1);
+          var mOff = (1 * pxScale).toFixed(1);
+          els.push('<text x="' + p.x + '" y="' + (p.y + parseFloat(mOff)) +
             '" text-anchor="middle" dominant-baseline="central" fill="#1e1e1e" ' +
-            'font-size="10" font-weight="bold" style="pointer-events:none;">&#10003;</text>');
+            'font-size="' + mFont + '" font-weight="bold" style="pointer-events:none;">&#10003;</text>');
         }
       });
     }
@@ -1398,9 +1424,9 @@
   // Erase a segment of the bbox wall at the door/opening location so the
   // gap is visible through the white rectangle. Background color matches
   // the SVG background so it effectively "cuts" the stroke.
-  function eraseWallSegment(els, x0, y0, x1, y1, face, offset, width) {
+  function eraseWallSegment(els, x0, y0, x1, y1, face, offset, width, eraseW) {
     var ERASE_COLOR = '#1e1e1e';
-    var ERASE_W = WALL_ERASE_STROKE_WIDTH_PX;  // thicker than bbox stroke (1.5) to fully cover
+    var ERASE_W = eraseW || WALL_ERASE_STROKE_WIDTH;
     if (face === 'north') {
       els.push('<line x1="' + (x0 + offset) + '" y1="' + y0 +
         '" x2="' + (x0 + offset + width) + '" y2="' + y0 +
@@ -1421,8 +1447,8 @@
   }
 
   function drawWallFeature(els, x0, y0, x1, y1, face, offset, width,
-                           color, strokeW, dash, extra) {
-    var off = WALL_FEATURE_OFFSET_PX;
+                           color, strokeW, dash, extra, featureOff) {
+    var off = featureOff || WALL_FEATURE_OFFSET;
     var dashAttr = dash ? ' stroke-dasharray="' + dash + '"' : '';
     var extraAttr = extra || '';
     if (face === 'north') {
@@ -2070,6 +2096,12 @@
         if (data.error) {
           if (status) status.textContent = 'Error: ' + data.error;
           return;
+        }
+        // D-154 : le JSON peut porter "mode":"ocr" pour un plan OCR
+        // sauvegardé. Met à jour _selectedPlan.mode pour que le batch
+        // rescan envoie le bon mode au backend (effacement cartouche).
+        if (data.mode) {
+          _setSelectedPlan(_getSelectedPlan().id, data.mode);
         }
         var _impScale = (typeof data.scale_cm_per_px === 'number' &&
                          data.scale_cm_per_px > 0)

@@ -7,6 +7,48 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-155 · Auto-calibration scale OCR + overlay indépendant de la résolution (2026-04-29)
+
+### Décision
+
+1. **Scale auto-calibré** : `extract_all_rooms` calcule toujours le scale à partir des surfaces annotées par OCR sur le plan (médiane), même quand un `scale_cm_per_px` est fourni. Le scale fourni sert uniquement de hint pour la détection (paramètres px via `_apply_detection_config`). Filtre : `surface_m2 ≥ 8 m²`, bbox > 20 px, pas au bord de l'image.
+2. **Overlay ingestion pxScale-aware** : tous les strokes, fonts, handles et dash-arrays de l'overlay ingestion sont multipliés par `pxScale` (viewBox units / CSS pixel). Les constantes sont centralisées en haut du fichier. Résultat : apparence identique sur plan standard (1920 px) et big plan (7320 px).
+
+### Justification
+
+Le scale stocké dans `drawing_scale_measured` est calculé via `2.54 × scale_text / DPI`. Quand le DPI de l'image est inconnu (PNG sans métadonnées), le scale est faux (~20% d'erreur sur le plan OCR test). Les surfaces annotées sur le plan sont la vérité terrain et ne dépendent pas du DPI.
+
+L'overlay utilisait des stroke-width hardcodés en unités viewBox → invisibles sur les plans haute résolution (7320+ px).
+
+### Impact
+
+- `test_comb.py` : constantes calibration (`MIN_CALIB_SURFACE_M2`, `CALIB_EDGE_MARGIN_PX`), auto-calibration toujours active
+- `ingestion.js` : 12 constantes overlay (`OVERLAY_*`) + pré-calcul scalé dans `renderIngestion` + paramètres `eraseW`/`featureOff` passés aux helpers
+
+---
+
+## D-154 · Mode source persistant OCR/preprocessed + fix cartouche erasure ordering (2026-04-29)
+
+### Décision
+
+1. Chaque JSON plan porte un champ `"mode": "ocr"|"preprocessed"` (écrit manuellement). Ce champ est la source de vérité pour le comportement du rescan (effacement cartouche, etc.). Absent → défaut "preprocessed" (rétrocompat).
+2. `/api/import/preprocessed` retourne `mode` depuis le JSON au frontend.
+3. Le frontend met à jour `_selectedPlan.mode` depuis la réponse import → le batch rescan envoie le bon mode.
+4. `_apply_detection_config(scale)` est appelé AVANT `find_seeds_by_ocr` partout (test_comb.py `extract_all_rooms`, app.py single + batch reanalyze). Corrige `CARTOUCHE_MARGIN_PX = 1` (valeur d'import stale).
+
+### Justification
+
+Le plan OCR `test_floorplan_ocr` avait un JSON compagnon issu d'une extraction précédente → l'app le chargeait en mode "preprocessed" → le batch rescan n'effaçait jamais les cartouches → les rays butaient sur le texte → pièces mal dimensionnées.
+
+### Impact
+
+- `test_floorplan_ocr.json` : ajout `"mode": "ocr"`
+- `app.py` : import/preprocessed retourne `json_data.get("mode", "preprocessed")` ; `_apply_detection_config` avant `find_seeds_by_ocr` dans reanalyze + batch
+- `test_comb.py` : `_apply_detection_config` déplacé avant `find_seeds_by_ocr`
+- `ingestion.js` : `extractRoomsPreprocessed` met à jour `_selectedPlan.mode` depuis la réponse
+
+---
+
 ## D-153 · Seeds portes préservées dans canonicalisation + filtre min_opening_width_cm (2026-04-27)
 
 ### Décision

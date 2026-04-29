@@ -7,6 +7,30 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Fixed
 
+- **Scale OCR auto-calibré** : le scale est maintenant calculé à partir des
+  surfaces annotées sur le plan (médiane), indépendamment du DPI de l'image.
+  Corrige des écarts de ~35% en surface sur les plans OCR dont le DPI est
+  inconnu (PNG sans métadonnées).
+- **Mode source OCR persistant** : le champ `mode` du JSON plan est propagé au
+  frontend lors du chargement. Le batch rescan envoie le bon mode au backend
+  (effacement cartouche en mode OCR).
+- **Ordering `_apply_detection_config`** : appelé avant `find_seeds_by_ocr`
+  partout (extraction complète + reanalyze single + batch). Corrige des
+  bboxes cartouche trop serrées quand `CARTOUCHE_MARGIN_PX` restait à sa
+  valeur d'import.
+
+### Changed
+
+- **Overlay ingestion indépendant de la résolution** : tous les strokes, fonts
+  et handles sont multipliés par `pxScale`. L'overlay a la même apparence sur
+  un plan standard (1920 px) et un plan haute résolution (7320+ px).
+
+---
+
+## [v0.4.5] — 2026-04-27
+
+### Fixed
+
 - **Seeds portes post-canonicalisation** : `computeCanonicalReanalyzeResult`
   perdait `seed_x`/`seed_y` des portes après un re-analyze. Les seeds sont
   maintenant préservées dans le mapping canonique.
