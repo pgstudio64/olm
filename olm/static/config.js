@@ -20,6 +20,11 @@ async function loadAppConfig() {
   if (APP_CONFIG.desk_width_cm) DESK_W = APP_CONFIG.desk_width_cm;
   if (APP_CONFIG.desk_depth_cm) DESK_D = APP_CONFIG.desk_depth_cm;
   if (APP_CONFIG.grid_cell_cm) GRID_STEP_CM = APP_CONFIG.grid_cell_cm;
+  // D-156 : afficher la version OLM dans le header Settings.
+  var verEl = document.getElementById("settingsVersion");
+  if (verEl && APP_CONFIG.olm_version) {
+    verEl.textContent = "v" + APP_CONFIG.olm_version;
+  }
 }
 
 function getStandards() {

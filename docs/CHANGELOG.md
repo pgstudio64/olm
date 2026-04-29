@@ -5,6 +5,28 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.4.7] — 2026-04-29
+
+### Fixed
+
+- **D-156 Fenêtres sud/est invisibles en Floor** : `drawWallFeature` recevait
+  `sFeatureOff` comme string (`.toFixed(2)`). L'opérateur `+` faisait une
+  concaténation JS (`782 + "3.00"` = `"7823.00"`). Les fenêtres sud et est
+  étaient dessinées hors écran. Fix : `parseFloat(featureOff)`.
+- **D-156 Preprocessed : aucune fenêtre après rescan** : `color_img` était
+  chargé depuis l'overlay (grayscale) au lieu du plan -SD (zones colorées).
+  Fix : charger depuis `plan_path` en mode preprocessed.
+- **D-156 Fausses fenêtres sur murs intérieurs** : les murs double-lignes
+  intérieurs étaient classés "window" par le texture classifier. Ajout du
+  filtrage par zone extérieure bleue (preprocessed uniquement).
+- **D-156 Fallback full-face supprimé** : un mur plein face à l'extérieur ne
+  reçoit plus de fenêtre fictive automatique.
+
+### Added
+
+- **Version OLM dans Settings** : `__version__` exposé via `/api/config`,
+  affiché dans le header du panneau Settings.
+
 ## [v0.4.6] — 2026-04-29
 
 ### Fixed

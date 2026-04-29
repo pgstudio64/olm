@@ -7,6 +7,31 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-156 · Filtrage fenêtres par zone extérieure + fix rendu sud/est (2026-04-29)
+
+### Décision
+
+1. **Filtrage extérieur des fenêtres** : en mode preprocessed, `extract_room_features` reçoit `color_image` (le plan -SD avec zones colorées) et `exterior_rgb`. Les fenêtres texture ne sont conservées que sur les faces bordant la zone extérieure (bleu sky blue ±40 tolerance, 30% match). En mode OCR, pas d'image couleur → comportement legacy (toutes les fenêtres texture conservées).
+2. **Détection grayscale** : si l'image couleur fournie est en réalité grayscale (R=G=B sur un échantillon de 500 px), `rgb_arr` est mis à None → fallback legacy.
+3. **Suppression du fallback full-face** : plus de fenêtre fictive créée automatiquement sur les faces extérieures sans fenêtre texture. Le filtre extérieur sert uniquement à éliminer les faux positifs, pas à créer des fenêtres sur des murs pleins.
+4. **Fix rendu Floor sud/est** : `drawWallFeature` recevait `sFeatureOff` comme string (via `.toFixed(2)`). L'opérateur `+` faisait une concaténation de chaînes (`782 + "3.00"` = `"7823.00"`) au lieu d'une addition. Les fenêtres sud/est étaient dessinées hors écran. Fix : `parseFloat(featureOff)`.
+5. **Version OLM dans Settings** : `__version__` exposé via `/api/config`, affiché dans le header Settings.
+6. **`_apply_detection_config` avant tout ray-cast** : appelé quel que soit le mode (OCR ou preprocessed), avant `find_seeds_by_ocr`. Corrige les marges cartouche trop serrées.
+
+### Justification
+
+Le plan -SD preprocessed porte les zones bleues (extérieur) et vertes (corridor). L'overlay est le plan officiel (souvent grayscale). En D-155, `color_img` était chargé depuis l'overlay → 0% match bleu → aucune fenêtre. Le fix charge depuis le -SD (`plan_path`). Le bug de rendu sud/est est un classique JS : `.toFixed()` retourne un string, et `+` avec string fait de la concaténation.
+
+### Impact
+
+- `olm/ingestion/extract.py` : +2 params `color_image`/`exterior_rgb`, détection grayscale, filtre extérieur, suppression fallback
+- `olm/server/app.py` : `_get_exterior_rgb()`, `color_img` chargé depuis plan_path, `_apply_detection_config` avant tout mode
+- `olm/static/ingestion.js` : `parseFloat(featureOff)` dans `drawWallFeature`, cleanup console.log
+- `olm/static/config.js` : affichage version Settings
+- `olm/templates/pattern_editor.html` : span `settingsVersion`
+
+---
+
 ## D-155 · Auto-calibration scale OCR + overlay indépendant de la résolution (2026-04-29)
 
 ### Décision

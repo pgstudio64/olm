@@ -3,7 +3,7 @@
 ## Contexte replay v0.4.5 (2026-04-26 → 2026-04-29)
 
 Rollback sur v0.4.5 (`be08ec0`) après régressions D-143→D-147. Replay
-sélectif terminé. D-154 + D-155 ajoutés post-replay.
+sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 
 | Unité | Statut | Notes |
 |---|---|---|
@@ -28,6 +28,9 @@ sélectif terminé. D-154 + D-155 ajoutés post-replay.
 - ~~*Rescan all (Floor) ne re-OCR pas*~~ → D-154 : mode source persistant dans le JSON, propagé au batch rescan
 - ~~*Scale OCR faux (DPI inconnu)*~~ → D-155 : auto-calibration depuis surfaces annotées
 - ~~*Overlay invisible sur plans haute résolution*~~ → D-155 : pxScale appliqué à tous les strokes/fonts
+- ~~*Fenêtres sud/est invisibles en Floor view*~~ → D-156 : bug JS string concat dans `drawWallFeature` (`parseFloat`)
+- ~~*Preprocessed : aucune fenêtre après rescan*~~ → D-156 : `color_img` chargé depuis -SD, pas depuis overlay
+- ~~*Fausses fenêtres sur murs intérieurs preprocessed*~~ → D-156 : filtre extérieur bleu + suppression fallback full-face
 
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
@@ -36,7 +39,7 @@ sélectif terminé. D-154 + D-155 ajoutés post-replay.
 
 ---
 
-Dernière mise à jour : 2026-04-29 (D-155 : auto-calibration scale OCR + overlay pxScale)
+Dernière mise à jour : 2026-04-29 (D-156 : filtrage fenêtres extérieur + fix rendu sud/est)
 
 > Renommage OLO → OLM (D-67). Le projet est un planificateur d'aménagement de bureaux, pas un optimiseur au sens mathématique. Le nom reflète l'ensemble des fonctionnalités : ingestion, matching, revue, export.
 

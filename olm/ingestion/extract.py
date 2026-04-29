@@ -1518,8 +1518,10 @@ def extract_room_features(
     binary_raw_precomputed: np.ndarray | None = None,
     clip_to_bbox: bool = False,
     cartouche_bboxes_px: list | None = None,
+    color_image: "Image.Image | None" = None,
+    exterior_rgb: tuple = (135, 206, 235),
 ) -> dict:
-    """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145).
+    """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145 / D-156).
 
     Pipeline :
     1. Peint en blanc les zones transparentes utilisateur + des zones auto
@@ -1529,8 +1531,12 @@ def extract_room_features(
     3. Ray-cast depuis `seed_px` via `detect_room_three_phase` → nouveau
        bbox + classification murs.
     4. Extrait windows (texture) / openings (détectées par la classif).
+       D-156 : quand `color_image` est fournie, les fenêtres texture ne
+       sont conservées que sur les faces bordant la zone extérieure
+       (couleur `exterior_rgb`). Les murs double-lignes intérieurs ne
+       produisent plus de fausses fenêtres.
     5. Fallback couleur : fenêtre unique full-face pour toute face qui
-       borde du bleu extérieur et n'a aucune fenêtre détectée.
+       borde la zone extérieure et n'a aucune fenêtre détectée.
 
     Args:
         image: image `-SD` (PIL, mode convertible en "L").
@@ -1577,6 +1583,15 @@ def extract_room_features(
             pipeline batch (`binary_precomputed` fourni), l'erase doit
             être fait en amont sur la binaire globale ; le param est
             ignoré ici. Default None.
+        color_image: (OPT, D-156) image PIL couleur (overlay preprocessed)
+            utilisée pour vérifier si une face borde la zone extérieure.
+            Quand fournie, seules les faces bordant `exterior_rgb` peuvent
+            porter des fenêtres — les fausses fenêtres sur murs double-
+            lignes intérieurs sont éliminées. None → comportement legacy
+            (toutes les fenêtres texture conservées).
+        exterior_rgb: couleur RGB de la zone extérieure (défaut sky blue
+            ``(135, 206, 235)``). Configurable via
+            ``ingestion.preprocessed_exterior_rgb`` dans config.json.
 
     Returns:
         {
@@ -1723,14 +1738,48 @@ def extract_room_features(
         walls[face] = segs
 
     # --- 4. Classification murs → windows / openings ---
-    # seg.start_px / end_px sont DÉJÀ relatifs au début de la face
-    # (index_in_positions × step_px). Pas de soustraction de face_origin.
+    # D-156 : quand une image couleur est disponible (mode preprocessed),
+    # les fenêtres ne sont conservées que sur les faces bordant la zone
+    # extérieure (bleue). Les murs double-lignes intérieurs ne produisent
+    # plus de fausses fenêtres.
     windows: list[dict] = []
     openings: list[dict] = []
     rgb_arr: np.ndarray | None = None
+    if color_image is not None:
+        try:
+            rgb_arr = np.array(
+                color_image if color_image.mode == "RGB"
+                else color_image.convert("RGB"))
+            # D-156 : détecter si l'overlay est en réalité grayscale
+            # (R=G=B partout). Un PNG 3-canaux sans couleur ne permet pas
+            # le filtrage extérieur → fallback legacy.
+            _sample_n = min(500, len(rgb_arr.reshape(-1, 3)))
+            _idx = np.linspace(0, len(rgb_arr.reshape(-1, 3)) - 1,
+                               _sample_n, dtype=int)
+            _sample = rgb_arr.reshape(-1, 3)[_idx]
+            _has_color = bool(np.any(_sample[:, 0] != _sample[:, 1])
+                              or np.any(_sample[:, 1] != _sample[:, 2]))
+            if not _has_color:
+                rgb_arr = None
+        except Exception:
+            pass
+    # D-156 : marge suffisante pour traverser le mur ET atteindre la zone
+    # extérieure. Le bbox s'arrête à la face intérieure du mur ; il faut
+    # aller au-delà de l'épaisseur du mur (~15-30 cm) pour toucher la zone
+    # colorée. On prend 50 cm / scale pour couvrir les cas courants.
+    _ext_margin_px = max(10, int(50.0 / scale_cm_per_px)) if rgb_arr is not None else 8
     for face in ("north", "south", "east", "west"):
         segs = walls.get(face, [])
         any_window = False
+
+        # D-156 : vérification extérieure par couleur (quand disponible).
+        face_is_exterior = (
+            rgb_arr is not None
+            and _face_borders_color(
+                rgb_arr, bbox_new, face, exterior_rgb,
+                margin_px=_ext_margin_px)
+        )
+
         for seg in segs:
             if seg.kind not in ("window", "opening"):
                 continue
@@ -1746,27 +1795,18 @@ def extract_room_features(
                 "width_cm": int(round(w * scale_cm_per_px)),
             }
             if seg.kind == "window":
-                windows.append(entry)
-                any_window = True
+                # D-156 : fenêtres uniquement sur faces extérieures.
+                # Sans image couleur (rgb_arr is None) → comportement
+                # legacy (toutes les fenêtres texture conservées).
+                if rgb_arr is None or face_is_exterior:
+                    windows.append(entry)
+                    any_window = True
             else:
                 openings.append(entry)
 
-        # --- 5. Fallback couleur bleue : fenêtre unique full-face ---
-        if not any_window:
-            if rgb_arr is None:
-                try:
-                    rgb_arr = np.array(image.convert("RGB"))
-                except Exception:
-                    rgb_arr = np.zeros((1, 1, 3), dtype=np.uint8)
-            if _face_borders_color(rgb_arr, bbox_new, face, (135, 206, 235)):
-                full_w = (nx1 - nx0) if face in ("north", "south") else (ny1 - ny0)
-                windows.append({
-                    "face": face,
-                    "offset_px": 0,
-                    "width_px": int(full_w),
-                    "offset_cm": 0,
-                    "width_cm": int(round(full_w * scale_cm_per_px)),
-                })
+        # Note : pas de fallback full-face. Le filtre extérieur sert
+        # uniquement à éliminer les faux positifs fenêtres sur faces
+        # intérieures, pas à créer des fenêtres sur des murs pleins.
 
     # Règle métier : une face ne peut pas avoir à la fois fenêtres et
     # openings. Si les deux coexistent, les openings sont des artefacts du

@@ -1448,7 +1448,7 @@
 
   function drawWallFeature(els, x0, y0, x1, y1, face, offset, width,
                            color, strokeW, dash, extra, featureOff) {
-    var off = featureOff || WALL_FEATURE_OFFSET;
+    var off = parseFloat(featureOff) || WALL_FEATURE_OFFSET;
     var dashAttr = dash ? ' stroke-dasharray="' + dash + '"' : '';
     var extraAttr = extra || '';
     if (face === 'north') {
@@ -1877,6 +1877,7 @@
         try {
           var payload = {
             plan_path: ingState.planPathEnhanced,
+            overlay_path: ingState.planPath || '',
             scale_cm_per_px: ingState.scale,
             door_width_cm: doorWidthCm,
             clip_to_bbox: lockWallsFloor,
@@ -2147,6 +2148,19 @@
         }
         if (typeof data.scale_cm_per_px === 'number' && data.scale_cm_per_px > 0) {
           ingState.scale = data.scale_cm_per_px;
+          // D-156 : si le JSON du plan porte un drawing_scale_text
+          // (ex. "1:300"), pré-remplir le champ avant suggestDrawingScale
+          // pour éviter le back-calcul erroné (ex. 1:157).
+          if (data.drawing_scale_text) {
+            var dsNum = parseDrawingScale(data.drawing_scale_text);
+            if (dsNum > 0) {
+              var dsField = document.getElementById('ingDrawingScale');
+              if (dsField && !dsField.value.trim()) {
+                dsField.value = '1 : ' + dsNum;
+                dsField.style.color = 'var(--text)';
+              }
+            }
+          }
           _suggestDrawingScale(data.scale_cm_per_px);
         }
         // Focus auto : si des pièces ont des bbox, cadrer sur leur enveloppe
