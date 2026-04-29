@@ -41,8 +41,13 @@ PRIVATE_PATHS=(
   "solver_lab/"
 )
 
+# Glob patterns for files not captured by directory paths above.
+PRIVATE_GLOBS=(
+  "SESSION_RESUME*"
+)
+
 # Regex used to detect leftover private paths (must cover all entries above).
-PRIVATE_REGEX='^(docs/|CLAUDE\.md|CLAUDE_IMPLEMENTER\.md|project/|\.claude/|solver_lab/)'
+PRIVATE_REGEX='^(docs/|CLAUDE\.md|CLAUDE_IMPLEMENTER\.md|project/|\.claude/|solver_lab/|SESSION_RESUME)'
 
 cd "$REPO_ROOT"
 
@@ -89,6 +94,9 @@ cd "$TEMP_CLONE"
 FILTER_ARGS=()
 for p in "${PRIVATE_PATHS[@]}"; do
   FILTER_ARGS+=(--path "$p")
+done
+for g in "${PRIVATE_GLOBS[@]}"; do
+  FILTER_ARGS+=(--path-glob "$g")
 done
 git-filter-repo --invert-paths "${FILTER_ARGS[@]}" --force 2>&1 | tail -3
 
