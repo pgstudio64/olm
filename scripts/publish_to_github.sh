@@ -84,12 +84,12 @@ echo "Local HEAD:     $LOCAL_HEAD"
 echo ""
 
 # --- Step 1: clone ---
-echo "[1/6] Cloning to $TEMP_CLONE..."
+echo "[1/7] Cloning to $TEMP_CLONE..."
 rm -rf "$TEMP_CLONE"
 git clone --no-local "$REPO_ROOT" "$TEMP_CLONE" >/dev/null 2>&1
 
 # --- Step 2: filter-repo ---
-echo "[2/6] Filtering private paths..."
+echo "[2/7] Filtering private paths..."
 cd "$TEMP_CLONE"
 FILTER_ARGS=()
 for p in "${PRIVATE_PATHS[@]}"; do
@@ -100,8 +100,28 @@ for g in "${PRIVATE_GLOBS[@]}"; do
 done
 git-filter-repo --invert-paths "${FILTER_ARGS[@]}" --force 2>&1 | tail -3
 
+# --- Step 2b: translate commit messages to English ---
+TRANSLATIONS_FILE="$REPO_ROOT/scripts/commit_translations.json"
+if [ -f "$TRANSLATIONS_FILE" ]; then
+  echo "[2b/7] Translating commit messages to English..."
+  git-filter-repo --message-callback '
+import json
+_g = globals()
+if "_trans" not in _g:
+    with open("'"$TRANSLATIONS_FILE"'") as f:
+        _g["_trans"] = json.load(f)
+lines = message.split(b"\n")
+first = lines[0].decode("utf-8", errors="replace")
+if first in _g["_trans"]:
+    lines[0] = _g["_trans"][first].encode("utf-8")
+return b"\n".join(lines)
+' --force 2>&1 | tail -3
+else
+  echo "[2b/7] No translations file found, skipping."
+fi
+
 # --- Step 3: verification ---
-echo "[3/6] Verifying no private paths remain..."
+echo "[3/7] Verifying no private paths remain..."
 
 # Check HEAD tree
 LEAK_HEAD=$(git ls-files | grep -iE "$PRIVATE_REGEX" || true)
@@ -127,7 +147,7 @@ fi
 echo "  OK — HEAD and history both clean."
 
 # --- Step 4: summary and confirmation ---
-echo "[4/6] Summary of what will be pushed:"
+echo "[4/7] Summary of what will be pushed:"
 COMMIT_COUNT=$(git log --oneline | wc -l | tr -d ' ')
 FILE_COUNT=$(git ls-files | wc -l | tr -d ' ')
 echo "  Commits:     $COMMIT_COUNT"
@@ -147,12 +167,12 @@ if [[ ! "$ans" =~ ^[Yy]$ ]]; then
 fi
 
 # --- Step 5: push ---
-echo "[5/6] Pushing to GitHub..."
+echo "[5/7] Pushing to GitHub..."
 git remote add github "$GITHUB_REMOTE_URL"
 git push github "$GITHUB_BRANCH" --force 2>&1 | tail -5
 
 # --- Step 6: cleanup ---
-echo "[6/6] Cleaning up temp clone..."
+echo "[6/7] Cleaning up temp clone..."
 cd "$REPO_ROOT"
 rm -rf "$TEMP_CLONE"
 
