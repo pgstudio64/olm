@@ -38,6 +38,35 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - *D4 — Portes mal identifiées / pièce réduite côté sud* : détection de portes imprécise, bbox tronqué au sud sur certaines pièces
 - *D8 — Rays invisibles en Floor après Rescan All* : après un Rescan All en vue Floor, les rays ne s'affichent pas (mais visibles après rescan individuel en Room)
 
+**Retours tests production (2026-05-08)** :
+
+*Problème critique — Échelle :*
+- Échelle auto-détectée souvent fausse (1:157 au lieu de 1:300). Forte sensibilité du rescan à l'échelle. La détection (fenêtres, portes) dépend beaucoup de l'échelle correcte.
+- → Utiliser l'échelle indiquée sur le plan quand elle est présente (priorité sur l'auto-calibration).
+
+*K — Cas à traiter (par pièce) :*
+- K2 — Poteau 20 cm côté fenêtre : centres vus comme ouvertures. Après mise à l'échelle : vert en haut + porte 508 cm à la place de la fenêtre.
+- K3 — Fenêtre dépasse le mur de 10 cm, OK après rescan Room. Après remise à l'échelle : grande ouverture au sud (mur pourtant détecté) + absence de fenêtre au nord.
+- K4 — Grande porte détectée quand la fenêtre fait un arrondi. → Utiliser le bleu extérieur pour discriminer.
+- K5 — Décalage de demi-hauteur vers le haut, non corrigé par rescan. Pièce détectée correctement mais inversée au rendu.
+- K6 — Orientation KO pour toutes les pièces de l'aile ouest (bleu à gauche). Poteau 20 cm, porte non reconnue même après ajustement mur + rescan. Reconnue après mise à l'échelle.
+- K8 — Porte non détectée alors que les rays la voient très bien.
+- K12 — Inversion complète du dessin/rays par rapport au plan. Porte 285 cm au sud, vraie porte non détectée.
+- K14 — Non détection de la porte (partiellement invisible sur le plan).
+- K16 — Non détection de la porte (partiellement invisible sur le plan).
+- K25 — Inversion complète de la détection par rapport à l'affichage. Porte en bas à gauche, détection en haut à droite.
+- K77 — Modification manuelle de la pièce : sauvegarde décalée de 40 cm en dessous de la position apparente.
+
+*Transversal :*
+- Seeds de porte jamais visibles sur le plan (confirme D2).
+- Inversions détection/affichage récurrentes (K5, K12, K25) → problème d'orientation canonique ?
+- Portes partiellement dessinées sur le plan non détectées (K14, K16) → seuil de détection arc trop strict ?
+
+*R — Réglés à préciser :*
+- Échelle auto-détectée fausse (1:300 au lieu de 1:200 sur un autre plan) — même famille que le problème critique ci-dessus.
+- Selon l'échelle, la détection est plus ou moins efficace (ex: fenêtres non identifiées).
+- Arcs de porte non noirs sur certains plans : marron RGB ~(137,126,115) / (133,123,114) / (133,121,112). → Seuil de binarisation ou détection couleur à adapter.
+
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
 - *Format JSON v3 en cm primary* (portes/ouvertures/fenêtres : `offset_px`/`width_px` → cm source de vérité)
