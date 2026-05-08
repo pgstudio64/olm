@@ -758,5 +758,18 @@ P7: BLOCK_2_FACE @SN @SW                  <span style="color:var(--text-dim)">--
         BLOCK_2_ORTHO_L  BLOCK_2_ORTHO_R
 Orientation: @0 @90 @180 @270  |  Offset: N/S + cm  |  Stick: @SN @SS @SE @SW
 Row: blocks separated by ,  with gap (cm) between  |  ; = new row + inter-row gap</span></div>
+<!-- Diagnostic modal (D-160) — copyable text output -->
+<div id="diagModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;max-width:600px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-weight:bold;font-size:13px;" id="diagTitle">Diagnostic</span>
+      <button id="diagClose" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer;">&times;</button>
+    </div>
+    <textarea id="diagText" readonly style="flex:1;min-height:300px;font-family:monospace;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px;resize:vertical;white-space:pre;overflow:auto;"></textarea>
+    <div style="margin-top:8px;text-align:right;">
+      <button id="diagCopy" class="btn btn-toolbar" style="font-size:11px;">Copy</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
