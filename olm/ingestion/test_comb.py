@@ -48,7 +48,7 @@ else:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "project", "plans", "test_floorplan3.png"
     )
-BINARIZE_THRESHOLD = 110
+BINARIZE_THRESHOLD = 140
 COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
@@ -1354,10 +1354,11 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
                                         other_seeds=other,
                                         scale_cm_per_px=classify_scale)
 
-        # Filtre largeur minimale porte (élimine les micro-portes parasites).
-        # Voir DetectionConfigCm.min_door_width_cm.
+        # Filtre largeur min/max porte (élimine micro-portes et faux positifs).
         _min_door_w_px = _cfg_px.min_door_width_px
-        doors = [d for d in doors if d.get('width_px', 0) >= _min_door_w_px]
+        _max_door_w_px = _cfg_px.max_door_width_px
+        doors = [d for d in doors
+                 if _min_door_w_px <= d.get('width_px', 0) <= _max_door_w_px]
 
         x0, y0, x1, y1 = bbox
         width_px = x1 - x0

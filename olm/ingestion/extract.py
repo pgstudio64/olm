@@ -673,9 +673,11 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
                 ))
             seg_start = i
             seg_kind = ray_kinds[i]
-    # Last segment
+    # Last segment — clamp end to actual face length so the last segment
+    # does not overshoot the bbox when step_px does not divide evenly.
+    face_len = (x1 - x0) if direction in ("north", "south") else (y1 - y0)
     px_start = seg_start * step_px
-    px_end = len(ray_kinds) * step_px
+    px_end = min(len(ray_kinds) * step_px, face_len)
     if px_end - px_start >= step_px:
         segments.append(WallSegment(
             start_px=px_start,
@@ -901,7 +903,7 @@ def extract_rooms(image: Image.Image,
 
     # Step 3: Binarize (two versions) — dilation from cm config.
     # Threshold stays at 180 (OCR scans are lighter than preprocessed plans
-    # which use binarize_threshold=110 via extract_room_features).
+    # which use binarize_threshold from DetectionConfigCm via extract_room_features).
     from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
     _cfg = DEFAULT_DETECTION_CONFIG_CM.to_px(scale_cm_per_px)
     binary, binary_raw = binarize(
@@ -1406,10 +1408,13 @@ def extract_rooms_from_preprocessed(
     if needs_detect:
         from PIL import Image as _PILImage
         from olm.ingestion.test_comb import _apply_detection_config
-        _apply_detection_config(scale_cm_per_px)
+        from olm.core.detection_config import DetectionConfigCm as _DCCm
+        _det_ov = json_data.get("_detection_overrides")
+        _dcfg_import = _DCCm.from_dict(_det_ov)
+        _apply_detection_config(scale_cm_per_px, _det_ov)
         _img_sd = _PILImage.open(enhanced_png_path).convert("L")
         _gray = np.asarray(_img_sd)
-        _bin_raw = _gray < 110
+        _bin_raw = _gray < _dcfg_import.binarize_threshold
         _bin = remove_non_ortho(_bin_raw)
         # Image couleur pour filtrage fenêtres/extérieur (D-156).
         _color_img = _PILImage.open(enhanced_png_path)
@@ -1419,7 +1424,7 @@ def extract_rooms_from_preprocessed(
             _other = [s for s in _all_seeds if s != (sx, sy)]
             features = extract_room_features(
                 _img_sd, (sx, sy), None, scale_cm_per_px,
-                threshold=110,
+                threshold=_dcfg_import.binarize_threshold,
                 binary_precomputed=_bin,
                 binary_raw_precomputed=_bin_raw,
                 color_image=_color_img,
@@ -1492,12 +1497,14 @@ def extract_rooms_from_preprocessed(
         windows = [_enrich_px_cm(w) for w in p["windows_raw"] if isinstance(w, dict)]
         doors = [_enrich_px_cm(d) for d in doors]
 
-        # Filtres largeur minimale (élimine les micro-ouvertures du JSON
-        # producer). Seuils cm-aware → comportement identique entre plans
-        # à différentes résolutions. Voir DetectionConfigCm.
+        # Filtres largeur min/max (élimine les micro-ouvertures et les
+        # faux positifs géants du JSON producer). Seuils cm-aware →
+        # comportement identique entre plans à différentes résolutions.
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
         _min_door_width_cm = _ddc.min_door_width_cm
-        doors = [d for d in doors if d.get("width_cm", 0) >= _min_door_width_cm]
+        _max_door_width_cm = _ddc.max_door_width_cm
+        doors = [d for d in doors
+                 if _min_door_width_cm <= d.get("width_cm", 0) <= _max_door_width_cm]
         _min_opening_width_cm = _ddc.min_opening_width_cm
         openings = [o for o in openings if o.get("width_cm", 0) >= _min_opening_width_cm]
 
@@ -1604,7 +1611,7 @@ def extract_room_features(
     transparent_zones_cm: list | None = None,
     doors_px: list | None = None,
     door_width_cm: int = 90,
-    threshold: int = 110,
+    threshold: int = 140,
     classify_step_cm: float = 15.0,
     binary_precomputed: np.ndarray | None = None,
     binary_raw_precomputed: np.ndarray | None = None,
@@ -1919,15 +1926,17 @@ def extract_room_features(
     # (JSON existant), on les préserve côté frontend.
     doors_out: list[dict] = []
     if not doors_px:
-        # Filtre largeur minimale porte (cf. DetectionConfigCm.min_door_width_cm).
+        # Filtre largeur min/max porte (cf. DetectionConfigCm).
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
-        _min_door_w_px = _ddc.to_px(scale_cm_per_px).min_door_width_px
+        _cfg_px = _ddc.to_px(scale_cm_per_px)
+        _min_door_w_px = _cfg_px.min_door_width_px
+        _max_door_w_px = _cfg_px.max_door_width_px
         for d in (_doors_detected or []):
             off = int(d.get("offset_px", 0))
             wpx = int(d.get("width_px", 0))
-            if wpx < _min_door_w_px:
+            if wpx < _min_door_w_px or wpx > _max_door_w_px:
                 continue
-            doors_out.append({
+            entry = {
                 "face": d.get("face"),
                 "offset_px": off,
                 "width_px": wpx,
@@ -1935,7 +1944,11 @@ def extract_room_features(
                 "width_cm": int(round(wpx * scale_cm_per_px)),
                 "hinge_side": d.get("hinge_side"),
                 "opens_inward": bool(d.get("opens_inward", True)),
-            })
+            }
+            if "seed_x" in d and "seed_y" in d:
+                entry["seed_x"] = int(d["seed_x"])
+                entry["seed_y"] = int(d["seed_y"])
+            doors_out.append(entry)
 
     return {
         "bbox_px": [int(nx0), int(ny0), int(nx1), int(ny1)],

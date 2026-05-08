@@ -49,7 +49,7 @@
       cartBboxesPx: [],
       show: {
         bbox: true, window: true, door: true, opening: true,
-        names: true, vrays: false, hrays: false, candidates: false,
+        names: true, seeds: false, vrays: false, hrays: false, candidates: false,
         grid: true,
       },
       zoomRoom: "",

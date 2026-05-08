@@ -257,8 +257,9 @@
       }
     });
 
-    // --- V-Rays / H-Rays toggles ---
+    // --- Seeds / V-Rays / H-Rays toggles ---
     ([
+      ["rvSeedsToggle", "showSeeds"],
       ["rvVraysToggle", "showVrays"],
       ["rvHraysToggle", "showHrays"],
     ]).forEach(function (entry) {

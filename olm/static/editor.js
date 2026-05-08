@@ -18,7 +18,7 @@ const COLOR_LABEL_BG     = "#0e0e0d";  // dim — dimension label background
 // Zoom factors and clamps (zoomIn / zoomOut).
 const ZOOM_IN_FACTOR         = 0.8;
 const ZOOM_OUT_FACTOR        = 1.25;
-const ZOOM_OUT_MAX_FIT_RATIO = 5;
+const ZOOM_OUT_MAX_FIT_RATIO = 2;
 
 // Seed / hit visual radius in cm SVG units.
 const SEED_DISC_R_PX = 3;
@@ -259,15 +259,24 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     });
   }
 
-  // Seed (disque vert) — affiché dès que V-Rays ou H-Rays est activée,
-  // même si aucun hit n'a encore été collecté (ex : avant 1er Rescan).
-  if (isReview && state.room_seed_cm &&
-      (state.showVrays || state.showHrays)) {
-    var _seedSx = roomX + state.room_seed_cm.x_cm * SCALE;
-    var _seedSy = roomY + state.room_seed_cm.y_cm * SCALE;
-    elements.push({ z: 9.8, s: '<circle cx="' + _seedSx.toFixed(1) +
-      '" cy="' + _seedSy.toFixed(1) + '" r="' + SEED_DISC_R_PX +
-      '" fill="' + COLOR_GOOD + '"/>' });
+  // Seeds (room seed green + door seeds orange) — toggle Seeds.
+  if (isReview && state.showSeeds) {
+    if (state.room_seed_cm) {
+      var _seedSx = roomX + state.room_seed_cm.x_cm * SCALE;
+      var _seedSy = roomY + state.room_seed_cm.y_cm * SCALE;
+      elements.push({ z: 9.8, s: '<circle cx="' + _seedSx.toFixed(1) +
+        '" cy="' + _seedSy.toFixed(1) + '" r="' + SEED_DISC_R_PX +
+        '" fill="' + COLOR_GOOD + '"/>' });
+    }
+    if (state.room_door_seeds_cm) {
+      state.room_door_seeds_cm.forEach(function (ds) {
+        var _dsx = roomX + ds.x_cm * SCALE;
+        var _dsy = roomY + ds.y_cm * SCALE;
+        elements.push({ z: 9.7, s: '<circle cx="' + _dsx.toFixed(1) +
+          '" cy="' + _dsy.toFixed(1) + '" r="' + SEED_DISC_R_PX +
+          '" fill="#ff9800"/>' });
+      });
+    }
   }
 
   // V-Rays / H-Rays debug (Room) — rayons axis-aligned depuis la ligne
@@ -1053,7 +1062,7 @@ function _renderImpl(targetSvg) {
       cmPerPx: 1 / SCALE,
       dotColor: COLOR_GRID,
       lineColor: COLOR_GRID_METER,
-      marginRatio: 0.5,
+      marginRatio: 1.0,
       minStartAt0: true,
     });
     gridParts.dots.forEach(function(s) { elements.push({ z: -0.5, s: s }); });
@@ -1968,6 +1977,15 @@ function loadRoomHitsAndSeedFromIngState(room) {
       return { x_cm: pC.x, y_cm: pC.y };
     });
   }
+  // Door seeds (orange) — same abs→canon conversion as room seed.
+  state.room_door_seeds_cm = [];
+  (ingRoom.doors || []).forEach(function (d) {
+    if (typeof d.seed_x !== 'number' || typeof d.seed_y !== 'number') return;
+    var pC = rotP(
+      { x: (d.seed_x - bx0) * sc, y: (d.seed_y - by0) * sc },
+      cf, absW, absD);
+    state.room_door_seeds_cm.push({ x_cm: pC.x, y_cm: pC.y });
+  });
 }
 window.loadRoomHitsAndSeedFromIngState = loadRoomHitsAndSeedFromIngState;
 

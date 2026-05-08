@@ -24,7 +24,7 @@ class DetectionConfigCm:
     """
 
     # --- Binarisation ---
-    binarize_threshold: int = 110            # niveaux gris (0-255), < = mur
+    binarize_threshold: int = 140            # niveaux gris (0-255), < = mur
     ortho_angle_tolerance_deg: float = 5.0   # tolérance orthogonalité
 
     # --- Classification / sizing des segments de mur ---
@@ -66,6 +66,9 @@ class DetectionConfigCm:
     # au chargement JSON). Élimine les micro-portes parasites issues
     # du JSON producer ou d'erreurs de classification.
     min_door_width_cm: float = 70.0
+    # Largeur maximale d'une porte. Au-delà de ce seuil, la détection
+    # est considérée comme un faux positif (ex. mur entier classé porte).
+    max_door_width_cm: float = 120.0
 
     # --- Couleur faces (corridor / extérieur) ---
     corridor_width_cm: float = 60.0     # largeur min supposée d'un couloir ;
@@ -108,6 +111,7 @@ class DetectionConfigCm:
                 self.min_door_arc_width_cm / self.comb_step_cm
             ))),
             min_door_width_px=_px(self.min_door_width_cm),
+            max_door_width_px=_px(self.max_door_width_cm),
             corridor_width_px=_px(self.corridor_width_cm),
             exterior_width_px=_px(self.exterior_width_cm),
             cartouche_margin_px=_px(self.cartouche_margin_cm),
@@ -156,6 +160,7 @@ class DetectionConfigPx:
     default_door_width_px: int
     min_door_arc_hits: int
     min_door_width_px: int
+    max_door_width_px: int
 
     corridor_width_px: int
     exterior_width_px: int
