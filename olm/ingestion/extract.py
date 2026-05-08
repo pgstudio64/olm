@@ -1149,73 +1149,118 @@ def _detect_face_colors(
     bbox_px: tuple,
     corridor_rgb: tuple[int, int, int],
     exterior_rgb: tuple[int, int, int],
-    corridor_strip_px: int = 8,
-    exterior_strip_px: int = 14,
     tolerance: int = 40,
+    max_scan_px: int = 300,
+    **_kwargs,
 ) -> dict:
-    """Sample pixels at the center of the corridor/exterior band outside bbox.
+    """Corner-scan color detection (D-158).
 
-    For each face, two sampling bands are tested:
-    - Corridor band centered at corridor_strip_px / 2 from bbox edge
-    - Exterior band centered at exterior_strip_px / 2 from bbox edge
+    From each bbox corner, scan outward in two perpendicular directions.
+    Stop at the first pixel matching corridor_rgb (green) or exterior_rgb
+    (blue) within ±tolerance.  No band width, no percentage threshold.
+
+    Corners and their scan directions:
+        NW (x0,y0) → north (dy=-1) + west (dx=-1)
+        NE (x1,y0) → north (dy=-1) + east (dx=+1)
+        SW (x0,y1) → south (dy=+1) + west (dx=-1)
+        SE (x1,y1) → south (dy=+1) + east (dx=+1)
 
     Args:
-        corridor_strip_px: Assumed corridor width in px (e.g. 60 cm).
-        exterior_strip_px: Assumed exterior width in px (e.g. 100 cm).
+        max_scan_px: Maximum scan distance in pixels (safety limit).
 
-    Returns dict with keys: corridor_face, exterior_faces.
+    Returns dict with keys:
+        corridor_face, exterior_faces, corner_hits (observability).
     """
     h, w = img_array.shape[:2]
     x0, y0, x1, y1 = bbox_px
+    corr = np.array(corridor_rgb, dtype=int)
+    ext = np.array(exterior_rgb, dtype=int)
 
-    def _sample_band(strip_px: int) -> dict[str, np.ndarray]:
-        """Return a thin sampling band centered at strip_px // 2."""
-        center = max(1, strip_px // 2)
-        half_band = max(1, strip_px // 5)
-        near = center - half_band
-        far = center + half_band
-        return {
-            "north": img_array[max(0, y0 - far):max(0, y0 - near), x0:x1],
-            "south": img_array[min(h, y1 + near):min(h, y1 + far), x0:x1],
-            "west":  img_array[y0:y1, max(0, x0 - far):max(0, x0 - near)],
-            "east":  img_array[y0:y1, min(w, x1 + near):min(w, x1 + far)],
-        }
+    def _scan_ray(
+        start_x: int, start_y: int, dx: int, dy: int,
+    ) -> dict | None:
+        """Scan from (start_x, start_y) stepping (dx, dy).
 
-    def _dominant_color(
-        samples: np.ndarray, target_rgb: tuple, tol: int,
-    ) -> bool:
-        if len(samples) == 0:
-            return False
-        diffs = np.abs(samples.astype(int) - np.array(target_rgb, dtype=int))
-        matches = np.all(diffs <= tol, axis=1)
-        return np.sum(matches) > len(samples) * 0.3
+        Returns {color: 'corridor'|'exterior', dist: int} or None.
+        """
+        px, py = start_x, start_y
+        for dist in range(1, max_scan_px + 1):
+            px += dx
+            py += dy
+            if px < 0 or px >= w or py < 0 or py >= h:
+                break
+            pixel = img_array[py, px].astype(int)
+            if np.all(np.abs(pixel - ext) <= tolerance):
+                return {"color": "exterior", "dist": dist}
+            if np.all(np.abs(pixel - corr) <= tolerance):
+                return {"color": "corridor", "dist": dist}
+        return None
 
-    corridor_regions = _sample_band(corridor_strip_px)
-    exterior_regions = _sample_band(exterior_strip_px)
+    # Corners: (name, x, y, scans: [(direction_name, face, dx, dy)])
+    corners = [
+        ("NW", x0, y0, [
+            ("north", "north", 0, -1),
+            ("west", "west", -1, 0),
+        ]),
+        ("NE", x1, y0, [
+            ("north", "north", 0, -1),
+            ("east", "east", 1, 0),
+        ]),
+        ("SW", x0, y1, [
+            ("south", "south", 0, 1),
+            ("west", "west", -1, 0),
+        ]),
+        ("SE", x1, y1, [
+            ("south", "south", 0, 1),
+            ("east", "east", 1, 0),
+        ]),
+    ]
 
-    faces = {}
+    # Collect per-face hits: face -> list of {corner, direction, color, dist}
+    face_hits: dict[str, list] = {
+        "north": [], "south": [], "east": [], "west": [],
+    }
+    corner_hits = []  # observability: all scan results
 
+    for corner_name, cx, cy, scans in corners:
+        for dir_name, face, dx, dy in scans:
+            hit = _scan_ray(cx, cy, dx, dy)
+            entry = {
+                "corner": corner_name,
+                "direction": dir_name,
+                "face": face,
+                "hit": hit,
+            }
+            corner_hits.append(entry)
+            if hit:
+                face_hits[face].append({
+                    "corner": corner_name,
+                    "color": hit["color"],
+                    "dist": hit["dist"],
+                })
+
+    # Determine corridor_face and exterior_faces from collected hits.
+    # Priority: exterior (blue) > corridor (green) for each face.
     corridor_face = ""
     exterior_faces = []
     for face in ("north", "south", "east", "west"):
-        # Corridor detection at corridor band center
-        c_region = corridor_regions[face]
-        if c_region.size > 0:
-            c_pixels = c_region.reshape(-1, 3)
-            if _dominant_color(c_pixels, corridor_rgb, tolerance):
-                if not corridor_face:
-                    corridor_face = face
-                faces[face] = "corridor"
-                continue
-        # Exterior detection at exterior band center
-        e_region = exterior_regions[face]
-        if e_region.size > 0:
-            e_pixels = e_region.reshape(-1, 3)
-            if _dominant_color(e_pixels, exterior_rgb, tolerance):
-                exterior_faces.append(face)
-                faces[face] = "exterior"
+        hits = face_hits[face]
+        if not hits:
+            continue
+        # A face has two scans (from two corners). Use closest hit.
+        ext_hits = [h for h in hits if h["color"] == "exterior"]
+        corr_hits = [h for h in hits if h["color"] == "corridor"]
+        if ext_hits:
+            exterior_faces.append(face)
+        elif corr_hits:
+            if not corridor_face:
+                corridor_face = face
 
-    return {"corridor_face": corridor_face, "exterior_faces": exterior_faces}
+    return {
+        "corridor_face": corridor_face,
+        "exterior_faces": exterior_faces,
+        "corner_hits": corner_hits,
+    }
 
 
 def _face_borders_color(
@@ -1598,18 +1643,6 @@ def extract_rooms_from_preprocessed(
             _enh_img = np.array(Image.open(enhanced_png_path).convert("RGB"))
             _corridor_rgb = tuple(json_data.get("corridor_rgb", [193, 247, 179]))
             _exterior_rgb = tuple(json_data.get("exterior_rgb", [135, 206, 235]))
-            from olm.core.detection_config import DetectionConfigCm
-            _det_ov = json_data.get("_detection_overrides")
-            _dcfg = DetectionConfigCm.from_dict(_det_ov)
-            if scale_cm_per_px > 0:
-                _px_per_cm = 1.0 / scale_cm_per_px
-                _corridor_strip_px = max(
-                    1, int(round(_dcfg.corridor_width_cm * _px_per_cm)))
-                _exterior_strip_px = max(
-                    1, int(round(_dcfg.exterior_width_cm * _px_per_cm)))
-            else:
-                _corridor_strip_px = 8
-                _exterior_strip_px = 14
             _OPPOSITE = {"north": "south", "south": "north",
                          "east": "west", "west": "east"}
             for room_dict in result:
@@ -1617,8 +1650,6 @@ def extract_rooms_from_preprocessed(
                 if bb and bb[2] > bb[0] and bb[3] > bb[1]:
                     colors = _detect_face_colors(
                         _enh_img, bb, _corridor_rgb, _exterior_rgb,
-                        corridor_strip_px=_corridor_strip_px,
-                        exterior_strip_px=_exterior_strip_px,
                     )
                     # canonical_top_face in JSON → override color detection
                     # (corridor_face = opposite).
