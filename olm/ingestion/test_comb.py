@@ -685,15 +685,12 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
     coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
 
-    # Bbox (start positions) = per-direction distances from seed.
-    # NOT symmetric: the seed is not necessarily centered in the room.
-    # Using max(north, south) caused rays to start outside the room
-    # when the seed was near one wall (e.g. south=7, north=94 → bbox
-    # extended 94px south of seed, 87px past the actual wall).
-    bbox_x0 = cx - coarse_mode['west']
-    bbox_x1 = cx + coarse_mode['east']
-    bbox_y0 = cy - coarse_mode['north']
-    bbox_y1 = cy + coarse_mode['south']
+    # Bbox (start positions) = symmetric, based on mode (dominant wall).
+    # v0.4.7 behavior — seed assumed roughly centered.
+    bbox_x0 = cx - coarse_ew
+    bbox_x1 = cx + coarse_ew
+    bbox_y0 = cy - coarse_ns
+    bbox_y1 = cy + coarse_ns
     # Ray range = based on max (to traverse doors), capped by seed distance
     max_north = coarse_max['north'] + RAY_MARGIN_PX
     max_south = coarse_max['south'] + RAY_MARGIN_PX
@@ -759,28 +756,21 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
 
     raw_counts = {d: len(dir_hits[d]) for d in dir_hits}
 
-    # Filter hits that go beyond a neighboring seed.
-    # A hit is invalid if it passes a neighbor's seed in the ray direction
-    # AND the neighbor seed is roughly aligned (within the room's perpendicular
-    # dimension).  Alignment tolerance uses the coarse room dimensions so that
-    # even rays near the seed center (hy ≈ cy) are correctly filtered.
+    # Filter hits that go beyond a neighboring seed (v0.4.7 logic).
     if other_seeds:
-        tol_ns = max(coarse_ns, step_px * 3)
-        tol_ew = max(coarse_ew, step_px * 3)
-
         def _not_past_seed(hx, hy, direction):
             for ox, oy in other_seeds:
                 if direction == 'east' and ox > cx and hx > ox:
-                    if abs(hy - oy) < tol_ns:
+                    if abs(hy - oy) < abs(hy - cy) * 2:
                         return False
                 elif direction == 'west' and ox < cx and hx < ox:
-                    if abs(hy - oy) < tol_ns:
+                    if abs(hy - oy) < abs(hy - cy) * 2:
                         return False
                 elif direction == 'south' and oy > cy and hy > oy:
-                    if abs(hx - ox) < tol_ew:
+                    if abs(hx - ox) < abs(hx - cx) * 2:
                         return False
                 elif direction == 'north' and oy < cy and hy < oy:
-                    if abs(hx - ox) < tol_ew:
+                    if abs(hx - ox) < abs(hx - cx) * 2:
                         return False
             return True
 
