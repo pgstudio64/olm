@@ -559,6 +559,45 @@ def _count_transitions(profile: list[bool]) -> int:
     return count
 
 
+def _opening_has_depth(binary: np.ndarray, bbox: tuple,
+                       direction: str, seg: "WallSegment",
+                       step_px: int, min_depth_px: int) -> bool:
+    """Check that an opening has free space behind it (inside the room).
+
+    Probes perpendicular to the wall, *toward the room interior*, at the
+    center of the opening.  If a black pixel (wall / window) is found
+    within ``min_depth_px`` the opening is invalid (likely a pillar gap
+    or a drawing artefact).
+
+    Returns True if the opening is deep enough (valid).
+    """
+    x0, y0, x1, y1 = bbox
+    h, w = binary.shape
+    mid_seg = (seg.start_px + seg.end_px) // 2
+
+    # Probe toward the room interior (opposite of the outward probe_dx/dy
+    # used for texture analysis).
+    if direction == "north":
+        px, py, dx, dy = x0 + mid_seg, y0, 0, 1      # probe south (into room)
+    elif direction == "south":
+        px, py, dx, dy = x0 + mid_seg, y1, 0, -1      # probe north (into room)
+    elif direction == "west":
+        px, py, dx, dy = x0, y0 + mid_seg, 1, 0       # probe east (into room)
+    elif direction == "east":
+        px, py, dx, dy = x1, y0 + mid_seg, -1, 0      # probe west (into room)
+    else:
+        return True
+
+    for i in range(1, min_depth_px + 1):
+        nx = px + dx * i
+        ny = py + dy * i
+        if nx < 0 or nx >= w or ny < 0 or ny >= h:
+            return True  # out of image = no obstacle
+        if binary[ny, nx]:
+            return False  # hit wall within min_depth → not a valid opening
+    return True
+
+
 def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
                           bbox: tuple, direction: str, step_px: int,
                           text_bboxes: list = None,
@@ -707,6 +746,10 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
         elif seg.kind == "opening":
             width_px = seg.end_px - seg.start_px
             if width_px < MIN_OPENING_WIDTH_PX:
+                seg.kind = "wall"
+            elif not _opening_has_depth(
+                    binary, bbox, direction, seg, step_px,
+                    MIN_OPENING_DEPTH_PX):
                 seg.kind = "wall"
         filtered.append(seg)
     segments = filtered

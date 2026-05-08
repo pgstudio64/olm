@@ -1862,6 +1862,7 @@
               bbox_px: r.bbox_px,
               seed_px: seedPx,
               transparent_zones: absTransparents,
+              doors: (amend && amend.doors) || r.doors || [],
             });
             validRooms.push(r);
           });

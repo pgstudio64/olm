@@ -74,7 +74,8 @@ def _get_detection_overrides() -> dict | None:
         overrides = {}
         for key in ("cartouche_margin_cm", "text_skip_margin_cm",
                      "corridor_width_cm", "exterior_width_cm",
-                     "max_door_width_cm"):
+                     "max_door_width_cm", "min_opening_depth_cm",
+                     "min_obstacle_width_cm"):
             if key in _ing:
                 overrides[key] = float(_ing[key])
         if "binarize_threshold" in _ing:
@@ -1264,6 +1265,10 @@ def api_room_reanalyze():
         threshold = int(data.get("threshold", _get_default_threshold()))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
+        # Seeds of all other rooms — limits rays at room boundaries.
+        raw_other = data.get("other_seeds_px") or []
+        other_seeds_px = [(int(s[0]), int(s[1]))
+                          for s in raw_other if s and len(s) >= 2]
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1314,6 +1319,7 @@ def api_room_reanalyze():
             cartouche_bboxes_px=cart_bboxes_px,
             color_image=color_img,
             exterior_rgb=_get_exterior_rgb(),
+            other_seeds=other_seeds_px or None,
         )
         return jsonify(result)
     except Exception as e:
@@ -1550,6 +1556,13 @@ def api_room_reanalyze_batch():
         _binary_raw_global = _gray_global < threshold
         _binary_global = remove_non_ortho(_binary_raw_global)
 
+        # Collect all seeds for inter-room ray limiting.
+        all_seeds_px: list[tuple[int, int]] = []
+        for r in rooms:
+            sp = r.get("seed_px")
+            if sp and len(sp) >= 2:
+                all_seeds_px.append((int(sp[0]), int(sp[1])))
+
         results = []
         for r in rooms:
             name = r.get("name", "")
@@ -1562,10 +1575,12 @@ def api_room_reanalyze_batch():
             if not seed_px or len(seed_px) != 2:
                 results.append({"name": name, "error": "missing seed_px"})
                 continue
+            cur_seed = (int(seed_px[0]), int(seed_px[1]))
+            other_seeds = [s for s in all_seeds_px if s != cur_seed]
             try:
                 features = extract_room_features(
                     img,
-                    (int(seed_px[0]), int(seed_px[1])),
+                    cur_seed,
                     tuple(int(v) for v in bbox_px),
                     scale,
                     transparent_zones_cm=r.get("transparent_zones") or [],
@@ -1577,6 +1592,7 @@ def api_room_reanalyze_batch():
                     clip_to_bbox=clip_to_bbox,
                     color_image=color_img,
                     exterior_rgb=_get_exterior_rgb(),
+                    other_seeds=other_seeds or None,
                 )
                 results.append({"name": name, **features})
             except Exception as e:

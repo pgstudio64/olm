@@ -414,6 +414,14 @@
           var lockWallsFlag = !!(lockWallsElFetch && lockWallsElFetch.checked);
           var planMode = (ingst._selectedPlan && ingst._selectedPlan.mode)
                          || 'ocr';
+          // Collect seeds of all other rooms to limit rays at boundaries.
+          var otherSeeds = [];
+          (ingst.rooms || []).forEach(function (ir) {
+            var sp = ir.seed_px || ir.seed;
+            if (sp && ir.name !== amend.roomName) {
+              otherSeeds.push([sp[0], sp[1]]);
+            }
+          });
           var resp = await fetch("/api/room/reanalyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -428,6 +436,7 @@
               door_width_cm: doorWidthCm,
               clip_to_bbox: lockWallsFlag,
               mode: planMode,
+              other_seeds_px: otherSeeds,
             }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);
