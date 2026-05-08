@@ -436,7 +436,7 @@
             "",
             "--- DOORS ---",
             "doors: " + (data.doors ? data.doors.length : 0),
-          ];
+          ]);
           (data.doors || []).forEach(function (d) {
             lines.push("  " + d.face + " @" + d.offset_px +
               " w=" + d.width_px +
