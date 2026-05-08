@@ -274,6 +274,22 @@ function renderFloorplanSettings() {
                       parseFloat(this.value) || 6.0);
     };
   }
+  var btEl = document.getElementById("cfgBinarizeThreshold");
+  if (btEl) {
+    btEl.value = ing.binarize_threshold != null ? ing.binarize_threshold : 140;
+    btEl.onchange = function() {
+      saveConfigField(["ingestion", "binarize_threshold"],
+                      parseInt(this.value) || 140);
+    };
+  }
+  var mdEl = document.getElementById("cfgMaxDoorWidth");
+  if (mdEl) {
+    mdEl.value = ing.max_door_width_cm != null ? ing.max_door_width_cm : 120;
+    mdEl.onchange = function() {
+      saveConfigField(["ingestion", "max_door_width_cm"],
+                      parseInt(this.value) || 120);
+    };
+  }
 
   var ext = ing.preprocessed_exterior_rgb || [135, 206, 235];
   var cor = ing.preprocessed_corridor_rgb || [193, 247, 179];

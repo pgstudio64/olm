@@ -73,15 +73,32 @@ def _get_detection_overrides() -> dict | None:
             _ing = json.load(_f).get("ingestion", {})
         overrides = {}
         for key in ("cartouche_margin_cm", "text_skip_margin_cm",
-                     "corridor_width_cm", "exterior_width_cm"):
+                     "corridor_width_cm", "exterior_width_cm",
+                     "max_door_width_cm"):
             if key in _ing:
                 overrides[key] = float(_ing[key])
+        if "binarize_threshold" in _ing:
+            overrides["binarize_threshold"] = int(_ing["binarize_threshold"])
         return overrides or None
     except Exception:
         return None
 
 
 _DEFAULT_EXTERIOR_RGB = (135, 206, 235)
+
+
+def _get_default_threshold() -> int:
+    """Read binarize threshold from config.json, default 140."""
+    _root = os.path.dirname(BASE_DIR)
+    _config_path = os.path.join(_root, "project", "config.json")
+    if not os.path.exists(_config_path):
+        return 140
+    try:
+        with open(_config_path, encoding="utf-8") as _f:
+            _ing = json.load(_f).get("ingestion", {})
+        return int(_ing.get("binarize_threshold", _ing.get("threshold", 140)))
+    except Exception:
+        return 140
 
 
 def _get_exterior_rgb() -> tuple:
@@ -287,7 +304,7 @@ def api_ingestion_extract():
     Accepts multipart form with:
       - 'image': the floor plan image file
       - 'scale' (optional): cm per pixel (default 0.5)
-      - 'threshold' (optional): binarization threshold (default 110)
+      - 'threshold' (optional): binarization threshold (default 140)
 
     Returns JSON with detected rooms (bbox, doors, windows, openings, hits).
     """
@@ -297,7 +314,7 @@ def api_ingestion_extract():
         plan_path = request.form.get('plan_path', '')
         scale_str = request.form.get('scale', '')
         scale = float(scale_str) if scale_str else None
-        threshold = int(request.form.get('threshold', 110))
+        threshold = int(request.form.get('threshold', _get_default_threshold()))
 
         if 'image' in request.files:
             f = request.files['image']
@@ -365,7 +382,7 @@ def api_ingestion_debug():
             plan_path = request.form.get('plan_path', '')
             scale_str = request.form.get('scale', '')
             scale = float(scale_str) if scale_str else None
-            threshold = int(request.form.get('threshold', 110))
+            threshold = int(request.form.get('threshold', _get_default_threshold()))
 
             if 'image' in request.files:
                 f = request.files['image']
@@ -500,7 +517,7 @@ def api_ingestion_binarize():
     from PIL import Image as PILImage
     try:
         plan_path = request.form.get('plan_path', '')
-        threshold = int(request.form.get('threshold', 110))
+        threshold = int(request.form.get('threshold', _get_default_threshold()))
 
         if 'image' in request.files:
             import tempfile
@@ -539,7 +556,7 @@ def api_import_ocr():
     Accepte multipart form avec :
       - floorplan_image : fichier image du plan de sol (PNG, JPEG ou PDF)
       - scale_cm_per_px (optionnel) : cm par pixel ; défaut depuis config.json
-      - threshold (optionnel) : seuil de binarisation ; défaut 110
+      - threshold (optionnel) : seuil de binarisation ; défaut 140
 
     Retourne :
       {
@@ -573,7 +590,7 @@ def api_import_ocr():
     # Valeurs par défaut depuis config.json
     _config_path = os.path.join(os.path.dirname(BASE_DIR), "project", "config.json")
     _default_scale: float = 0.5
-    _default_threshold: int = 110
+    _default_threshold = _get_default_threshold()
     _pdf_render_dpi: int = 200
     _detection_overrides: dict | None = None
     if os.path.exists(_config_path):
@@ -581,7 +598,6 @@ def api_import_ocr():
             _cfg = json.load(_f)
         _ing = _cfg.get("ingestion", {})
         _default_scale = float(_ing.get("scale_cm_per_px", _default_scale))
-        _default_threshold = int(_ing.get("threshold", _default_threshold))
         _pdf_render_dpi = int(_ing.get("pdf_render_dpi", _pdf_render_dpi))
         # D-155 : detection overrides via _get_detection_overrides()
 
@@ -1224,7 +1240,7 @@ def api_room_reanalyze():
           "bbox_px": [x0, y0, x1, y1],
           "scale_cm_per_px": 0.5,
           "transparent_zones": [{x_cm, y_cm, width_cm, depth_cm}, ...],
-          "threshold": 110  (optionnel)
+          "threshold": 140  (optionnel)
         }
 
     Retour :
@@ -1245,7 +1261,7 @@ def api_room_reanalyze():
         transparents = data.get("transparent_zones", []) or []
         doors = data.get("doors", []) or []
         door_width_cm = int(data.get("door_width_cm", 90))
-        threshold = int(data.get("threshold", 110))
+        threshold = int(data.get("threshold", _get_default_threshold()))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
 
@@ -1462,7 +1478,7 @@ def api_room_reanalyze_batch():
         {
           "plan_path": "/chemin/vers/plan-SD.png",
           "scale_cm_per_px": 0.5,
-          "threshold": 110,
+          "threshold": 140,
           "rooms": [
             {"name": "237", "bbox_px": [x0,y0,x1,y1], "transparent_zones": [...]},
             ...
@@ -1477,7 +1493,7 @@ def api_room_reanalyze_batch():
         data = request.json or {}
         plan_path = data.get("plan_path", "")
         scale = float(data.get("scale_cm_per_px", 0.5))
-        threshold = int(data.get("threshold", 110))
+        threshold = int(data.get("threshold", _get_default_threshold()))
         door_width_cm = int(data.get("door_width_cm", 90))
         rooms = data.get("rooms") or []
         clip_to_bbox = bool(data.get("clip_to_bbox", False))

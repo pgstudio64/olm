@@ -123,6 +123,16 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <input type="number" id="cfgTextSkipMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
           <span style="font-size:9px;color:var(--text-dim);">Margin around text bboxes for wall classifier</span>
         </div>
+        <label class="settings-label">Binarize threshold</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgBinarizeThreshold" class="settings-input" style="width:70px;" min="50" max="250" step="5">
+          <span style="font-size:9px;color:var(--text-dim);">Grayscale level below which a pixel is wall (0-255)</span>
+        </div>
+        <label class="settings-label">Max door width (cm)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgMaxDoorWidth" class="settings-input" style="width:70px;" min="80" max="300" step="10">
+          <span style="font-size:9px;color:var(--text-dim);">Doors wider than this are rejected as false positives</span>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -280,6 +290,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             <label><input type="checkbox" id="ing_window" checked> Windows</label>
             <label><input type="checkbox" id="ing_door" checked> Doors</label>
             <label><input type="checkbox" id="ing_opening" checked> Openings</label>
+            <label><input type="checkbox" id="ing_seeds"> Seeds</label>
             <label><input type="checkbox" id="ing_vrays"> V-Rays</label>
             <label><input type="checkbox" id="ing_hrays"> H-Rays</label>
             <span style="flex:1;"></span>
@@ -333,6 +344,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           </div>
           <div class="fp-canvas-wrap" id="rvCanvasWrap">
             <div class="canvas-toolbar">
+              <label><input type="checkbox" id="rvSeedsToggle"> Seeds</label>
               <label><input type="checkbox" id="rvVraysToggle"> V-Rays</label>
               <label><input type="checkbox" id="rvHraysToggle"> H-Rays</label>
               <span style="flex:1;"></span>

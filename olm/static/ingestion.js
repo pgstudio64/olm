@@ -987,19 +987,13 @@
       var cx = seedPx ? seedPx[0] : (x0 + x1) / 2;
       var cy = seedPx ? seedPx[1] : (y0 + y1) / 2;
 
-      // Rays — clippés aux bornes du bbox pièce. Le comb retourne tous
-      // les hits (y compris ceux au-delà du bbox dans toutes les
-      // directions). Sans clip, le rendu trace une ligne seed→hit qui
-      // déborde largement du bbox sur les plans haute résolution. On
-      // ne dessine que les hits qui définissent la bbox courant.
+      // Rays — tous les hits retournés par le comb, y compris ceux
+      // au-delà du bbox (portes, arcs). Aucun clip : le diagnostic
+      // visuel doit montrer exactement ce que le ray-cast a vu.
       if (show.vrays || show.hrays) {
         var raySW = (OVERLAY_RAY_STROKE * pxScale).toFixed(2);
-        function _hitInBbox(hx, hy) {
-          return hx >= x0 && hx <= x1 && hy >= y0 && hy <= y1;
-        }
         (room.hits || []).forEach(function (hit) {
           var hx = hit[0], hy = hit[1];
-          if (!_hitInBbox(hx, hy)) return;
           if (hy < cy && show.vrays) {
             els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
               '" y2="' + hy + '" stroke="' + COLORS.vray_n +
@@ -1018,22 +1012,23 @@
               '" stroke-width="' + raySW + '"/>');
           }
         });
-        // Hits as dots — même clip que rays.
+        // Hits as dots
         var hitR = (OVERLAY_HIT_RADIUS * pxScale).toFixed(2);
         (room.hits || []).forEach(function (hit) {
           var hx = hit[0], hy = hit[1];
-          if (!_hitInBbox(hx, hy)) return;
           var isV = (hy !== cy), isH = (hx !== cx);
           if ((isV && show.vrays) || (isH && show.hrays)) {
             els.push('<circle cx="' + hx + '" cy="' + hy +
               '" r="' + hitR + '" fill="' + COLORS.hit + '"/>');
           }
         });
-        // Seed pièce
+      }
+
+      // Seeds (room seed green + door seeds orange)
+      if (show.seeds) {
         var seedR = (OVERLAY_SEED_RADIUS * pxScale).toFixed(2);
         els.push('<circle cx="' + cx + '" cy="' + cy +
           '" r="' + seedR + '" fill="' + COLORS.seed + '"/>');
-        // Door seeds (orange circles at detection origin)
         (room.doors || []).forEach(function (d) {
           if (typeof d.seed_x !== 'number' || typeof d.seed_y !== 'number') return;
           els.push('<circle cx="' + d.seed_x + '" cy="' + d.seed_y +
@@ -1319,6 +1314,11 @@
 
   function zoomBy(factor) {
     var vb = ingState.vb;
+    // Clamp zoom out to ZOOM_MAX_EXTENT_RATIO × plan size.
+    if (factor > 1) {
+      var maxW = (ingState.planW || 1000) * ZOOM_MAX_EXTENT_RATIO;
+      if (vb.w * factor > maxW) return;
+    }
     var cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
     vb.w *= factor;
     vb.h *= factor;
@@ -1472,7 +1472,7 @@
   function setupToggles() {
     var keys = {
       r: 'bbox', w: 'window', d: 'door', o: 'opening',
-      v: 'vrays', h: 'hrays', c: 'candidates',
+      s: 'seeds', v: 'vrays', h: 'hrays', c: 'candidates',
       g: 'grid'
     };
 
