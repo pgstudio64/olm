@@ -1446,6 +1446,9 @@ def api_debug_room_diagnostic():
                 result["color_params"] = {
                     "corridor_rgb": list(_get_corridor_rgb()),
                     "exterior_rgb": list(_get_exterior_rgb()),
+                    "image_path": plan_path,
+                    "image_mode": color_img.mode,
+                    "image_size": list(color_img.size),
                 }
                 _OPP = {"north": "south", "south": "north",
                          "east": "west", "west": "east"}

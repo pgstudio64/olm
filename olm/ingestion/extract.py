@@ -1150,23 +1150,20 @@ def _detect_face_colors(
     corridor_rgb: tuple[int, int, int],
     exterior_rgb: tuple[int, int, int],
     tolerance: int = 40,
-    max_scan_px: int = 300,
     **_kwargs,
 ) -> dict:
-    """Corner-scan color detection (D-158).
+    """Corner-scan color detection (D-161).
 
-    From each bbox corner, scan outward in two perpendicular directions.
-    Stop at the first pixel matching corridor_rgb (green) or exterior_rgb
-    (blue) within ±tolerance.  No band width, no percentage threshold.
+    From each bbox corner, scan outward in two perpendicular directions
+    until the image edge. Stop at the first pixel matching corridor_rgb
+    (green) or exterior_rgb (blue) within ±tolerance.
+    No distance threshold, no percentage threshold.
 
     Corners and their scan directions:
         NW (x0,y0) → north (dy=-1) + west (dx=-1)
         NE (x1,y0) → north (dy=-1) + east (dx=+1)
         SW (x0,y1) → south (dy=+1) + west (dx=-1)
         SE (x1,y1) → south (dy=+1) + east (dx=+1)
-
-    Args:
-        max_scan_px: Maximum scan distance in pixels (safety limit).
 
     Returns dict with keys:
         corridor_face, exterior_faces, corner_hits (observability).
@@ -1178,23 +1175,68 @@ def _detect_face_colors(
 
     def _scan_ray(
         start_x: int, start_y: int, dx: int, dy: int,
-    ) -> dict | None:
-        """Scan from (start_x, start_y) stepping (dx, dy).
+    ) -> dict:
+        """Scan from (start_x, start_y) in direction (dx, dy) to image edge.
 
-        Returns {color: 'corridor'|'exterior', dist: int} or None.
+        Uses numpy vectorized operations on the full row/column strip.
+
+        Returns dict with keys:
+            color: 'corridor'|'exterior'|None
+            dist: int (distance to match, or to image edge)
+            reason: 'match'|'boundary'
+            first_rgb: [R,G,B] of first non-dark pixel (brightness>50)
         """
-        px, py = start_x, start_y
-        for dist in range(1, max_scan_px + 1):
-            px += dx
-            py += dy
-            if px < 0 or px >= w or py < 0 or py >= h:
-                break
-            pixel = img_array[py, px].astype(int)
-            if np.all(np.abs(pixel - ext) <= tolerance):
-                return {"color": "exterior", "dist": dist}
-            if np.all(np.abs(pixel - corr) <= tolerance):
-                return {"color": "corridor", "dist": dist}
-        return None
+        # Extract the 1-D strip of pixels from start to image edge.
+        if dx == 0 and dy == -1:       # north
+            strip = img_array[0:start_y, start_x, :][::-1]
+        elif dx == 0 and dy == 1:      # south
+            strip = img_array[start_y + 1:h, start_x, :]
+        elif dx == -1 and dy == 0:     # west
+            strip = img_array[start_y, 0:start_x, :][::-1]
+        elif dx == 1 and dy == 0:      # east
+            strip = img_array[start_y, start_x + 1:w, :]
+        else:
+            return {"color": None, "dist": 0,
+                    "reason": "boundary", "first_rgb": None}
+
+        if len(strip) == 0:
+            return {"color": None, "dist": 0,
+                    "reason": "boundary", "first_rgb": None}
+
+        # Vectorized match: check all pixels at once.
+        strip_int = strip.astype(int)
+        ext_match = np.all(np.abs(strip_int - ext) <= tolerance, axis=1)
+        corr_match = np.all(np.abs(strip_int - corr) <= tolerance, axis=1)
+
+        # First non-dark pixel (any channel > 50).
+        bright = np.max(strip_int, axis=1) > 50
+        first_bright = int(np.argmax(bright)) if np.any(bright) else -1
+        first_rgb = (strip_int[first_bright].tolist()
+                     if first_bright >= 0 else None)
+
+        # Find first match (exterior has priority over corridor).
+        ext_idx = int(np.argmax(ext_match)) if np.any(ext_match) else -1
+        corr_idx = int(np.argmax(corr_match)) if np.any(corr_match) else -1
+
+        # Pick closest match.
+        best_idx = -1
+        best_color = None
+        if ext_idx >= 0 and corr_idx >= 0:
+            if ext_idx <= corr_idx:
+                best_idx, best_color = ext_idx, "exterior"
+            else:
+                best_idx, best_color = corr_idx, "corridor"
+        elif ext_idx >= 0:
+            best_idx, best_color = ext_idx, "exterior"
+        elif corr_idx >= 0:
+            best_idx, best_color = corr_idx, "corridor"
+
+        if best_color:
+            return {"color": best_color, "dist": best_idx + 1,
+                    "reason": "match", "first_rgb": first_rgb}
+
+        return {"color": None, "dist": len(strip),
+                "reason": "boundary", "first_rgb": first_rgb}
 
     # Corners: (name, x, y, scans: [(direction_name, face, dx, dy)])
     corners = [
@@ -1232,7 +1274,7 @@ def _detect_face_colors(
                 "hit": hit,
             }
             corner_hits.append(entry)
-            if hit:
+            if hit["color"]:
                 face_hits[face].append({
                     "corner": corner_name,
                     "color": hit["color"],

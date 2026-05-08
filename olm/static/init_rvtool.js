@@ -409,13 +409,23 @@
             "--- CORNER SCAN ---",
           ];
           ch.forEach(function (c) {
-            var hitStr = c.hit
-              ? c.hit.color + " at " + c.hit.dist + "px"
-              : "(none)";
+            var h = c.hit || {};
+            var hitStr = h.color
+              ? h.color + " at " + h.dist + "px"
+              : "(none) " + (h.reason || "") +
+                " @" + (h.dist || 0) + "px" +
+                (h.first_rgb
+                  ? " rgb=" + JSON.stringify(h.first_rgb)
+                  : "");
             lines.push(
               "  " + c.corner + " -> " + c.direction +
               " : " + hitStr);
           });
+          var cp = data.color_params || {};
+          if (cp.image_mode) {
+            lines.push("  image_mode: " + cp.image_mode +
+              " size: " + JSON.stringify(cp.image_size));
+          }
           lines = lines.concat([
             "",
             "--- BBOX ---",
