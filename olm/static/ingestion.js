@@ -1033,8 +1033,7 @@
         var seedR = (OVERLAY_SEED_RADIUS * pxScale).toFixed(2);
         els.push('<circle cx="' + cx + '" cy="' + cy +
           '" r="' + seedR + '" fill="' + COLORS.seed + '"/>');
-        // Seeds de portes (orange) — vérifie visuellement que l'ancrage
-        // seed → arc de porte se positionne bien.
+        // Door seeds (orange circles at detection origin)
         (room.doors || []).forEach(function (d) {
           if (typeof d.seed_x !== 'number' || typeof d.seed_y !== 'number') return;
           els.push('<circle cx="' + d.seed_x + '" cy="' + d.seed_y +
