@@ -711,50 +711,50 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
                              'west': int(max_west), 'east': int(max_east)}
 
     # === Phase 2: fine comb, bounded in position AND range ===
-    # D-160: rays traverse obstacles narrower than MIN_OBSTACLE_WIDTH_PX
-    # to find the real wall behind pillars.
+    # D-160: ray_single_through exists but is DISABLED — min_obstacle_width_cm
+    # (30 cm) traverses interior walls (~10-15 cm). Needs a dedicated
+    # pillar_max_width_cm parameter before activation.
     dir_hits = {'north': [], 'south': [], 'east': [], 'west': []}
     all_obstacles: list[tuple[int, int, int, int]] = []
-    min_wall = MIN_OBSTACLE_WIDTH_PX
-
-    def _cast(origin_x, origin_y, ddx, ddy, max_d, direction):
-        d, obs = ray_single_through(
-            binary, origin_x, origin_y, ddx, ddy, max_d, min_wall)
-        if d > 0:
-            hx = origin_x + ddx * d
-            hy = origin_y + ddy * d
-            dir_hits[direction].append((hx, hy))
-            for os_start, os_end in obs:
-                ox = origin_x + ddx * os_start
-                oy = origin_y + ddy * os_start
-                ox2 = origin_x + ddx * os_end
-                oy2 = origin_y + ddy * os_end
-                all_obstacles.append((
-                    min(ox, ox2), min(oy, oy2),
-                    max(ox, ox2), max(oy, oy2)))
 
     # Vertical rays (N and S)
     rx = cx
     while rx >= bbox_x0:
-        _cast(rx, cy, 0, -1, max_north, 'north')
-        _cast(rx, cy, 0, 1, max_south, 'south')
+        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
+        if d > 0:
+            dir_hits['north'].append((rx, cy - d))
+        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
+        if d > 0:
+            dir_hits['south'].append((rx, cy + d))
         rx -= step_px
     rx = cx + step_px
     while rx <= bbox_x1:
-        _cast(rx, cy, 0, -1, max_north, 'north')
-        _cast(rx, cy, 0, 1, max_south, 'south')
+        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
+        if d > 0:
+            dir_hits['north'].append((rx, cy - d))
+        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
+        if d > 0:
+            dir_hits['south'].append((rx, cy + d))
         rx += step_px
 
     # Horizontal rays (E and W)
     ry = cy
     while ry >= bbox_y0:
-        _cast(cx, ry, -1, 0, max_west, 'west')
-        _cast(cx, ry, 1, 0, max_east, 'east')
+        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
+        if d > 0:
+            dir_hits['west'].append((cx - d, ry))
+        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
+        if d > 0:
+            dir_hits['east'].append((cx + d, ry))
         ry -= step_px
     ry = cy + step_px
     while ry <= bbox_y1:
-        _cast(cx, ry, -1, 0, max_west, 'west')
-        _cast(cx, ry, 1, 0, max_east, 'east')
+        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
+        if d > 0:
+            dir_hits['west'].append((cx - d, ry))
+        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
+        if d > 0:
+            dir_hits['east'].append((cx + d, ry))
         ry += step_px
 
     raw_counts = {d: len(dir_hits[d]) for d in dir_hits}
