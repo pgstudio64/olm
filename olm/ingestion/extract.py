@@ -1104,46 +1104,71 @@ def _detect_face_colors(
     bbox_px: tuple,
     corridor_rgb: tuple[int, int, int],
     exterior_rgb: tuple[int, int, int],
-    margin_px: int = 8,
+    corridor_strip_px: int = 8,
+    exterior_strip_px: int = 14,
     tolerance: int = 40,
 ) -> dict:
-    """Sample pixels just outside each face of a room bbox to detect color zones.
+    """Sample pixels at the center of the corridor/exterior band outside bbox.
+
+    For each face, two sampling bands are tested:
+    - Corridor band centered at corridor_strip_px / 2 from bbox edge
+    - Exterior band centered at exterior_strip_px / 2 from bbox edge
+
+    Args:
+        corridor_strip_px: Assumed corridor width in px (e.g. 60 cm).
+        exterior_strip_px: Assumed exterior width in px (e.g. 100 cm).
 
     Returns dict with keys: corridor_face, exterior_faces.
     """
     h, w = img_array.shape[:2]
     x0, y0, x1, y1 = bbox_px
 
-    def _dominant_color(samples: np.ndarray, target_rgb: tuple, tol: int) -> bool:
+    def _sample_band(strip_px: int) -> dict[str, np.ndarray]:
+        """Return a thin sampling band centered at strip_px // 2."""
+        center = max(1, strip_px // 2)
+        half_band = max(1, strip_px // 5)
+        near = center - half_band
+        far = center + half_band
+        return {
+            "north": img_array[max(0, y0 - far):max(0, y0 - near), x0:x1],
+            "south": img_array[min(h, y1 + near):min(h, y1 + far), x0:x1],
+            "west":  img_array[y0:y1, max(0, x0 - far):max(0, x0 - near)],
+            "east":  img_array[y0:y1, min(w, x1 + near):min(w, x1 + far)],
+        }
+
+    def _dominant_color(
+        samples: np.ndarray, target_rgb: tuple, tol: int,
+    ) -> bool:
         if len(samples) == 0:
             return False
         diffs = np.abs(samples.astype(int) - np.array(target_rgb, dtype=int))
         matches = np.all(diffs <= tol, axis=1)
         return np.sum(matches) > len(samples) * 0.3
 
+    corridor_regions = _sample_band(corridor_strip_px)
+    exterior_regions = _sample_band(exterior_strip_px)
+
     faces = {}
-    # Sample strip just outside each face
-    strip = margin_px
-    regions = {
-        "north": img_array[max(0, y0 - strip):y0, x0:x1],
-        "south": img_array[y1:min(h, y1 + strip), x0:x1],
-        "west":  img_array[y0:y1, max(0, x0 - strip):x0],
-        "east":  img_array[y0:y1, x1:min(w, x1 + strip)],
-    }
 
     corridor_face = ""
     exterior_faces = []
-    for face, region in regions.items():
-        if region.size == 0:
-            continue
-        pixels = region.reshape(-1, 3)
-        if _dominant_color(pixels, corridor_rgb, tolerance):
-            if not corridor_face:
-                corridor_face = face
-            faces[face] = "corridor"
-        elif _dominant_color(pixels, exterior_rgb, tolerance):
-            exterior_faces.append(face)
-            faces[face] = "exterior"
+    for face in ("north", "south", "east", "west"):
+        # Corridor detection at corridor band center
+        c_region = corridor_regions[face]
+        if c_region.size > 0:
+            c_pixels = c_region.reshape(-1, 3)
+            if _dominant_color(c_pixels, corridor_rgb, tolerance):
+                if not corridor_face:
+                    corridor_face = face
+                faces[face] = "corridor"
+                continue
+        # Exterior detection at exterior band center
+        e_region = exterior_regions[face]
+        if e_region.size > 0:
+            e_pixels = e_region.reshape(-1, 3)
+            if _dominant_color(e_pixels, exterior_rgb, tolerance):
+                exterior_faces.append(face)
+                faces[face] = "exterior"
 
     return {"corridor_face": corridor_face, "exterior_faces": exterior_faces}
 
@@ -1523,6 +1548,18 @@ def extract_rooms_from_preprocessed(
             _enh_img = np.array(Image.open(enhanced_png_path).convert("RGB"))
             _corridor_rgb = tuple(json_data.get("corridor_rgb", [193, 247, 179]))
             _exterior_rgb = tuple(json_data.get("exterior_rgb", [135, 206, 235]))
+            from olm.core.detection_config import DetectionConfigCm
+            _det_ov = json_data.get("_detection_overrides")
+            _dcfg = DetectionConfigCm.from_dict(_det_ov)
+            if scale_cm_per_px > 0:
+                _px_per_cm = 1.0 / scale_cm_per_px
+                _corridor_strip_px = max(
+                    1, int(round(_dcfg.corridor_width_cm * _px_per_cm)))
+                _exterior_strip_px = max(
+                    1, int(round(_dcfg.exterior_width_cm * _px_per_cm)))
+            else:
+                _corridor_strip_px = 8
+                _exterior_strip_px = 14
             _OPPOSITE = {"north": "south", "south": "north",
                          "east": "west", "west": "east"}
             for room_dict in result:
@@ -1530,6 +1567,8 @@ def extract_rooms_from_preprocessed(
                 if bb and bb[2] > bb[0] and bb[3] > bb[1]:
                     colors = _detect_face_colors(
                         _enh_img, bb, _corridor_rgb, _exterior_rgb,
+                        corridor_strip_px=_corridor_strip_px,
+                        exterior_strip_px=_exterior_strip_px,
                     )
                     # canonical_top_face in JSON → override color detection
                     # (corridor_face = opposite).
