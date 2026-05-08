@@ -7,35 +7,52 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
-## D-160 · Traversée poteaux dans le ray-cast + endpoint diagnostic (2026-05-08)
+## D-161 · Corner-scan pour la détection d'orientation (2026-05-08)
 
 ### Décision
-- `ray_single_through` : nouveau ray qui traverse les obstacles plus étroits que
-  `min_obstacle_width_px` (défaut 30 cm) pour trouver le vrai mur/fenêtre derrière.
-  Remplace `ray_single` en phase fine du comb.
-- `seed_caps` : les distances coarse sont plafonnées par la distance au seed voisin
-  le plus proche dans chaque direction, empêchant les rays de déborder dans les
-  pièces adjacentes même avant le filtre post-hoc.
-- Endpoint `/api/debug/room-diagnostic` : re-exécute la détection avec un dict
-  `diag` qui collecte coarse_mode, coarse_max, seed_caps, bbox_coarse, hit counts
-  (raw vs filtered) et obstacles traversés. Permet le debug à distance.
-- `diag` chainé : `extract_room_features` → `detect_room` → `comb_collect_hits`.
+Remplacement complet de `_detect_face_colors` (band sampling) par un algorithme
+corner-scan : depuis chaque coin de la bbox, scanner pixel par pixel dans les deux
+directions perpendiculaires vers l'extérieur. S'arrêter au premier pixel bleu
+(extérieur) ou vert (couloir). Pas de seuil de distance, pas de seuil de
+pourcentage.
 
 ### Justification
-- Poteaux (K2, K6) : les rays butent sur les poteaux et voient un mur trop proche.
-  Traverser l'obstacle étroit permet de détecter le vrai mur derrière.
-- Overshoot (K5, K12, K25) : malgré le filtre `_not_past_seed`, les rays allaient
-  trop loin car `coarse_max` n'était pas borné. `seed_caps` résout le problème en
-  amont.
-- Debug distant : les plans réels ne sont pas accessibles depuis la plateforme de
-  développement ; le diagnostic JSON permet de valider sans publier à répétition.
+Le band sampling échouait quand le bleu/vert était au-delà de la largeur de bande
+configurée. Élargir la bande introduisait des faux positifs. Le corner-scan est
+plus simple et plus robuste : il trouve la première couleur pertinente quelle que
+soit sa distance.
 
 ### Impact
-- `olm/ingestion/test_comb.py` : +`ray_single_through`, `MIN_OBSTACLE_WIDTH_PX`
-  global, phase fine utilise `_cast` helper, `diag` dans `detect_room`.
-- `olm/ingestion/extract.py` : `diag` param dans `extract_room_features`.
+- `olm/ingestion/extract.py` : `_detect_face_colors` réécrite (corner-scan).
+  Signature simplifiée (plus de corridor_strip_px/exterior_strip_px).
+- `olm/server/app.py` : endpoint diagnostic retourne `corner_hits` (8 scans).
+- `olm/static/init_rvtool.js` : section CORNER SCAN dans le diagnostic.
+- `CLAUDE.md` : règle ajoutée — expliquer l'algo avant de coder.
+
+---
+
+## D-160 · Endpoint diagnostic + modal copyable (2026-05-08)
+
+### Décision
+- Endpoint `/api/debug/room-diagnostic` : re-exécute la détection sur une pièce
+  et retourne un JSON avec coarse distances, hit counts, obstacles, portes, etc.
+- Modal textarea (au lieu d'`alert()`) pour un diagnostic copyable depuis le
+  navigateur.
+- `diag` dict chaîné : `extract_room_features` → `detect_room` → `comb_collect_hits`.
+- `ray_single_through` et `seed_caps` implémentés mais **désactivés** après
+  régressions en prod (traversait les vrais murs, rétrécissait les pièces).
+  `_opening_has_depth` désactivé aussi (rejetait toutes les ouvertures).
+
+### Justification
+Debug distant : les plans réels ne sont pas accessibles depuis la plateforme de
+développement ; le diagnostic permet de valider sans publier à répétition.
+
+### Impact
 - `olm/server/app.py` : +endpoint `/api/debug/room-diagnostic`.
-- `olm/core/detection_config.py` : `min_obstacle_width_px` déjà exposé.
+- `olm/templates/pattern_editor.html` : modal diagnostic + bouton Diag.
+- `olm/static/init_rvtool.js` : handler Diag, formatage sections.
+- `olm/ingestion/test_comb.py` : `diag` dans `detect_room`, `ray_single_through`
+  présent mais non utilisé, `seed_caps` calculé pour diag seulement.
 
 ---
 

@@ -3,49 +3,33 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
-## [Unreleased]
+## [v0.4.16] — 2026-05-08
 
 ### Added
 
-- **D-160 Traversée poteaux** : `ray_single_through` traverse les obstacles plus
-  étroits que `min_obstacle_width_cm` (défaut 30 cm) pour trouver le vrai mur
-  derrière. Les positions des poteaux sont collectées comme obstacles dans le
-  diagnostic (K2, K6).
-- **D-160 seed_caps** : les distances coarse sont plafonnées par le seed voisin le
-  plus proche, empêchant les rays de déborder dans les pièces adjacentes (K5, K12,
-  K25).
+- **D-161 Corner-scan** : détection d'orientation par corner-scan. Depuis chaque
+  coin de la bbox, scan pixel par pixel dans deux directions perpendiculaires.
+  Premier pixel bleu (extérieur) ou vert (couloir) trouvé détermine la face.
+  Remplace le band sampling (plus de seuil de largeur/pourcentage).
+- **D-160 Diagnostic modal** : modal textarea copyable + section CORNER SCAN
+  montrant les 8 scans (4 coins × 2 directions) avec couleur et distance.
 - **D-160 Diagnostic endpoint** : `/api/debug/room-diagnostic` re-exécute la
-  détection et retourne un JSON avec coarse distances, seed_caps, hit counts et
-  obstacles traversés. Debug à distance sans publication répétée.
-- **D-159 other_seeds au rescan** : les rescan unitaire (Room) et batch (Floor)
-  passent maintenant les seeds de toutes les pièces voisines à
-  `extract_room_features`. Les rays s'arrêtent aux frontières des pièces
-  au lieu de traverser les murs de séparation (fixes K5, K12, K25).
-- **D-159 Validation profondeur ouvertures** : `_opening_has_depth()` vérifie
-  qu'il y a au moins `min_opening_depth_cm` (défaut 60) d'espace libre derrière
-  chaque ouverture détectée. Les fausses ouvertures (poteaux, artefacts) sont
-  reclassées en mur.
-- **D-159 Settings** : `min_opening_depth_cm` et `min_obstacle_width_cm`
-  exposés dans l'interface Settings.
-- **D-158 max_door_width_cm** : filtre largeur max porte (défaut 120 cm) dans
-  DetectionConfigCm + 3 points de filtrage (preprocessed, detected, test_comb).
-  Paramètre exposé dans Settings UI.
-- **D-158 Seeds toggle séparé** : toggle Seeds indépendant de V-Rays/H-Rays dans
-  Floor et Room. Affiche room seed (vert) + door seeds (orange).
-- **D-158 Door seeds en Room** : conversion abs→canonical + rendu dans l'onglet Room.
+  détection et retourne un JSON complet. Debug à distance.
+- **D-159 other_seeds au rescan** : les rescan passent les seeds voisines.
+- **D-158 max_door_width_cm** : filtre largeur max porte (défaut 120 cm).
+- **D-158 Seeds toggle séparé** + door seeds en Room.
 
 ### Fixed
 
-- **D-158 binarize_threshold 110→140** : les arcs de porte marron (grayscale ~125)
-  n'étaient pas détectés. Seuil relevé à 140, configurable dans Settings.
-- **NameError _default_threshold** : variable locale utilisée hors scope dans batch
-  rescan. Remplacée par fonction module-level `_get_default_threshold()`.
-- **Fenêtres dépassant bbox** : dernier WallSegment `end_px` pouvait excéder la
-  longueur de face. Clamp ajouté.
-- **Rays clippés au bbox** : suppression du filtre `_hitInBbox`, tous les hits
-  sont maintenant rendus.
-- **Zoom out excessif** : boutons zoom Floor clampés + ratio Room réduit de 5→2.
-- **Grille coupée latéralement** : margin ratio doublé (0.5→1.0) dans Room.
+- **D-158 binarize_threshold 110→140** : arcs de porte détectés.
+- **Revert ray_single_through/seed_caps/_opening_has_depth** : désactivés
+  après régressions prod (traversait murs, rétrécissait pièces, rejetait
+  ouvertures). Code présent mais inactif.
+
+### Changed
+
+- **Blue→corridor deduction** : si bleu détecté mais pas de vert, le corridor
+  est déduit comme la face opposée au bleu.
 
 ## [v0.4.7] — 2026-04-29
 
