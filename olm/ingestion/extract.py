@@ -1232,14 +1232,18 @@ def _detect_face_colors(
             best_idx, best_color = corr_idx, "corridor"
 
         if best_color:
+            match_rgb = strip_int[best_idx].tolist()
             return {"color": best_color, "dist": best_idx + 1,
-                    "reason": "match", "first_rgb": first_rgb}
+                    "reason": "match", "match_rgb": match_rgb,
+                    "first_rgb": first_rgb}
 
         return {"color": None, "dist": len(strip),
                 "reason": "boundary", "first_rgb": first_rgb}
 
-    # Corners: (name, x, y, scans: [(direction_name, face, dx, dy)])
-    corners = [
+    # Scan points: corners + midpoints of each face.
+    mid_x = (x0 + x1) // 2
+    mid_y = (y0 + y1) // 2
+    scan_points = [
         ("NW", x0, y0, [
             ("north", "north", 0, -1),
             ("west", "west", -1, 0),
@@ -1256,6 +1260,10 @@ def _detect_face_colors(
             ("south", "south", 0, 1),
             ("east", "east", 1, 0),
         ]),
+        ("MN", mid_x, y0, [("north", "north", 0, -1)]),
+        ("MS", mid_x, y1, [("south", "south", 0, 1)]),
+        ("MW", x0, mid_y, [("west", "west", -1, 0)]),
+        ("ME", x1, mid_y, [("east", "east", 1, 0)]),
     ]
 
     # Collect per-face hits: face -> list of {corner, direction, color, dist}
@@ -1264,7 +1272,7 @@ def _detect_face_colors(
     }
     corner_hits = []  # observability: all scan results
 
-    for corner_name, cx, cy, scans in corners:
+    for corner_name, cx, cy, scans in scan_points:
         for dir_name, face, dx, dy in scans:
             hit = _scan_ray(cx, cy, dx, dy)
             entry = {
