@@ -685,11 +685,15 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
     coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
 
-    # Bbox (start positions) = based on mode (dominant wall)
-    bbox_x0 = cx - coarse_ew
-    bbox_x1 = cx + coarse_ew
-    bbox_y0 = cy - coarse_ns
-    bbox_y1 = cy + coarse_ns
+    # Bbox (start positions) = per-direction distances from seed.
+    # NOT symmetric: the seed is not necessarily centered in the room.
+    # Using max(north, south) caused rays to start outside the room
+    # when the seed was near one wall (e.g. south=7, north=94 → bbox
+    # extended 94px south of seed, 87px past the actual wall).
+    bbox_x0 = cx - coarse_mode['west']
+    bbox_x1 = cx + coarse_mode['east']
+    bbox_y0 = cy - coarse_mode['north']
+    bbox_y1 = cy + coarse_mode['south']
     # Ray range = based on max (to traverse doors), capped by seed distance
     max_north = coarse_max['north'] + RAY_MARGIN_PX
     max_south = coarse_max['south'] + RAY_MARGIN_PX
