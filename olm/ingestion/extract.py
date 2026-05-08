@@ -1629,6 +1629,13 @@ def extract_rooms_from_preprocessed(
                         )
                     elif colors["corridor_face"]:
                         room_dict["corridor_face"] = colors["corridor_face"]
+                    # Priority 1: blue (exterior) → corridor = opposite.
+                    # Priority 2: green (corridor) → direct (handled above).
+                    # If no green detected but blue found, deduce corridor.
+                    if (not room_dict.get("corridor_face")
+                            and colors["exterior_faces"]):
+                        room_dict["corridor_face"] = _OPPOSITE.get(
+                            colors["exterior_faces"][0], "")
                     if colors["exterior_faces"]:
                         room_dict["exterior_faces"] = colors["exterior_faces"]
         except Exception as e:
