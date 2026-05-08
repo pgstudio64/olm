@@ -31,9 +31,9 @@ class DetectionConfigCm:
     wall_depth_cm: float = 24.0              # profondeur de probe dans mur
     min_opening_width_cm: float = 24.0       # largeur min pour qu'un "trou"
                                              # soit une opening
-    min_opening_depth_cm: float = 100.0       # profondeur min derrière le mur
-                                             # (just enough to clear wall
-                                             # thickness between two rooms)
+    min_opening_depth_cm: float = 60.0        # profondeur min derrière le mur ;
+                                             # si un obstacle est à moins de
+                                             # cette distance → pas d'ouverture
     min_window_width_cm: float = 24.0
     min_obstacle_width_cm: float = 30.0
     max_absorb_cm: float = 30.0              # largeur max d'une "rupture"

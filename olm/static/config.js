@@ -291,6 +291,25 @@ function renderFloorplanSettings() {
     };
   }
 
+  var odEl = document.getElementById("cfgMinOpeningDepth");
+  if (odEl) {
+    odEl.value = ing.min_opening_depth_cm != null
+      ? ing.min_opening_depth_cm : 60;
+    odEl.onchange = function() {
+      saveConfigField(["ingestion", "min_opening_depth_cm"],
+                      parseInt(this.value) || 60);
+    };
+  }
+  var owEl = document.getElementById("cfgMinObstacleWidth");
+  if (owEl) {
+    owEl.value = ing.min_obstacle_width_cm != null
+      ? ing.min_obstacle_width_cm : 30;
+    owEl.onchange = function() {
+      saveConfigField(["ingestion", "min_obstacle_width_cm"],
+                      parseInt(this.value) || 30);
+    };
+  }
+
   var ext = ing.preprocessed_exterior_rgb || [135, 206, 235];
   var cor = ing.preprocessed_corridor_rgb || [193, 247, 179];
 
