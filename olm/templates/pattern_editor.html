@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OLS — Office Layout Studio</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{ v }}">
 <style>html, body { touch-action: none; }</style>
 </head>
 <body>
@@ -717,24 +717,24 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   </div>
 </div>
 
-<script src="/static/store.js"></script>
-<script src="/static/canonical_io.js"></script>
-<script src="/static/room_sync_helpers.js"></script>
-<script src="/static/block_constants.js"></script>
-<script src="/static/block_geometry.js"></script>
-<script src="/static/block_svg.js"></script>
-<script src="/static/render_shared.js"></script>
-<script src="/static/editor.js"></script>
-<script src="/static/shared.js"></script>
-<script src="/static/config.js"></script>
-<script src="/static/catalogue.js"></script>
-<script src="/static/floor_plan.js"></script>
-<script src="/static/ingestion_scale.js"></script>
-<script src="/static/ingestion_serialize.js"></script>
-<script src="/static/ingestion.js"></script>
-<script src="/static/init.js"></script>
-<script src="/static/init_rvtool.js"></script>
-<script src="/static/init_resize.js"></script>
+<script src="/static/store.js?v={{ v }}"></script>
+<script src="/static/canonical_io.js?v={{ v }}"></script>
+<script src="/static/room_sync_helpers.js?v={{ v }}"></script>
+<script src="/static/block_constants.js?v={{ v }}"></script>
+<script src="/static/block_geometry.js?v={{ v }}"></script>
+<script src="/static/block_svg.js?v={{ v }}"></script>
+<script src="/static/render_shared.js?v={{ v }}"></script>
+<script src="/static/editor.js?v={{ v }}"></script>
+<script src="/static/shared.js?v={{ v }}"></script>
+<script src="/static/config.js?v={{ v }}"></script>
+<script src="/static/catalogue.js?v={{ v }}"></script>
+<script src="/static/floor_plan.js?v={{ v }}"></script>
+<script src="/static/ingestion_scale.js?v={{ v }}"></script>
+<script src="/static/ingestion_serialize.js?v={{ v }}"></script>
+<script src="/static/ingestion.js?v={{ v }}"></script>
+<script src="/static/init.js?v={{ v }}"></script>
+<script src="/static/init_rvtool.js?v={{ v }}"></script>
+<script src="/static/init_resize.js?v={{ v }}"></script>
 <div id="dslHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);max-height:80vh;overflow-y:auto;"><span class="tooltip-close" onclick="this.parentElement.style.display='none'">&times;</span>ROOM 600x500          <span style="color:var(--text-dim)">-- room 600cm wide, 500cm deep</span>
 WINDOW N              <span style="color:var(--text-dim)">-- full-width window on north wall</span>
 WINDOW N 50 200       <span style="color:var(--text-dim)">-- 200cm window, 50cm from west corner</span>
