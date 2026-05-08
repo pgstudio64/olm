@@ -7,6 +7,88 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-160 · Traversée poteaux dans le ray-cast + endpoint diagnostic (2026-05-08)
+
+### Décision
+- `ray_single_through` : nouveau ray qui traverse les obstacles plus étroits que
+  `min_obstacle_width_px` (défaut 30 cm) pour trouver le vrai mur/fenêtre derrière.
+  Remplace `ray_single` en phase fine du comb.
+- `seed_caps` : les distances coarse sont plafonnées par la distance au seed voisin
+  le plus proche dans chaque direction, empêchant les rays de déborder dans les
+  pièces adjacentes même avant le filtre post-hoc.
+- Endpoint `/api/debug/room-diagnostic` : re-exécute la détection avec un dict
+  `diag` qui collecte coarse_mode, coarse_max, seed_caps, bbox_coarse, hit counts
+  (raw vs filtered) et obstacles traversés. Permet le debug à distance.
+- `diag` chainé : `extract_room_features` → `detect_room` → `comb_collect_hits`.
+
+### Justification
+- Poteaux (K2, K6) : les rays butent sur les poteaux et voient un mur trop proche.
+  Traverser l'obstacle étroit permet de détecter le vrai mur derrière.
+- Overshoot (K5, K12, K25) : malgré le filtre `_not_past_seed`, les rays allaient
+  trop loin car `coarse_max` n'était pas borné. `seed_caps` résout le problème en
+  amont.
+- Debug distant : les plans réels ne sont pas accessibles depuis la plateforme de
+  développement ; le diagnostic JSON permet de valider sans publier à répétition.
+
+### Impact
+- `olm/ingestion/test_comb.py` : +`ray_single_through`, `MIN_OBSTACLE_WIDTH_PX`
+  global, phase fine utilise `_cast` helper, `diag` dans `detect_room`.
+- `olm/ingestion/extract.py` : `diag` param dans `extract_room_features`.
+- `olm/server/app.py` : +endpoint `/api/debug/room-diagnostic`.
+- `olm/core/detection_config.py` : `min_obstacle_width_px` déjà exposé.
+
+---
+
+## D-159 · other_seeds au rescan + validation profondeur ouvertures (2026-05-08)
+
+### Décision
+
+1. **other_seeds passé au rescan** (unitaire et batch). Les rays du comb sont filtrés par les seeds des pièces voisines : un hit est rejeté s'il dépasse un seed voisin dans sa direction. Élimine les rays qui traversent les murs de séparation entre pièces.
+
+2. **Validation profondeur des ouvertures**. Après classification, chaque opening est vérifiée : un probe perpendiculaire vers l'intérieur de la pièce vérifie qu'il y a au moins `min_opening_depth_cm` (défaut 60) de libre derrière. Si un obstacle (mur, fenêtre) est à moins de cette distance → reclassé en mur.
+
+3. **Paramètres Settings** : `min_opening_depth_cm` et `min_obstacle_width_cm` exposés dans l'UI.
+
+### Justification
+
+Tests production (K5, K12, K25) : les rays dépassaient massivement les murs réels de la pièce parce que le rescan ne passait pas les seeds des pièces voisines comme condition d'arrêt. Le scan initial OCR et l'import preprocessed les passaient déjà — seul le rescan était affecté.
+
+Les fausses ouvertures (K3) sont causées par des artefacts de dessin (poteaux, double-traits) où le mur ne fait que quelques cm d'épaisseur. La validation de profondeur les élimine.
+
+### Impact
+
+- `app.py` : rescan unitaire accepte `other_seeds_px`, batch construit `other_seeds` pour chaque pièce
+- `init_rvtool.js` : envoie les seeds des autres pièces au rescan unitaire
+- `ingestion.js` : envoie les doors (avec seed_x/y) dans le batch payload
+- `extract.py` : `_opening_has_depth()` + appel dans `_classify_wall_direct`
+- `detection_config.py` : `min_opening_depth_cm` 100→60
+
+---
+
+## D-158 · max_door_width + binarize_threshold + seeds toggle (2026-05-08)
+
+### Décision
+
+Trois ajouts liés à la détection de portes et à la visibilité des seeds :
+
+1. **max_door_width_cm = 120** dans DetectionConfigCm. Les ouvertures > 120 cm détectées comme portes (ex. 508 cm) sont filtrées. Paramètre exposé dans Settings.
+2. **binarize_threshold relevé de 110 à 140**. Les arcs de porte marron (grayscale ~125) n'étaient pas détectés avec le seuil 110. Paramètre exposé dans Settings.
+3. **Seeds toggle séparé** de V-Rays/H-Rays. Affiche room seed (vert) et door seeds (orange) dans Floor et Room.
+
+### Justification
+
+Tests production (K cases) : portes non détectées (arcs marron sous seuil), fausses portes géantes (murs entiers classés porte), seeds invisibles pour diagnostic. Trois problèmes indépendants mais tous liés à la qualité de détection de portes.
+
+### Impact
+
+- `detection_config.py` : +`max_door_width_cm`, `binarize_threshold` 110→140
+- `extract.py` : filtre min+max portes (preprocessed + detected), binarize depuis config, door seeds dans output, clamp fenêtres
+- `app.py` : `_get_default_threshold()` module-level, overrides étendus
+- `ingestion.js` / `editor.js` : toggle Seeds, door seeds Room, rays non clippés
+- `pattern_editor.html` + `config.js` : champs Settings + checkboxes Seeds
+
+---
+
 ## D-157 · Import preprocessed : détection complète sans bbox_px (2026-04-29)
 
 ### Décision

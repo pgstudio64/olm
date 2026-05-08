@@ -1663,6 +1663,7 @@ def extract_room_features(
     color_image: "Image.Image | None" = None,
     exterior_rgb: tuple = (135, 206, 235),
     other_seeds: list[tuple[int, int]] | None = None,
+    diag: dict | None = None,
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145 / D-156).
 
@@ -1868,6 +1869,7 @@ def extract_room_features(
         scale_cm_per_px=scale_cm_per_px,
         binary_for_arcs=binary_for_arcs,
         door_seeds=door_seeds,
+        diag=diag,
     )
     nx0, ny0, nx1, ny1 = bbox_new
 

@@ -1327,6 +1327,85 @@ def api_room_reanalyze():
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
+@app.route("/api/debug/room-diagnostic", methods=["POST"])
+def api_debug_room_diagnostic():
+    """Diagnostic endpoint: re-runs detection with full debug info.
+
+    Body JSON: same as /api/room/reanalyze plus optional room_name.
+    Returns: extract_room_features result + diag dict with coarse
+    distances, seed_caps, hit counts, bbox info.
+    """
+    try:
+        data = request.json or {}
+        plan_path = data.get("plan_path", "")
+        seed_px = data.get("seed_px")
+        bbox_px = data.get("bbox_px")
+        scale = float(data.get("scale_cm_per_px", 0.5))
+        transparents = data.get("transparent_zones", []) or []
+        doors = data.get("doors", []) or []
+        door_width_cm = int(data.get("door_width_cm", 90))
+        threshold = int(data.get("threshold", _get_default_threshold()))
+        clip_to_bbox = bool(data.get("clip_to_bbox", False))
+        mode = (data.get("mode") or "preprocessed").lower()
+        raw_other = data.get("other_seeds_px") or []
+        other_seeds_px = [(int(s[0]), int(s[1]))
+                          for s in raw_other if s and len(s) >= 2]
+
+        if not plan_path or not os.path.exists(plan_path):
+            return jsonify({"error": "plan_path missing or invalid"}), 400
+        if not seed_px or len(seed_px) != 2:
+            return jsonify({"error": "seed_px must be [x, y]"}), 400
+        if bbox_px:
+            try:
+                bbox_px = [int(v) for v in bbox_px]
+            except (TypeError, ValueError):
+                return jsonify({"error": "bbox_px must contain ints"}), 400
+            if bbox_px[2] <= bbox_px[0] or bbox_px[3] <= bbox_px[1]:
+                bbox_px = None
+
+        from PIL import Image as _PILImage
+        from olm.ingestion.extract import extract_room_features
+        img = _PILImage.open(plan_path).convert("L")
+
+        color_img = None
+        if mode != "ocr" and plan_path and os.path.exists(plan_path):
+            color_img = _PILImage.open(plan_path)
+
+        from olm.ingestion.test_comb import _apply_detection_config
+        _apply_detection_config(scale, _get_detection_overrides())
+
+        cart_bboxes_px: list = []
+        if mode == "ocr":
+            from olm.ingestion.test_comb import find_seeds_by_ocr
+            _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
+
+        diag: dict = {}
+        result = extract_room_features(
+            img,
+            (int(seed_px[0]), int(seed_px[1])),
+            tuple(bbox_px) if bbox_px else None,
+            scale,
+            transparent_zones_cm=transparents,
+            doors_px=doors,
+            door_width_cm=door_width_cm,
+            threshold=threshold,
+            clip_to_bbox=clip_to_bbox,
+            cartouche_bboxes_px=cart_bboxes_px,
+            color_image=color_img,
+            exterior_rgb=_get_exterior_rgb(),
+            other_seeds=other_seeds_px or None,
+            diag=diag,
+        )
+        # Strip hits from result to keep response small
+        result.pop("hits", None)
+        result["diag"] = diag
+        result["other_seeds_count"] = len(other_seeds_px)
+        return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route("/api/room/orientation-check", methods=["POST"])
 def api_room_orientation_check():
     """Auto-test R-13 / D-119 — vérifie l'orientation canonique d'une pièce.

@@ -53,6 +53,7 @@ COMB_STEP_PX = 5   # comb step in pixels
 MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
 MIN_DOOR_ARC_HITS = 3   # min hits per direction to validate a door arc
+MIN_OBSTACLE_WIDTH_PX = 15  # default ~30cm at 0.5 cm/px; updated by _apply
 
 # --- Scale auto-calibration from OCR surfaces ---
 # Minimum annotated surface (m²) for a room to be used in scale calibration.
@@ -86,7 +87,7 @@ def _apply_detection_config(scale_cm_per_px: float,
     global BINARIZE_THRESHOLD, COMB_STEP_PX, MAX_RAY_PX, CARTOUCHE_MARGIN_PX
     global COARSE_STEP_PX, RAY_MARGIN_PX, SNAP_SEARCH_PX
     global DOOR_PROBE_PX, DOOR_GROUP_GAP_PX, WALL_MARGIN_PX
-    global MIN_DOOR_ARC_HITS
+    global MIN_DOOR_ARC_HITS, MIN_OBSTACLE_WIDTH_PX
     BINARIZE_THRESHOLD = cfg.binarize_threshold
     COMB_STEP_PX = cfg.comb_step_px
     MAX_RAY_PX = cfg.max_ray_px
@@ -98,6 +99,7 @@ def _apply_detection_config(scale_cm_per_px: float,
     DOOR_GROUP_GAP_PX = cfg.door_group_gap_px
     WALL_MARGIN_PX = cfg.door_wall_margin_px
     MIN_DOOR_ARC_HITS = cfg.min_door_arc_hits
+    MIN_OBSTACLE_WIDTH_PX = cfg.min_obstacle_width_px
 
 # --- Tesseract OCR parameters ---
 # Upscale factor applied before OCR — small cartouche text (10-20 px) needs enlargement
@@ -529,11 +531,60 @@ def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX):
     return max_dist
 
 
+def ray_single_through(binary, x, y, dx, dy, max_dist, min_wall_px):
+    """Ray that traverses obstacles narrower than min_wall_px.
+
+    Returns:
+        (distance, obstacles) where distance is the distance to the real
+        wall (thick obstacle or image boundary), and obstacles is a list
+        of (start_d, end_d) for each narrow obstacle traversed.
+        Returns (-1, []) if start is on a wall.
+    """
+    h, w = binary.shape
+    if 0 <= x < w and 0 <= y < h and binary[y, x]:
+        return -1, []
+    obstacles: list[tuple[int, int]] = []
+    px, py = x, y
+    in_obstacle = False
+    obs_start = 0
+    d = 0
+    for d in range(1, max_dist + 1):
+        px += dx
+        py += dy
+        if px < 0 or px >= w or py < 0 or py >= h:
+            if in_obstacle:
+                # Reached boundary inside an obstacle — it's a real wall
+                return obs_start - 1, obstacles
+            return d - 1, obstacles
+        if binary[py, px]:
+            if not in_obstacle:
+                in_obstacle = True
+                obs_start = d
+        else:
+            if in_obstacle:
+                obs_width = d - obs_start
+                if obs_width >= min_wall_px:
+                    # Real wall — stop at last white before it
+                    return obs_start - 1, obstacles
+                # Narrow obstacle — record and continue
+                obstacles.append((obs_start, d - 1))
+                in_obstacle = False
+    # Reached max_dist
+    if in_obstacle:
+        obs_width = d - obs_start + 1
+        if obs_width >= min_wall_px:
+            return obs_start - 1, obstacles
+        # Narrow obstacle at the very end — treat as wall anyway
+        return obs_start - 1, obstacles
+    return max_dist, obstacles
+
+
 COARSE_STEP_PX = 30  # phase 1: coarse scan to find room walls
 RAY_MARGIN_PX = 10   # margin beyond coarse distance for fine rays
 
 
-def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
+def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
+                      diag=None):
     """Adaptive two-pass comb.
 
     Phase 1 (coarse): rays at wide step (COARSE_STEP_PX) from the seed
@@ -542,6 +593,10 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
     Phase 2 (fine): rays at step_px, bounded in position (phase 1 bbox)
     AND in range (phase 1 distance + margin). No ray goes past the walls
     detected in phase 1.
+
+    Args:
+        diag: (OPT) dict — when provided, filled with diagnostic data
+            (coarse distances, seed limits, hit counts before/after filter).
 
     Returns (all_hits, dir_hits):
       all_hits = flat list [(px, py), ...]
@@ -604,6 +659,33 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
     coarse_mode = {d: _mode_dist(coarse_dists[d]) for d in coarse_dists}
     coarse_max = {d: max(coarse_dists[d]) if coarse_dists[d] else 0
                   for d in coarse_dists}
+
+    # Cap coarse max distances using neighbor seeds.  If a neighbor seed
+    # sits between us and the farthest coarse hit, that hit went through
+    # a shared wall — cap at the seed distance so the fine phase doesn't
+    # send rays into the neighbor's room.
+    seed_caps = {'north': None, 'south': None, 'east': None, 'west': None}
+    if other_seeds:
+        for ox, oy in other_seeds:
+            dx_s = ox - cx
+            dy_s = oy - cy
+            if dx_s > 0 and (seed_caps['east'] is None
+                             or dx_s < seed_caps['east']):
+                seed_caps['east'] = dx_s
+            if dx_s < 0 and (seed_caps['west'] is None
+                             or -dx_s < seed_caps['west']):
+                seed_caps['west'] = -dx_s
+            if dy_s > 0 and (seed_caps['south'] is None
+                             or dy_s < seed_caps['south']):
+                seed_caps['south'] = dy_s
+            if dy_s < 0 and (seed_caps['north'] is None
+                             or -dy_s < seed_caps['north']):
+                seed_caps['north'] = -dy_s
+        for d in ('north', 'south', 'east', 'west'):
+            cap = seed_caps[d]
+            if cap is not None and coarse_max[d] > cap:
+                coarse_max[d] = cap
+
     coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
     coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
 
@@ -612,54 +694,70 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
     bbox_x1 = cx + coarse_ew
     bbox_y0 = cy - coarse_ns
     bbox_y1 = cy + coarse_ns
-    # Ray range = based on max (to traverse doors)
+    # Ray range = based on max (to traverse doors), capped by seed distance
     max_north = coarse_max['north'] + RAY_MARGIN_PX
     max_south = coarse_max['south'] + RAY_MARGIN_PX
     max_west = coarse_max['west'] + RAY_MARGIN_PX
     max_east = coarse_max['east'] + RAY_MARGIN_PX
 
+    if diag is not None:
+        diag['coarse_mode'] = dict(coarse_mode)
+        diag['coarse_max'] = dict(coarse_max)
+        diag['seed_caps'] = {k: int(v) if v is not None else None
+                             for k, v in seed_caps.items()}
+        diag['bbox_coarse'] = [int(bbox_x0), int(bbox_y0),
+                               int(bbox_x1), int(bbox_y1)]
+        diag['max_range'] = {'north': int(max_north), 'south': int(max_south),
+                             'west': int(max_west), 'east': int(max_east)}
+
     # === Phase 2: fine comb, bounded in position AND range ===
+    # D-160: rays traverse obstacles narrower than MIN_OBSTACLE_WIDTH_PX
+    # to find the real wall behind pillars.
     dir_hits = {'north': [], 'south': [], 'east': [], 'west': []}
+    all_obstacles: list[tuple[int, int, int, int]] = []
+    min_wall = MIN_OBSTACLE_WIDTH_PX
+
+    def _cast(origin_x, origin_y, ddx, ddy, max_d, direction):
+        d, obs = ray_single_through(
+            binary, origin_x, origin_y, ddx, ddy, max_d, min_wall)
+        if d > 0:
+            hx = origin_x + ddx * d
+            hy = origin_y + ddy * d
+            dir_hits[direction].append((hx, hy))
+            for os_start, os_end in obs:
+                ox = origin_x + ddx * os_start
+                oy = origin_y + ddy * os_start
+                ox2 = origin_x + ddx * os_end
+                oy2 = origin_y + ddy * os_end
+                all_obstacles.append((
+                    min(ox, ox2), min(oy, oy2),
+                    max(ox, ox2), max(oy, oy2)))
 
     # Vertical rays (N and S)
     rx = cx
     while rx >= bbox_x0:
-        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
-        if d > 0:
-            dir_hits['north'].append((rx, cy - d))
-        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
-        if d > 0:
-            dir_hits['south'].append((rx, cy + d))
+        _cast(rx, cy, 0, -1, max_north, 'north')
+        _cast(rx, cy, 0, 1, max_south, 'south')
         rx -= step_px
     rx = cx + step_px
     while rx <= bbox_x1:
-        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
-        if d > 0:
-            dir_hits['north'].append((rx, cy - d))
-        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
-        if d > 0:
-            dir_hits['south'].append((rx, cy + d))
+        _cast(rx, cy, 0, -1, max_north, 'north')
+        _cast(rx, cy, 0, 1, max_south, 'south')
         rx += step_px
 
     # Horizontal rays (E and W)
     ry = cy
     while ry >= bbox_y0:
-        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
-        if d > 0:
-            dir_hits['west'].append((cx - d, ry))
-        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
-        if d > 0:
-            dir_hits['east'].append((cx + d, ry))
+        _cast(cx, ry, -1, 0, max_west, 'west')
+        _cast(cx, ry, 1, 0, max_east, 'east')
         ry -= step_px
     ry = cy + step_px
     while ry <= bbox_y1:
-        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
-        if d > 0:
-            dir_hits['west'].append((cx - d, ry))
-        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
-        if d > 0:
-            dir_hits['east'].append((cx + d, ry))
+        _cast(cx, ry, -1, 0, max_west, 'west')
+        _cast(cx, ry, 1, 0, max_east, 'east')
         ry += step_px
+
+    raw_counts = {d: len(dir_hits[d]) for d in dir_hits}
 
     # Filter hits that go beyond a neighboring seed.
     # A hit is invalid if it passes a neighbor's seed in the ray direction
@@ -689,6 +787,17 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
         for direction in dir_hits:
             dir_hits[direction] = [(hx, hy) for hx, hy in dir_hits[direction]
                                    if _not_past_seed(hx, hy, direction)]
+
+    # Deduplicate obstacle bboxes (multiple rays may hit same pillar)
+    unique_obs = list(set(all_obstacles)) if all_obstacles else []
+
+    if diag is not None:
+        filtered_counts = {d: len(dir_hits[d]) for d in dir_hits}
+        diag['hits_raw'] = raw_counts
+        diag['hits_filtered'] = filtered_counts
+        diag['other_seeds_count'] = len(other_seeds) if other_seeds else 0
+        diag['obstacles_px'] = [[x0, y0, x1, y1]
+                                for x0, y0, x1, y1 in unique_obs]
 
     all_hits = [h for hits in dir_hits.values() for h in hits]
     return all_hits, dir_hits
@@ -1238,7 +1347,8 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
 
 def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
                 scale_cm_per_px: float | None = None,
-                binary_for_arcs=None, door_seeds=None):
+                binary_for_arcs=None, door_seeds=None,
+                diag=None):
     """Detect a room rectangle: comb ��� hits → largest rectangle → door arc expansion.
 
     Args:
@@ -1255,7 +1365,8 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     if scale_cm_per_px is not None:
         _apply_detection_config(scale_cm_per_px)
     all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
-                                           other_seeds=other_seeds)
+                                           other_seeds=other_seeds,
+                                           diag=diag)
 
     rect = largest_rect_no_hits(all_hits, cx, cy)
 

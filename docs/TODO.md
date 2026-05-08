@@ -34,7 +34,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - ~~*Import preprocessed sans bbox : pièces carrées sans features*~~ → D-157 : `extract_room_features` complet à l'import (ray-cast + fenêtres + ouvertures + portes)
 
 **Défauts production restants (2026-04-29)** :
-- *D2 — Door seeds invisibles en Floor* : les seeds de portes ne sont pas affichés quand les rays sont activés en vue Floor
+- ~~*D2 — Door seeds invisibles en Floor*~~ → D-158 : toggle Seeds séparé + rendu door seeds en Floor et Room.
 - *D4 — Portes mal identifiées / pièce réduite côté sud* : détection de portes imprécise, bbox tronqué au sud sur certaines pièces
 - *D8 — Rays invisibles en Floor après Rescan All* : après un Rescan All en vue Floor, les rays ne s'affichent pas (mais visibles après rescan individuel en Room)
 
@@ -45,27 +45,27 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - → Utiliser l'échelle indiquée sur le plan quand elle est présente (priorité sur l'auto-calibration).
 
 *K — Cas à traiter (par pièce) :*
-- K2 — Poteau 20 cm côté fenêtre : centres vus comme ouvertures. Après mise à l'échelle : vert en haut + porte 508 cm à la place de la fenêtre.
-- K3 — Fenêtre dépasse le mur de 10 cm, OK après rescan Room. Après remise à l'échelle : grande ouverture au sud (mur pourtant détecté) + absence de fenêtre au nord.
+- K2 — Poteau 20 cm côté fenêtre : centres vus comme ouvertures. Après mise à l'échelle : vert en haut + porte 508 cm à la place de la fenêtre. → **Poteaux** : min_obstacle_width_cm à implémenter dans le ray-cast.
+- K3 — ~~Fenêtre dépasse le mur de 10 cm~~ D-158. Grande ouverture au sud → **D-159 opening depth validation** devrait reclasser en mur.
 - K4 — Grande porte détectée quand la fenêtre fait un arrondi. → Utiliser le bleu extérieur pour discriminer.
-- K5 — Décalage de demi-hauteur vers le haut, non corrigé par rescan. Pièce détectée correctement mais inversée au rendu.
+- K5 — ~~Décalage de demi-hauteur vers le haut~~ → **D-159 other_seeds** passé au rescan (les rays ne dépassent plus les pièces voisines). À revalider.
 - K6 — Orientation KO pour toutes les pièces de l'aile ouest (bleu à gauche). Poteau 20 cm, porte non reconnue même après ajustement mur + rescan. Reconnue après mise à l'échelle.
 - K8 — Porte non détectée alors que les rays la voient très bien.
-- K12 — Inversion complète du dessin/rays par rapport au plan. Porte 285 cm au sud, vraie porte non détectée.
+- K12 — ~~Inversion complète du dessin/rays~~ → **D-159 other_seeds** (même cause que K5). À revalider.
 - K14 — Non détection de la porte (partiellement invisible sur le plan).
 - K16 — Non détection de la porte (partiellement invisible sur le plan).
-- K25 — Inversion complète de la détection par rapport à l'affichage. Porte en bas à gauche, détection en haut à droite.
+- K25 — ~~Inversion complète de la détection~~ → **D-159 other_seeds** (même cause que K5). À revalider.
 - K77 — Modification manuelle de la pièce : sauvegarde décalée de 40 cm en dessous de la position apparente.
 
 *Transversal :*
-- Seeds de porte jamais visibles sur le plan (confirme D2).
-- Inversions détection/affichage récurrentes (K5, K12, K25) → problème d'orientation canonique ?
+- ~~Seeds de porte jamais visibles sur le plan~~ → D-158 (toggle Seeds, door seeds en Floor+Room).
+- ~~Inversions détection/affichage récurrentes (K5, K12, K25)~~ → D-159 other_seeds au rescan. Cause : rays traversaient les pièces voisines, pas un problème d'orientation canonique.
 - Portes partiellement dessinées sur le plan non détectées (K14, K16) → seuil de détection arc trop strict ?
 
-*R — Réglés à préciser :*
+*R — Réglés :*
+- ~~Arcs de porte non noirs sur certains plans~~ → D-158 binarize_threshold 110→140 (configurable dans Settings).
 - Échelle auto-détectée fausse (1:300 au lieu de 1:200 sur un autre plan) — même famille que le problème critique ci-dessus.
 - Selon l'échelle, la détection est plus ou moins efficace (ex: fenêtres non identifiées).
-- Arcs de porte non noirs sur certains plans : marron RGB ~(137,126,115) / (133,123,114) / (133,121,112). → Seuil de binarisation ou détection couleur à adapter.
 
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
