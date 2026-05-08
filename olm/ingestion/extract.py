@@ -1149,14 +1149,12 @@ def _detect_face_colors(
     bbox_px: tuple,
     corridor_rgb: tuple[int, int, int],
     exterior_rgb: tuple[int, int, int],
-    tolerance: int = 40,
-    **_kwargs,
 ) -> dict:
     """Corner-scan color detection (D-161).
 
-    From each bbox corner, scan outward in two perpendicular directions
-    until the image edge. Stop at the first pixel matching corridor_rgb
-    (green) or exterior_rgb (blue) within ±tolerance.
+    From each bbox corner + face midpoint, scan outward to the image edge.
+    Uses exact RGB match (no tolerance) — preprocessed images have
+    programmatic colors.
     No distance threshold, no percentage threshold.
 
     Corners and their scan directions:
@@ -1170,21 +1168,21 @@ def _detect_face_colors(
     """
     h, w = img_array.shape[:2]
     x0, y0, x1, y1 = bbox_px
-    corr = np.array(corridor_rgb, dtype=int)
-    ext = np.array(exterior_rgb, dtype=int)
+    corr_u8 = np.array(corridor_rgb, dtype=np.uint8)
+    ext_u8 = np.array(exterior_rgb, dtype=np.uint8)
 
     def _scan_ray(
         start_x: int, start_y: int, dx: int, dy: int,
     ) -> dict:
         """Scan from (start_x, start_y) in direction (dx, dy) to image edge.
 
-        Uses numpy vectorized operations on the full row/column strip.
+        Uses numpy vectorized exact match on the full row/column strip.
 
         Returns dict with keys:
             color: 'corridor'|'exterior'|None
             dist: int (distance to match, or to image edge)
             reason: 'match'|'boundary'
-            first_rgb: [R,G,B] of first non-dark pixel (brightness>50)
+            match_rgb: [R,G,B] of matched pixel (only if color is set)
         """
         # Extract the 1-D strip of pixels from start to image edge.
         if dx == 0 and dy == -1:       # north
@@ -1196,30 +1194,17 @@ def _detect_face_colors(
         elif dx == 1 and dy == 0:      # east
             strip = img_array[start_y, start_x + 1:w, :]
         else:
-            return {"color": None, "dist": 0,
-                    "reason": "boundary", "first_rgb": None}
+            return {"color": None, "dist": 0, "reason": "boundary"}
 
         if len(strip) == 0:
-            return {"color": None, "dist": 0,
-                    "reason": "boundary", "first_rgb": None}
+            return {"color": None, "dist": 0, "reason": "boundary"}
 
-        # Vectorized match: check all pixels at once.
-        # Reject gray pixels (R=G=B) — they are not colored.
-        strip_int = strip.astype(int)
-        saturated = (np.max(strip_int, axis=1)
-                     - np.min(strip_int, axis=1)) > 0
-        ext_match = (np.all(np.abs(strip_int - ext) <= tolerance, axis=1)
-                     & saturated)
-        corr_match = (np.all(np.abs(strip_int - corr) <= tolerance, axis=1)
-                      & saturated)
+        # Vectorized exact match: preprocessed images have programmatic
+        # colors, no tolerance needed.
+        ext_match = np.all(strip == ext_u8, axis=1)
+        corr_match = np.all(strip == corr_u8, axis=1)
 
-        # First non-dark pixel (any channel > 50).
-        bright = np.max(strip_int, axis=1) > 50
-        first_bright = int(np.argmax(bright)) if np.any(bright) else -1
-        first_rgb = (strip_int[first_bright].tolist()
-                     if first_bright >= 0 else None)
-
-        # Find first match (exterior has priority over corridor).
+        # Find first exact match.
         ext_idx = int(np.argmax(ext_match)) if np.any(ext_match) else -1
         corr_idx = int(np.argmax(corr_match)) if np.any(corr_match) else -1
 
@@ -1237,13 +1222,12 @@ def _detect_face_colors(
             best_idx, best_color = corr_idx, "corridor"
 
         if best_color:
-            match_rgb = strip_int[best_idx].tolist()
+            match_rgb = strip[best_idx].tolist()
             return {"color": best_color, "dist": best_idx + 1,
-                    "reason": "match", "match_rgb": match_rgb,
-                    "first_rgb": first_rgb}
+                    "reason": "match", "match_rgb": match_rgb}
 
         return {"color": None, "dist": len(strip),
-                "reason": "boundary", "first_rgb": first_rgb}
+                "reason": "boundary"}
 
     # Scan points: corners + midpoints of each face.
     mid_x = (x0 + x1) // 2
