@@ -662,27 +662,27 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None):
         ry += step_px
 
     # Filter hits that go beyond a neighboring seed.
-    # A hit is invalid if it passes a neighbor's seed in the ray direction:
-    #   - east hit at hx: invalid if there's a seed with ox < hx (hit went past it)
-    #   - west hit at hx: invalid if there's a seed with ox > hx
-    #   - south hit at hy: invalid if there's a seed with oy < hy
-    #   - north hit at hy: invalid if there's a seed with oy > hy
-    # Only consider seeds that are roughly aligned with the ray (within bbox).
+    # A hit is invalid if it passes a neighbor's seed in the ray direction
+    # AND the neighbor seed is roughly aligned (within the room's perpendicular
+    # dimension).  Alignment tolerance uses the coarse room dimensions so that
+    # even rays near the seed center (hy ≈ cy) are correctly filtered.
     if other_seeds:
+        tol_ns = max(coarse_ns, step_px * 3)
+        tol_ew = max(coarse_ew, step_px * 3)
+
         def _not_past_seed(hx, hy, direction):
             for ox, oy in other_seeds:
                 if direction == 'east' and ox > cx and hx > ox:
-                    # Hit went east past a seed that's east of us
-                    if abs(hy - oy) < abs(hy - cy) * 2:  # roughly aligned
+                    if abs(hy - oy) < tol_ns:
                         return False
                 elif direction == 'west' and ox < cx and hx < ox:
-                    if abs(hy - oy) < abs(hy - cy) * 2:
+                    if abs(hy - oy) < tol_ns:
                         return False
                 elif direction == 'south' and oy > cy and hy > oy:
-                    if abs(hx - ox) < abs(hx - cx) * 2:
+                    if abs(hx - ox) < tol_ew:
                         return False
                 elif direction == 'north' and oy < cy and hy < oy:
-                    if abs(hx - ox) < abs(hx - cx) * 2:
+                    if abs(hx - ox) < tol_ew:
                         return False
             return True
 
