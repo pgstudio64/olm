@@ -393,6 +393,7 @@
           if (data.error) throw new Error(data.error);
           var diag = data.diag || {};
           var cd = data.color_detection || {};
+          var ch = data.corner_hits || [];
           var lines = [
             "=== Room " + roomName + " diagnostic ===",
             "",
@@ -404,6 +405,18 @@
               cd.exterior_faces || []),
             "deduced corridor: " +
               (data.deduced_corridor_face || "(none)"),
+            "",
+            "--- CORNER SCAN ---",
+          ];
+          ch.forEach(function (c) {
+            var hitStr = c.hit
+              ? c.hit.color + " at " + c.hit.dist + "px"
+              : "(none)";
+            lines.push(
+              "  " + c.corner + " -> " + c.direction +
+              " : " + hitStr);
+          });
+          lines = lines.concat([
             "",
             "--- BBOX ---",
             "seed_px: [" + seedPx[0] + ", " + seedPx[1] + "]",

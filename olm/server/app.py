@@ -1426,23 +1426,21 @@ def api_debug_room_diagnostic():
             try:
                 import numpy as _np
                 from olm.ingestion.extract import _detect_face_colors
-                from olm.core.detection_config import DetectionConfigCm
                 _rgb_arr = _np.array(color_img.convert("RGB"))
-                _dcfg = DetectionConfigCm.from_dict(
-                    _get_detection_overrides())
-                _px_per_cm = 1.0 / scale if scale > 0 else 2.0
-                _corr_strip = max(
-                    1, int(round(_dcfg.corridor_width_cm * _px_per_cm)))
-                _ext_strip = max(
-                    1, int(round(_dcfg.exterior_width_cm * _px_per_cm)))
                 colors = _detect_face_colors(
                     _rgb_arr, detected_bbox,
                     _get_corridor_rgb(),
                     _get_exterior_rgb(),
-                    corridor_strip_px=_corr_strip,
-                    exterior_strip_px=_ext_strip,
                 )
-                result["color_detection"] = colors
+                result["color_detection"] = {
+                    "corridor_face": colors["corridor_face"],
+                    "exterior_faces": colors["exterior_faces"],
+                }
+                result["corner_hits"] = colors.get("corner_hits", [])
+                result["color_params"] = {
+                    "corridor_rgb": list(_get_corridor_rgb()),
+                    "exterior_rgb": list(_get_exterior_rgb()),
+                }
                 _OPP = {"north": "south", "south": "north",
                          "east": "west", "west": "east"}
                 deduced_cf = colors.get("corridor_face", "")
