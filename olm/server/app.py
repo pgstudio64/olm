@@ -72,7 +72,8 @@ def _get_detection_overrides() -> dict | None:
         with open(_config_path, encoding="utf-8") as _f:
             _ing = json.load(_f).get("ingestion", {})
         overrides = {}
-        for key in ("cartouche_margin_cm", "text_skip_margin_cm"):
+        for key in ("cartouche_margin_cm", "text_skip_margin_cm",
+                     "corridor_width_cm", "exterior_width_cm"):
             if key in _ing:
                 overrides[key] = float(_ing[key])
         return overrides or None
@@ -795,6 +796,11 @@ def api_import_preprocessed():
         # Pass explicit scale to extract function if available
         if explicit_scale is not None and explicit_scale > 0:
             json_data["_override_cm_per_px"] = explicit_scale
+
+        # Pass detection overrides for color sampling widths
+        _det_overrides = _get_detection_overrides()
+        if _det_overrides:
+            json_data["_detection_overrides"] = _det_overrides
 
         # --- Extraction ---
         from olm.ingestion.extract import extract_rooms_from_preprocessed

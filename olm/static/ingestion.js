@@ -92,8 +92,11 @@
   //   4) post-traitement des points / rectangles relatifs au bbox
   //      (hits / seed / auto_door_masks — non gérés par fromStorage).
   function computeCanonicalReanalyzeResult(data, prevCorridorFace, scale) {
-    var corridor = (data.doors && data.doors.length && data.doors[0].face)
-      ? data.doors[0].face : (prevCorridorFace || '');
+    // Preserve corridor_face from import (set by color detection).
+    // Only use door-based corridor if no previous value exists.
+    var corridor = prevCorridorFace
+      || (data.doors && data.doors.length && data.doors[0].face)
+      || '';
     var bbox = data.bbox_px || null;
     var absW = bbox ? (bbox[2] - bbox[0]) * scale : 0;
     var absD = bbox ? (bbox[3] - bbox[1]) * scale : 0;

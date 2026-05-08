@@ -67,6 +67,12 @@ class DetectionConfigCm:
     # du JSON producer ou d'erreurs de classification.
     min_door_width_cm: float = 70.0
 
+    # --- Couleur faces (corridor / extérieur) ---
+    corridor_width_cm: float = 60.0     # largeur min supposée d'un couloir ;
+                                         # l'échantillonnage cible le milieu
+    exterior_width_cm: float = 100.0    # largeur min supposée de l'extérieur ;
+                                         # idem, échantillonnage au milieu
+
     # --- Divers ---
     cartouche_margin_cm: float = 3.0
     text_skip_margin_cm: float = 6.0    # marge autour des bbox texte pour
@@ -102,6 +108,8 @@ class DetectionConfigCm:
                 self.min_door_arc_width_cm / self.comb_step_cm
             ))),
             min_door_width_px=_px(self.min_door_width_cm),
+            corridor_width_px=_px(self.corridor_width_cm),
+            exterior_width_px=_px(self.exterior_width_cm),
             cartouche_margin_px=_px(self.cartouche_margin_cm),
             text_skip_margin_px=_px(self.text_skip_margin_cm),
         )
@@ -148,6 +156,9 @@ class DetectionConfigPx:
     default_door_width_px: int
     min_door_arc_hits: int
     min_door_width_px: int
+
+    corridor_width_px: int
+    exterior_width_px: int
 
     cartouche_margin_px: int
     text_skip_margin_px: int

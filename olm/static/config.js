@@ -305,6 +305,24 @@ function renderFloorplanSettings() {
       if (prev) prev.style.background = "rgb(" + vals[idx].join(",") + ")";
     })(i);
   }
+
+  // Corridor / exterior width (cm) for color sampling
+  var cwEl = document.getElementById("cfgCorridorWidth");
+  if (cwEl) {
+    cwEl.value = ing.corridor_width_cm != null ? ing.corridor_width_cm : 60;
+    cwEl.onchange = function() {
+      saveConfigField(["ingestion", "corridor_width_cm"],
+                      parseFloat(this.value) || 60);
+    };
+  }
+  var ewEl = document.getElementById("cfgExteriorWidth");
+  if (ewEl) {
+    ewEl.value = ing.exterior_width_cm != null ? ing.exterior_width_cm : 100;
+    ewEl.onchange = function() {
+      saveConfigField(["ingestion", "exterior_width_cm"],
+                      parseFloat(this.value) || 100);
+    };
+  }
 }
 
 async function saveSpacingField(standard, field, value) {
