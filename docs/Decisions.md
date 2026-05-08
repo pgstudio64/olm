@@ -7,27 +7,29 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
-## D-161 · Corner-scan pour la détection d'orientation (2026-05-08)
+## D-161 · Corner-scan exact match pour la détection d'orientation (2026-05-08)
 
 ### Décision
 Remplacement complet de `_detect_face_colors` (band sampling) par un algorithme
-corner-scan : depuis chaque coin de la bbox, scanner pixel par pixel dans les deux
-directions perpendiculaires vers l'extérieur. S'arrêter au premier pixel bleu
-(extérieur) ou vert (couloir). Pas de seuil de distance, pas de seuil de
-pourcentage.
+corner-scan avec match exact RGB :
+- 12 scans : 4 coins × 2 directions perpendiculaires + 4 midpoints × 1 direction.
+- Depuis chaque point, extraction numpy vectorisée du strip complet (ligne ou colonne).
+- Match exact RGB (pas de tolérance) — les images preprocessed ont des couleurs
+  programmatiques.
+- Premier pixel bleu (extérieur) ou vert (couloir) trouvé détermine la face.
+- Pas de seuil de distance, pas de seuil de pourcentage.
 
 ### Justification
-Le band sampling échouait quand le bleu/vert était au-delà de la largeur de bande
-configurée. Élargir la bande introduisait des faux positifs. Le corner-scan est
-plus simple et plus robuste : il trouve la première couleur pertinente quelle que
-soit sa distance.
+Le band sampling échouait quand le bleu/vert était au-delà de la bande configurée.
+La tolérance ±40 causait des faux positifs (gris 207,207,207 matchait le vert
+corridor 193,247,179). L'exact match est sûr puisque les couleurs sont programmatiques.
 
 ### Impact
-- `olm/ingestion/extract.py` : `_detect_face_colors` réécrite (corner-scan).
-  Signature simplifiée (plus de corridor_strip_px/exterior_strip_px).
-- `olm/server/app.py` : endpoint diagnostic retourne `corner_hits` (8 scans).
+- `olm/ingestion/extract.py` : `_detect_face_colors` réécrite (12 corner-scans,
+  exact match, numpy vectorisé). Signature simplifiée (plus de tolerance/kwargs).
+- `olm/server/app.py` : endpoint diagnostic retourne `corner_hits` (12 scans).
 - `olm/static/init_rvtool.js` : section CORNER SCAN dans le diagnostic.
-- `CLAUDE.md` : règle ajoutée — expliquer l'algo avant de coder.
+- `CLAUDE.md` : règles ajoutées — expliquer l'algo + lister tous les choix d'implémentation.
 
 ---
 

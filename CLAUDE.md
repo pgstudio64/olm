@@ -160,6 +160,7 @@ Conséquences concrètes :
 - **Cohérence données/rendu** : toute modification de valeurs normatives doit être propagée à la représentation graphique. Vérifier systématiquement que le rendu utilise les valeurs du standard du pattern affiché, pas un standard par défaut.
 - **Itération sans retour en arrière** : la propreté du proto garantit que chaque itération avance sans devoir refactorer les fondations
 - **Expliquer l'algo avant de coder** : avant d'implémenter un algorithme, expliquer son fonctionnement en langage clair (pas de jargon technique inventé) pour que l'utilisateur puisse vérifier et aider. Ne pas coder d'abord et expliquer après — d'abord l'explication, puis la validation, puis le code.
+- **Lister TOUS les choix d'implémentation** : avant de coder, lister explicitement tous les choix techniques (limites, seuils, filtres, optimisations, valeurs par défaut) pour validation par l'utilisateur. Ne jamais ajouter silencieusement un seuil, une tolérance, un filtre ou une limite qui n'a pas été validé. Si un choix n'a pas été discuté, le signaler — ne pas décider seul.
 
 ---
 

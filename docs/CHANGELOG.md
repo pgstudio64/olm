@@ -3,6 +3,20 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.21] — 2026-05-08
+
+### Fixed
+
+- **D-161 Exact RGB match** : suppression de la tolérance ±40 dans le corner-scan.
+  Les images preprocessed ont des couleurs programmatiques — la tolérance causait
+  des faux positifs (gris 207,207,207 matchait le vert corridor). Match exact uniquement.
+- Nettoyage signature `_detect_face_colors` : suppression paramètre `tolerance` et `**_kwargs`.
+
+### Added
+
+- **CLAUDE.md** : règle « lister TOUS les choix d'implémentation » avant de coder.
+  Interdit d'ajouter silencieusement seuils, filtres ou limites non validés.
+
 ## [v0.4.16] — 2026-05-08
 
 ### Added
