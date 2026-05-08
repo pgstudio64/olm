@@ -23,9 +23,13 @@ from olm.core.pattern_generator import (
 )
 from olm.core.spacing_config import ALL_CONFIGS
 
-app = Flask(__name__, static_folder=None)
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+app = Flask(
+    __name__,
+    static_folder=None,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+)
 CATALOGUE_DIR = os.path.join(os.path.dirname(BASE_DIR), "project", "catalogue")
 CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
 
@@ -286,8 +290,10 @@ def _get_block_defs(standard_name: str) -> dict:
 
 @app.route("/")
 def index():
-    """Serve the pattern editor page."""
-    return send_from_directory(os.path.join(BASE_DIR, "templates"), "pattern_editor.html")
+    """Serve the pattern editor page with cache-bust version."""
+    from flask import render_template
+    from olm import __version__
+    return render_template("pattern_editor.html", v=__version__)
 
 
 @app.route("/test_rooms.json")
