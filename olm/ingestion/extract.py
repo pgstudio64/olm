@@ -1204,9 +1204,14 @@ def _detect_face_colors(
                     "reason": "boundary", "first_rgb": None}
 
         # Vectorized match: check all pixels at once.
+        # Reject gray pixels (R=G=B) — they are not colored.
         strip_int = strip.astype(int)
-        ext_match = np.all(np.abs(strip_int - ext) <= tolerance, axis=1)
-        corr_match = np.all(np.abs(strip_int - corr) <= tolerance, axis=1)
+        saturated = (np.max(strip_int, axis=1)
+                     - np.min(strip_int, axis=1)) > 0
+        ext_match = (np.all(np.abs(strip_int - ext) <= tolerance, axis=1)
+                     & saturated)
+        corr_match = (np.all(np.abs(strip_int - corr) <= tolerance, axis=1)
+                      & saturated)
 
         # First non-dark pixel (any channel > 50).
         bright = np.max(strip_int, axis=1) > 50
