@@ -410,13 +410,12 @@
           ];
           ch.forEach(function (c) {
             var h = c.hit || {};
+            var rgb = h.match_rgb || h.first_rgb;
+            var rgbStr = rgb ? " rgb=" + JSON.stringify(rgb) : "";
             var hitStr = h.color
-              ? h.color + " at " + h.dist + "px"
+              ? h.color + " at " + h.dist + "px" + rgbStr
               : "(none) " + (h.reason || "") +
-                " @" + (h.dist || 0) + "px" +
-                (h.first_rgb
-                  ? " rgb=" + JSON.stringify(h.first_rgb)
-                  : "");
+                " @" + (h.dist || 0) + "px" + rgbStr;
             lines.push(
               "  " + c.corner + " -> " + c.direction +
               " : " + hitStr);
