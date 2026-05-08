@@ -118,6 +118,25 @@ def _get_exterior_rgb() -> tuple:
     return _DEFAULT_EXTERIOR_RGB
 
 
+_DEFAULT_CORRIDOR_RGB = (193, 247, 179)
+
+
+def _get_corridor_rgb() -> tuple:
+    """Read preprocessed corridor RGB from config.json."""
+    _root = os.path.dirname(BASE_DIR)
+    _config_path = os.path.join(_root, "project", "config.json")
+    if os.path.exists(_config_path):
+        try:
+            with open(_config_path, encoding="utf-8") as _f:
+                rgb = json.load(_f).get("ingestion", {}).get(
+                    "preprocessed_corridor_rgb")
+            if rgb and len(rgb) == 3:
+                return tuple(int(v) for v in rgb)
+        except Exception:
+            pass
+    return _DEFAULT_CORRIDOR_RGB
+
+
 @app.route("/static/<path:filename>")
 def serve_static(filename: str):
     """Serve static files from the static/ folder."""
@@ -1400,6 +1419,41 @@ def api_debug_room_diagnostic():
         result.pop("hits", None)
         result["diag"] = diag
         result["other_seeds_count"] = len(other_seeds_px)
+
+        # Color detection on detected bbox (orientation diagnostic)
+        detected_bbox = result.get("bbox_px")
+        if detected_bbox and color_img and mode != "ocr":
+            try:
+                import numpy as _np
+                from olm.ingestion.extract import _detect_face_colors
+                from olm.core.detection_config import DetectionConfigCm
+                _rgb_arr = _np.array(color_img.convert("RGB"))
+                _dcfg = DetectionConfigCm.from_dict(
+                    _get_detection_overrides())
+                _px_per_cm = 1.0 / scale if scale > 0 else 2.0
+                _corr_strip = max(
+                    1, int(round(_dcfg.corridor_width_cm * _px_per_cm)))
+                _ext_strip = max(
+                    1, int(round(_dcfg.exterior_width_cm * _px_per_cm)))
+                colors = _detect_face_colors(
+                    _rgb_arr, detected_bbox,
+                    _get_corridor_rgb(),
+                    _get_exterior_rgb(),
+                    corridor_strip_px=_corr_strip,
+                    exterior_strip_px=_ext_strip,
+                )
+                result["color_detection"] = colors
+                _OPP = {"north": "south", "south": "north",
+                         "east": "west", "west": "east"}
+                deduced_cf = colors.get("corridor_face", "")
+                if not deduced_cf and colors.get("exterior_faces"):
+                    deduced_cf = ("(from blue) "
+                                  + _OPP.get(
+                                      colors["exterior_faces"][0], "?"))
+                result["deduced_corridor_face"] = deduced_cf
+            except Exception as e:
+                result["color_detection_error"] = str(e)
+
         return jsonify(result)
     except Exception as e:
         traceback.print_exc()

@@ -325,6 +325,29 @@
       });
     }
 
+    // --- Diagnostic modal helpers ---
+    var diagModal = document.getElementById("diagModal");
+    var diagText = document.getElementById("diagText");
+    var diagTitle = document.getElementById("diagTitle");
+    var diagClose = document.getElementById("diagClose");
+    var diagCopy = document.getElementById("diagCopy");
+    function showDiag(title, text) {
+      if (!diagModal || !diagText) { alert(text); return; }
+      diagTitle.textContent = title;
+      diagText.value = text;
+      diagModal.style.display = "flex";
+    }
+    if (diagClose) diagClose.onclick = function () {
+      diagModal.style.display = "none";
+    };
+    if (diagCopy) diagCopy.onclick = function () {
+      diagText.select();
+      document.execCommand("copy");
+    };
+    if (diagModal) diagModal.onclick = function (e) {
+      if (e.target === diagModal) diagModal.style.display = "none";
+    };
+
     // --- Diagnostic button (D-160) ---
     var diagBtn = document.getElementById("rvBtnDiag");
     if (diagBtn) {
@@ -369,40 +392,63 @@
           var data = await resp.json();
           if (data.error) throw new Error(data.error);
           var diag = data.diag || {};
+          var cd = data.color_detection || {};
           var lines = [
             "=== Room " + roomName + " diagnostic ===",
+            "",
+            "--- ORIENTATION ---",
+            "corridor_face_abs (stored): " +
+              (orig.corridor_face_abs || "(empty)"),
+            "green detected: " + (cd.corridor_face || "(none)"),
+            "blue detected: " + JSON.stringify(
+              cd.exterior_faces || []),
+            "deduced corridor: " +
+              (data.deduced_corridor_face || "(none)"),
+            "",
+            "--- BBOX ---",
             "seed_px: [" + seedPx[0] + ", " + seedPx[1] + "]",
             "bbox_detected: " + JSON.stringify(data.bbox_px),
-            "other_seeds: " + (data.other_seeds_count || 0),
-            "",
+            "bbox_coarse: " + JSON.stringify(diag.bbox_coarse),
             "coarse_mode: " + JSON.stringify(diag.coarse_mode),
             "coarse_max: " + JSON.stringify(diag.coarse_max),
             "seed_caps: " + JSON.stringify(diag.seed_caps),
-            "bbox_coarse: " + JSON.stringify(diag.bbox_coarse),
             "max_range: " + JSON.stringify(diag.max_range),
+            "other_seeds: " + (data.other_seeds_count || 0),
             "",
+            "--- HITS ---",
             "hits_raw: " + JSON.stringify(diag.hits_raw),
             "hits_filtered: " + JSON.stringify(diag.hits_filtered),
             "obstacles: " + (diag.obstacles_px
               ? diag.obstacles_px.length : 0),
+            "",
+            "--- DOORS ---",
+            "doors: " + (data.doors ? data.doors.length : 0),
           ];
-          if (data.windows) {
-            lines.push("", "windows: " + data.windows.length);
-            data.windows.forEach(function (w) {
-              lines.push("  " + w.face + " @" + w.offset_px +
-                " w=" + w.width_px);
-            });
-          }
-          if (data.openings) {
-            lines.push("openings: " + data.openings.length);
-            data.openings.forEach(function (o) {
-              lines.push("  " + o.face + " @" + o.offset_px +
-                " w=" + o.width_px);
-            });
-          }
-          alert(lines.join("\n"));
+          (data.doors || []).forEach(function (d) {
+            lines.push("  " + d.face + " @" + d.offset_px +
+              " w=" + d.width_px +
+              (d.seed_x != null ? " seed=" + d.seed_x +
+                "," + d.seed_y : ""));
+          });
+          lines.push("");
+          lines.push("--- WINDOWS ---");
+          lines.push("windows: " + (data.windows
+            ? data.windows.length : 0));
+          (data.windows || []).forEach(function (w) {
+            lines.push("  " + w.face + " @" + w.offset_px +
+              " w=" + w.width_px);
+          });
+          lines.push("");
+          lines.push("--- OPENINGS ---");
+          lines.push("openings: " + (data.openings
+            ? data.openings.length : 0));
+          (data.openings || []).forEach(function (o) {
+            lines.push("  " + o.face + " @" + o.offset_px +
+              " w=" + o.width_px);
+          });
+          showDiag("Room " + roomName, lines.join("\n"));
         } catch (err) {
-          alert("Diag error: " + err.message);
+          showDiag("Error", err.message);
         } finally {
           diagBtn.disabled = false;
           diagBtn.textContent = "Diag";
