@@ -747,10 +747,10 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
             width_px = seg.end_px - seg.start_px
             if width_px < MIN_OPENING_WIDTH_PX:
                 seg.kind = "wall"
-            elif not _opening_has_depth(
-                    binary, bbox, direction, seg, step_px,
-                    MIN_OPENING_DEPTH_PX):
-                seg.kind = "wall"
+            # D-160: _opening_has_depth disabled — too aggressive on
+            # preprocessed plans (interior lines within 60cm reject
+            # all valid openings). Needs multi-point probe before
+            # re-activation.
         filtered.append(seg)
     segments = filtered
 
