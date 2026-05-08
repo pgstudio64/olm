@@ -326,11 +326,13 @@
   }
 
   // --- Drawing scale helpers (extracted to ingestion_scale.js, D-94 P4) ---
-  var parseDrawingScale     = window.olmScale.parseDrawingScale;
-  var computeCmPerPx        = window.olmScale.computeCmPerPx;
-  var getDrawingScale       = window.olmScale.getDrawingScale;
-  var getRenderDpi          = window.olmScale.getRenderDpi;
-  var _suggestDrawingScale  = window.olmScale.suggestDrawingScale;
+  var parseDrawingScale      = window.olmScale.parseDrawingScale;
+  var computeCmPerPx         = window.olmScale.computeCmPerPx;
+  var getDrawingScale        = window.olmScale.getDrawingScale;
+  var getRenderDpi           = window.olmScale.getRenderDpi;
+  var _populateScaleSelector = window.olmScale.populateScaleSelector;
+  var _getSelectedSource     = window.olmScale.getSelectedSource;
+  var _getActiveCmPerPx      = window.olmScale.getActiveCmPerPx;
 
   /**
    * Show/hide plan-dependent UI sections and enable/disable Review+Design tabs.
@@ -562,7 +564,7 @@
         ingState.planPath = data.image_path || "";
         ingState.planPathEnhanced = data.image_path || "";
         ingState.scale = data.scale_cm_per_px;
-        _suggestDrawingScale(data.scale_cm_per_px);
+        _populateScaleSelector(data);
         ingState.vb = { x: 0, y: 0, w: ingState.planW, h: ingState.planH };
         _showPlanLoadedUI(planId);
         if (status) status.textContent = ingState.rooms.length + ' rooms — scale ' +
@@ -625,19 +627,9 @@
   }
   document.addEventListener('DOMContentLoaded', _wireFloorMetadataInputs);
 
-  // --- Pre-fill drawing scale from APP_CONFIG (called by init.js after config loaded) ---
-  window.prefillDrawingScale = function () {
-    var dsField = document.getElementById('ingDrawingScale');
-    if (!dsField || dsField.value.trim()) return;  // already filled by user
-    var cfgDs = ((window.APP_CONFIG || {}).ingestion || {}).drawing_scale_text || '';
-    if (cfgDs) {
-      var cfgNum = parseDrawingScale(cfgDs);
-      if (cfgNum > 0) {
-        dsField.value = '1 : ' + cfgNum;
-        dsField.style.color = 'var(--text)';
-      }
-    }
-  };
+  // Pre-fill drawing scale — now handled by populateScaleSelector after import.
+  // Kept as no-op for init.js compat.
+  window.prefillDrawingScale = function () {};
 
   // --- Room list (clickable, same style as Review) ---
   window.updateIngRoomList = updateIngRoomList;
@@ -1551,82 +1543,39 @@
     updatePlanDependentUI();  // initial state: hide sections, disable tabs
 
     // Drawing scale field: recalculate room dimensions on change
-    var dsField = document.getElementById('ingDrawingScale');
-    if (dsField) {
-      // Pre-fill deferred until APP_CONFIG is loaded — see prefillDrawingScale()
-
-      // On focus: select only the number part (after "1 : ")
-      dsField.addEventListener('focus', function() {
-        var val = this.value;
-        var m = val.match(/^1\s*:\s*/);
-        if (m) {
-          var start = m[0].length;
-          var self = this;
-          setTimeout(function() { self.setSelectionRange(start, val.length); }, 0);
-        }
-      });
-
-      // On blur/change: reformat to "1 : <number>" and apply
-      function _applyDrawingScale() {
-        var scaleNum = parseDrawingScale(dsField.value);
-        if (scaleNum > 0) {
-          dsField.value = '1 : ' + scaleNum;
-          dsField.style.color = 'var(--text)';
-        }
-        var dpi = getRenderDpi();
-        if (scaleNum > 0 && dpi > 0 && ingState.rooms.length > 0) {
-          ingState.scale = computeCmPerPx(scaleNum, dpi);
-          // Propage aussi la nouvelle échelle dans fpOverlay (utilisé par
-          // Room / Office pour positionner l'overlay du plan).
-          if (window.fpOverlay && ingState.scale > 0) {
-            window.fpOverlay.pxPerCm = 1.0 / ingState.scale;
-          }
-          ingState.rooms.forEach(function(r) {
-            if (r.bbox_px) _updateRoomDims(r);
-          });
-          // D-95: propagate new dims to fpData.rooms so Room/Office reads fresh
-          // values next time they render. The actual re-render happens when the
-          // user switches to those tabs (triggered by existing tab handlers).
-          if (window.fpData && window.fpData.rooms && window.fpData.rooms.length) {
-            var byName = {};
-            ingState.rooms.forEach(function(r) { byName[r.name] = r; });
-            window.fpData.rooms.forEach(function(fr) {
-              var src = byName[fr.name];
-              if (src) {
-                fr.width_cm = src.width_cm;
-                fr.depth_cm = src.depth_cm;
-                fr.surface_m2 = src.surface_m2;
-              }
-            });
-          }
-          updateIngRoomList();
-          renderIngestion();
-          populateRoomsJson();
-          // Refresh the Floor properties panel (Rooms + Total area m²)
-          // immediately — rvRenderCurrent would do it on match round-trip,
-          // but we want the sidebar to reflect the new scale without
-          // waiting on the async fetch.
-          if (typeof window.updateFloorProperties === 'function') {
-            window.updateFloorProperties();
-          }
-          // Propager les offsets re-scalés (windows / openings) dans
-          // fpData.rooms — sans quoi Room et Office gardent les anciennes
-          // valeurs cm.
-          if (typeof window.fpLoadAndMatch === 'function') {
-            window.fpLoadAndMatch(ingState.rooms);
-          }
-          var info = document.getElementById('ingScaleInfo');
-          if (info) info.textContent = scaleNum +
-            ' → ' + ingState.scale.toFixed(4) + ' cm/px (at ' + dpi + ' DPI)';
-        }
-        saveConfigField(["ingestion", "drawing_scale_text"], dsField.value);
+    // Scale change propagation — called by ingestion_scale.js when
+    // the user picks a different scale source from the dropdown.
+    window.onScaleChanged = function () {
+      if (!ingState.scale || ingState.scale <= 0) return;
+      if (!ingState.rooms.length) return;
+      if (window.fpOverlay && ingState.scale > 0) {
+        window.fpOverlay.pxPerCm = 1.0 / ingState.scale;
       }
-      dsField.addEventListener('change', _applyDrawingScale);
-      dsField.addEventListener('blur', function() {
-        var scaleNum = parseDrawingScale(this.value);
-        if (scaleNum > 0) this.value = '1 : ' + scaleNum;
+      ingState.rooms.forEach(function(r) {
+        if (r.bbox_px) _updateRoomDims(r);
       });
-    }
+      if (window.fpData && window.fpData.rooms && window.fpData.rooms.length) {
+        var byName = {};
+        ingState.rooms.forEach(function(r) { byName[r.name] = r; });
+        window.fpData.rooms.forEach(function(fr) {
+          var src = byName[fr.name];
+          if (src) {
+            fr.width_cm = src.width_cm;
+            fr.depth_cm = src.depth_cm;
+            fr.surface_m2 = src.surface_m2;
+          }
+        });
+      }
+      updateIngRoomList();
+      renderIngestion();
+      populateRoomsJson();
+      if (typeof window.updateFloorProperties === 'function') {
+        window.updateFloorProperties();
+      }
+      if (typeof window.fpLoadAndMatch === 'function') {
+        window.fpLoadAndMatch(ingState.rooms);
+      }
+    };
 
     // Keyboard shortcuts for bbox editor (arrows = move, Delete = remove, Escape = deselect)
     document.addEventListener('keydown', function(e) {
@@ -2148,21 +2097,8 @@
         }
         if (typeof data.scale_cm_per_px === 'number' && data.scale_cm_per_px > 0) {
           ingState.scale = data.scale_cm_per_px;
-          // D-156 : si le JSON du plan porte un drawing_scale_text
-          // (ex. "1:300"), pré-remplir le champ avant suggestDrawingScale
-          // pour éviter le back-calcul erroné (ex. 1:157).
-          if (data.drawing_scale_text) {
-            var dsNum = parseDrawingScale(data.drawing_scale_text);
-            if (dsNum > 0) {
-              var dsField = document.getElementById('ingDrawingScale');
-              if (dsField && !dsField.value.trim()) {
-                dsField.value = '1 : ' + dsNum;
-                dsField.style.color = 'var(--text)';
-              }
-            }
-          }
-          _suggestDrawingScale(data.scale_cm_per_px);
         }
+        _populateScaleSelector(data);
         // Focus auto : si des pièces ont des bbox, cadrer sur leur enveloppe
         var hasBoxes = ingState.rooms.some(function(r) { return r.bbox_px && r.bbox_px[2] > r.bbox_px[0]; });
         if (hasBoxes) {

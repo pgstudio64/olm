@@ -1216,6 +1216,7 @@
       ]
     }
   },
+  "render_dpi": 300,
   "drawing_scale_text": "1 : 350",
   "drawing_scale_measured": "2.9633 cm/px"
 }

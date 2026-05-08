@@ -204,11 +204,17 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div id="ingPlanSections" style="display:none;">
 
         <div class="section-title">Scale</div>
-        <input type="text" id="ingDrawingScale" placeholder="1 : 100"
-          style="width:100%;padding:3px 6px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;font-family:var(--font-mono);margin-bottom:4px;">
-        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:var(--sp-sm);">
-          Scale of the original PDF drawing (e.g. "1 : 100"). Combined with render DPI to compute real-world dimensions. Leave empty to estimate from room surfaces.
+        <div id="ingScaleSelector" style="position:relative;margin-bottom:var(--sp-sm);">
+          <div id="ingScaleDisplay" style="width:100%;font-size:11px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;box-sizing:border-box;">
+            <span id="ingScaleDisplayLabel">—</span>
+            <span style="display:flex;align-items:center;gap:6px;">
+              <span id="ingScaleDisplayValue" style="font-family:var(--font-mono);">—</span>
+              <span style="color:var(--text-dim);font-size:9px;">&#9660;</span>
+            </span>
+          </div>
+          <div id="ingScalePopup" style="display:none;position:absolute;left:0;right:0;z-index:10;background:var(--surface);border:1px solid var(--border);border-top:none;font-size:11px;"></div>
         </div>
+        <div id="ingScaleInfo" style="font-size:9px;color:var(--text-dim);margin-bottom:var(--sp-sm);"></div>
 
         <div class="section-title">Floor properties</div>
         <table style="margin-bottom:var(--sp-sm);">
