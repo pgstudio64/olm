@@ -325,6 +325,91 @@
       });
     }
 
+    // --- Diagnostic button (D-160) ---
+    var diagBtn = document.getElementById("rvBtnDiag");
+    if (diagBtn) {
+      diagBtn.addEventListener("click", async function () {
+        if (!state.roomAmendMode) return;
+        var ingst = window.ingState || {};
+        var orig = state.roomAmendMode.originalRoom || {};
+        var seedPx = orig.seed_px || orig.seed ||
+          (orig.seed_x != null && orig.seed_y != null
+            ? [orig.seed_x, orig.seed_y] : null);
+        if (!seedPx || !ingst.planPathEnhanced || !ingst.scale) {
+          alert("Diag unavailable: missing seed, plan path, or scale.");
+          return;
+        }
+        var roomName = orig.name || "";
+        var otherSeeds = [];
+        var allRooms = (ingst.rooms || {});
+        Object.keys(allRooms).forEach(function (k) {
+          if (k === roomName) return;
+          var r = allRooms[k];
+          if (r && r.seed_x != null && r.seed_y != null) {
+            otherSeeds.push([r.seed_x, r.seed_y]);
+          }
+        });
+        diagBtn.disabled = true;
+        diagBtn.textContent = "...";
+        try {
+          var resp = await fetch("/api/debug/room-diagnostic", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              plan_path: ingst.planPathEnhanced,
+              seed_px: [parseInt(seedPx[0]), parseInt(seedPx[1])],
+              bbox_px: orig.bbox_px || null,
+              scale_cm_per_px: ingst.scale,
+              mode: ingst.mode || "preprocessed",
+              other_seeds_px: otherSeeds,
+              doors: orig.doors || [],
+              transparent_zones: orig.transparent_zones || [],
+            }),
+          });
+          var data = await resp.json();
+          if (data.error) throw new Error(data.error);
+          var diag = data.diag || {};
+          var lines = [
+            "=== Room " + roomName + " diagnostic ===",
+            "seed_px: [" + seedPx[0] + ", " + seedPx[1] + "]",
+            "bbox_detected: " + JSON.stringify(data.bbox_px),
+            "other_seeds: " + (data.other_seeds_count || 0),
+            "",
+            "coarse_mode: " + JSON.stringify(diag.coarse_mode),
+            "coarse_max: " + JSON.stringify(diag.coarse_max),
+            "seed_caps: " + JSON.stringify(diag.seed_caps),
+            "bbox_coarse: " + JSON.stringify(diag.bbox_coarse),
+            "max_range: " + JSON.stringify(diag.max_range),
+            "",
+            "hits_raw: " + JSON.stringify(diag.hits_raw),
+            "hits_filtered: " + JSON.stringify(diag.hits_filtered),
+            "obstacles: " + (diag.obstacles_px
+              ? diag.obstacles_px.length : 0),
+          ];
+          if (data.windows) {
+            lines.push("", "windows: " + data.windows.length);
+            data.windows.forEach(function (w) {
+              lines.push("  " + w.face + " @" + w.offset_px +
+                " w=" + w.width_px);
+            });
+          }
+          if (data.openings) {
+            lines.push("openings: " + data.openings.length);
+            data.openings.forEach(function (o) {
+              lines.push("  " + o.face + " @" + o.offset_px +
+                " w=" + o.width_px);
+            });
+          }
+          alert(lines.join("\n"));
+        } catch (err) {
+          alert("Diag error: " + err.message);
+        } finally {
+          diagBtn.disabled = false;
+          diagBtn.textContent = "Diag";
+        }
+      });
+    }
+
     // --- Re-analyze button (R-04 Review) ---
     var reanalyzeBtn = document.getElementById("rvBtnReanalyze");
     if (reanalyzeBtn) {

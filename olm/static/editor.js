@@ -2060,6 +2060,8 @@ function enterRoomAmendMode(room) {
   if (rvLockWallsCb) rvLockWallsCb.checked = !!state.walls_user_edited;
   var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
   if (rvBtnCheck) rvBtnCheck.style.display = "";
+  var rvBtnDiag = document.getElementById("rvBtnDiag");
+  if (rvBtnDiag) rvBtnDiag.style.display = "";
 
   // Disable navigation during edit
   document.getElementById("rvBtnPrev").disabled = true;
@@ -2094,6 +2096,8 @@ function exitRoomAmendUI() {
   if (rvLockWalls2) rvLockWalls2.checked = false;
   var rvBtnCheck2 = document.getElementById("rvBtnCheckOrient");
   if (rvBtnCheck2) rvBtnCheck2.style.display = "none";
+  var rvBtnDiag2 = document.getElementById("rvBtnDiag");
+  if (rvBtnDiag2) rvBtnDiag2.style.display = "none";
   var rvBadge = document.getElementById("rvOrientBadge");
   if (rvBadge) rvBadge.style.display = "none";
 
