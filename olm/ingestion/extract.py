@@ -1320,39 +1320,56 @@ def extract_rooms_from_preprocessed(
             area_cm2 = p["surface_m2"] * 10_000.0
             if area_px > 0:
                 scale_samples.append(math.sqrt(area_cm2 / area_px))
-    # Priority: _override_cm_per_px > drawing_scale_measured > median > fallback
+    # Priority: override > notation (text + dpi) > ruler (measured) > median
+    # No silent fallback — if nothing works, median is the last resort.
     override_scale = json_data.get("_override_cm_per_px")
-    dsm_raw = json_data.get("drawing_scale_measured", "")
-    dsm_value = 0.0
+
+    # Notation Scale: drawing_scale_text + render_dpi → cm_per_px
+    notation_scale = 0.0
+    dst_raw = str(json_data.get("drawing_scale_text", "")).strip()
+    render_dpi = int(json_data.get("render_dpi", 0))
+    if dst_raw and render_dpi > 0:
+        _dst_match = re.match(r"1\s*:\s*(\d+(?:\.\d+)?)", dst_raw)
+        if _dst_match:
+            notation_scale = 2.54 * float(_dst_match.group(1)) / render_dpi
+
+    # Ruler Scale: drawing_scale_measured (already in cm/px)
+    ruler_scale = 0.0
+    dsm_raw = str(json_data.get("drawing_scale_measured", "")).strip()
     if dsm_raw:
-        _dsm_match = re.search(r"([\d.]+)", str(dsm_raw))
+        _dsm_match = re.search(r"([\d.]+)", dsm_raw)
         if _dsm_match:
-            dsm_value = float(_dsm_match.group(1))
+            ruler_scale = float(_dsm_match.group(1))
 
     if override_scale and float(override_scale) > 0:
         scale_cm_per_px = float(override_scale)
         logger.info(
-            "JSON preprocessed v3 : cm_per_px=%.4f (drawing_scale override)",
-            scale_cm_per_px,
+            "Scale: cm_per_px=%.4f (override)", scale_cm_per_px,
         )
-    elif dsm_value > 0:
-        scale_cm_per_px = dsm_value
+    elif notation_scale > 0:
+        scale_cm_per_px = notation_scale
         logger.info(
-            "JSON preprocessed v3 : cm_per_px=%.4f (drawing_scale_measured)",
-            scale_cm_per_px,
+            "Scale: cm_per_px=%.4f (notation: %s at %d DPI)",
+            scale_cm_per_px, dst_raw, render_dpi,
+        )
+    elif ruler_scale > 0:
+        scale_cm_per_px = ruler_scale
+        logger.info(
+            "Scale: cm_per_px=%.4f (ruler measured)", scale_cm_per_px,
         )
     elif scale_samples:
         scale_samples.sort()
         scale_cm_per_px = scale_samples[len(scale_samples) // 2]
-        logger.info(
-            "JSON preprocessed v3 : cm_per_px=%.4f déduit de %d échantillon(s)",
+        logger.warning(
+            "Scale: cm_per_px=%.4f from %d bbox sample(s) — no explicit "
+            "scale available, detection accuracy may be reduced",
             scale_cm_per_px, len(scale_samples),
         )
     else:
-        scale_cm_per_px = 0.5
-        logger.warning(
-            "JSON preprocessed v3 : aucun bbox_px Save-enriched pour calibrer "
-            "l'échelle — fallback cm_per_px=0.5 (ray-cast requis pour affiner)"
+        scale_cm_per_px = 0.0
+        logger.error(
+            "Scale: no scale source available (no notation, no ruler, "
+            "no bbox samples). Detection will not work correctly."
         )
 
     # D-157 : analyse complète à l'import pour les pièces sans bbox_px.

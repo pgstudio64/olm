@@ -741,38 +741,56 @@ def api_import_preprocessed():
             json_data.setdefault("corridor_rgb", _ing_pp.get("preprocessed_corridor_rgb", [193, 247, 179]))
             json_data.setdefault("exterior_rgb", _ing_pp.get("preprocessed_exterior_rgb", [135, 206, 235]))
 
-        # --- Scale resolution: JSON measured > frontend drawing_scale > median ---
+        # --- Scale resolution ---
+        # Priority: notation (text + dpi) > ruler (measured) > median
+        # The frontend may send a manual override via drawing_scale form field.
         import re as _re_pp
         import math as _math
-        render_dpi = int(request.form.get("render_dpi") or 300)
+        render_dpi = int(
+            json_data.get("render_dpi")
+            or request.form.get("render_dpi")
+            or 300
+        )
 
-        # 1) drawing_scale_measured from JSON (ruler-based, most reliable)
-        measured_scale: float | None = None
-        measured_str = str(json_data.get("drawing_scale_measured", "")).strip()
+        # 1) Notation Scale: drawing_scale_text from JSON + render_dpi
+        notation_scale: float | None = None
+        dst_raw = str(json_data.get("drawing_scale_text", "")).strip()
+        if dst_raw and render_dpi > 0:
+            m_dst = _re_pp.match(r"1\s*:\s*(\d+(?:\.\d+)?)", dst_raw)
+            if m_dst:
+                notation_scale = 2.54 * float(m_dst.group(1)) / render_dpi
+
+        # 2) Ruler Scale: drawing_scale_measured from JSON (cm/px)
+        ruler_scale: float | None = None
+        measured_str = str(
+            json_data.get("drawing_scale_measured", "")
+        ).strip()
         if measured_str:
             m_val = _re_pp.match(r"([\d.]+)\s*cm/px", measured_str)
             if m_val:
-                measured_scale = float(m_val.group(1))
+                ruler_scale = float(m_val.group(1))
 
-        # 2) drawing_scale from frontend UI (text-based)
+        # 3) Manual Scale: drawing_scale from frontend UI
+        manual_scale: float | None = None
         drawing_scale_str = request.form.get("drawing_scale", "").strip()
-        text_scale: float | None = None
         if drawing_scale_str:
-            m_txt = _re_pp.match(r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str)
+            m_txt = _re_pp.match(
+                r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str,
+            )
             if m_txt:
-                text_scale = 2.54 * float(m_txt.group(1)) / render_dpi
+                manual_scale = 2.54 * float(m_txt.group(1)) / render_dpi
 
-        # Cross-check: log if both sources diverge significantly
-        if measured_scale and text_scale:
-            ratio = measured_scale / text_scale if text_scale > 0 else 0
-            if ratio < 0.8 or ratio > 1.2:
-                app.logger.warning(
-                    "Scale divergence: measured=%.4f cm/px vs text=%.4f cm/px "
-                    "(ratio=%.2f) — using measured value",
-                    measured_scale, text_scale, ratio,
-                )
-
-        explicit_scale = measured_scale or text_scale
+        # Frontend may specify which source to use (radio selection)
+        scale_source = request.form.get("scale_source", "").strip()
+        if scale_source == "notation" and notation_scale:
+            explicit_scale = notation_scale
+        elif scale_source == "ruler" and ruler_scale:
+            explicit_scale = ruler_scale
+        elif scale_source == "manual" and manual_scale:
+            explicit_scale = manual_scale
+        else:
+            # Default cascade: notation > ruler > manual
+            explicit_scale = notation_scale or ruler_scale or manual_scale
 
         # Pass explicit scale to extract function if available
         if explicit_scale is not None and explicit_scale > 0:
@@ -793,7 +811,7 @@ def api_import_preprocessed():
             except Exception:
                 page_w = page_h = 0
 
-        # Scale cm/px : use explicit scale if provided, otherwise median from rooms
+        # Scale cm/px : use explicit scale if provided, otherwise median
         if explicit_scale is not None and explicit_scale > 0:
             scale_cm_per_px = explicit_scale
         else:
@@ -804,10 +822,13 @@ def api_import_preprocessed():
                 if bb and surf > 0 and bb[2] > bb[0] and bb[3] > bb[1]:
                     area_px = (bb[2] - bb[0]) * (bb[3] - bb[1])
                     if area_px > 0:
-                        scale_samples.append(_math.sqrt((surf * 10_000.0) / area_px))
+                        scale_samples.append(
+                            _math.sqrt((surf * 10_000.0) / area_px)
+                        )
             scale_samples.sort()
             scale_cm_per_px = (
-                scale_samples[len(scale_samples) // 2] if scale_samples else 0.5
+                scale_samples[len(scale_samples) // 2]
+                if scale_samples else 0.0
             )
 
         return jsonify({
@@ -818,15 +839,18 @@ def api_import_preprocessed():
             "image_size": [page_w, page_h],
             "image_path": overlay_path,
             "scale_cm_per_px": scale_cm_per_px,
-            # D-156 : le frontend utilise drawing_scale_text pour pré-remplir
-            # le champ scale (évite le back-calcul erroné 1:157 au lieu de
-            # 1:300 quand measured=1.33 cm/px et DPI présumé=300).
+            # Scale sources for the frontend selector
+            "render_dpi": render_dpi,
             "drawing_scale_text": str(
                 json_data.get("drawing_scale_text", "")),
+            "notation_scale_cm_per_px": notation_scale or 0,
+            "ruler_scale_cm_per_px": ruler_scale or 0,
+            "scale_source": scale_source or "auto",
             "first_scan_done": bool(json_data.get("first_scan_done", False)),
             "building_id":  str(json_data.get("building_id", "")),
             "floor_id":     str(json_data.get("floor_id", "")),
-            "north_angle_deg": float(json_data.get("north_angle_deg", 0) or 0),
+            "north_angle_deg": float(
+                json_data.get("north_angle_deg", 0) or 0),
         })
     except (json.JSONDecodeError, ValueError) as e:
         for p in _temp_paths:
