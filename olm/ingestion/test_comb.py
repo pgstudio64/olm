@@ -660,10 +660,10 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     coarse_max = {d: max(coarse_dists[d]) if coarse_dists[d] else 0
                   for d in coarse_dists}
 
-    # Cap coarse max distances using neighbor seeds.  If a neighbor seed
-    # sits between us and the farthest coarse hit, that hit went through
-    # a shared wall — cap at the seed distance so the fine phase doesn't
-    # send rays into the neighbor's room.
+    # Compute seed_caps for diagnostic only — NOT applied to coarse_max.
+    # D-160 tried capping coarse_max by neighbor seed distance but this
+    # was too aggressive (rooms between close seeds got very small bboxes).
+    # The post-hoc _not_past_seed filter handles overshoot instead.
     seed_caps = {'north': None, 'south': None, 'east': None, 'west': None}
     if other_seeds:
         for ox, oy in other_seeds:
@@ -681,10 +681,6 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
             if dy_s < 0 and (seed_caps['north'] is None
                              or -dy_s < seed_caps['north']):
                 seed_caps['north'] = -dy_s
-        for d in ('north', 'south', 'east', 'west'):
-            cap = seed_caps[d]
-            if cap is not None and coarse_max[d] > cap:
-                coarse_max[d] = cap
 
     coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
     coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
