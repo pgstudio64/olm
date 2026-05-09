@@ -505,6 +505,57 @@
             lines.push("  " + o.face + " @" + o.offset_px +
               " w=" + o.width_px);
           });
+
+          // --- OVERLAY DEBUG ---
+          lines.push("");
+          lines.push("--- OVERLAY DEBUG ---");
+          var _cfAbs = orig.corridor_face_abs || "";
+          var _cAngle = (window.canonicalIO && window.canonicalIO.canonAngle)
+            ? window.canonicalIO.canonAngle(_cfAbs) : 0;
+          var _bpx = orig.bbox_px || [0, 0, 0, 0];
+          var _sc = (ingst.scale || 1);
+          var _ov = state.overlay || {};
+          var _ovScale = _ov.pxPerCm ? (2 / _ov.pxPerCm) : 0;
+          var _roomWCm = state.room_width_cm || 0;
+          var _roomDCm = state.room_depth_cm || 0;
+          var _refWPx = _roomWCm * 2;
+          var _refHPx = _roomDCm * 2;
+          var _ocx = _refWPx / 2;
+          var _ocy = _refHPx / 2;
+          var _dx = 0, _dy = 0;
+          if (_cAngle === 90 || _cAngle === 270) {
+            _dx = (_refWPx - _refHPx) / 2;
+            _dy = (_refHPx - _refWPx) / 2;
+          }
+          var _ovOffX = _ov.offsetX || 0;
+          var _ovOffY = _ov.offsetY || 0;
+          var _ovX = -(_ovOffX * 2);
+          var _ovY = -(_ovOffY * 2);
+          lines.push("corridor_face_abs: " + (_cfAbs || "(empty)"));
+          lines.push("canonAngle: " + _cAngle);
+          lines.push("room_width_cm (canon): " + _roomWCm);
+          lines.push("room_depth_cm (canon): " + _roomDCm);
+          lines.push("bbox_px (abs): " + JSON.stringify(_bpx));
+          lines.push("bbox_px w×h: " +
+            (_bpx[2] - _bpx[0]) + " × " + (_bpx[3] - _bpx[1]));
+          lines.push("scale: " + _sc + " cm/px");
+          lines.push("abs dims cm: " +
+            Math.round((_bpx[2] - _bpx[0]) * _sc) + " × " +
+            Math.round((_bpx[3] - _bpx[1]) * _sc));
+          lines.push("refWPx (canon W*SCALE): " + _refWPx.toFixed(1));
+          lines.push("refHPx (canon D*SCALE): " + _refHPx.toFixed(1));
+          lines.push("rotation center: (" +
+            _ocx.toFixed(1) + ", " + _ocy.toFixed(1) + ")");
+          lines.push("translate dx: " + _dx.toFixed(1) +
+            ", dy: " + _dy.toFixed(1));
+          lines.push("overlay offsetX: " + _ovOffX.toFixed(2) +
+            ", offsetY: " + _ovOffY.toFixed(2));
+          lines.push("overlay imgW: " + (_ov.imgW || 0) +
+            ", imgH: " + (_ov.imgH || 0));
+          lines.push("overlay pxPerCm: " + (_ov.pxPerCm || 0).toFixed(4));
+          lines.push("image pos (ovX, ovY): (" +
+            _ovX.toFixed(1) + ", " + _ovY.toFixed(1) + ")");
+
           showDiag("Room " + roomName, lines.join("\n"));
         } catch (err) {
           showDiag("Error", err.message);
