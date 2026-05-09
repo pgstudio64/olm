@@ -287,30 +287,38 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       (state.showVrays || state.showHrays)) {
     var sx = roomX + state.room_seed_cm.x_cm * SCALE;
     var sy = roomY + state.room_seed_cm.y_cm * SCALE;
+    var RAY_COLORS = {
+      n: { stroke: "rgba(0,200,0,0.4)",   fill: "rgb(0,200,0)" },
+      s: { stroke: "rgba(0,150,200,0.4)", fill: "rgb(0,150,200)" },
+      w: { stroke: "rgba(200,0,0,0.4)",   fill: "rgb(200,0,0)" },
+      e: { stroke: "rgba(200,100,0,0.4)", fill: "rgb(200,100,0)" }
+    };
     state.room_hits.forEach(function (h) {
       var hx = roomX + h.x_cm * SCALE;
       var hy = roomY + h.y_cm * SCALE;
-      var dx = hx - sx;
-      var dy = hy - sy;
-      var x1, y1, x2, y2, stroke = null;
-      if (state.showVrays && Math.abs(dy) > Math.abs(dx)) {
-        // V-ray : vertical depuis (hx, sy) jusqu'à (hx, hy).
+      // Direction from backend; fallback to heuristic for old data.
+      var dir = h.d;
+      if (!dir) {
+        var dx = hx - sx, dy = hy - sy;
+        if (Math.abs(dy) > Math.abs(dx)) dir = (dy < 0) ? 'n' : 's';
+        else dir = (dx < 0) ? 'w' : 'e';
+      }
+      var isV = (dir === 'n' || dir === 's');
+      if ((isV && !state.showVrays) || (!isV && !state.showHrays)) return;
+      var x1, y1, x2, y2;
+      if (isV) {
         x1 = hx; y1 = sy; x2 = hx; y2 = hy;
-        stroke = (dy < 0) ? "rgba(0,200,0,0.4)" : "rgba(0,150,200,0.4)";
-      } else if (state.showHrays && Math.abs(dx) > Math.abs(dy)) {
-        // H-ray : horizontal depuis (sx, hy) jusqu'à (hx, hy).
+      } else {
         x1 = sx; y1 = hy; x2 = hx; y2 = hy;
-        stroke = (dx < 0) ? "rgba(200,0,0,0.4)" : "rgba(200,100,0,0.4)";
       }
-      if (stroke) {
-        elements.push({ z: 9.6, s: '<line x1="' + x1.toFixed(1) +
-          '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) +
-          '" y2="' + y2.toFixed(1) + '" stroke="' + stroke +
-          '" stroke-width="0.8" vector-effect="non-scaling-stroke"/>' });
-        elements.push({ z: 9.7, s: '<circle cx="' + hx.toFixed(1) +
-          '" cy="' + hy.toFixed(1) + '" r="' + HIT_DISC_R_PX +
-          '" fill="#ffff00"/>' });
-      }
+      var c = RAY_COLORS[dir];
+      elements.push({ z: 9.6, s: '<line x1="' + x1.toFixed(1) +
+        '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) +
+        '" y2="' + y2.toFixed(1) + '" stroke="' + c.stroke +
+        '" stroke-width="0.8" vector-effect="non-scaling-stroke"/>' });
+      elements.push({ z: 9.7, s: '<circle cx="' + hx.toFixed(1) +
+        '" cy="' + hy.toFixed(1) + '" r="' + HIT_DISC_R_PX +
+        '" fill="' + c.fill + '"/>' });
     });
     // Seed déjà dessiné plus haut (indépendamment de la présence de hits).
   }
@@ -1974,7 +1982,7 @@ function loadRoomHitsAndSeedFromIngState(room) {
       var pC = rotP(
         { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
         cf, absW, absD);
-      return { x_cm: pC.x, y_cm: pC.y };
+      return { x_cm: pC.x, y_cm: pC.y, d: h[2] || null };
     });
   }
   // Door seeds (orange) — same abs→canon conversion as room seed.

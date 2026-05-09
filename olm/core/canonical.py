@@ -19,9 +19,8 @@ _FACE_MAPS: dict[str, dict[str, str]] = {
 
 # Inverse : face locale → face absolue
 _INV_FACE_MAPS: dict[str, dict[str, str]] = {
-    "north": {"north": "south", "south": "north", "east": "west", "west": "east"},
-    "east":  {"north": "west",  "east": "north",  "south": "east", "west": "south"},
-    "west":  {"north": "east",  "east": "south",  "south": "west", "west": "north"},
+    cf: {v: k for k, v in mapping.items()}
+    for cf, mapping in _FACE_MAPS.items()
 }
 
 

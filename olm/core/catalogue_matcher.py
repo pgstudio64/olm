@@ -1202,10 +1202,10 @@ def largest_free_rectangle_m2(
 
     # Exclusion zones
     for excl in room.exclusion_zones:
-        r1 = excl.y_cm // GRID_CELL_CM
-        r2 = (excl.y_cm + excl.depth_cm) // GRID_CELL_CM
-        c1 = excl.x_cm // GRID_CELL_CM
-        c2 = (excl.x_cm + excl.width_cm) // GRID_CELL_CM
+        r1 = int(excl.y_cm // GRID_CELL_CM)
+        r2 = int((excl.y_cm + excl.depth_cm) // GRID_CELL_CM)
+        c1 = int(excl.x_cm // GRID_CELL_CM)
+        c2 = int((excl.x_cm + excl.width_cm) // GRID_CELL_CM)
         r1 = max(0, min(r1, rows))
         r2 = max(0, min(r2, rows))
         c1 = max(0, min(c1, cols))
