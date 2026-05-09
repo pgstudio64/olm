@@ -528,6 +528,49 @@ def api_ingestion_plan_image(filename):
     return send_from_directory(_get_plans_dir(), filename)
 
 
+@app.route("/api/plans/<plan_id>/metadata")
+def api_plan_metadata(plan_id):
+    """Return lightweight metadata from the plan JSON (no extraction).
+
+    Used by the frontend to populate building/floor info and zoom to the
+    rooms envelope while the full import runs in the background.
+    """
+    plans_dir = _get_plans_dir()
+    json_path = os.path.join(plans_dir, plan_id + ".json")
+    if not os.path.exists(json_path):
+        return jsonify({"error": "JSON not found"}), 404
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+        rooms_summary = []
+        for r in data.get("rooms", []):
+            bbox = r.get("bbox_px")
+            if bbox and len(bbox) == 4:
+                rooms_summary.append({
+                    "name": r.get("room_id", ""),
+                    "bbox_px": [int(v) for v in bbox],
+                })
+        page_w = int(data.get("page_width_px") or 0)
+        page_h = int(data.get("page_height_px") or 0)
+        if page_w <= 0 or page_h <= 0:
+            png_path = os.path.join(plans_dir, plan_id + ".png")
+            if os.path.exists(png_path):
+                from PIL import Image as _PilImg
+                with _PilImg.open(png_path) as im:
+                    page_w, page_h = im.size
+        return jsonify({
+            "building_id": str(data.get("building_id", "")),
+            "floor_id": str(data.get("floor_id", "")),
+            "north_angle_deg": float(data.get("north_angle_deg", 0) or 0),
+            "drawing_scale_text": str(data.get("drawing_scale_text", "")),
+            "mode": data.get("mode", "preprocessed"),
+            "image_size": [page_w, page_h],
+            "rooms_summary": rooms_summary,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/ingestion/binarize", methods=["POST"])
 def api_ingestion_binarize():
     """Return the binarized version of a plan image (for visualization).
