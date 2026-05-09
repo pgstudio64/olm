@@ -495,7 +495,7 @@
         _closePlanPopup();
         // Show the new plan image immediately (no rooms yet)
         ingState.rooms = [];
-        var url = '/api/image?path=plans/' + encodeURIComponent(newPlanId) + '.png';
+        var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
         var img = new Image();
         img.onload = function () {
           ingState.planUrl = url;
@@ -1959,12 +1959,25 @@
               ? window.canonicalZonesToAbs(
                   rawTransparents, rCfAbs, rAbsW, rAbsD)
               : rawTransparents;
+            // Convert door faces canon → abs for pillar exclusion.
+            var rDoors = (amend && amend.doors) || r.doors || [];
+            var cio = window.canonicalIO;
+            var invMap = (cio && cio.INV_FACE_MAPS)
+              ? cio.INV_FACE_MAPS[rCfAbs] : null;
+            var absDoors = rDoors.map(function (d) {
+              var af = (invMap && invMap[d.face]) || d.face;
+              var e = { face: af, offset_px: d.offset_px || 0,
+                        width_px: d.width_px || 0 };
+              if (d.seed_x != null) e.seed_x = d.seed_x;
+              if (d.seed_y != null) e.seed_y = d.seed_y;
+              return e;
+            });
             payload.rooms.push({
               name: r.name,
               bbox_px: r.bbox_px,
               seed_px: seedPx,
               transparent_zones: absTransparents,
-              doors: [],
+              doors: absDoors,
             });
             validRooms.push(r);
           });
@@ -2067,11 +2080,11 @@
             // Hits du ray-cast — propagés dans le store pour que H-Rays /
             // V-Rays affichent les rayons après rescan-all (sans cette
             // ligne, `ingState.rooms[i].hits` reste vide → 0 ray rendu).
-            if (Array.isArray(res.hits)) {
-              updates.hits = res.hits;
+            if (Array.isArray(canon.hits)) {
+              updates.hits = canon.hits;
             }
-            if (Array.isArray(res.pillar_hits)) {
-              updates.pillar_hits = res.pillar_hits;
+            if (Array.isArray(canon.pillar_hits)) {
+              updates.pillar_hits = canon.pillar_hits;
             }
             // Merge auto exclusion zones: keep manual, replace auto.
             if (Array.isArray(canon.auto_exclusion_zones) &&
