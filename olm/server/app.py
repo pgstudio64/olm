@@ -1726,7 +1726,9 @@ def api_room_reanalyze_batch():
             _gray_global = erase_cartouches(_gray_global, _cart_bboxes_px)
 
         _binary_raw_global = _gray_global < threshold
-        _binary_global = remove_non_ortho(_binary_raw_global)
+        # DISABLED — see extract.py L877 comment.  Restore: uncomment.
+        # _binary_global = remove_non_ortho(_binary_raw_global)  # disabled
+        _binary_global = _binary_raw_global.copy()
 
         # Collect all seeds for inter-room ray limiting.
         all_seeds_px: list[tuple[int, int]] = []
