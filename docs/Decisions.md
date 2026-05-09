@@ -7,6 +7,32 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-162 · Closest-first orientation sans seuil de distance (2026-05-09)
+
+### Décision
+Remplacement de la logique de décision dans `_detect_face_colors` :
+l'ancienne règle « exterior gagne toujours par face » est remplacée par un
+algorithme closest-first global :
+1. Tous les hits (12 scans) sont triés par distance croissante.
+2. Le premier hit exterior et le premier hit corridor sont identifiés.
+3. S'ils sont sur des faces opposées → pas d'ambiguïté.
+4. S'ils ne sont pas opposés → le plus proche fait référence pour orienter.
+5. Pas de seuil de distance.
+
+### Justification
+Les scans sans limite de distance traversent tout le plan et trouvent des
+couleurs d'autres pièces (faux positifs). Exemple : pièce avec exterior à
+l'ouest (48 px) et corridor à l'est (5 px), mais les scans nord/sud trouvaient
+du bleu à 322-641 px → 4 faces classées exterior → orientation fausse.
+L'approche closest-first résout le problème sans introduire de seuil arbitraire.
+
+### Impact
+- `olm/ingestion/extract.py` : logique de décision de `_detect_face_colors`
+  réécrite. `exterior_faces` ne contient plus que la face du hit exterior le
+  plus proche (pas toutes les faces ayant un hit exterior).
+
+---
+
 ## D-161 · Corner-scan exact match pour la détection d'orientation (2026-05-08)
 
 ### Décision

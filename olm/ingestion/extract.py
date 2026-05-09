@@ -1278,22 +1278,53 @@ def _detect_face_colors(
                     "dist": hit["dist"],
                 })
 
-    # Determine corridor_face and exterior_faces from collected hits.
-    # Priority: exterior (blue) > corridor (green) for each face.
+    # Determine corridor_face and exterior_faces from closest-first
+    # analysis (D-162).
+    #
+    # Algorithm:
+    #   1. Flatten all hits, sort by distance (closest first).
+    #   2. Find the first (closest) exterior hit and the first corridor hit.
+    #   3. If both exist and are on opposite faces → no ambiguity.
+    #   4. If both exist but not opposite → the closest of the two is the
+    #      reference for orientation.
+    #   5. If only one type exists → it alone determines orientation.
+    #   No distance threshold.
+    opposite = {
+        "north": "south", "south": "north",
+        "east": "west", "west": "east",
+    }
+
+    all_hits = []
+    for face, hits in face_hits.items():
+        for h in hits:
+            all_hits.append({"face": face, "color": h["color"],
+                             "dist": h["dist"]})
+    all_hits.sort(key=lambda h: h["dist"])
+
+    first_ext = next((h for h in all_hits if h["color"] == "exterior"), None)
+    first_corr = next((h for h in all_hits if h["color"] == "corridor"), None)
+
     corridor_face = ""
     exterior_faces = []
-    for face in ("north", "south", "east", "west"):
-        hits = face_hits[face]
-        if not hits:
-            continue
-        # A face has two scans (from two corners). Use closest hit.
-        ext_hits = [h for h in hits if h["color"] == "exterior"]
-        corr_hits = [h for h in hits if h["color"] == "corridor"]
-        if ext_hits:
-            exterior_faces.append(face)
-        elif corr_hits:
-            if not corridor_face:
-                corridor_face = face
+
+    if first_ext and first_corr:
+        if opposite[first_ext["face"]] == first_corr["face"]:
+            # Opposite faces — no ambiguity.
+            corridor_face = first_corr["face"]
+            exterior_faces = [first_ext["face"]]
+        else:
+            # Not opposite — closest hit is the reference.
+            if first_corr["dist"] <= first_ext["dist"]:
+                corridor_face = first_corr["face"]
+                exterior_faces = [first_ext["face"]]
+            else:
+                corridor_face = opposite[first_ext["face"]]
+                exterior_faces = [first_ext["face"]]
+    elif first_corr:
+        corridor_face = first_corr["face"]
+    elif first_ext:
+        corridor_face = opposite[first_ext["face"]]
+        exterior_faces = [first_ext["face"]]
 
     return {
         "corridor_face": corridor_face,

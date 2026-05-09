@@ -3,6 +3,17 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.22] — 2026-05-09
+
+### Fixed
+
+- **D-162 Closest-first orientation** : la logique de décision de
+  `_detect_face_colors` triait les hits par face avec priorité exterior absolue.
+  Les scans lointains (322-3922 px) trouvaient du bleu d'autres pièces →
+  faux positifs → orientation fausse. Nouvelle logique : tous les hits triés
+  par distance, premier exterior + premier corridor déterminent l'orientation
+  sans seuil de distance.
+
 ## [v0.4.21] — 2026-05-08
 
 ### Fixed
