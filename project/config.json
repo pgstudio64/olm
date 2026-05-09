@@ -18,7 +18,7 @@
     "drawing_scale_text": "1 : 350",
     "render_dpi": 300,
     "scale_cm_per_px": 0.5,
-    "threshold": 110,
+    "binarize_threshold": 110,
     "pdf_render_dpi": 200,
     "plans_dir": "project/plans",
     "preprocessed_exterior_rgb": [

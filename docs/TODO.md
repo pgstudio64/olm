@@ -647,6 +647,10 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
 
 ### Court terme (bugs bloquants UX / régressions potentielles)
 
+0. **Double-clic sur pièce sélectionnée en Floor → naviguer vers Room** :
+   quand une pièce est déjà sélectionnée en Floor view, un double-clic
+   devrait basculer vers la vue Room de cette pièce (même comportement
+   que le double-clic sur une pièce non sélectionnée). Priorité haute.
 1. **Persistance Save room : bbox_px non mis à jour si resize** (R-04
    Review, limite D-127). Fix : calculer `effBbox` au save comme dans
    le handler re-analyze et le persister. Impact fort sur le workflow
