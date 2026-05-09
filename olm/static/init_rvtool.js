@@ -659,8 +659,17 @@
           var newDoors = preservedDoors.length ? [] : canon.doors;
 
           if (canon.hits) state.room_hits = canon.hits;
+          if (canon.pillar_hits) state.room_pillar_hits = canon.pillar_hits;
           if (canon.seed_cm) state.room_seed_cm = canon.seed_cm;
           if (canon.auto_door_masks) state.room_auto_door_masks = canon.auto_door_masks;
+          // Merge auto exclusion zones: keep manual, replace auto.
+          if (Array.isArray(canon.auto_exclusion_zones)) {
+            var manualExcl = (state.room_exclusions || []).filter(function(z) {
+              return z.origin !== 'auto';
+            });
+            state.room_exclusions = manualExcl.concat(
+              canon.auto_exclusion_zones);
+          }
 
           if (canon.bbox_px && ingst.scale && !lockWalls) {
             if (canon.width_cm > 0 && canon.depth_cm > 0) {

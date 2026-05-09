@@ -143,6 +143,21 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <input type="number" id="cfgMinObstacleWidth" class="settings-input" style="width:70px;" min="10" max="100" step="5">
           <span style="font-size:9px;color:var(--text-dim);">Pillars narrower than this are traversed by rays</span>
         </div>
+        <label class="settings-label">Max pillar size (cm)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgMaxPillarSize" class="settings-input" style="width:70px;" min="10" max="100" step="5">
+          <span style="font-size:9px;color:var(--text-dim);">Max side of a square pillar</span>
+        </div>
+        <label class="settings-label">Comb step (cm)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgCombStep" class="settings-input" style="width:70px;" min="3" max="30" step="1">
+          <span style="font-size:9px;color:var(--text-dim);">Distance between rays — smaller = finer detection, slower</span>
+        </div>
+        <label class="settings-label">Min pillar size (cm)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="cfgMinPillarSize" class="settings-input" style="width:70px;" min="5" max="50" step="5">
+          <span style="font-size:9px;color:var(--text-dim);">Min side to classify as pillar (not artefact)</span>
+        </div>
       </div>
     </div>
     <div class="settings-section">

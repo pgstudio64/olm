@@ -7,6 +7,39 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-165 · Detection poteaux + stop_mask + hits directionnels (2026-05-09)
+
+### Decision
+Detecter automatiquement les poteaux (piliers) sur les 4 faces de chaque piece via `_filter_pillar_hits`. Les hits de poteau sont retires des hits normaux et convertis en zones d'exclusion (cm) dans `extract_room_features`. Introduction d'un `stop_mask` dans `ray_single` pour arreter les rays sur les zones colorees (bleu exterieur, vert couloir) sans les compter comme mur. Les hits portent desormais leur direction (n/s/e/w).
+
+### Justification
+Sur les plans avec gros poteaux (room 923, 917, 900), les hits de poteau faussaient le bbox et empechaient le matching. Le stop_mask evite que les rays fuient a travers les portes vers les zones exterieures/couloir. Les hits directionnels eliminent l'heuristique abs(dy)>abs(dx) qui etait fausse pour les pieces hautes/etroites.
+
+### Impact
+- `test_comb.py` : CombResult dataclass, ray_single stop_mask, _filter_pillar_hits (gap_threshold 3*step), comb_collect_hits dir_hits
+- `extract.py` : stop_mask depuis color_image, corridor_rgb, zones d'exclusion auto, hits annotes [x,y,"n"]
+- `app.py` : corridor_rgb aux 3 appels, cache-bust timestamp
+- `editor.js` : couleurs hits directionnels
+- `ingestion.js` : COLORS hit_n/s/e/w
+- `detection_config.py` : min/max_pillar_size_cm, comb_step_cm
+- `config.js` / `pattern_editor.html` : Settings pillar
+
+---
+
+## D-164 · Fix Rescan All bbox tronqué — doors_px passées au batch (2026-05-09)
+
+### Decision
+Ne plus passer les portes existantes (`doors_px`) au backend lors du Rescan All batch. Le batch envoie `doors: []` comme le fait déjà le Rescan single.
+
+### Justification
+En batch, les portes existantes (souvent seed-only sans face) étaient passées au backend, ce qui construisait un `door_seeds` filtrant. `expand_door_arcs` skippait alors les faces non listées dans `door_seeds` (ligne 1322 de test_comb.py). Résultat : les arcs de porte non référencés n'étaient pas détectés, et le bbox restait tronqué (ex. room 900 : 397 cm au lieu de 472 cm). Le Rescan single n'avait pas ce problème car il envoyait `doorsPx = []`.
+
+### Impact
+- `olm/static/ingestion.js` : batch payload `doors: []` au lieu de `(amend.doors || r.doors)`.
+- Rescan All et Rescan single produisent désormais le même bbox pour la même room.
+
+---
+
 ## D-163 · Correction inversion east/west dans canonical_io.js (2026-05-09)
 
 ### Decision

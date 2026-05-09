@@ -20,6 +20,7 @@ import re
 import sys
 import tempfile
 import logging
+from dataclasses import dataclass, field
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw
@@ -54,6 +55,8 @@ MAX_RAY_PX = 1500
 CARTOUCHE_MARGIN_PX = 1
 MIN_DOOR_ARC_HITS = 3   # min hits per direction to validate a door arc
 MIN_OBSTACLE_WIDTH_PX = 15  # default ~30cm at 0.5 cm/px; updated by _apply
+MIN_PILLAR_SIZE_PX = 8    # default ~15cm at 0.5 cm/px; updated by _apply
+MAX_PILLAR_SIZE_PX = 60   # default ~30cm at 0.5 cm/px; updated by _apply
 
 # --- Scale auto-calibration from OCR surfaces ---
 # Minimum annotated surface (m²) for a room to be used in scale calibration.
@@ -88,6 +91,7 @@ def _apply_detection_config(scale_cm_per_px: float,
     global COARSE_STEP_PX, RAY_MARGIN_PX, SNAP_SEARCH_PX
     global DOOR_PROBE_PX, DOOR_GROUP_GAP_PX, WALL_MARGIN_PX
     global MIN_DOOR_ARC_HITS, MIN_OBSTACLE_WIDTH_PX
+    global MIN_PILLAR_SIZE_PX, MAX_PILLAR_SIZE_PX
     BINARIZE_THRESHOLD = cfg.binarize_threshold
     COMB_STEP_PX = cfg.comb_step_px
     MAX_RAY_PX = cfg.max_ray_px
@@ -100,6 +104,8 @@ def _apply_detection_config(scale_cm_per_px: float,
     WALL_MARGIN_PX = cfg.door_wall_margin_px
     MIN_DOOR_ARC_HITS = cfg.min_door_arc_hits
     MIN_OBSTACLE_WIDTH_PX = cfg.min_obstacle_width_px
+    MIN_PILLAR_SIZE_PX = cfg.min_pillar_size_px
+    MAX_PILLAR_SIZE_PX = cfg.max_pillar_size_px
 
 # --- Tesseract OCR parameters ---
 # Upscale factor applied before OCR — small cartouche text (10-20 px) needs enlargement
@@ -510,12 +516,19 @@ def remove_non_ortho(binary):
     return binary
 
 
-def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX):
+def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX,
+               stop_mask=None):
     """Return the distance to the last white pixel before the wall.
 
+    Args:
+        stop_mask: optional boolean array same shape as binary.
+            When a ray hits stop_mask before binary, it stops but
+            returns a **negative** distance (= opening, not wall).
+
     Returns:
-        Distance to last white pixel (= wall distance - 1), or
-        -1 if the start point is on a wall.
+        Positive distance: wall hit (distance to last white pixel).
+        Negative distance: stopped on stop_mask at abs(distance).
+        -1: start point is on a wall.
     """
     h, w = binary.shape
     if 0 <= x < w and 0 <= y < h and binary[y, x]:
@@ -528,6 +541,8 @@ def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX):
             return d - 1
         if binary[py, px]:
             return d - 1
+        if stop_mask is not None and stop_mask[py, px]:
+            return -(d - 1)
     return max_dist
 
 
@@ -584,7 +599,7 @@ RAY_MARGIN_PX = 10   # margin beyond coarse distance for fine rays
 
 
 def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
-                      diag=None):
+                      diag=None, stop_mask=None):
     """Adaptive two-pass comb.
 
     Phase 1 (coarse): rays at wide step (COARSE_STEP_PX) from the seed
@@ -717,19 +732,23 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     # Vertical rays (N and S)
     rx = cx
     while rx >= bbox_x0:
-        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
+        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['north'].append((rx, cy - d))
-        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
+        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['south'].append((rx, cy + d))
         rx -= step_px
     rx = cx + step_px
     while rx <= bbox_x1:
-        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north)
+        d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['north'].append((rx, cy - d))
-        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south)
+        d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['south'].append((rx, cy + d))
         rx += step_px
@@ -737,19 +756,23 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     # Horizontal rays (E and W)
     ry = cy
     while ry >= bbox_y0:
-        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
+        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['west'].append((cx - d, ry))
-        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
+        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['east'].append((cx + d, ry))
         ry -= step_px
     ry = cy + step_px
     while ry <= bbox_y1:
-        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west)
+        d = ray_single(binary, cx, ry, -1, 0, max_dist=max_west,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['west'].append((cx - d, ry))
-        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east)
+        d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east,
+                       stop_mask=stop_mask)
         if d > 0:
             dir_hits['east'].append((cx + d, ry))
         ry += step_px
@@ -791,6 +814,222 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
 
     all_hits = [h for hits in dir_hits.values() for h in hits]
     return all_hits, dir_hits
+
+
+def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
+                        min_pillar_size_px=8, max_pillar_size_px=60,
+                        door_seeds=None, min_door_width_px=0,
+                        step_px=10):
+    """Filter out hits caused by narrow pillars (< min_obstacle_width_px).
+
+    For each face, the dominant wall position is the mode of the hit
+    coordinates perpendicular to the face. Hits that are closer to the
+    seed than the mode form candidate pillar groups. A contiguous group
+    whose width (along the face) is < min_obstacle_width_px is classified
+    as a pillar: its hits are removed from dir_hits and the pillar
+    geometry is recorded.
+
+    Groups whose centre falls inside the exclusion square of a known
+    door seed (side = min_door_width_px, centred on the seed) are
+    rejected — they are arc fragments, not pillars.
+
+    Args:
+        dir_hits: dict {face: [(hx, hy), ...]} — modified in place.
+        cx, cy: seed position.
+        min_obstacle_width_px: max width for an obstacle to be a pillar.
+        min_pillar_size_px: min protrusion to qualify as pillar.
+        door_seeds: list of {face, seed_x, seed_y} or None.
+        min_door_width_px: side of the exclusion square around each
+            door seed.
+
+    Returns:
+        tuple (pillars, pillar_hit_coords):
+        - pillars: list of pillar dicts {face, pos_along_px, width_px,
+          depth_px, hit_coord_px, mode_coord_px}.
+        - pillar_hit_coords: list of (x, y) hit coordinates removed.
+    """
+    pillars = []
+    pillar_hit_coords: list[tuple[int, int]] = []
+    if min_obstacle_width_px <= 0:
+        return pillars, pillar_hit_coords
+
+    for face in ('north', 'south', 'east', 'west'):
+        hits = dir_hits.get(face, [])
+        if len(hits) < 3:
+            continue
+
+        # Perpendicular coordinate = wall position (Y for N/S, X for E/W).
+        # Along coordinate = position along the face (X for N/S, Y for E/W).
+        if face in ('north', 'south'):
+            perp = [hy for _, hy in hits]
+            along = [hx for hx, _ in hits]
+        else:
+            perp = [hx for hx, _ in hits]
+            along = [hy for hx, hy in hits]
+
+        # Mode = dominant wall position.
+        vals, counts = np.unique(perp, return_counts=True)
+        mode_perp = int(vals[np.argmax(counts)])
+
+        # Identify hits closer to seed than the mode (= in front of the
+        # wall, toward the room interior).
+        # North: wall is at small Y, closer to seed = larger Y.
+        # South: wall is at large Y, closer to seed = smaller Y.
+        # West: wall is at small X, closer to seed = larger X.
+        # East: wall is at large X, closer to seed = smaller X.
+        if face == 'north':
+            is_inward = lambda p: p > mode_perp
+        elif face == 'south':
+            is_inward = lambda p: p < mode_perp
+        elif face == 'west':
+            is_inward = lambda p: p > mode_perp
+        else:  # east
+            is_inward = lambda p: p < mode_perp
+
+        # Collect inward hits with their indices, filtering by max
+        # displacement < min_obstacle_width_px.
+        inward_indices = []
+        for i, (p, a) in enumerate(zip(perp, along)):
+            displacement = abs(p - mode_perp)
+            if is_inward(p) and displacement >= min_pillar_size_px:
+                inward_indices.append(i)
+
+        if not inward_indices:
+            continue
+
+        # Sort inward hits by along-coordinate to find contiguous groups.
+        inward_sorted = sorted(inward_indices, key=lambda i: along[i])
+
+        # Group contiguous hits (gap < 2 * step between rays).
+        # Use a generous gap threshold: hits from adjacent rays are
+        # spaced by step_px (~10-20 px). Allow 3× step as gap tolerance.
+        gap_threshold = 3 * step_px
+        groups: list[list[int]] = []
+        current_group = [inward_sorted[0]]
+        for k in range(1, len(inward_sorted)):
+            if along[inward_sorted[k]] - along[inward_sorted[k - 1]] \
+                    <= gap_threshold:
+                current_group.append(inward_sorted[k])
+            else:
+                groups.append(current_group)
+                current_group = [inward_sorted[k]]
+        groups.append(current_group)
+
+        # Evaluate each group: pillar if width <= max_pillar_size_px
+        # and displacement pattern is constant (not progressive like an arc).
+        indices_to_remove: set[int] = set()
+        for group in groups:
+            if len(group) < 3:
+                continue  # Too few hits to be a reliable pillar.
+            along_vals = [along[i] for i in group]
+            group_width = max(along_vals) - min(along_vals)
+            if group_width > max_pillar_size_px:
+                continue  # Too wide to be a pillar.
+
+            # Distinguish pillar (constant depth) from door arc
+            # (progressive depth). Sort by along-coordinate and check
+            # if displacements are monotonically increasing/decreasing.
+            sorted_group = sorted(group, key=lambda i: along[i])
+            disps = [abs(perp[i] - mode_perp) for i in sorted_group]
+            if len(disps) >= 3:
+                diffs = [disps[j+1] - disps[j] for j in range(len(disps)-1)]
+                # Arc: diffs are mostly same sign (monotonic).
+                # Pillar: diffs are near zero or mixed sign.
+                positive = sum(1 for d in diffs if d > 0)
+                negative = sum(1 for d in diffs if d < 0)
+                n = len(diffs)
+                # If > 70% of diffs are same sign → monotonic → arc.
+                if positive > 0.7 * n or negative > 0.7 * n:
+                    continue  # Progressive displacement → door arc.
+
+            # Reject if group centre falls in a door seed exclusion square.
+            group_center_along = (min(along_vals) + max(along_vals)) / 2
+            group_center_perp = sum(perp[i] for i in group) / len(group)
+            if door_seeds and min_door_width_px > 0:
+                half = min_door_width_px / 2
+                in_door_zone = False
+                for ds in door_seeds:
+                    if ds.get('face') != face:
+                        continue
+                    ds_x = ds.get('seed_x', 0)
+                    ds_y = ds.get('seed_y', 0)
+                    if face in ('north', 'south'):
+                        d_along = abs(group_center_along - ds_x)
+                        d_perp = abs(group_center_perp - ds_y)
+                    else:
+                        d_along = abs(group_center_along - ds_y)
+                        d_perp = abs(group_center_perp - ds_x)
+                    if d_along <= half and d_perp <= half:
+                        in_door_zone = True
+                        break
+                if in_door_zone:
+                    continue
+
+            # Max depth: a pillar cannot protrude more than its max width.
+            perp_vals = [perp[i] for i in group]
+            depth = max(abs(p - mode_perp) for p in perp_vals)
+            if depth > max_pillar_size_px:
+                continue  # Too deep — wall bleed-through, not a pillar.
+
+            # Pillar detected — record geometry.
+            pos_along = min(along_vals)
+            width = group_width if group_width > 0 else 1
+
+            # hit_coord = the perpendicular position of the pillar hits
+            # (average). Needed to place the exclusion zone.
+            avg_perp = int(round(sum(perp_vals) / len(perp_vals)))
+
+            pillars.append({
+                'face': face,
+                'pos_along_px': pos_along,
+                'width_px': width,
+                'depth_px': depth,
+                'hit_coord_px': avg_perp,
+                'mode_coord_px': mode_perp,
+            })
+            indices_to_remove.update(group)
+
+        # Remove pillar hits from dir_hits and record their coords.
+        if indices_to_remove:
+            for i in indices_to_remove:
+                pillar_hit_coords.append(hits[i])
+            dir_hits[face] = [h for i, h in enumerate(hits)
+                              if i not in indices_to_remove]
+
+    # Remove perpendicular hits that fall inside pillar zones.
+    # E.g. a pillar on north face (Y range mode..hit) also blocks
+    # east/west hits at the same Y and X range → remove them so the
+    # bbox can expand to the real wall.
+    for p in pillars:
+        pf = p['face']
+        mode_c = p['mode_coord_px']
+        hit_c = p['hit_coord_px']
+        pos = p['pos_along_px']
+        width = p['width_px']
+        if pf in ('north', 'south'):
+            y_lo = min(mode_c, hit_c)
+            y_hi = max(mode_c, hit_c)
+            x_lo = pos
+            x_hi = pos + width
+            for perp_face in ('east', 'west'):
+                before = len(dir_hits[perp_face])
+                dir_hits[perp_face] = [
+                    (hx, hy) for hx, hy in dir_hits[perp_face]
+                    if not (y_lo <= hy <= y_hi and x_lo <= hx <= x_hi)
+                ]
+        else:  # east / west
+            x_lo = min(mode_c, hit_c)
+            x_hi = max(mode_c, hit_c)
+            y_lo = pos
+            y_hi = pos + width
+            for perp_face in ('north', 'south'):
+                before = len(dir_hits[perp_face])
+                dir_hits[perp_face] = [
+                    (hx, hy) for hx, hy in dir_hits[perp_face]
+                    if not (x_lo <= hx <= x_hi and y_lo <= hy <= y_hi)
+                ]
+
+    return pillars, pillar_hit_coords
 
 
 def _innermost_with_support(coords, direction, min_support=3, tolerance=2):
@@ -1335,10 +1574,23 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
     return (x0, y0, x1, y1), doors
 
 
+@dataclass
+class CombResult:
+    """Result of detect_room: bbox, hits, doors, pillars, diagnostics."""
+
+    bbox: tuple[int, int, int, int]
+    hits: list[tuple[int, int]]
+    doors: list[dict]
+    pillars: list[dict] = field(default_factory=list)
+    pillar_hits: list[tuple[int, int]] = field(default_factory=list)
+    dir_hits: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+
+
 def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
                 scale_cm_per_px: float | None = None,
                 binary_for_arcs=None, door_seeds=None,
-                diag=None):
+                diag=None, detection_overrides=None,
+                stop_mask=None):
     """Detect a room rectangle: comb ��� hits → largest rectangle → door arc expansion.
 
     Args:
@@ -1353,18 +1605,54 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
             not listed when a non-None list is provided.
     """
     if scale_cm_per_px is not None:
-        _apply_detection_config(scale_cm_per_px)
+        _apply_detection_config(scale_cm_per_px, detection_overrides)
     all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
                                            other_seeds=other_seeds,
-                                           diag=diag)
+                                           diag=diag,
+                                           stop_mask=stop_mask)
 
-    rect = largest_rect_no_hits(all_hits, cx, cy)
+    # Phase 2b: filter out narrow pillar hits before rectangle fitting.
+    # Door seeds define exclusion squares so arc fragments near doors
+    # are not mistaken for pillars.
+    from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+    _det_cfg = DEFAULT_DETECTION_CONFIG_CM.to_px(
+        scale_cm_per_px if scale_cm_per_px else 0.5)
+    pillars, pillar_hit_coords = _filter_pillar_hits(
+        dir_hits, cx, cy, MIN_OBSTACLE_WIDTH_PX,
+        min_pillar_size_px=MIN_PILLAR_SIZE_PX,
+        max_pillar_size_px=MAX_PILLAR_SIZE_PX,
+        door_seeds=door_seeds,
+        min_door_width_px=_det_cfg.min_door_width_px,
+        step_px=step_px,
+    )
+    # Rebuild all_hits from filtered dir_hits (pillar hits removed).
+    all_hits_filtered = [h for hits in dir_hits.values() for h in hits]
 
+    rect = largest_rect_no_hits(all_hits_filtered, cx, cy)
     if rect is None:
-        return (cx - 1, cy - 1, cx + 1, cy + 1), all_hits, []
+        return CombResult(
+            bbox=(cx - 1, cy - 1, cx + 1, cy + 1),
+            hits=all_hits, doors=[], dir_hits=dir_hits)
 
     # Expand each edge outward through fully white lines
     rect = snap_through_white(binary, rect)
+
+    # Extend bbox edges to include pillar wall position (mode_coord_px).
+    # The rectangle may stop at the pillar tip; extend to the real wall.
+    if pillars:
+        rx0, ry0, rx1, ry1 = rect
+        for p in pillars:
+            mc = p['mode_coord_px']
+            pf = p['face']
+            if pf == 'north':
+                ry0 = min(ry0, mc)
+            elif pf == 'south':
+                ry1 = max(ry1, mc)
+            elif pf == 'west':
+                rx0 = min(rx0, mc)
+            elif pf == 'east':
+                rx1 = max(rx1, mc)
+        rect = (rx0, ry0, rx1, ry1)
 
     # Phase 3: door arc expansion — `binary` (cleaned) is used for the
     # contact/far-hit heuristics; `binary_for_arcs` (pre-clean, D-145)
@@ -1374,7 +1662,10 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
                                    door_seeds=door_seeds,
                                    binary_arcs=binary_for_arcs)
 
-    return rect, all_hits, doors
+    return CombResult(
+        bbox=rect, hits=all_hits, doors=doors,
+        pillars=pillars, pillar_hits=pillar_hit_coords,
+        dir_hits=dir_hits)
 
 
 # Automatic exclusion zone extension removed.
@@ -1450,28 +1741,28 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
         # 23 px = 21 cm, cherche des arcs trop courts → micro-portes).
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
         _cfg_px = DEFAULT_DETECTION_CONFIG_CM.to_px(classify_scale)
-        bbox, hits, doors = detect_room(binary, cx, cy, COMB_STEP_PX,
-                                        door_width_px=_cfg_px.default_door_width_px,
-                                        other_seeds=other,
-                                        scale_cm_per_px=classify_scale)
+        cr = detect_room(binary, cx, cy, COMB_STEP_PX,
+                         door_width_px=_cfg_px.default_door_width_px,
+                         other_seeds=other,
+                         scale_cm_per_px=classify_scale)
 
         # Filtre largeur min/max porte (élimine micro-portes et faux positifs).
         _min_door_w_px = _cfg_px.min_door_width_px
         _max_door_w_px = _cfg_px.max_door_width_px
-        doors = [d for d in doors
+        doors = [d for d in cr.doors
                  if _min_door_w_px <= d.get('width_px', 0) <= _max_door_w_px]
 
-        x0, y0, x1, y1 = bbox
+        x0, y0, x1, y1 = cr.bbox
         width_px = x1 - x0
         height_px = y1 - y0
 
         # Debug: save intermediate image
-        save_debug_image(binary, hits, bbox, name, f"comb_{width_px}x{height_px}")
+        save_debug_image(binary, cr.hits, cr.bbox, name, f"comb_{width_px}x{height_px}")
 
         # Classify walls
         wall_segs = {}
         for face in ('north', 'south', 'east', 'west'):
-            segs, _ = _classify_wall_direct(binary, binary, bbox, face, 5,
+            segs, _ = _classify_wall_direct(binary, binary, cr.bbox, face, 5,
                                             scale_cm_per_px=classify_scale)
             wall_segs[face] = segs
 
@@ -1514,7 +1805,7 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
             'doors': doors,
             'exterior_faces': exterior_faces,
             'corridor_face': corridor_face,
-            'hits': [(int(hx), int(hy)) for hx, hy in hits],
+            'hits': [(int(hx), int(hy)) for hx, hy in cr.hits],
         }
         logger.debug(f"  room '{name}': bbox=({x0},{y0},{x1},{y1}) {width_px}×{height_px}px, "
                      f"win={len(windows)} open={len(openings)} door={len(doors)}")
@@ -1667,28 +1958,31 @@ def main():
         cx, cy = seeds[target_room][0], seeds[target_room][1]
         other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
         print(f"\n=== {target_room} (seed {cx},{cy}) ===")
-        bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
-        x0, y0, x1, y1 = bbox
+        cr = detect_room(binary, cx, cy, step_px, other_seeds=other)
+        x0, y0, x1, y1 = cr.bbox
         print(f"Rectangle: ({x0},{y0}) → ({x1},{y1})")
         print(f"Size: {x1 - x0} x {y1 - y0} px")
-        print(f"Hits: {len(hits)}")
-        for d in doors:
+        print(f"Hits: {len(cr.hits)}")
+        for d in cr.doors:
             print(f"Door: face={d['face']}, offset={d['offset_px']}px, "
                   f"width={d['width_px']}px, hinge={d['hinge_side']}")
+        for p in cr.pillars:
+            print(f"Pillar: face={p['face']}, pos={p['pos_along_px']}px, "
+                  f"w={p['width_px']}px, d={p['depth_px']}px")
         draw_debug_single(Image.fromarray(cleaned_arr), binary,
-                          target_room, bbox, hits, cx, cy,
+                          target_room, cr.bbox, cr.hits, cx, cy,
                           os.path.join(_TMP, f"comb_{target_room}.png"))
     else:
         results = []
         for name, seed_data in sorted(seeds.items()):
             cx, cy = seed_data[0], seed_data[1]
             other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
-            bbox, hits, doors = detect_room(binary, cx, cy, step_px, other_seeds=other)
-            x0, y0, x1, y1 = bbox
-            door_str = f" | {len(doors)} door(s)" if doors else ""
+            cr = detect_room(binary, cx, cy, step_px, other_seeds=other)
+            x0, y0, x1, y1 = cr.bbox
+            door_str = f" | {len(cr.doors)} door(s)" if cr.doors else ""
             print(f"  {name}: ({x0},{y0}) → ({x1},{y1}) = "
                   f"{x1 - x0}x{y1 - y0}px{door_str}")
-            results.append((name, bbox, cx, cy, hits, doors))
+            results.append((name, cr.bbox, cx, cy, cr.hits, cr.doors))
 
         draw_debug_all(Image.fromarray(cleaned_arr), results,
                        os.path.join(_TMP, "comb_all.png"))

@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 RAY_FAN_STEP = 3             # sample every N pixels along the fan (3 = 3x faster)
-DOOR_ARC_R2_THRESHOLD = 0.7  # R² threshold for arc detection
 ORTHO_ANGLE_TOLERANCE = 5    # degrees tolerance for orthogonal filter
 
 
@@ -559,45 +558,6 @@ def _count_transitions(profile: list[bool]) -> int:
     return count
 
 
-def _opening_has_depth(binary: np.ndarray, bbox: tuple,
-                       direction: str, seg: "WallSegment",
-                       step_px: int, min_depth_px: int) -> bool:
-    """Check that an opening has free space behind it (inside the room).
-
-    Probes perpendicular to the wall, *toward the room interior*, at the
-    center of the opening.  If a black pixel (wall / window) is found
-    within ``min_depth_px`` the opening is invalid (likely a pillar gap
-    or a drawing artefact).
-
-    Returns True if the opening is deep enough (valid).
-    """
-    x0, y0, x1, y1 = bbox
-    h, w = binary.shape
-    mid_seg = (seg.start_px + seg.end_px) // 2
-
-    # Probe toward the room interior (opposite of the outward probe_dx/dy
-    # used for texture analysis).
-    if direction == "north":
-        px, py, dx, dy = x0 + mid_seg, y0, 0, 1      # probe south (into room)
-    elif direction == "south":
-        px, py, dx, dy = x0 + mid_seg, y1, 0, -1      # probe north (into room)
-    elif direction == "west":
-        px, py, dx, dy = x0, y0 + mid_seg, 1, 0       # probe east (into room)
-    elif direction == "east":
-        px, py, dx, dy = x1, y0 + mid_seg, -1, 0      # probe west (into room)
-    else:
-        return True
-
-    for i in range(1, min_depth_px + 1):
-        nx = px + dx * i
-        ny = py + dy * i
-        if nx < 0 or nx >= w or ny < 0 or ny >= h:
-            return True  # out of image = no obstacle
-        if binary[ny, nx]:
-            return False  # hit wall within min_depth → not a valid opening
-    return True
-
-
 def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
                           bbox: tuple, direction: str, step_px: int,
                           text_bboxes: list = None,
@@ -724,11 +684,6 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
             kind=seg_kind,
         ))
 
-    # TODO: obstacle detection disabled
-    for seg in segments:
-        if seg.kind == "short":
-            seg.kind = "wall"
-
     # Merge adjacent segments (absorb openings < max_absorb_cm).
     # Seuils (réutilise le cfg calculé en tête de fonction).
     _cfg_px = _cfg_local
@@ -747,10 +702,6 @@ def _classify_wall_direct(binary: np.ndarray, binary_raw: np.ndarray,
             width_px = seg.end_px - seg.start_px
             if width_px < MIN_OPENING_WIDTH_PX:
                 seg.kind = "wall"
-            # D-160: _opening_has_depth disabled — too aggressive on
-            # preprocessed plans (interior lines within 60cm reject
-            # all valid openings). Needs multi-point probe before
-            # re-activation.
         filtered.append(seg)
     segments = filtered
 
@@ -853,41 +804,6 @@ def _merge_adjacent_segments(segments: list[WallSegment],
             merged.append(seg)
 
     return merged
-
-
-def _detect_arc_profile(distances: np.ndarray, start: int, end: int,
-                        mode: int) -> bool:
-    """Check if a 'short' segment has a circular arc profile.
-
-    Fits sqrt(R² - p²) and checks R² goodness of fit.
-    """
-    segment = distances[start:end]
-    if len(segment) < 5:
-        return False
-
-    # Normalize: deviation from mode
-    deviations = mode - segment  # positive = closer than mode
-    deviations = np.clip(deviations, 0, None)
-
-    # Expected arc: deviation = sqrt(R² - p²) for p from 0 to len
-    n = len(deviations)
-    R_est = max(deviations) if max(deviations) > 0 else n
-    if R_est == 0:
-        return False
-
-    p = np.arange(n, dtype=float)
-    # Scale p to [0, R_est]
-    p_scaled = p * R_est / n
-
-    expected = np.sqrt(np.clip(R_est**2 - p_scaled**2, 0, None))
-    # Normalize both for comparison
-    if np.std(expected) == 0 or np.std(deviations) == 0:
-        return False
-
-    corr = np.corrcoef(deviations, expected)[0, 1]
-    r2 = corr ** 2 if not np.isnan(corr) else 0
-
-    return r2 > DOOR_ARC_R2_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -1003,7 +919,6 @@ def extract_rooms(image: Image.Image,
             if corridor_face:
                 break
 
-        # TODO: exclusion detection disabled — second pass needed
         exclusions = []
 
         # Associate nearest label
@@ -1774,8 +1689,10 @@ def extract_room_features(
     cartouche_bboxes_px: list | None = None,
     color_image: "Image.Image | None" = None,
     exterior_rgb: tuple = (135, 206, 235),
+    corridor_rgb: tuple = (193, 247, 179),
     other_seeds: list[tuple[int, int]] | None = None,
     diag: dict | None = None,
+    detection_overrides: dict | None = None,
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145 / D-156).
 
@@ -1948,6 +1865,23 @@ def extract_room_features(
             if bx1 < W:         binary[by0:by1, bx1:] = True
             binary_raw = binary
 
+    # --- 2b. Masque d'arrêt couleur (extérieur/couloir) ---
+    # Les pixels exactement bleu ou vert sont un masque d'arrêt séparé.
+    # Les rays s'arrêtent dessus mais les hits ne comptent pas comme murs
+    # (ce sont des ouvertures : si c'était un mur, le ray se serait arrêté
+    # sur du noir avant d'atteindre la couleur).
+    stop_mask: np.ndarray | None = None
+    if color_image is not None:
+        color_arr = np.asarray(color_image.convert("RGB"))
+        combined = np.zeros(color_arr.shape[:2], dtype=bool)
+        for rgb in (exterior_rgb, corridor_rgb):
+            if rgb:
+                combined |= ((color_arr[:, :, 0] == rgb[0])
+                             & (color_arr[:, :, 1] == rgb[1])
+                             & (color_arr[:, :, 2] == rgb[2]))
+        if np.any(combined):
+            stop_mask = combined
+
     # --- 3. Detection du bbox via l'algo comb (test_comb.detect_room,
     # même algo que l'import OCR — éprouvé et plus robuste que
     # detect_room_three_phase).
@@ -1956,8 +1890,8 @@ def extract_room_features(
     # autour des seeds de portes connus.
     from olm.ingestion.test_comb import detect_room as _comb_detect_room
     px_per_cm_f = 1.0 / scale_cm_per_px
-    step_cm = 10
-    comb_step_px = max(1, int(round(step_cm * px_per_cm_f)))
+    from olm.ingestion.test_comb import COMB_STEP_PX
+    comb_step_px = COMB_STEP_PX
     door_px = max(1, int(round(door_width_cm * px_per_cm_f)))
 
     # Construire door_seeds à partir de doors_px pour scoper le scan
@@ -1975,14 +1909,17 @@ def extract_room_features(
         if ds:
             door_seeds = ds
 
-    bbox_new, all_hits, _doors_detected = _comb_detect_room(
+    cr = _comb_detect_room(
         binary, seed_x, seed_y, comb_step_px,
         door_width_px=door_px, other_seeds=other_seeds,
         scale_cm_per_px=scale_cm_per_px,
         binary_for_arcs=binary_for_arcs,
         door_seeds=door_seeds,
         diag=diag,
+        detection_overrides=detection_overrides,
+        stop_mask=stop_mask,
     )
+    bbox_new = cr.bbox
     nx0, ny0, nx1, ny1 = bbox_new
 
     # --- Classification murs sur le bbox détecté ---
@@ -2074,8 +2011,13 @@ def extract_room_features(
     faces_with_windows = {w["face"] for w in windows}
     openings = [o for o in openings if o["face"] not in faces_with_windows]
 
-    # Hits issus du comb (réels, pas juste les 4 coins du bbox).
-    hits = [[int(h[0]), int(h[1])] for h in (all_hits or [])]
+    # Hits issus du comb avec direction (n/s/e/w) pour affichage correct.
+    hits = []
+    for face, face_hits in cr.dir_hits.items():
+        d = face[0]  # 'n', 's', 'e', 'w'
+        for h in face_hits:
+            hits.append([int(h[0]), int(h[1]), d])
+    pillar_hits_px = [[int(h[0]), int(h[1])] for h in cr.pillar_hits]
 
     # Portes détectées par l'expansion d'arcs du comb. On les remonte
     # uniquement si l'appelant n'en a pas fourni — principe : à minima
@@ -2088,7 +2030,7 @@ def extract_room_features(
         _cfg_px = _ddc.to_px(scale_cm_per_px)
         _min_door_w_px = _cfg_px.min_door_width_px
         _max_door_w_px = _cfg_px.max_door_width_px
-        for d in (_doors_detected or []):
+        for d in cr.doors:
             off = int(d.get("offset_px", 0))
             wpx = int(d.get("width_px", 0))
             if wpx < _min_door_w_px or wpx > _max_door_w_px:
@@ -2107,6 +2049,50 @@ def extract_room_features(
                 entry["seed_y"] = int(d["seed_y"])
             doors_out.append(entry)
 
+    # --- Pillar → exclusion zones auto ---
+    # Convert pillar detections to room-local exclusion zones (cm).
+    auto_exclusions: list[dict] = []
+    for p in cr.pillars:
+        face = p['face']
+        pos = p['pos_along_px']
+        width = p['width_px']
+        depth = p['depth_px']
+        mode_c = p['mode_coord_px']
+        hit_c = p['hit_coord_px']
+        # Zone d'exclusion : rectangle allant du mur (mode_c) vers
+        # l'intérieur de la pièce sur `depth` pixels.
+        # mode_c = position du mur, depth = saillie du poteau.
+        wall_along = pos - (nx0 if face in ('north', 'south') else ny0)
+        wall_perp = mode_c - (ny0 if face in ('north', 'south') else nx0)
+        if face == 'north':
+            x_px, y_px = wall_along, wall_perp
+            w_px, d_px = width, depth
+        elif face == 'south':
+            x_px, y_px = wall_along, wall_perp - depth
+            w_px, d_px = width, depth
+        elif face == 'west':
+            x_px, y_px = wall_perp, wall_along
+            w_px, d_px = depth, width
+        else:  # east
+            x_px, y_px = wall_perp - depth, wall_along
+            w_px, d_px = depth, width
+        # Clamp to bbox dimensions.
+        bbox_w_px = nx1 - nx0
+        bbox_h_px = ny1 - ny0
+        cx0 = max(0, min(x_px, bbox_w_px))
+        cy0 = max(0, min(y_px, bbox_h_px))
+        cx1 = max(0, min(x_px + w_px, bbox_w_px))
+        cy1 = max(0, min(y_px + d_px, bbox_h_px))
+        if cx1 <= cx0 or cy1 <= cy0:
+            continue
+        auto_exclusions.append({
+            "x_cm": round(cx0 * scale_cm_per_px, 1),
+            "y_cm": round(cy0 * scale_cm_per_px, 1),
+            "width_cm": max(1, round((cx1 - cx0) * scale_cm_per_px, 1)),
+            "depth_cm": max(1, round((cy1 - cy0) * scale_cm_per_px, 1)),
+            "origin": "auto",
+        })
+
     return {
         "bbox_px": [int(nx0), int(ny0), int(nx1), int(ny1)],
         "seed_px": [seed_x, seed_y],
@@ -2114,7 +2100,9 @@ def extract_room_features(
         "openings": openings,
         "doors": doors_out,
         "hits": hits,
+        "pillar_hits": pillar_hits_px,
         # D-145 : plus de masquage auto des portes → liste vide. Clé
         # conservée pour compat frontend (overlay debug dans editor.js).
         "auto_door_masks_px": [],
+        "auto_exclusion_zones": auto_exclusions,
     }

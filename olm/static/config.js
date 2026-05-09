@@ -310,6 +310,35 @@ function renderFloorplanSettings() {
     };
   }
 
+  var pdEl = document.getElementById("cfgMinPillarSize");
+  if (pdEl) {
+    pdEl.value = ing.min_pillar_size_cm != null
+      ? ing.min_pillar_size_cm : 15;
+    pdEl.onchange = function() {
+      saveConfigField(["ingestion", "min_pillar_size_cm"],
+                      parseInt(this.value) || 15);
+    };
+  }
+
+  var mpdEl = document.getElementById("cfgMaxPillarSize");
+  if (mpdEl) {
+    mpdEl.value = ing.max_pillar_size_cm != null
+      ? ing.max_pillar_size_cm : 50;
+    mpdEl.onchange = function() {
+      saveConfigField(["ingestion", "max_pillar_size_cm"],
+                      parseInt(this.value) || 50);
+    };
+  }
+
+  var csEl = document.getElementById("cfgCombStep");
+  if (csEl) {
+    csEl.value = ing.comb_step_cm != null ? ing.comb_step_cm : 5;
+    csEl.onchange = function() {
+      saveConfigField(["ingestion", "comb_step_cm"],
+                      parseInt(this.value) || 5);
+    };
+  }
+
   var ext = ing.preprocessed_exterior_rgb || [135, 206, 235];
   var cor = ing.preprocessed_corridor_rgb || [193, 247, 179];
 

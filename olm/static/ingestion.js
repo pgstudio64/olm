@@ -195,6 +195,17 @@
                  width_cm: rr.width, depth_cm: rr.depth };
       });
     }
+    // Pillar hits — same transform as regular hits.
+    var pillarHits = null;
+    if (data.pillar_hits && bbox) {
+      var pbx0 = bbox[0], pby0 = bbox[1];
+      pillarHits = data.pillar_hits.map(function (h) {
+        var p = _rotP(
+          { x: (h[0] - pbx0) * scale, y: (h[1] - pby0) * scale },
+          corridor, absW, absD);
+        return { x_cm: p.x, y_cm: p.y };
+      });
+    }
     return {
       corridor_face: corridor,
       bbox_px: bbox,
@@ -204,8 +215,18 @@
       openings: openingsCanon,
       doors: doorsCanon,
       hits: hits,
+      pillar_hits: pillarHits,
       seed_cm: seed_cm,
       auto_door_masks: masks,
+      auto_exclusion_zones: (data.auto_exclusion_zones || []).map(function (z) {
+        var rr = _rotR(
+          { x: z.x_cm || 0, y: z.y_cm || 0,
+            width: z.width_cm || 0, depth: z.depth_cm || 0 },
+          corridor, absW, absD);
+        return { x_cm: rr.x, y_cm: rr.y,
+                 width_cm: rr.width, depth_cm: rr.depth,
+                 origin: z.origin || 'auto' };
+      }),
     };
   }
   window.computeCanonicalReanalyzeResult = computeCanonicalReanalyzeResult;
@@ -380,6 +401,11 @@
     hray_w:   'rgba(200,0,0,0.4)',
     hray_e:   'rgba(200,100,0,0.4)',
     hit:      '#ffff00',
+    hit_n:    'rgb(0,200,0)',
+    hit_s:    'rgb(0,150,200)',
+    hit_w:    'rgb(200,0,0)',
+    hit_e:    'rgb(200,100,0)',
+    pillar_hit: '#ff6600',
     candidate:'rgba(255,255,0,0.3)',
     seed:     '#58c080',
     door_seed:'#ff9800',
@@ -825,6 +851,7 @@
       exterior_faces: [],
       corridor_face: null,
       hits: [],
+      pillar_hits: [],
       manual: true,
     });
 
@@ -1023,8 +1050,23 @@
           var hx = hit[0], hy = hit[1];
           var isV = (hy !== cy), isH = (hx !== cx);
           if ((isV && show.vrays) || (isH && show.hrays)) {
+            var hc, hdx = hx - cx, hdy = hy - cy;
+            if (Math.abs(hdy) > Math.abs(hdx)) {
+              hc = (hdy < 0) ? COLORS.hit_n : COLORS.hit_s;
+            } else {
+              hc = (hdx < 0) ? COLORS.hit_w : COLORS.hit_e;
+            }
             els.push('<circle cx="' + hx + '" cy="' + hy +
-              '" r="' + hitR + '" fill="' + COLORS.hit + '"/>');
+              '" r="' + hitR + '" fill="' + hc + '"/>');
+          }
+        });
+        // Pillar hits: orange dots drawn on top of yellow ones.
+        (room.pillar_hits || []).forEach(function (hit) {
+          var hx = hit[0], hy = hit[1];
+          var isV = (hy !== cy), isH = (hx !== cx);
+          if ((isV && show.vrays) || (isH && show.hrays)) {
+            els.push('<circle cx="' + hx + '" cy="' + hy +
+              '" r="' + hitR + '" fill="' + COLORS.pillar_hit + '"/>');
           }
         });
       }
@@ -1113,6 +1155,21 @@
             d.face, hingeCoord, freeCoord, wallCoord, swing, inward, 0);
           els.push(parts[0]);
           els.push(parts[1]);
+        });
+      }
+
+      // Exclusion zones (semi-transparent red rectangles)
+      if (show.bbox && ingState.scale) {
+        var sc = 1.0 / ingState.scale;  // px per cm
+        (room.exclusion_zones || []).forEach(function (z) {
+          var zx = x0 + (z.x_cm || 0) * sc;
+          var zy = y0 + (z.y_cm || 0) * sc;
+          var zw = (z.width_cm || 0) * sc;
+          var zd = (z.depth_cm || 0) * sc;
+          els.push('<rect x="' + zx.toFixed(1) + '" y="' + zy.toFixed(1) +
+            '" width="' + zw.toFixed(1) + '" height="' + zd.toFixed(1) +
+            '" fill="rgba(200,50,50,0.25)" stroke="#c05858"' +
+            ' stroke-width="' + (1 * pxScale).toFixed(1) + '"/>');
         });
       }
 
@@ -1867,7 +1924,7 @@
               bbox_px: r.bbox_px,
               seed_px: seedPx,
               transparent_zones: absTransparents,
-              doors: (amend && amend.doors) || r.doors || [],
+              doors: [],
             });
             validRooms.push(r);
           });
@@ -1973,8 +2030,21 @@
             if (Array.isArray(res.hits)) {
               updates.hits = res.hits;
             }
-            if (reanchored) {
+            if (Array.isArray(res.pillar_hits)) {
+              updates.pillar_hits = res.pillar_hits;
+            }
+            // Merge auto exclusion zones: keep manual, replace auto.
+            if (Array.isArray(canon.auto_exclusion_zones) &&
+                canon.auto_exclusion_zones.length) {
+              var manualZones = (r.exclusion_zones || []).filter(function(z) {
+                return z.origin !== 'auto';
+              });
+              updates.exclusion_zones = manualZones.concat(
+                canon.auto_exclusion_zones);
+            } else if (reanchored) {
               updates.exclusion_zones = reanchored.exclusion_zones;
+            }
+            if (reanchored) {
               updates.transparent_zones = reanchored.transparent_zones;
             }
             if (canon.bbox_px) {

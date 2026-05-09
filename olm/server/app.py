@@ -5,9 +5,11 @@ Storage: catalogue/patterns.json
 """
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
+import re
 import traceback
 from io import StringIO
 
@@ -34,6 +36,24 @@ CATALOGUE_DIR = os.path.join(os.path.dirname(BASE_DIR), "project", "catalogue")
 CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
 
 
+_PROJECT_ROOT = os.path.dirname(BASE_DIR)
+_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "project", "config.json")
+
+
+@functools.lru_cache(maxsize=1)
+def _load_project_config() -> dict:
+    """Load and cache project/config.json. Returns {} on error."""
+    if not os.path.exists(_CONFIG_PATH):
+        return {}
+    try:
+        with open(_CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Cannot read %s: %s", _CONFIG_PATH, exc)
+        return {}
+
+
 def _get_plans_dir() -> str:
     """Return the plans directory path from config.json, or the default.
 
@@ -41,22 +61,14 @@ def _get_plans_dir() -> str:
     resolved against the project root (parent of BASE_DIR). Falls back to
     ``<root>/project/plans`` if the key is absent or the file unreadable.
     """
-    _root = os.path.dirname(BASE_DIR)
-    _default = os.path.join(_root, "project", "plans")
-    _config_path = os.path.join(_root, "project", "config.json")
-    if not os.path.exists(_config_path):
+    _default = os.path.join(_PROJECT_ROOT, "project", "plans")
+    _plans_dir = _load_project_config().get("ingestion", {}).get(
+        "plans_dir", "")
+    if not _plans_dir:
         return _default
-    try:
-        with open(_config_path, encoding="utf-8") as _f:
-            _cfg = json.load(_f)
-        _plans_dir = _cfg.get("ingestion", {}).get("plans_dir", "")
-        if not _plans_dir:
-            return _default
-        if os.path.isabs(_plans_dir):
-            return _plans_dir
-        return os.path.join(_root, _plans_dir)
-    except Exception:
-        return _default
+    if os.path.isabs(_plans_dir):
+        return _plans_dir
+    return os.path.join(_PROJECT_ROOT, _plans_dir)
 
 
 PLANS_DIR = _get_plans_dir()
@@ -68,25 +80,18 @@ def _get_detection_overrides() -> dict | None:
     Returns a dict suitable for ``DetectionConfigCm.from_dict`` or None
     if no overrides are configured.
     """
-    _root = os.path.dirname(BASE_DIR)
-    _config_path = os.path.join(_root, "project", "config.json")
-    if not os.path.exists(_config_path):
-        return None
-    try:
-        with open(_config_path, encoding="utf-8") as _f:
-            _ing = json.load(_f).get("ingestion", {})
-        overrides = {}
-        for key in ("cartouche_margin_cm", "text_skip_margin_cm",
-                     "corridor_width_cm", "exterior_width_cm",
-                     "max_door_width_cm", "min_opening_depth_cm",
-                     "min_obstacle_width_cm"):
-            if key in _ing:
-                overrides[key] = float(_ing[key])
-        if "binarize_threshold" in _ing:
-            overrides["binarize_threshold"] = int(_ing["binarize_threshold"])
-        return overrides or None
-    except Exception:
-        return None
+    _ing = _load_project_config().get("ingestion", {})
+    overrides = {}
+    for key in ("cartouche_margin_cm", "text_skip_margin_cm",
+                 "corridor_width_cm", "exterior_width_cm",
+                 "max_door_width_cm", "min_opening_depth_cm",
+                 "min_obstacle_width_cm", "min_pillar_size_cm",
+                 "max_pillar_size_cm", "comb_step_cm"):
+        if key in _ing:
+            overrides[key] = float(_ing[key])
+    if "binarize_threshold" in _ing:
+        overrides["binarize_threshold"] = int(_ing["binarize_threshold"])
+    return overrides or None
 
 
 _DEFAULT_EXTERIOR_RGB = (135, 206, 235)
@@ -94,31 +99,16 @@ _DEFAULT_EXTERIOR_RGB = (135, 206, 235)
 
 def _get_default_threshold() -> int:
     """Read binarize threshold from config.json, default 140."""
-    _root = os.path.dirname(BASE_DIR)
-    _config_path = os.path.join(_root, "project", "config.json")
-    if not os.path.exists(_config_path):
-        return 140
-    try:
-        with open(_config_path, encoding="utf-8") as _f:
-            _ing = json.load(_f).get("ingestion", {})
-        return int(_ing.get("binarize_threshold", _ing.get("threshold", 140)))
-    except Exception:
-        return 140
+    _ing = _load_project_config().get("ingestion", {})
+    return int(_ing.get("binarize_threshold", _ing.get("threshold", 140)))
 
 
 def _get_exterior_rgb() -> tuple:
     """Read preprocessed exterior RGB from config.json (D-156)."""
-    _root = os.path.dirname(BASE_DIR)
-    _config_path = os.path.join(_root, "project", "config.json")
-    if os.path.exists(_config_path):
-        try:
-            with open(_config_path, encoding="utf-8") as _f:
-                rgb = json.load(_f).get("ingestion", {}).get(
-                    "preprocessed_exterior_rgb")
-            if rgb and len(rgb) == 3:
-                return tuple(int(v) for v in rgb)
-        except Exception:
-            pass
+    rgb = _load_project_config().get("ingestion", {}).get(
+        "preprocessed_exterior_rgb")
+    if rgb and len(rgb) == 3:
+        return tuple(int(v) for v in rgb)
     return _DEFAULT_EXTERIOR_RGB
 
 
@@ -127,18 +117,22 @@ _DEFAULT_CORRIDOR_RGB = (193, 247, 179)
 
 def _get_corridor_rgb() -> tuple:
     """Read preprocessed corridor RGB from config.json."""
-    _root = os.path.dirname(BASE_DIR)
-    _config_path = os.path.join(_root, "project", "config.json")
-    if os.path.exists(_config_path):
-        try:
-            with open(_config_path, encoding="utf-8") as _f:
-                rgb = json.load(_f).get("ingestion", {}).get(
-                    "preprocessed_corridor_rgb")
-            if rgb and len(rgb) == 3:
-                return tuple(int(v) for v in rgb)
-        except Exception:
-            pass
+    rgb = _load_project_config().get("ingestion", {}).get(
+        "preprocessed_corridor_rgb")
+    if rgb and len(rgb) == 3:
+        return tuple(int(v) for v in rgb)
     return _DEFAULT_CORRIDOR_RGB
+
+
+_INCH_TO_CM = 2.54
+
+
+def _drawing_scale_to_cm_per_px(text: str, render_dpi: int) -> float | None:
+    """Convertit un texte '1 : N' en cm/px via le DPI de rendu."""
+    m = re.match(r"1\s*:\s*(\d+(?:\.\d+)?)", text.strip())
+    if not m or render_dpi <= 0:
+        return None
+    return _INCH_TO_CM * float(m.group(1)) / render_dpi
 
 
 @app.route("/static/<path:filename>")
@@ -292,8 +286,10 @@ def _get_block_defs(standard_name: str) -> dict:
 def index():
     """Serve the pattern editor page with cache-bust version."""
     from flask import render_template
+    import time
     from olm import __version__
-    return render_template("pattern_editor.html", v=__version__)
+    return render_template("pattern_editor.html",
+                           v=__version__ + '.' + str(int(time.time())))
 
 
 @app.route("/test_rooms.json")
@@ -629,14 +625,11 @@ def api_import_ocr():
 
     try:
         # Drawing scale (e.g. "1 : 100") takes priority over raw scale_cm_per_px
-        import re as _re
         drawing_scale_str = request.form.get("drawing_scale", "").strip()
         render_dpi = int(request.form.get("render_dpi") or 300)
         scale: float | None = None
         if drawing_scale_str:
-            m = _re.match(r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str)
-            if m:
-                scale = 2.54 * float(m.group(1)) / render_dpi
+            scale = _drawing_scale_to_cm_per_px(drawing_scale_str, render_dpi)
         if scale is None:
             scale_str = request.form.get("scale_cm_per_px", "")
             scale = float(scale_str) if scale_str else None
@@ -787,7 +780,6 @@ def api_import_preprocessed():
         # --- Scale resolution ---
         # Priority: notation (text + dpi) > ruler (measured) > median
         # The frontend may send a manual override via drawing_scale form field.
-        import re as _re_pp
         import math as _math
         render_dpi = int(
             json_data.get("render_dpi")
@@ -796,12 +788,9 @@ def api_import_preprocessed():
         )
 
         # 1) Notation Scale: drawing_scale_text from JSON + render_dpi
-        notation_scale: float | None = None
         dst_raw = str(json_data.get("drawing_scale_text", "")).strip()
-        if dst_raw and render_dpi > 0:
-            m_dst = _re_pp.match(r"1\s*:\s*(\d+(?:\.\d+)?)", dst_raw)
-            if m_dst:
-                notation_scale = 2.54 * float(m_dst.group(1)) / render_dpi
+        notation_scale = _drawing_scale_to_cm_per_px(
+            dst_raw, render_dpi) if dst_raw else None
 
         # 2) Ruler Scale: drawing_scale_measured from JSON (cm/px)
         ruler_scale: float | None = None
@@ -809,19 +798,14 @@ def api_import_preprocessed():
             json_data.get("drawing_scale_measured", "")
         ).strip()
         if measured_str:
-            m_val = _re_pp.match(r"([\d.]+)\s*cm/px", measured_str)
+            m_val = re.match(r"([\d.]+)\s*cm/px", measured_str)
             if m_val:
                 ruler_scale = float(m_val.group(1))
 
         # 3) Manual Scale: drawing_scale from frontend UI
-        manual_scale: float | None = None
         drawing_scale_str = request.form.get("drawing_scale", "").strip()
-        if drawing_scale_str:
-            m_txt = _re_pp.match(
-                r"1\s*:\s*(\d+(?:\.\d+)?)", drawing_scale_str,
-            )
-            if m_txt:
-                manual_scale = 2.54 * float(m_txt.group(1)) / render_dpi
+        manual_scale = _drawing_scale_to_cm_per_px(
+            drawing_scale_str, render_dpi) if drawing_scale_str else None
 
         # Frontend may specify which source to use (radio selection)
         scale_source = request.form.get("scale_source", "").strip()
@@ -968,7 +952,6 @@ def api_spacing():
     POST: update a standard. Body: {"standard": "SITE", "values": {...}}.
     """
     if request.method == "POST":
-        from olm.core.spacing_config import update_config
         from olm.core.spacing_config import update_config, reset_config
         data = request.json
         name = data.get("standard")
@@ -1344,7 +1327,9 @@ def api_room_reanalyze():
             cartouche_bboxes_px=cart_bboxes_px,
             color_image=color_img,
             exterior_rgb=_get_exterior_rgb(),
+            corridor_rgb=_get_corridor_rgb(),
             other_seeds=other_seeds_px or None,
+            detection_overrides=_get_detection_overrides(),
         )
         return jsonify(result)
     except Exception as e:
@@ -1418,8 +1403,10 @@ def api_debug_room_diagnostic():
             cartouche_bboxes_px=cart_bboxes_px,
             color_image=color_img,
             exterior_rgb=_get_exterior_rgb(),
+            corridor_rgb=_get_corridor_rgb(),
             other_seeds=other_seeds_px or None,
             diag=diag,
+            detection_overrides=_get_detection_overrides(),
         )
         # Strip hits from result to keep response small
         result.pop("hits", None)
@@ -1732,7 +1719,9 @@ def api_room_reanalyze_batch():
                     clip_to_bbox=clip_to_bbox,
                     color_image=color_img,
                     exterior_rgb=_get_exterior_rgb(),
+                    corridor_rgb=_get_corridor_rgb(),
                     other_seeds=other_seeds or None,
+                    detection_overrides=_get_detection_overrides(),
                 )
                 results.append({"name": name, **features})
             except Exception as e:
@@ -1755,6 +1744,7 @@ MOCK_ROOM = {
 
 def _pattern_emprise_eo(pattern: dict) -> float:
     """Compute the EO footprint (width) of the first row of a pattern."""
+    block_defs = _get_block_defs("SITE")
     rows = pattern.get("rows", [])
     if not rows:
         return 0.0
@@ -1763,7 +1753,7 @@ def _pattern_emprise_eo(pattern: dict) -> float:
         total += block.get("gap_cm", 0)
         btype = block.get("type", "")
         orient = block.get("orientation", 0)
-        bdef = BLOCK_DEFS.get(btype, {})
+        bdef = block_defs.get(btype, {})
         eo = bdef.get("eo_cm", 0)
         ns = bdef.get("ns_cm", 0)
         if orient in (90, 270):
@@ -1775,10 +1765,11 @@ def _pattern_emprise_eo(pattern: dict) -> float:
 
 def _pattern_total_desks(pattern: dict) -> int:
     """Count the total number of desks in a pattern."""
+    block_defs = _get_block_defs("SITE")
     total = 0
     for row in pattern.get("rows", []):
         for block in row.get("blocks", []):
-            bdef = BLOCK_DEFS.get(block.get("type", ""), {})
+            bdef = block_defs.get(block.get("type", ""), {})
             total += bdef.get("n_desks", 0)
     return total
 

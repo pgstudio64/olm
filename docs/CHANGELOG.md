@@ -3,6 +3,32 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.24] — 2026-05-09
+
+### Added
+
+- **Pillar detection** : detection automatique des poteaux sur les 4 faces
+  via `_filter_pillar_hits` (min 3 hits, filtre monotonic anti-arc, exclusion
+  zone porte). Zones d'exclusion auto generees en cm.
+- **CombResult dataclass** : remplace le tuple de retour de `detect_room` par
+  une dataclass avec champs nommes (bbox, hits, doors, pillars, pillar_hits,
+  dir_hits).
+- **stop_mask** : `ray_single` accepte un masque d'arret optionnel (zones bleu
+  exterieur / vert couloir). Les rays s'arretent sans compter comme mur.
+- **Hits directionnels** : chaque hit porte sa direction (n/s/e/w), couleurs
+  differenciees dans l'overlay (vert/cyan/rouge/orange).
+- **Settings pillar** : min/max pillar size et comb step configurables.
+
+### Fixed
+
+- **Zones d'exclusion decalees** : les formules south/east utilisaient
+  `hit_coord_px` au lieu de `mode_coord_px`, decalant la zone rose par
+  rapport au poteau reel.
+- **gap_threshold** : base sur `3 * step_px` au lieu de `min_obstacle_width_px`
+  pour eviter la fusion de tous les hits en un groupe geant.
+- **Cache-bust** : timestamp ajoute au parametre `v=` pour forcer le
+  rechargement JS.
+
 ## [v0.4.23] — 2026-05-09
 
 ### Fixed
@@ -13,6 +39,11 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   Causait un decalage vertical de 50% et une inversion des positions
   de porte dans la vue Room pour les pieces avec corridor east ou west.
   FACE_MAPS et offset mirror (xformOpening) non modifies — corrects.
+- **D-164 Rescan All bbox tronque** : le batch passait les portes existantes
+  au backend, ce qui restreignait `expand_door_arcs` aux faces listees dans
+  `door_seeds`. Les arcs de porte sur les faces non referencees n'etaient pas
+  detectes, tronquant le bbox (ex. room 900 : 397 cm au lieu de 472 cm).
+  Fix : le batch envoie `doors: []` comme le single.
 - **Door seeds preservation** : les seeds de porte du JSON Input etaient
   filtrees par le pipeline de detection (filtre largeur, import features).
   5 corrections dans extract.py, ingestion.js et ingestion_serialize.js

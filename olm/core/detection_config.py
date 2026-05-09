@@ -36,6 +36,10 @@ class DetectionConfigCm:
                                              # cette distance → pas d'ouverture
     min_window_width_cm: float = 24.0
     min_obstacle_width_cm: float = 30.0
+    min_pillar_size_cm: float = 15.0        # côté min d'un poteau (carré)
+                                             # pour ne pas être un artefact
+    max_pillar_size_cm: float = 50.0       # côté max d'un poteau (carré) ;
+                                             # au-delà c'est un mur, pas un poteau
     max_absorb_cm: float = 30.0              # largeur max d'une "rupture"
                                              # parasite absorbée dans un mur
 
@@ -45,7 +49,7 @@ class DetectionConfigCm:
     morph_dilate_cm: float = 3.0             # dilatation morphologique
 
     # --- Comb rays ---
-    comb_step_cm: float = 15.0               # pas entre rays
+    comb_step_cm: float = 5.0                # pas entre rays
     coarse_step_cm: float = 90.0             # pas phase 1 (grossière)
     ray_margin_cm: float = 30.0              # marge au-delà de phase 1
     max_ray_cm: float = 4500.0               # distance max d'un ray
@@ -58,8 +62,7 @@ class DetectionConfigCm:
     # Largeur minimale d'arc de porte détectable (en cm). Sous ce seuil,
     # `_detect_doors_on_face` rejette le candidat. Les hits étant espacés
     # de `comb_step_cm`, le nombre minimal de hits = round(value /
-    # comb_step_cm). Ex. : 45 cm / 15 cm = 3 hits, équivalent au
-    # historique `n < 3`.
+    # comb_step_cm). Ex. : 45 cm / 5 cm = 9 hits.
     min_door_arc_width_cm: float = 45.0
     # Largeur minimale d'une vraie porte. Une porte sous ce seuil est
     # filtrée (côté OCR : reclassée wall ; côté preprocessed : rejetée
@@ -94,6 +97,8 @@ class DetectionConfigCm:
             min_opening_depth_px=_px(self.min_opening_depth_cm),
             min_window_width_px=_px(self.min_window_width_cm),
             min_obstacle_width_px=_px(self.min_obstacle_width_cm),
+            min_pillar_size_px=_px(self.min_pillar_size_cm),
+            max_pillar_size_px=_px(self.max_pillar_size_cm),
             max_absorb_px=_px(self.max_absorb_cm),
             snap_search_px=_px(self.snap_search_cm),
             mode_tolerance_px=_px(self.mode_tolerance_cm),
@@ -143,6 +148,8 @@ class DetectionConfigPx:
     min_opening_depth_px: int
     min_window_width_px: int
     min_obstacle_width_px: int
+    min_pillar_size_px: int
+    max_pillar_size_px: int
     max_absorb_px: int
 
     snap_search_px: int

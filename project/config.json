@@ -30,7 +30,9 @@
       193,
       247,
       179
-    ]
+    ],
+    "min_obstacle_width_cm": 30,
+    "max_pillar_size_cm": 50
   },
   "export": {
     "formats": [
