@@ -151,6 +151,23 @@
   }
 
 
+  /**
+   * Inverse exact de rotatePoint : canon → abs.
+   * rotatePointInv(rotatePoint(p, cf, W, D), cf, W, D) ≡ p.
+   *
+   * @param {{x:number,y:number}} pt
+   * @param {string} cfAbs
+   * @param {number} absW
+   * @param {number} absD
+   */
+  function rotatePointInv(pt, cfAbs, absW, absD) {
+    var x = pt.x, y = pt.y;
+    if (cfAbs === "north") return { x: absW - x, y: absD - y };
+    if (cfAbs === "east")  return { x: y,        y: absD - x };
+    if (cfAbs === "west")  return { x: absW - y, y: x        };
+    return { x: x, y: y };
+  }
+
   // ── fromStorage ─────────────────────────────────────────────────────────
 
   /**
@@ -574,6 +591,7 @@
     fromStorage:    fromStorage,
     toStorage:      toStorage,
     rotatePoint:    rotatePoint,
+    rotatePointInv: rotatePointInv,
     rotateRect:     rotateRect,
     rotateRectInv:  rotateRectInv,
     canonAngle:     canonAngle,

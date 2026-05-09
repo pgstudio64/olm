@@ -489,9 +489,31 @@
     listEl.innerHTML = html;
     listEl.querySelectorAll('.plan-item').forEach(function (el) {
       el.addEventListener('click', function () {
-        _setSelectedPlan(this.dataset.planId, this.dataset.planMode);
+        var newPlanId = this.dataset.planId;
+        var newPlanMode = this.dataset.planMode;
+        _setSelectedPlan(newPlanId, newPlanMode);
         _closePlanPopup();
-        extractRooms();
+        // Show the new plan image immediately (no rooms yet)
+        ingState.rooms = [];
+        var url = '/api/image?path=plans/' + encodeURIComponent(newPlanId) + '.png';
+        var img = new Image();
+        img.onload = function () {
+          ingState.planUrl = url;
+          ingState.planW = img.naturalWidth;
+          ingState.planH = img.naturalHeight;
+          ingState.vb = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+          renderIngestion();
+          extractRooms();
+        };
+        img.onerror = function () {
+          // PNG not found — just proceed with import
+          ingState.planUrl = '';
+          ingState.planW = 0;
+          ingState.planH = 0;
+          renderIngestion();
+          extractRooms();
+        };
+        img.src = url;
       });
     });
   }
@@ -1022,10 +1044,26 @@
       // Rays — tous les hits retournés par le comb, y compris ceux
       // au-delà du bbox (portes, arcs). Aucun clip : le diagnostic
       // visuel doit montrer exactement ce que le ray-cast a vu.
+      // D-165 : hits stockés en canonique {x_cm, y_cm} → conversion
+      // à la volée vers px image absolus via rotatePointInv.
+      var _cfAbs = roomCanon.corridor_face_abs || '';
+      var _sc = ingState.scale || 1;
+      var _absW = (x1 - x0) * _sc;
+      var _absD = (y1 - y0) * _sc;
+      var _rpInv = window.canonicalIO && window.canonicalIO.rotatePointInv;
+      function _hitToPx(hit) {
+        if (typeof hit.x_cm === 'number' && _rpInv) {
+          var abs = _rpInv({ x: hit.x_cm, y: hit.y_cm }, _cfAbs, _absW, _absD);
+          return [x0 + abs.x / _sc, y0 + abs.y / _sc];
+        }
+        return [hit[0], hit[1]];
+      }
+
       if (show.vrays || show.hrays) {
         var raySW = (OVERLAY_RAY_STROKE * pxScale).toFixed(2);
         (room.hits || []).forEach(function (hit) {
-          var hx = hit[0], hy = hit[1];
+          var hp = _hitToPx(hit);
+          var hx = hp[0], hy = hp[1];
           if (hy < cy && show.vrays) {
             els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
               '" y2="' + hy + '" stroke="' + COLORS.vray_n +
@@ -1047,7 +1085,8 @@
         // Hits as dots
         var hitR = (OVERLAY_HIT_RADIUS * pxScale).toFixed(2);
         (room.hits || []).forEach(function (hit) {
-          var hx = hit[0], hy = hit[1];
+          var hp = _hitToPx(hit);
+          var hx = hp[0], hy = hp[1];
           var isV = (hy !== cy), isH = (hx !== cx);
           if ((isV && show.vrays) || (isH && show.hrays)) {
             var hc, hdx = hx - cx, hdy = hy - cy;
@@ -1062,7 +1101,8 @@
         });
         // Pillar hits: orange dots drawn on top of yellow ones.
         (room.pillar_hits || []).forEach(function (hit) {
-          var hx = hit[0], hy = hit[1];
+          var hp = _hitToPx(hit);
+          var hx = hp[0], hy = hp[1];
           var isV = (hy !== cy), isH = (hx !== cx);
           if ((isV && show.vrays) || (isH && show.hrays)) {
             els.push('<circle cx="' + hx + '" cy="' + hy +
