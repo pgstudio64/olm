@@ -84,12 +84,12 @@ echo "Local HEAD:     $LOCAL_HEAD"
 echo ""
 
 # --- Step 1: clone ---
-echo "[1/7] Cloning to $TEMP_CLONE..."
+echo "[1/8] Cloning to $TEMP_CLONE..."
 rm -rf "$TEMP_CLONE"
 git clone --no-local "$REPO_ROOT" "$TEMP_CLONE" >/dev/null 2>&1
 
 # --- Step 2: filter-repo ---
-echo "[2/7] Filtering private paths..."
+echo "[2/8] Filtering private paths..."
 cd "$TEMP_CLONE"
 FILTER_ARGS=()
 for p in "${PRIVATE_PATHS[@]}"; do
@@ -103,7 +103,7 @@ git-filter-repo --invert-paths "${FILTER_ARGS[@]}" --force 2>&1 | tail -3
 # --- Step 2b: translate commit messages to English ---
 TRANSLATIONS_FILE="$REPO_ROOT/scripts/commit_translations.json"
 if [ -f "$TRANSLATIONS_FILE" ]; then
-  echo "[2b/7] Translating commit messages to English..."
+  echo "[2b/8] Translating commit messages to English..."
   git-filter-repo --message-callback '
 import json
 _g = globals()
@@ -117,11 +117,11 @@ if first in _g["_trans"]:
 return b"\n".join(lines)
 ' --force 2>&1 | tail -3
 else
-  echo "[2b/7] No translations file found, skipping."
+  echo "[2b/8] No translations file found, skipping."
 fi
 
 # --- Step 3: verification ---
-echo "[3/7] Verifying no private paths remain..."
+echo "[3/8] Verifying no private paths remain..."
 
 # Check HEAD tree
 LEAK_HEAD=$(git ls-files | grep -iE "$PRIVATE_REGEX" || true)
@@ -147,7 +147,7 @@ fi
 echo "  OK — HEAD and history both clean."
 
 # --- Step 4: summary and confirmation ---
-echo "[4/7] Summary of what will be pushed:"
+echo "[4/8] Summary of what will be pushed:"
 COMMIT_COUNT=$(git log --oneline | wc -l | tr -d ' ')
 FILE_COUNT=$(git ls-files | wc -l | tr -d ' ')
 echo "  Commits:     $COMMIT_COUNT"
@@ -166,17 +166,38 @@ if [[ ! "$ans" =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-# --- Step 5: push ---
-echo "[5/7] Pushing to GitHub..."
+# --- Step 5: push branch ---
+echo "[5/8] Pushing branch to GitHub..."
 git remote add github "$GITHUB_REMOTE_URL"
 git push github "$GITHUB_BRANCH" --force 2>&1 | tail -5
 
-# --- Step 6: cleanup ---
-echo "[6/7] Cleaning up temp clone..."
+# --- Step 6: push tags ---
+echo "[6/8] Pushing tags..."
 cd "$REPO_ROOT"
+LOCAL_TAGS=$(git tag --points-at HEAD 2>/dev/null || true)
+if [ -n "$LOCAL_TAGS" ]; then
+  cd "$TEMP_CLONE"
+  FILTERED_HEAD=$(git rev-parse HEAD)
+  for t in $LOCAL_TAGS; do
+    git tag -f "$t" "$FILTERED_HEAD" >/dev/null 2>&1
+    echo "  Tag: $t"
+  done
+  git push github --tags --force 2>&1 | tail -5
+  cd "$REPO_ROOT"
+else
+  echo "  No tags on local HEAD — skipped."
+fi
+
+# --- Step 7: cleanup ---
+echo "[7/8] Cleaning up temp clone..."
 rm -rf "$TEMP_CLONE"
 
 echo ""
 echo "=== Published successfully. ==="
 echo "  Local HEAD:   $LOCAL_HEAD (unchanged)"
 echo "  GitHub HEAD:  (filtered copy of $LOCAL_HEAD)"
+if [ -n "$LOCAL_TAGS" ]; then
+  for t in $LOCAL_TAGS; do
+    echo "  Download:     https://github.com/pgstudio64/olm/archive/refs/tags/${t}.zip"
+  done
+fi
