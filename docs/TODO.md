@@ -57,6 +57,9 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - K25 — ~~Inversion complète de la détection~~ → **D-159 other_seeds** (même cause que K5). À revalider.
 - K77 — Modification manuelle de la pièce : sauvegarde décalée de 40 cm en dessous de la position apparente.
 
+*Orientation :*
+- D-162 (closest-first orientation) : codé dans v0.4.22, **à valider sur prod** quand la plate-forme pourra récupérer la nouvelle version.
+
 *Transversal :*
 - ~~Seeds de porte jamais visibles sur le plan~~ → D-158 (toggle Seeds, door seeds en Floor+Room).
 - ~~Inversions détection/affichage récurrentes (K5, K12, K25)~~ → D-159 other_seeds au rescan. Cause : rays traversaient les pièces voisines, pas un problème d'orientation canonique.
