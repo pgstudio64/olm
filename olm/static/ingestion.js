@@ -493,9 +493,11 @@
         var newPlanMode = this.dataset.planMode;
         _setSelectedPlan(newPlanId, newPlanMode);
         _closePlanPopup();
-        // Show status immediately
-        var status = document.getElementById('ingStatus');
-        if (status) status.textContent = 'Importing ' + newPlanId + '...';
+        // Show status immediately in the always-visible header
+        var hdr = document.getElementById('hdrCurrentPlan');
+        if (hdr) hdr.textContent = newPlanId + ' — Importing...';
+        // Make toolbar visible so ingStatus updates are seen
+        _showPlanLoadedUI(newPlanId);
         ingState.rooms = [];
 
         // Load PNG + metadata in parallel
