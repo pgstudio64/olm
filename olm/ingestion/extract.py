@@ -1662,18 +1662,22 @@ def extract_rooms_from_preprocessed(
         _min_door_width_cm = _ddc.min_door_width_cm
         _max_door_width_cm = _ddc.max_door_width_cm
         doors = [d for d in doors
-                 if _min_door_width_cm <= d.get("width_cm", 0) <= _max_door_width_cm]
+                 if "width_cm" not in d  # seed-only Input doors: keep
+                 or _min_door_width_cm <= d["width_cm"] <= _max_door_width_cm]
         _min_opening_width_cm = _ddc.min_opening_width_cm
         openings = [o for o in openings if o.get("width_cm", 0) >= _min_opening_width_cm]
 
         # D-157 : override par les features détectées à l'import.
         # extract_room_features retourne windows/openings/doors déjà enrichis
         # (offset_cm, width_cm) et filtrés — on les substitue directement.
+        # Seed-only Input doors (no width_cm) are preserved alongside
+        # detected doors so their seeds remain visible on the floor plan.
         _feat = _import_features.get(p["room_id"])
         if _feat:
             windows = _feat.get("windows", [])
             openings = _feat.get("openings", [])
-            doors = _feat.get("doors", [])
+            _seed_only = [d for d in doors if "width_cm" not in d]
+            doors = _feat.get("doors", []) + _seed_only
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox

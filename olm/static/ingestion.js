@@ -106,13 +106,14 @@
       return { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
     }
     function slimDoor(d) {
+      // Seed-only Input doors: pass through unchanged.
+      if (typeof d.seed_x === 'number' && !d.face) {
+        return { seed_x: d.seed_x, seed_y: d.seed_y };
+      }
       var s = {
         face: d.face, offset_cm: d.offset_cm, width_cm: d.width_cm,
         hinge_side: d.hinge_side, opens_inward: d.opens_inward !== false,
       };
-      // Remonte les seeds calculées par le backend pour qu'elles soient
-      // persistées (ingestion_serialize.js les lit) et réutilisées au
-      // prochain rescan comme ancrage.
       if (typeof d.seed_x === 'number') s.seed_x = d.seed_x;
       if (typeof d.seed_y === 'number') s.seed_y = d.seed_y;
       return s;
@@ -146,6 +147,10 @@
       return feat(o);
     });
     var doorsCanon = (canon.doors || []).map(function (d) {
+      // Seed-only Input doors: pass through unchanged.
+      if (typeof d.seed_x === 'number' && !d.face) {
+        return { seed_x: d.seed_x, seed_y: d.seed_y };
+      }
       var extra = {
         hinge_side: d.hinge_side,
         opens_inward: d.opens_inward !== false,

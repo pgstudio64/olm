@@ -185,6 +185,11 @@
       // écrase les ouvertures que l'utilisateur avait personnalisées.
       if (Array.isArray(r.doors) && r.doors.length > 0) {
         roomObj.doors = r.doors.map(function (d) {
+          // Seed-only Input doors: preserve as-is, no detection fields.
+          var isSeedOnly = (typeof d.seed_x === 'number' && !d.face);
+          if (isSeedOnly) {
+            return { seed_x: _px(d.seed_x), seed_y: _px(d.seed_y) };
+          }
           var o = {
             face: d.face,
             offset_px: _px(d.offset_px),
@@ -193,8 +198,6 @@
           if (d.hinge_side) o.hinge_side = d.hinge_side;
           if (typeof d.opens_inward === 'boolean') o.opens_inward = d.opens_inward;
           if (d.origin) o.origin = d.origin;
-          // D-138 : seed de porte (Input preprocessing externe) persisté
-          // au round-trip Save / Load. Coords image absolues, pas rotées.
           if (typeof d.seed_x === 'number') o.seed_x = _px(d.seed_x);
           if (typeof d.seed_y === 'number') o.seed_y = _px(d.seed_y);
           return o;

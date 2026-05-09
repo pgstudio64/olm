@@ -3,6 +3,21 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.23] — 2026-05-09
+
+### Fixed
+
+- **D-163 East/west rotation swap** : les formules de rotation dans
+  `canonical_io.js` etaient inversees entre east et west (rotatePoint,
+  rotateRect, rotateRectInv, canonAngle, xformZone, xformZoneBack).
+  Causait un decalage vertical de 50% et une inversion des positions
+  de porte dans la vue Room pour les pieces avec corridor east ou west.
+  FACE_MAPS et offset mirror (xformOpening) non modifies — corrects.
+- **Door seeds preservation** : les seeds de porte du JSON Input etaient
+  filtrees par le pipeline de detection (filtre largeur, import features).
+  5 corrections dans extract.py, ingestion.js et ingestion_serialize.js
+  pour garantir que les seeds traversent le pipeline sans modification.
+
 ## [v0.4.22] — 2026-05-09
 
 ### Fixed

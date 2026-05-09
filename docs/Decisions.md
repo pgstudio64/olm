@@ -7,6 +7,33 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-163 · Correction inversion east/west dans canonical_io.js (2026-05-09)
+
+### Decision
+Les 6 fonctions de rotation de `canonical_io.js` (rotatePoint, rotateRect,
+rotateRectInv, canonAngle, xformZone, xformZoneBack) avaient les corps
+east et west inverses. FACE_MAPS (correct) effectue une rotation 90 CW
+pour east, mais rotatePoint effectuait 90 CCW — contradiction factuelle
+prouvee par le test (0,0) qui donne des resultats differents.
+
+Correction : swap des corps east/west dans les 6 fonctions + mise a jour
+des expected values des tests auto. FACE_MAPS et offset mirror
+(xformOpening/xformBack ligne 208/309) non modifies car corrects.
+
+### Justification
+Le bug causait un decalage vertical de 50% de l'overlay plan dans la vue
+Room et une inversion des positions de porte pour toute piece avec
+corridor east ou west. Preuve : point (0,0) avec W=300, D=500 et
+corridor east donnait (0, 300) via rotatePoint mais FACE_MAPS produit
+south->east (rotation 90 CW) qui devrait donner (500, 0).
+
+### Impact
+- `olm/static/canonical_io.js` : 6 fonctions corrigees + 3 jeux de tests
+- Vue Room : overlay et positions correctes pour les pieces east/west
+- Aucun impact sur FACE_MAPS ni sur la logique offset mirror
+
+---
+
 ## D-162 · Closest-first orientation sans seuil de distance (2026-05-09)
 
 ### Décision
