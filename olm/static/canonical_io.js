@@ -87,8 +87,8 @@
   function rotatePoint(pt, cfAbs, absW, absD) {
     var x = pt.x, y = pt.y;
     if (cfAbs === "north") return { x: absW - x, y: absD - y };
-    if (cfAbs === "east")  return { x: y,        y: absW - x };
-    if (cfAbs === "west")  return { x: absD - y, y: x         };
+    if (cfAbs === "east")  return { x: absD - y, y: x         };
+    if (cfAbs === "west")  return { x: y,        y: absW - x };
     return { x: x, y: y };
   }
 
@@ -104,8 +104,8 @@
   function rotateRect(rect, cfAbs, absW, absD) {
     var x = rect.x, y = rect.y, w = rect.width, d = rect.depth;
     if (cfAbs === "north") return { x: absW - x - w, y: absD - y - d, width: w, depth: d };
-    if (cfAbs === "east")  return { x: y,            y: absW - x - w, width: d, depth: w };
-    if (cfAbs === "west")  return { x: absD - y - d, y: x,             width: d, depth: w };
+    if (cfAbs === "east")  return { x: absD - y - d, y: x,             width: d, depth: w };
+    if (cfAbs === "west")  return { x: y,            y: absW - x - w, width: d, depth: w };
     return { x: x, y: y, width: w, depth: d };
   }
 
@@ -114,7 +114,7 @@
    * repère canonique (corridor sud). cfAbs = corridor_face absolu.
    *
    * Convention dérivée du rendu overlay actuel (D-83 / éditeur.js) :
-   *   south → 0, east → 90, north → 180, west → 270.
+   *   south → 0, east → 270, north → 180, west → 90.
    *
    * Source unique de cette convention (D-134 P6) — remplace
    * `_canonicalAngle` éparpillé dans editor.js.
@@ -123,9 +123,9 @@
    * @returns {number} degrés pour `transform="rotate(angle cx cy)"`.
    */
   function canonAngle(cfAbs) {
-    if (cfAbs === "east")  return 90;
+    if (cfAbs === "east")  return 270;
     if (cfAbs === "north") return 180;
-    if (cfAbs === "west")  return 270;
+    if (cfAbs === "west")  return 90;
     return 0;  // "" ou "south" ou inconnu → pas de rotation
   }
 
@@ -145,8 +145,8 @@
   function rotateRectInv(rect, cfAbs, absW, absD) {
     var xc = rect.x, yc = rect.y, wc = rect.width, dc = rect.depth;
     if (cfAbs === "north") return { x: absW - xc - wc, y: absD - yc - dc, width: wc, depth: dc };
-    if (cfAbs === "east")  return { x: absW - yc - dc, y: xc,             width: dc, depth: wc };
-    if (cfAbs === "west")  return { x: yc,             y: absD - xc - wc, width: dc, depth: wc };
+    if (cfAbs === "east")  return { x: yc,             y: absD - xc - wc, width: dc, depth: wc };
+    if (cfAbs === "west")  return { x: absW - yc - dc, y: xc,             width: dc, depth: wc };
     return { x: xc, y: yc, width: wc, depth: dc };
   }
 
@@ -226,13 +226,13 @@
         ex.x_cm = W - e.x_cm - e.width_cm;
         ex.y_cm = D - e.y_cm - e.depth_cm;
       } else if (cf === "east") {
-        ex.x_cm     = e.y_cm;
-        ex.y_cm     = W - e.x_cm - e.width_cm;
+        ex.x_cm     = D - e.y_cm - e.depth_cm;
+        ex.y_cm     = e.x_cm;
         ex.width_cm = e.depth_cm;
         ex.depth_cm = e.width_cm;
       } else if (cf === "west") {
-        ex.x_cm     = D - e.y_cm - e.depth_cm;
-        ex.y_cm     = e.x_cm;
+        ex.x_cm     = e.y_cm;
+        ex.y_cm     = W - e.x_cm - e.width_cm;
         ex.width_cm = e.depth_cm;
         ex.depth_cm = e.width_cm;
       }
@@ -328,15 +328,13 @@
         ex.x_cm = Wc - e.x_cm - e.width_cm;
         ex.y_cm = Dc - e.y_cm - e.depth_cm;
       } else if (ocf === "east") {
-        // canonical: w=D_abs, h=W_abs → inverse: (xc,yc) → (W-yc-hc, xc)
-        ex.x_cm     = Dc - e.y_cm - e.depth_cm;
-        ex.y_cm     = e.x_cm;
+        ex.x_cm     = e.y_cm;
+        ex.y_cm     = Wc - e.x_cm - e.width_cm;
         ex.width_cm = e.depth_cm;
         ex.depth_cm = e.width_cm;
       } else if (ocf === "west") {
-        // canonical: w=D_abs, h=W_abs → inverse: (xc,yc) → (yc, W-xc-wc)
-        ex.x_cm     = e.y_cm;
-        ex.y_cm     = Wc - e.x_cm - e.width_cm;
+        ex.x_cm     = Dc - e.y_cm - e.depth_cm;
+        ex.y_cm     = e.x_cm;
         ex.width_cm = e.depth_cm;
         ex.depth_cm = e.width_cm;
       }
@@ -427,8 +425,8 @@
     var POINT_CASES = [
       { cf: "south", pt: { x: 30, y: 40 }, exp: { x: 30, y: 40 } },
       { cf: "north", pt: { x: 30, y: 40 }, exp: { x: W - 30, y: D - 40 } },
-      { cf: "east",  pt: { x: 30, y: 40 }, exp: { x: 40,      y: W - 30 } },
-      { cf: "west",  pt: { x: 30, y: 40 }, exp: { x: D - 40,  y: 30      } },
+      { cf: "east",  pt: { x: 30, y: 40 }, exp: { x: D - 40,  y: 30      } },
+      { cf: "west",  pt: { x: 30, y: 40 }, exp: { x: 40,      y: W - 30 } },
     ];
     POINT_CASES.forEach(function (c) {
       var r = rotatePoint(c.pt, c.cf, W, D);
@@ -444,8 +442,8 @@
     var RECT_CASES = [
       { cf: "south", exp: { x: 10, y: 20, width: 50, depth: 60 } },
       { cf: "north", exp: { x: W - 10 - 50, y: D - 20 - 60, width: 50, depth: 60 } },
-      { cf: "east",  exp: { x: 20, y: W - 10 - 50, width: 60, depth: 50 } },
-      { cf: "west",  exp: { x: D - 20 - 60, y: 10, width: 60, depth: 50 } },
+      { cf: "east",  exp: { x: D - 20 - 60, y: 10, width: 60, depth: 50 } },
+      { cf: "west",  exp: { x: 20, y: W - 10 - 50, width: 60, depth: 50 } },
     ];
     RECT_CASES.forEach(function (c) {
       var r = rotateRect(RECT, c.cf, W, D);
@@ -477,9 +475,9 @@
     var ANGLE_CASES = [
       { cf: "",      exp: 0   },
       { cf: "south", exp: 0   },
-      { cf: "east",  exp: 90  },
+      { cf: "east",  exp: 270 },
       { cf: "north", exp: 180 },
-      { cf: "west",  exp: 270 },
+      { cf: "west",  exp: 90  },
     ];
     ANGLE_CASES.forEach(function (c) {
       var got = canonAngle(c.cf);
