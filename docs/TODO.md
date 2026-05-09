@@ -70,6 +70,11 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - Échelle auto-détectée fausse (1:300 au lieu de 1:200 sur un autre plan) — même famille que le problème critique ci-dessus.
 - Selon l'échelle, la détection est plus ou moins efficace (ex: fenêtres non identifiées).
 
+**Bugs prioritaires** :
+- **B1 — Inversion ouest/est en mode Room** : les faces est et ouest sont inversées dans la description de la pièce en mode Room. Une ouverture à droite au sud (vue Floor, repère local) se retrouve à gauche au sud quand on ouvre la pièce en Room. Uniquement sur les faces ouest et est.
+- **B2 — Import / ouverture plan pas propre** : lors de l'import ou de l'ouverture d'un nouveau plan, la colonne de gauche n'est pas peuplée et le message "import en cours" ne s'affiche pas. Lors d'une seconde ouverture, les données de l'ancien plan restent affichées pendant tout l'import.
+- **B3 — Import preprocessed lent sans rescan** : un import preprocessed sans rescan (tout est dans le JSON) devrait être quasi-instantané. Actuellement c'est lent. À analyser — identifier ce qui prend du temps.
+
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
 - *Format JSON v3 en cm primary* (portes/ouvertures/fenêtres : `offset_px`/`width_px` → cm source de vérité)
