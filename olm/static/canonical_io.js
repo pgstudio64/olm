@@ -222,7 +222,7 @@
     function xformOpening(o) {
       var r = Object.assign({}, o);
       r.face = faceMap[o.face] || o.face;
-      if (cf === "north" || cf === "west") {
+      if (cf === "north" || cf === "east") {
         r.offset_cm = _absLen(o.face, W, D) - (o.offset_cm || 0) - (o.width_cm || 0);
         if (o.hinge_side) {
           r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
@@ -323,7 +323,7 @@
     function xformBack(o) {
       var r = Object.assign({}, o);
       r.face = invMap[o.face] || o.face;
-      if (ocf === "north" || ocf === "west") {
+      if (ocf === "north" || ocf === "east") {
         r.offset_cm = _canonLen(o.face, Wc, Dc) - (o.offset_cm || 0) - (o.width_cm || 0);
         if (o.hinge_side) {
           r.hinge_side = (o.hinge_side === "left") ? "right" : "left";

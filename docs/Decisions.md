@@ -7,6 +7,22 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-169 · Fix inversion est/ouest canonical_io (2026-05-09)
+
+### Decision
+Corriger la condition de flip d'offset dans `canonical_io.js` : remplacer `cf === "north" || cf === "west"` par `cf === "north" || cf === "east"` dans `fromStorage` (L225) et `toStorage` (L326). Le flip du hinge_side suit la meme condition.
+
+### Justification
+Verification geometrique : pour corridor_face="east" (rotation 90° horaire), le bout nord du mur absolu se retrouve au bout est du mur canonique sud — il faut inverser l'offset (mesure depuis l'ouest). Pour corridor_face="west" (90° anti-horaire), le bout nord se retrouve au bout ouest — pas besoin d'inverser. La condition etait inversee, causant une symetrie miroir des features sur les faces est/ouest en vue Room.
+
+### Impact
+- `canonical_io.js` : 2 lignes modifiees (fromStorage + toStorage)
+- Affecte toutes les pieces avec corridor east ou west
+- Round-trip toStorage(fromStorage(x)) garanti (modification symetrique)
+- Corrige B1 dans TODO.md
+
+---
+
 ## D-167 · Door detection diagnostics dans Diag (2026-05-09)
 
 ### Decision

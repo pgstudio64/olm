@@ -3,6 +3,17 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.34] — 2026-05-09
+
+### Fixed
+
+- **B1 — Inversion est/ouest en Room** : les features (portes, fenetres,
+  ouvertures) sur les faces est et ouest etaient inversees en vue Room
+  pour les pieces dont le couloir est a l'est ou a l'ouest. Cause :
+  condition de flip d'offset dans `canonical_io.js` appliquee a "west"
+  au lieu de "east" (fromStorage L225 + toStorage L326). Le round-trip
+  abs↔canon reste garanti.
+
 ## [v0.4.25] — 2026-05-09
 
 ### Added

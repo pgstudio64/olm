@@ -71,7 +71,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - Selon l'échelle, la détection est plus ou moins efficace (ex: fenêtres non identifiées).
 
 **Bugs prioritaires** :
-- **B1 — Inversion ouest/est en mode Room** : les faces est et ouest sont inversées dans la description de la pièce en mode Room. Une ouverture à droite au sud (vue Floor, repère local) se retrouve à gauche au sud quand on ouvre la pièce en Room. Uniquement sur les faces ouest et est.
+- ~~**B1 — Inversion ouest/est en mode Room**~~ : corrigé D-169 v0.4.34. Condition de flip d'offset dans canonical_io.js inversée ("west" au lieu de "east").
 - **B2 — Import / ouverture plan pas propre** : lors de l'import ou de l'ouverture d'un nouveau plan, la colonne de gauche n'est pas peuplée et le message "import en cours" ne s'affiche pas. Lors d'une seconde ouverture, les données de l'ancien plan restent affichées pendant tout l'import.
 - **B3 — Import preprocessed lent sans rescan** : un import preprocessed sans rescan (tout est dans le JSON) devrait être quasi-instantané. Actuellement c'est lent. À analyser — identifier ce qui prend du temps.
 
