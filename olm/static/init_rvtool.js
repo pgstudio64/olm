@@ -364,12 +364,11 @@
         }
         var roomName = orig.name || "";
         var otherSeeds = [];
-        var allRooms = (ingst.rooms || {});
-        Object.keys(allRooms).forEach(function (k) {
-          if (k === roomName) return;
-          var r = allRooms[k];
-          if (r && r.seed_x != null && r.seed_y != null) {
-            otherSeeds.push([r.seed_x, r.seed_y]);
+        (ingst.rooms || []).forEach(function (r) {
+          if (r.name === roomName) return;
+          var sp = r.seed_px || r.seed;
+          if (sp && sp.length >= 2) {
+            otherSeeds.push([sp[0], sp[1]]);
           }
         });
         diagBtn.disabled = true;
@@ -425,6 +424,44 @@
             lines.push("  image_mode: " + cp.image_mode +
               " size: " + JSON.stringify(cp.image_size));
           }
+          lines.push("");
+          lines.push("--- DOOR DETECTION ---");
+          lines.push("binarize_threshold: " +
+            (diag.binarize_threshold || "?"));
+          lines.push("door_width_px: " +
+            (diag.door_width_px || "?"));
+          var doorFaces = diag.door_faces || [];
+          if (!doorFaces.length) {
+            lines.push("  (no door_faces diag — old backend?)");
+          }
+          doorFaces.forEach(function (df) {
+            var parts = ["  " + df.face + ":"];
+            if (df.rejected) {
+              parts.push("REJECTED=" + df.rejected);
+            } else {
+              parts.push("OK doors=" + (df.doors_found || 0));
+            }
+            if (df.far_hits != null) parts.push("far=" + df.far_hits);
+            if (df.wall_px != null) parts.push("wall=" + df.wall_px);
+            if (df.wall_hits != null) parts.push("whits=" + df.wall_hits);
+            if (df.contact_ratio != null)
+              parts.push("contact=" +
+                (df.contact_ratio * 100).toFixed(1) + "%");
+            if (df.arc_pixels != null) parts.push("arc=" + df.arc_pixels);
+            if (df.probe_px != null) parts.push("probe=" + df.probe_px);
+            if (df.scan_range && df.scan_range.length)
+              parts.push("scan=" + df.scan_range[0] + "-" +
+                df.scan_range[1]);
+            if (df.groups && df.groups.length) {
+              parts.push("groups=" + df.groups.length);
+              df.groups.forEach(function (g) {
+                parts.push("  g:" + g.start + "-" + g.end +
+                  " w=" + g.width);
+              });
+            }
+            lines.push(parts.join(" "));
+          });
+
           lines = lines.concat([
             "",
             "--- BBOX ---",

@@ -7,6 +7,35 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-167 · Door detection diagnostics dans Diag (2026-05-09)
+
+### Decision
+Ajouter une section DOOR DETECTION au bouton Diag avec les donnees de chaque face : far_hits, wall_px, contact ratio, arc pixels, probe position, scan range, groups, raison de rejet (no_far_hits, too_few_wall_hits, too_much_contact, no_arc_pixels, no_seeds_for_face). Seuil de binarisation et door_width_px affiches.
+
+### Justification
+Le diagnostic des portes non detectees (arcs marron, seuil de binarisation, absence de hits) necessitait des prints debug temporaires. L'observabilite permanente dans Diag evite les allers-retours code/test.
+
+### Impact
+- `test_comb.py` : parametre `diag` ajoute a `_detect_doors_on_face` et `expand_door_arcs`, collecte progressive du dict de diagnostic.
+- `app.py` : binarize_threshold et door_width_px ajoutes au diag.
+- `init_rvtool.js` : section DOOR DETECTION dans l'affichage Diag.
+
+---
+
+## D-166 · Bbox extension par seed_caps (2026-05-09)
+
+### Decision
+Etendre le bbox du peigne (comb_collect_hits) jusqu'au seed voisin quand la distance coarse_mode est insuffisante. Les seed_caps servent de plancher (le bbox ne peut que grandir).
+
+### Justification
+Quand le seed est decentre et qu'un obstacle (meuble, texte) bloque les rays coarse sur la ligne du seed, le bbox coarse est trop petit et les rays fins ne couvrent pas toute la piece. L'extension par seed_caps garantit que les rays atteignent au moins le seed voisin.
+
+### Impact
+- `test_comb.py` : 8 lignes ajoutees apres le calcul du bbox dans comb_collect_hits.
+- Pas de regression D-160 : D-160 reduisait le bbox, D-166 l'etend.
+
+---
+
 ## D-165 · Detection poteaux + stop_mask + hits directionnels (2026-05-09)
 
 ### Decision

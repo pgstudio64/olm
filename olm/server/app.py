@@ -1410,6 +1410,8 @@ def api_debug_room_diagnostic():
         )
         # Strip hits from result to keep response small
         result.pop("hits", None)
+        diag['binarize_threshold'] = threshold
+        diag['door_width_px'] = int(round(door_width_cm / scale))
         result["diag"] = diag
         result["other_seeds_count"] = len(other_seeds_px)
 

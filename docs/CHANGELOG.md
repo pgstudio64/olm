@@ -3,6 +3,31 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.25] — 2026-05-09
+
+### Added
+
+- **D-166 Bbox extension par seed_caps** : le bbox du peigne s'etend
+  jusqu'au seed voisin quand coarse_mode est trop court (obstacle sur
+  la ligne du seed empechant les rays coarse de couvrir toute la piece).
+- **D-167 Door detection diagnostics** : le bouton Diag affiche une
+  section DOOR DETECTION avec pour chaque face : far_hits, wall_px,
+  contact ratio, arc pixels, probe position, scan range, groups, raison
+  de rejet. Seuil de binarisation et door_width_px inclus.
+- **rotatePointInv** dans canonical_io.js : inverse exacte de
+  rotatePoint (canon → abs), utilisee pour convertir les hits a la volee.
+
+### Fixed
+
+- **Hits overlay Floor** : les hits canoniques (x_cm, y_cm) sont
+  convertis a la volee en px absolus via rotatePointInv. Corrige
+  l'inversion/decalage pour les pieces west/east/north.
+- **Diag otherSeeds** : le bouton Diag ne passait pas other_seeds
+  (format dict vs array + seed_x vs seed_px). Fix : meme logique que
+  le re-analyze single.
+- **Changement de plan** : l'ancien plan est efface et le PNG du
+  nouveau plan est affiche immediatement avant le lancement de l'import.
+
 ## [v0.4.24] — 2026-05-09
 
 ### Added
