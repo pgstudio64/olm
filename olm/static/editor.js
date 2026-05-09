@@ -1109,8 +1109,11 @@ function _renderImpl(targetSvg) {
       // Centre de rotation figé sur le NW ORIGINAL (MARGIN), pas sur
       // roomX/roomY courants qui bougent via roomRenderOffset — sinon
       // l'overlay pivote visuellement pendant le drag.
-      var ocx = MARGIN + refWPx / 2;
-      var ocy = MARGIN + refHPx / 2;
+      // D-168 : pour 90/270, tourner autour du centre de l'image ABSOLUE
+      // (refHPx × refWPx), pas du rectangle canonique (refWPx × refHPx).
+      var needSwapCenter = (ovAngle === 90 || ovAngle === 270);
+      var ocx = MARGIN + (needSwapCenter ? refHPx : refWPx) / 2;
+      var ocy = MARGIN + (needSwapCenter ? refWPx : refHPx) / 2;
       // Pour 90/270, la room canonicalisée a w/h swappés vs l'image originale.
       // Après rotation autour du centre room, compenser le décalage dû au swap.
       var dx = 0, dy = 0;

@@ -520,8 +520,9 @@
           var _roomDCm = state.room_depth_cm || 0;
           var _refWPx = _roomWCm * 2;
           var _refHPx = _roomDCm * 2;
-          var _ocx = _refWPx / 2;
-          var _ocy = _refHPx / 2;
+          var _swapC = (_cAngle === 90 || _cAngle === 270);
+          var _ocx = (_swapC ? _refHPx : _refWPx) / 2;
+          var _ocy = (_swapC ? _refWPx : _refHPx) / 2;
           var _dx = 0, _dy = 0;
           if (_cAngle === 90 || _cAngle === 270) {
             _dx = (_refWPx - _refHPx) / 2;
@@ -538,7 +539,7 @@
           lines.push("bbox_px (abs): " + JSON.stringify(_bpx));
           lines.push("bbox_px w×h: " +
             (_bpx[2] - _bpx[0]) + " × " + (_bpx[3] - _bpx[1]));
-          lines.push("scale: " + _sc + " cm/px");
+          lines.push("scale: " + _sc.toFixed(4) + " cm/px");
           lines.push("abs dims cm: " +
             Math.round((_bpx[2] - _bpx[0]) * _sc) + " × " +
             Math.round((_bpx[3] - _bpx[1]) * _sc));

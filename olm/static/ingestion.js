@@ -493,25 +493,83 @@
         var newPlanMode = this.dataset.planMode;
         _setSelectedPlan(newPlanId, newPlanMode);
         _closePlanPopup();
-        // Show the new plan image immediately (no rooms yet)
+        // Show status immediately
+        var status = document.getElementById('ingStatus');
+        if (status) status.textContent = 'Importing ' + newPlanId + '...';
         ingState.rooms = [];
+
+        // Load PNG + metadata in parallel
         var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
+        var pngReady = false, metaReady = false;
+        var metaData = null;
+
+        function _tryRenderAndImport() {
+          if (!pngReady) return;
+          // Zoom to rooms envelope from metadata if available
+          if (metaData && metaData.rooms_summary && metaData.rooms_summary.length) {
+            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            metaData.rooms_summary.forEach(function (r) {
+              var b = r.bbox_px;
+              if (!b) return;
+              if (b[0] < minX) minX = b[0];
+              if (b[1] < minY) minY = b[1];
+              if (b[2] > maxX) maxX = b[2];
+              if (b[3] > maxY) maxY = b[3];
+            });
+            if (minX < Infinity) {
+              var pad = Math.max(maxX - minX, maxY - minY) * BBOX_AUTOFOCUS_PADDING_RATIO;
+              ingState.vb = { x: minX - pad, y: minY - pad,
+                w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
+            }
+          }
+          renderIngestion();
+          extractRooms();
+        }
+
+        // Metadata fetch (preprocessed only)
+        if (newPlanMode === 'preprocessed') {
+          fetch('/api/plans/' + encodeURIComponent(newPlanId) + '/metadata')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (!data.error) {
+                metaData = data;
+                ingState.buildingId = data.building_id || '';
+                ingState.floorId = data.floor_id || '';
+                ingState.northAngleDeg = data.north_angle_deg || 0;
+                if (typeof window.updateFloorMetadataUI === 'function') {
+                  window.updateFloorMetadataUI();
+                }
+                if (data.image_size && data.image_size[0] > 0) {
+                  ingState.planW = data.image_size[0];
+                  ingState.planH = data.image_size[1];
+                }
+              }
+              metaReady = true;
+              _tryRenderAndImport();
+            })
+            .catch(function () { metaReady = true; _tryRenderAndImport(); });
+        } else {
+          metaReady = true;
+        }
+
+        // PNG load
         var img = new Image();
         img.onload = function () {
           ingState.planUrl = url;
           ingState.planW = img.naturalWidth;
           ingState.planH = img.naturalHeight;
-          ingState.vb = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
-          renderIngestion();
-          extractRooms();
+          if (!metaData) {
+            ingState.vb = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+          }
+          pngReady = true;
+          _tryRenderAndImport();
         };
         img.onerror = function () {
-          // PNG not found — just proceed with import
           ingState.planUrl = '';
           ingState.planW = 0;
           ingState.planH = 0;
-          renderIngestion();
-          extractRooms();
+          pngReady = true;
+          _tryRenderAndImport();
         };
         img.src = url;
       });
