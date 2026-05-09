@@ -874,8 +874,11 @@ def extract_rooms(image: Image.Image,
                 binary.shape, np.sum(binary), np.sum(binary_raw))
 
     # Step 3b: Remove non-orthogonal elements (door arcs, annotations)
-    binary = remove_non_ortho(binary)
-    binary_raw = remove_non_ortho(binary_raw)
+    # DISABLED — door detection needs arc hits in cleaned binary.
+    # See test_comb.py:2027 (OCR pipeline already disabled).
+    # Restore: uncomment the two lines below.
+    # binary = remove_non_ortho(binary)          # L877 disabled
+    # binary_raw = remove_non_ortho(binary_raw)  # L878 disabled
 
     # Build expanded text bboxes for skip zones (margin accounts for
     # cleaning area that may have erased window lines)
@@ -1488,7 +1491,9 @@ def extract_rooms_from_preprocessed(
         _img_sd = _PILImage.open(enhanced_png_path).convert("L")
         _gray = np.asarray(_img_sd)
         _bin_raw = _gray < _dcfg_import.binarize_threshold
-        _bin = remove_non_ortho(_bin_raw)
+        # DISABLED — see L877 comment.  Restore: uncomment next line.
+        # _bin = remove_non_ortho(_bin_raw)  # L1491 disabled
+        _bin = _bin_raw.copy()
         # Image couleur pour filtrage fenêtres/extérieur (D-156).
         _color_img = _PILImage.open(enhanced_png_path)
         _all_seeds = [(p["seed_x"], p["seed_y"]) for p in parsed_rooms]
@@ -1844,7 +1849,9 @@ def extract_room_features(
             draw.rectangle(rect, fill=255)
         gray = np.asarray(working)
         binary_for_arcs = gray < threshold
-        binary = remove_non_ortho(binary_for_arcs)
+        # DISABLED — see L877 comment.  Restore: uncomment next line.
+        # binary = remove_non_ortho(binary_for_arcs)  # L1847 disabled
+        binary = binary_for_arcs.copy()
         binary_raw = binary
 
     # --- D-132 : clip_to_bbox — force solides tous les pixels hors bbox_px
