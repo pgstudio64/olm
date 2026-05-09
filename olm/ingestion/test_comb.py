@@ -953,24 +953,24 @@ def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
                 if positive > 0.7 * n or negative > 0.7 * n:
                     continue  # Progressive displacement → door arc.
 
-            # Reject if group centre falls in a door seed exclusion square.
+            # Reject if group centre falls near a door seed (any face).
+            # Door arcs in corners generate hits on the adjacent face,
+            # so we compare in absolute image coordinates, not per-face.
             group_center_along = (min(along_vals) + max(along_vals)) / 2
             group_center_perp = sum(perp[i] for i in group) / len(group)
+            if face in ('north', 'south'):
+                gc_x = group_center_along
+                gc_y = group_center_perp
+            else:
+                gc_x = group_center_perp
+                gc_y = group_center_along
             if door_seeds and min_door_width_px > 0:
                 half = min_door_width_px / 2
                 in_door_zone = False
                 for ds in door_seeds:
-                    if ds.get('face') != face:
-                        continue
                     ds_x = ds.get('seed_x', 0)
                     ds_y = ds.get('seed_y', 0)
-                    if face in ('north', 'south'):
-                        d_along = abs(group_center_along - ds_x)
-                        d_perp = abs(group_center_perp - ds_y)
-                    else:
-                        d_along = abs(group_center_along - ds_y)
-                        d_perp = abs(group_center_perp - ds_x)
-                    if d_along <= half and d_perp <= half:
+                    if abs(gc_x - ds_x) <= half and abs(gc_y - ds_y) <= half:
                         in_door_zone = True
                         break
                 if in_door_zone:

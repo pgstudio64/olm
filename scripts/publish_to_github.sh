@@ -79,6 +79,21 @@ if [ -n "$(git status --porcelain)" ]; then
   [[ "$ans" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
 fi
 
+LOCAL_TAGS_EARLY=$(git tag --points-at HEAD 2>/dev/null || true)
+VERSION_TAG=$(echo "$LOCAL_TAGS_EARLY" | grep -E '^v[0-9]+\.' | head -1 || true)
+if [ -n "$VERSION_TAG" ]; then
+  VERSION_NUM="${VERSION_TAG#v}"
+  CURRENT_VERSION=$(python3 -c "import olm; print(olm.__version__)")
+  if [ "$CURRENT_VERSION" != "$VERSION_NUM" ]; then
+    echo "[pre] Updating olm/__init__.py: $CURRENT_VERSION → $VERSION_NUM"
+    sed -i '' "s/^__version__ = .*/__version__ = \"$VERSION_NUM\"/" olm/__init__.py
+    git add olm/__init__.py
+    git commit -m "chore: bump version to $VERSION_NUM" --quiet
+    # Move tag to include this commit
+    git tag -f "$VERSION_TAG" >/dev/null 2>&1
+  fi
+fi
+
 LOCAL_HEAD=$(git rev-parse HEAD)
 echo "Local HEAD:     $LOCAL_HEAD"
 echo ""
