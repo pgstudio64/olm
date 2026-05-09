@@ -123,9 +123,9 @@
    * @returns {number} degrés pour `transform="rotate(angle cx cy)"`.
    */
   function canonAngle(cfAbs) {
-    if (cfAbs === "east")  return 270;
+    if (cfAbs === "east")  return 90;
     if (cfAbs === "north") return 180;
-    if (cfAbs === "west")  return 90;
+    if (cfAbs === "west")  return 270;
     return 0;  // "" ou "south" ou inconnu → pas de rotation
   }
 
@@ -492,9 +492,9 @@
     var ANGLE_CASES = [
       { cf: "",      exp: 0   },
       { cf: "south", exp: 0   },
-      { cf: "east",  exp: 270 },
+      { cf: "east",  exp: 90  },
       { cf: "north", exp: 180 },
-      { cf: "west",  exp: 90  },
+      { cf: "west",  exp: 270 },
     ];
     ANGLE_CASES.forEach(function (c) {
       var got = canonAngle(c.cf);
