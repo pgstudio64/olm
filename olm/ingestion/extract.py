@@ -2031,12 +2031,12 @@ def extract_room_features(
         for h in face_hits:
             coarse_hits_out.append([int(h[0]), int(h[1]), d])
 
-    # Portes : si le caller en fournit (import preprocessed / JSON),
-    # les restituer telles quelles. Sinon, détecter depuis les arcs.
+    # Portes détectées par l'expansion d'arcs du comb. On les remonte
+    # uniquement si l'appelant n'en a pas fourni — principe : à minima
+    # faire ce que fait l'import OCR. Si l'appelant a déjà des portes
+    # (JSON existant), on les préserve côté frontend.
     doors_out: list[dict] = []
-    if doors_px:
-        doors_out = list(doors_px)
-    else:
+    if not doors_px:
         # Filtre largeur min/max porte (cf. DetectionConfigCm).
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
         _cfg_px = _ddc.to_px(scale_cm_per_px)
