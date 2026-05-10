@@ -743,18 +743,19 @@
                 width_cm: z.width_cm, depth_cm: z.depth_cm,
               };
             });
-        // Re-analyze does not re-detect doors, but existing door seeds
-        // are sent so the backend can exclude arc fragments from pillar
-        // detection (_filter_pillar_hits). Face is converted canon → abs.
-        var doorsPx = (state.room_doors || []).map(function (d) {
+        // In preprocessed mode, send existing doors so the backend
+        // preserves them. In OCR mode, rescan from scratch (no doors sent).
+        var _isOcr = ((ingst._selectedPlan && ingst._selectedPlan.mode)
+                       || 'ocr') === 'ocr';
+        var doorsPx = _isOcr ? [] : (state.room_doors || []).map(function (d) {
           var absFace = d.face;
           var invMap = cio && cio.INV_FACE_MAPS
             ? cio.INV_FACE_MAPS[cfAbsForZones] : null;
           if (invMap && invMap[d.face]) absFace = invMap[d.face];
           var entry = {
             face: absFace,
-            offset_px: d.offset_px || 0,
-            width_px: d.width_px || 0,
+            offset_cm: d.offset_cm || 0,
+            width_cm: d.width_cm || 0,
           };
           if (d.seed_x != null) entry.seed_x = d.seed_x;
           if (d.seed_y != null) entry.seed_y = d.seed_y;
