@@ -758,22 +758,18 @@
           // north/east, sinon l'offset alterne à chaque rescan.
           var _canonFaceLen = (d.face === 'north' || d.face === 'south')
             ? _Wc : _Dc;
-          var offAbsCm = d.offset_cm || 0;
-          var offAbsPx = d.offset_px || 0;
+          var offAbs = d.offset_cm || 0;
           var hingeAbs = d.hinge_side;
           if (cfAbsForZones === 'north' || cfAbsForZones === 'east') {
-            offAbsCm = _canonFaceLen - offAbsCm - (d.width_cm || 0);
-            var _canonFaceLenPx = (d.face === 'north' || d.face === 'south')
-              ? ((_Wc / ingst.scale) || 0) : ((_Dc / ingst.scale) || 0);
-            offAbsPx = _canonFaceLenPx - offAbsPx - (d.width_px || 0);
+            offAbs = _canonFaceLen - offAbs - (d.width_cm || 0);
             if (d.hinge_side) {
               hingeAbs = (d.hinge_side === 'left') ? 'right' : 'left';
             }
           }
           var entry = {
             face: absFace,
-            offset_px: offAbsPx,
-            width_px: d.width_px || 0,
+            offset_cm: offAbs,
+            width_cm: d.width_cm || 0,
           };
           if (hingeAbs) entry.hinge_side = hingeAbs;
           if (d.opens_inward != null) entry.opens_inward = d.opens_inward;

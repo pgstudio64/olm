@@ -1099,8 +1099,7 @@
     // overlay rend dans le repère ABSOLU (raster). toStorage(room, scale)
     // retourne une pièce absolue avec offset_px / width_px déjà recalculés.
     function _renderRoom(roomCanon) {
-      if (roomCanon.corridor_face_abs !== undefined &&
-          window.canonicalIO) {
+      if (window.canonicalIO) {
         return window.canonicalIO.toStorage(roomCanon, ingState.scale);
       }
       return roomCanon;
@@ -1266,11 +1265,9 @@
           var swing = d.hinge_side || 'left';
           var inward = d.opens_inward !== false;
           // Resolve hinge/free coords from jambs + swing + face convention
-          // (west wall inverts jh/jf selection, mirroring editor's logic).
           var swingLeft = (swing === 'left');
-          var westInvert = (d.face === 'west');
-          var hingeCoord = (swingLeft !== westInvert) ? jh : jf;
-          var freeCoord  = (swingLeft !== westInvert) ? jf : jh;
+          var hingeCoord = swingLeft ? jh : jf;
+          var freeCoord  = swingLeft ? jf : jh;
           var wallCoord;
           if (d.face === 'south') wallCoord = y1;
           else if (d.face === 'north') wallCoord = y0;
@@ -2044,15 +2041,29 @@
               ? window.canonicalZonesToAbs(
                   rawTransparents, rCfAbs, rAbsW, rAbsD)
               : rawTransparents;
-            // Convert door faces canon → abs for pillar exclusion.
+            // Convert door faces + offset canon → abs.
             var rDoors = (amend && amend.doors) || r.doors || [];
             var cio = window.canonicalIO;
             var invMap = (cio && cio.INV_FACE_MAPS)
               ? cio.INV_FACE_MAPS[rCfAbs] : null;
+            var _rWc = r.width_cm || 0;
+            var _rDc = r.depth_cm || 0;
             var absDoors = rDoors.map(function (d) {
               var af = (invMap && invMap[d.face]) || d.face;
-              var e = { face: af, offset_px: d.offset_px || 0,
-                        width_px: d.width_px || 0 };
+              var offAbs = d.offset_cm || 0;
+              var hingeAbs = d.hinge_side;
+              if (rCfAbs === 'north' || rCfAbs === 'east') {
+                var faceLen = (d.face === 'north' || d.face === 'south')
+                  ? _rWc : _rDc;
+                offAbs = faceLen - offAbs - (d.width_cm || 0);
+                if (d.hinge_side) {
+                  hingeAbs = (d.hinge_side === 'left') ? 'right' : 'left';
+                }
+              }
+              var e = { face: af, offset_cm: offAbs,
+                        width_cm: d.width_cm || 0 };
+              if (hingeAbs) e.hinge_side = hingeAbs;
+              if (d.opens_inward != null) e.opens_inward = d.opens_inward;
               if (d.seed_x != null) e.seed_x = d.seed_x;
               if (d.seed_y != null) e.seed_y = d.seed_y;
               return e;
