@@ -3,6 +3,25 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.37] — 2026-05-10
+
+### Fixed
+
+- **Stop_mask hits enregistres (D-171)** : les fine rays arretes par la
+  couleur couloir/exterieur (stop_mask) etaient silencieusement ignores
+  (distance negative rejetee par `if d > 0`). Les ouvertures dans les
+  murs ne produisaient aucun ray visible. Fix : enregistrer les hits
+  stop_mask a `abs(d)` dans les 4 directions.
+
+### Added
+
+- **Coarse rays overlay** : les rays de la phase 1 (coarse) sont
+  affiches en vue Room avec un trait plus epais (stroke-width 2.4).
+- **seed_caps fix N/S** : le filtre de caps nord/sud ne retient que
+  les seeds au-dela du mur (pas les voisins lateraux).
+- **Hit direction propagation** : la direction (n/s/e/w) est propagee
+  a travers la canonicalisation et le format isCanon.
+
 ## [v0.4.34] — 2026-05-09
 
 ### Fixed

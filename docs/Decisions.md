@@ -7,6 +7,21 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-171 · Enregistrer les hits stop_mask dans le fine comb (2026-05-10)
+
+### Decision
+Les fine rays arretes par le stop_mask (couleur couloir/exterieur) sont desormais enregistres dans dir_hits a `abs(d)`, au meme titre que les hits mur. Condition : `d < -1` (exclut `d == -1` = depart sur mur).
+
+### Justification
+Les rays qui traversent une ouverture dans un mur et touchent le vert du couloir retournaient une distance negative, silencieusement ignoree par `if d > 0`. Consequence : aucun ray visible a l'emplacement des ouvertures, rendant leur detection impossible visuellement. Le coarse scan n'utilise pas le stop_mask, donc il trouvait les murs au-dela du couloir, mais les fine rays etaient coupes avant.
+
+### Impact
+- `olm/ingestion/test_comb.py` : 8 blocs `elif d < -1` ajoutes dans la phase 2 fine comb (4 directions x 2 boucles)
+- Les ouvertures sont maintenant visibles dans les rays (Room et Floor)
+- Le nombre de hits augmente pour les pieces avec ouvertures sur couloir
+
+---
+
 ## D-169 · Fix inversion est/ouest canonical_io (2026-05-09)
 
 ### Decision
