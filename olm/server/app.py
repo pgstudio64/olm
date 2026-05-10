@@ -1451,8 +1451,8 @@ def api_debug_room_diagnostic():
             diag=diag,
             detection_overrides=_get_detection_overrides(),
         )
-        # Strip hits from result to keep response small
-        result.pop("hits", None)
+        # Keep hits in the response so the frontend can display
+        # rays after rescan (D-169b).
         diag['binarize_threshold'] = threshold
         diag['door_width_px'] = int(round(door_width_cm / scale))
         result["diag"] = diag

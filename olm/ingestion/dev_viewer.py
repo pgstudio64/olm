@@ -112,8 +112,8 @@ def img():
     all_seed_positions = list(seeds.values())
     for name, (cx, cy) in seeds.items():
         other = [(ox, oy) for ox, oy in all_seed_positions if (ox, oy) != (cx, cy)]
-        all_hits, dir_hits = comb_collect_hits(comb_bin, cx, cy, COMB_STEP_PX,
-                                               other_seeds=other)
+        all_hits, dir_hits, _ = comb_collect_hits(comb_bin, cx, cy, COMB_STEP_PX,
+                                                  other_seeds=other)
         best, candidates = largest_rect_no_hits(all_hits, cx, cy, return_all=True)
         if best is None:
             best = (cx - 1, cy - 1, cx + 1, cy + 1)

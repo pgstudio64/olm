@@ -2025,6 +2025,11 @@ def extract_room_features(
         for h in face_hits:
             hits.append([int(h[0]), int(h[1]), d])
     pillar_hits_px = [[int(h[0]), int(h[1])] for h in cr.pillar_hits]
+    coarse_hits_out = []
+    for face, face_hits in cr.coarse_hits.items():
+        d = face[0]
+        for h in face_hits:
+            coarse_hits_out.append([int(h[0]), int(h[1]), d])
 
     # Portes détectées par l'expansion d'arcs du comb. On les remonte
     # uniquement si l'appelant n'en a pas fourni — principe : à minima
@@ -2107,6 +2112,7 @@ def extract_room_features(
         "openings": openings,
         "doors": doors_out,
         "hits": hits,
+        "coarse_hits": coarse_hits_out,
         "pillar_hits": pillar_hits_px,
         # D-145 : plus de masquage auto des portes → liste vide. Clé
         # conservée pour compat frontend (overlay debug dans editor.js).
