@@ -3,6 +3,16 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.39] — 2026-05-10
+
+### Changed
+
+- **Nouvel algo detection portes par hits (D-173)** : `_detect_doors_on_face`
+  reecrit pour analyser les `dir_hits[face]` au lieu de scanner la binary.
+  Detecte le mur (mode perpendiculaire), les hits d'arc (plus courts),
+  verifie profil monotone et ouverture mur. WIP — echoue quand l'arc est
+  trop fin pour arreter les rays (`no_arc_hits`).
+
 ## [v0.4.38] — 2026-05-10
 
 ### Fixed

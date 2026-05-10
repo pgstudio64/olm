@@ -7,6 +7,38 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-173 · Nouvel algo detection portes par hits — WIP (2026-05-10)
+
+### Contexte
+Le probe de l'ancien algo (`_detect_doors_on_face`) scanne une seule ligne horizontale pour trouver les pixels d'arc. A l'echelle 2.54 cm/px (plan preprocessed 1:300), l'arc ne fait que 1-2 px d'epaisseur : le probe ne trouve que 2 pixels, la porte est filtree par `min_door_width_cm` (70 cm).
+
+### Nouvel algo (D-169b reporte, commit source `5451fd0`)
+Analyse les hits par direction (`dir_hits[face]`) au lieu de scanner des pixels dans la binary :
+1. Mur = mode des coordonnees perpendiculaires des hits de la face
+2. Hits plus courts que le mur = arc
+3. Verification profil monotone, ouverture dans le mur
+4. Largeur porte = etendue de la zone d'arc
+5. `expand_door_arcs` recoit `dir_hits` + `snap_rect` (pre-poteaux)
+6. `detect_room` passe `dir_hits` et `snap_rect`
+
+### Etat : deploye, probleme ouvert
+L'algo est en place dans le code. Il fonctionne quand l'arc est assez epais pour arreter les rays de la face. Il echoue quand les rays de la face ne sont pas arretes par l'arc (`no_arc_hits`). Observe sur pieces 916, 920, 914 du plan big_pillars : bbox raccourcie.
+
+### Donnees diagnostiques (piece 914)
+- rect: [5581,2475,6221,2985], seed: (5883,2684)
+- South: wall_px=2985 (=rect.y1), wall_hits=59, pos=2996 count=48
+- door_width_px=116, distance mur→couloir=11px
+- Toutes les 4 faces rejetees (no_arc_hits ou arc_too_wide)
+- Les hits visibles sur l'arc dans l'overlay ne sont pas dans `dir_hits['south']`
+
+### Piste de fix identifiee
+Quand `no_arc_hits` sur une face (aucun hit plus court que le mur), regarder les hits **au-dela du mur** (y > wall pour south). S'il y en a, c'est que des rays passent par des ouvertures. Les positions le long du mur de ces hits identifient les portes. La bbox s'etend a ces hits.
+
+### Impact
+- `test_comb.py` : `_detect_doors_on_face` reecrit, `expand_door_arcs` adapte pour `dir_hits` + `snap_rect`, `detect_room` passe `dir_hits` et `snap_rect`
+
+---
+
 ## D-172 · Rotation des directions de hits + fix aller-retour portes au rescan (2026-05-10)
 
 ### Decision
