@@ -441,34 +441,83 @@
             lines.push("  (no door_faces diag — old backend?)");
           }
           doorFaces.forEach(function (df) {
-            var parts = ["  " + df.face + ":"];
-            if (df.rejected) {
-              parts.push("REJECTED=" + df.rejected);
-            } else {
-              parts.push("OK doors=" + (df.doors_found || 0));
-            }
-            if (df.all_beyond != null) parts.push("beyond=" + df.all_beyond);
+            lines.push("");
+            lines.push("  === " + df.face.toUpperCase() + " === " +
+              (df.rejected ? "REJECTED=" + df.rejected
+                : "OK doors=" + (df.doors_found || 0)));
+            lines.push("  rect: " + JSON.stringify(df.rect));
+            lines.push("  face_len: " + df.face_len_px +
+              "  door_width: " + (df.door_width_px || "?") +
+              "  tolerance: " + (df.tolerance || "?"));
+            lines.push("  dist_range: [" +
+              (df.dist_range_px || []).join(", ") + "]" +
+              "  min_arc_hits: " + (df.min_door_arc_hits || "?"));
+            lines.push("  scan: [" +
+              (df.scan_range || []).join("-") + "]" +
+              " (" + (df.scan_count || 0) + " px)" +
+              "  seeds: " + (df.has_seeds ? df.seeds_count : "none"));
+            lines.push("  binary_arcs: " + (df.using_binary_arcs || false));
+
+            // Step 1: beyond hits
+            lines.push("  -- step 1: hits beyond bbox --");
+            lines.push("  all_beyond: " + (df.all_beyond || 0));
             if (df.beyond_dists && df.beyond_dists.length)
-              parts.push("dists=[" + df.beyond_dists.join(",") + "]");
-            if (df.far_hits != null) parts.push("far=" + df.far_hits);
-            if (df.wall_px != null) parts.push("wall=" + df.wall_px);
-            if (df.wall_hits != null) parts.push("whits=" + df.wall_hits);
-            if (df.contact_ratio != null)
-              parts.push("contact=" +
-                (df.contact_ratio * 100).toFixed(1) + "%");
-            if (df.arc_pixels != null) parts.push("arc=" + df.arc_pixels);
-            if (df.probe_px != null) parts.push("probe=" + df.probe_px);
-            if (df.scan_range && df.scan_range.length)
-              parts.push("scan=" + df.scan_range[0] + "-" +
-                df.scan_range[1]);
-            if (df.groups && df.groups.length) {
-              parts.push("groups=" + df.groups.length);
-              df.groups.forEach(function (g) {
-                parts.push("  g:" + g.start + "-" + g.end +
-                  " w=" + g.width);
-              });
+              lines.push("  dists: [" + df.beyond_dists.join(",") + "]");
+            if (df.beyond_hits && df.beyond_hits.length) {
+              var bh = df.beyond_hits;
+              var bxs = bh.map(function (h) { return h.x; });
+              lines.push("  beyond x=[" + Math.min.apply(null, bxs) +
+                ".." + Math.max.apply(null, bxs) + "]" +
+                "  d=[" + bh[0].d + ".." + bh[bh.length - 1].d + "]");
             }
-            lines.push(parts.join(" "));
+
+            // Step 2: far hits (distance-filtered)
+            lines.push("  -- step 2: far hits (dist filter) --");
+            lines.push("  far_hits: " + (df.far_hits || 0));
+            if (df.far_detail && df.far_detail.length) {
+              var fh = df.far_detail;
+              var fxs = fh.map(function (h) { return h.x; });
+              lines.push("  far x=[" + Math.min.apply(null, fxs) +
+                ".." + Math.max.apply(null, fxs) + "]" +
+                "  d=[" + fh[0].d + ".." + fh[fh.length - 1].d + "]");
+            }
+
+            // Step 3: wall mode
+            if (df.wall_px != null) {
+              lines.push("  -- step 3: wall position (mode) --");
+              lines.push("  wall_px: " + df.wall_px +
+                "  wall_hits: " + df.wall_hits);
+              if (df.wall_distribution && df.wall_distribution.length) {
+                lines.push("  distribution:");
+                df.wall_distribution.forEach(function (w) {
+                  lines.push("    pos=" + w.pos + " count=" + w.count);
+                });
+              }
+            }
+
+            // Step 4: contact
+            if (df.contact_px != null) {
+              lines.push("  -- step 4: contact --");
+              lines.push("  contact_px: " + df.contact_px +
+                "/" + df.face_len_px +
+                " = " + (df.contact_ratio * 100).toFixed(1) + "%" +
+                "  check_pos: " + (df.contact_check_pos || "?") +
+                "  threshold: " + ((df.contact_threshold || 0.20) * 100) +
+                "%");
+            }
+
+            // Step 5: arc scan
+            if (df.arc_pixels != null) {
+              lines.push("  -- step 5: arc pixel scan --");
+              lines.push("  probe_px: " + df.probe_px +
+                "  arc_pixels: " + df.arc_pixels);
+              if (df.groups && df.groups.length) {
+                df.groups.forEach(function (g) {
+                  lines.push("    group: " + g.start + "-" + g.end +
+                    " w=" + g.width);
+                });
+              }
+            }
           });
 
           lines = lines.concat([
@@ -483,11 +532,56 @@
             "max_range: " + JSON.stringify(diag.max_range),
             "other_seeds: " + (data.other_seeds_count || 0),
             "",
-            "--- HITS ---",
-            "hits_raw: " + JSON.stringify(diag.hits_raw),
-            "hits_filtered: " + JSON.stringify(diag.hits_filtered),
+            "--- HITS PIPELINE ---",
+            "1. hits_raw (after comb): " + JSON.stringify(diag.hits_raw),
+            "2. seed_filter: " + JSON.stringify(diag.seed_filter
+              ? Object.keys(diag.seed_filter).reduce(function(o, k) {
+                  o[k] = "kept=" + diag.seed_filter[k].kept +
+                    " removed=" + diag.seed_filter[k].removed;
+                  return o; }, {}) : "none"),
+            "3. hits_after_seed_filter: " +
+              JSON.stringify(diag.hits_after_seed_filter),
+            "4. pillar_hits_removed: " +
+              (diag.pillar_hits_removed || 0),
+            "   pillars_detected: " +
+              JSON.stringify(diag.pillars_detected || []),
+            "5. hits_after_pillar_filter: " +
+              JSON.stringify(diag.hits_after_pillar_filter),
+            "6. hits_filtered (final): " +
+              JSON.stringify(diag.hits_filtered),
             "obstacles: " + (diag.obstacles_px
               ? diag.obstacles_px.length : 0),
+          ]);
+          // Seed filter: only show directions with removals
+          if (diag.seed_filter) {
+            Object.keys(diag.seed_filter).forEach(function (dir) {
+              var sf = diag.seed_filter[dir];
+              if (sf.removed > 0 && sf.removed_hits) {
+                var blockers = {};
+                sf.removed_hits.forEach(function (r) {
+                  var k = r.blocker.join(",");
+                  blockers[k] = (blockers[k] || 0) + 1;
+                });
+                var bstr = Object.keys(blockers).map(function (k) {
+                  return "[" + k + "]×" + blockers[k];
+                }).join(" ");
+                lines.push("  " + dir + " removed=" + sf.removed +
+                  " by: " + bstr);
+              }
+            });
+          }
+          // South hits: y range summary
+          if (diag.south_hits && diag.south_hits.length) {
+            var sh = diag.south_hits;
+            var ys = sh.map(function (h) { return h[1]; });
+            var xs = sh.map(function (h) { return h[0]; });
+            lines.push("south_hits: " + sh.length +
+              "  x=[" + Math.min.apply(null, xs) + ".." +
+              Math.max.apply(null, xs) + "]" +
+              "  y=[" + Math.min.apply(null, ys) + ".." +
+              Math.max.apply(null, ys) + "]");
+          }
+          lines = lines.concat([
             "",
             "--- DOORS ---",
             "doors: " + (data.doors ? data.doors.length : 0),
