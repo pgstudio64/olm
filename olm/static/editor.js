@@ -1995,6 +1995,7 @@ function loadRoomHitsAndSeedFromIngState(room) {
   var absD = (room.bbox_px[3] - room.bbox_px[1]) * sc;
   var cf = room.corridor_face_abs || "";
   var rotP = window.canonicalIO.rotatePoint;
+  var rotD = window.canonicalIO.rotateDir;
   var seedPx = ingRoom.seed_px || ingRoom.seed;
   if (seedPx) {
     var sC = rotP(
@@ -2015,7 +2016,7 @@ function loadRoomHitsAndSeedFromIngState(room) {
         var pC = rotP(
           { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
           cf, absW, absD);
-        return { x_cm: pC.x, y_cm: pC.y, d: h[2] || null };
+        return { x_cm: pC.x, y_cm: pC.y, d: rotD(h[2], cf) };
       });
     }
   }
@@ -2031,7 +2032,7 @@ function loadRoomHitsAndSeedFromIngState(room) {
         var pC = rotP(
           { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
           cf, absW, absD);
-        return { x_cm: pC.x, y_cm: pC.y, d: h[2] || null };
+        return { x_cm: pC.x, y_cm: pC.y, d: rotD(h[2], cf) };
       });
     }
   }

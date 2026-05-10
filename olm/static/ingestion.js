@@ -166,6 +166,7 @@
     // (D-122 P6 : source unique, plus de rotation ad-hoc locale).
     var _rotP = window.canonicalIO.rotatePoint;
     var _rotR = window.canonicalIO.rotateRect;
+    var _rotD = window.canonicalIO.rotateDir;
     var hits = null, seed_cm = null;
     if (data.hits && bbox) {
       var hbx0 = bbox[0], hby0 = bbox[1];
@@ -173,7 +174,7 @@
         var p = _rotP(
           { x: (h[0] - hbx0) * scale, y: (h[1] - hby0) * scale },
           corridor, absW, absD);
-        return { x_cm: p.x, y_cm: p.y, d: h[2] || null };
+        return { x_cm: p.x, y_cm: p.y, d: _rotD(h[2], corridor) };
       });
       if (data.seed_px) {
         var sC = _rotP(
@@ -214,7 +215,7 @@
         var p = _rotP(
           { x: (h[0] - cbx0) * scale, y: (h[1] - cby0) * scale },
           corridor, absW, absD);
-        return { x_cm: p.x, y_cm: p.y, d: h[2] || null };
+        return { x_cm: p.x, y_cm: p.y, d: _rotD(h[2], corridor) };
       });
     }
     return {
@@ -1136,10 +1137,12 @@
         return [hit[0], hit[1]];
       }
 
+      var _rdInv = window.canonicalIO && window.canonicalIO.rotateDirInv;
       function _hitDir(hit) {
-        return (typeof hit.d === 'string') ? hit.d
-             : (typeof hit[2] === 'string') ? hit[2]
-             : null;
+        var d = (typeof hit.d === 'string') ? hit.d
+              : (typeof hit[2] === 'string') ? hit[2]
+              : null;
+        return (d && _rdInv) ? _rdInv(d, _cfAbs) : d;
       }
 
       if (show.vrays || show.hrays) {

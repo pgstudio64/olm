@@ -84,6 +84,34 @@
    * @param {number} absD            - Profondeur absolue (cm).
    * @returns {{x:number,y:number}} Point canonique room-local (cm).
    */
+  var DIR_LONG = { n: "north", s: "south", e: "east", w: "west" };
+  var DIR_SHORT = { north: "n", south: "s", east: "e", west: "w" };
+
+  /**
+   * Pivote une direction courte (n/s/e/w) abs → canon, même logique que
+   * rotatePoint. Retourne null si d est falsy ou si cfAbs n'a pas de map.
+   */
+  function rotateDir(d, cfAbs) {
+    if (!d) return d;
+    var map = FACE_MAPS[cfAbs];
+    if (!map) return d;  // south ou vide → identité
+    var long = DIR_LONG[d];
+    if (!long) return d;
+    return DIR_SHORT[map[long]] || d;
+  }
+
+  /**
+   * Inverse de rotateDir : canon → abs. Utilise INV_FACE_MAPS.
+   */
+  function rotateDirInv(d, cfAbs) {
+    if (!d) return d;
+    var map = INV_FACE_MAPS[cfAbs];
+    if (!map) return d;
+    var long = DIR_LONG[d];
+    if (!long) return d;
+    return DIR_SHORT[map[long]] || d;
+  }
+
   function rotatePoint(pt, cfAbs, absW, absD) {
     var x = pt.x, y = pt.y;
     if (cfAbs === "north") return { x: absW - x, y: absD - y };
@@ -590,6 +618,8 @@
   window.canonicalIO = {
     fromStorage:    fromStorage,
     toStorage:      toStorage,
+    rotateDir:      rotateDir,
+    rotateDirInv:   rotateDirInv,
     rotatePoint:    rotatePoint,
     rotatePointInv: rotatePointInv,
     rotateRect:     rotateRect,
