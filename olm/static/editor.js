@@ -294,15 +294,10 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       e: { stroke: "rgba(200,100,0,0.4)", fill: "rgb(200,100,0)" }
     };
     state.room_hits.forEach(function (h) {
+      var dir = h.d;
+      if (!dir) return;
       var hx = roomX + h.x_cm * SCALE;
       var hy = roomY + h.y_cm * SCALE;
-      // Direction from backend; fallback to heuristic for old data.
-      var dir = h.d;
-      if (!dir) {
-        var dx = hx - sx, dy = hy - sy;
-        if (Math.abs(dy) > Math.abs(dx)) dir = (dy < 0) ? 'n' : 's';
-        else dir = (dx < 0) ? 'w' : 'e';
-      }
       var isV = (dir === 'n' || dir === 's');
       if ((isV && !state.showVrays) || (!isV && !state.showHrays)) return;
       var x1, y1, x2, y2;
@@ -318,6 +313,32 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
         '" stroke-width="0.8" vector-effect="non-scaling-stroke"/>' });
       elements.push({ z: 9.7, s: '<circle cx="' + hx.toFixed(1) +
         '" cy="' + hy.toFixed(1) + '" r="' + HIT_DISC_R_PX +
+        '" fill="' + c.fill + '"/>' });
+    });
+    // Coarse rays — mêmes couleurs, trait plus gras, hit 75% plus gros.
+    var COARSE_RAY_SW = 2.4;          // 3× le stroke-width normal (0.8)
+    var COARSE_HIT_R = HIT_DISC_R_PX * 1.75;  // 75% plus gros
+    (state.room_coarse_hits || []).forEach(function (h) {
+      var dir = h.d;
+      if (!dir) return;
+      var hx = roomX + h.x_cm * SCALE;
+      var hy = roomY + h.y_cm * SCALE;
+      var isV = (dir === 'n' || dir === 's');
+      if ((isV && !state.showVrays) || (!isV && !state.showHrays)) return;
+      var x1, y1, x2, y2;
+      if (isV) {
+        x1 = hx; y1 = sy; x2 = hx; y2 = hy;
+      } else {
+        x1 = sx; y1 = hy; x2 = hx; y2 = hy;
+      }
+      var c = RAY_COLORS[dir];
+      elements.push({ z: 9.5, s: '<line x1="' + x1.toFixed(1) +
+        '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) +
+        '" y2="' + y2.toFixed(1) + '" stroke="' + c.stroke +
+        '" stroke-width="' + COARSE_RAY_SW +
+        '" vector-effect="non-scaling-stroke"/>' });
+      elements.push({ z: 9.5, s: '<circle cx="' + hx.toFixed(1) +
+        '" cy="' + hy.toFixed(1) + '" r="' + COARSE_HIT_R +
         '" fill="' + c.fill + '"/>' });
     });
     // Seed déjà dessiné plus haut (indépendamment de la présence de hits).
@@ -1962,6 +1983,7 @@ var ROOM_AMEND_DISABLE_IDS = [
 // et entrée en édition (enterRoomAmendMode).
 function loadRoomHitsAndSeedFromIngState(room) {
   state.room_hits = null;
+  state.room_coarse_hits = null;
   state.room_seed_cm = null;
   var ing = window.ingState;
   if (!ing || !ing.scale || !room || !room.bbox_px || !ing.rooms) return;
@@ -1981,12 +2003,37 @@ function loadRoomHitsAndSeedFromIngState(room) {
     state.room_seed_cm = { x_cm: sC.x, y_cm: sC.y };
   }
   if (ingRoom.hits && ingRoom.hits.length) {
-    state.room_hits = ingRoom.hits.map(function (h) {
-      var pC = rotP(
-        { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
-        cf, absW, absD);
-      return { x_cm: pC.x, y_cm: pC.y, d: h[2] || null };
-    });
+    // Hits may arrive in two formats:
+    //   - raw px arrays [x, y] or [x, y, dir] (from initial import)
+    //   - canonical objects {x_cm, y_cm} (from batch rescan)
+    var sample = ingRoom.hits[0];
+    var isCanon = (typeof sample.x_cm === 'number');
+    if (isCanon) {
+      state.room_hits = ingRoom.hits;
+    } else {
+      state.room_hits = ingRoom.hits.map(function (h) {
+        var pC = rotP(
+          { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
+          cf, absW, absD);
+        return { x_cm: pC.x, y_cm: pC.y, d: h[2] || null };
+      });
+    }
+  }
+  // Coarse hits — same format and conversion as room_hits.
+  state.room_coarse_hits = null;
+  if (ingRoom.coarse_hits && ingRoom.coarse_hits.length) {
+    var csample = ingRoom.coarse_hits[0];
+    var cIsCanon = (typeof csample.x_cm === 'number');
+    if (cIsCanon) {
+      state.room_coarse_hits = ingRoom.coarse_hits;
+    } else {
+      state.room_coarse_hits = ingRoom.coarse_hits.map(function (h) {
+        var pC = rotP(
+          { x: (h[0] - bx0) * sc, y: (h[1] - by0) * sc },
+          cf, absW, absD);
+        return { x_cm: pC.x, y_cm: pC.y, d: h[2] || null };
+      });
+    }
   }
   // Door seeds (orange) — same abs→canon conversion as room seed.
   state.room_door_seeds_cm = [];

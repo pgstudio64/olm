@@ -864,6 +864,7 @@
           var newDoors = preservedDoors.length ? [] : canon.doors;
 
           if (canon.hits) state.room_hits = canon.hits;
+          if (canon.coarse_hits) state.room_coarse_hits = canon.coarse_hits;
           if (canon.pillar_hits) state.room_pillar_hits = canon.pillar_hits;
           if (canon.seed_cm) state.room_seed_cm = canon.seed_cm;
           if (canon.auto_door_masks) state.room_auto_door_masks = canon.auto_door_masks;

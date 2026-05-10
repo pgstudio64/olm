@@ -173,7 +173,7 @@
         var p = _rotP(
           { x: (h[0] - hbx0) * scale, y: (h[1] - hby0) * scale },
           corridor, absW, absD);
-        return { x_cm: p.x, y_cm: p.y };
+        return { x_cm: p.x, y_cm: p.y, d: h[2] || null };
       });
       if (data.seed_px) {
         var sC = _rotP(
@@ -206,6 +206,17 @@
         return { x_cm: p.x, y_cm: p.y };
       });
     }
+    // Coarse hits — same transform as regular hits.
+    var coarseHits = null;
+    if (data.coarse_hits && bbox) {
+      var cbx0 = bbox[0], cby0 = bbox[1];
+      coarseHits = data.coarse_hits.map(function (h) {
+        var p = _rotP(
+          { x: (h[0] - cbx0) * scale, y: (h[1] - cby0) * scale },
+          corridor, absW, absD);
+        return { x_cm: p.x, y_cm: p.y, d: h[2] || null };
+      });
+    }
     return {
       corridor_face: corridor,
       bbox_px: bbox,
@@ -215,6 +226,7 @@
       openings: openingsCanon,
       doors: doorsCanon,
       hits: hits,
+      coarse_hits: coarseHits,
       pillar_hits: pillarHits,
       seed_cm: seed_cm,
       auto_door_masks: masks,
@@ -646,7 +658,12 @@
           if (debugLog) debugLog.textContent = '[ERROR] ' + data.error;
           return;
         }
-        ingState.rooms = data.rooms || [];
+        var _ocrScale = (typeof data.scale_cm_per_px === 'number' &&
+                         data.scale_cm_per_px > 0)
+          ? data.scale_cm_per_px : 0;
+        ingState.rooms = (data.rooms || []).map(function (r) {
+          return window.canonicalIO.fromStorage(r, _ocrScale);
+        });
         // D-135 rider : snapshot immutable de la surface cartouche pour
         // l'affichage "Plan area (m²)". surface_m2 sera potentiellement
         // écrasé par les recalculs bbox (_updateRoomDims, save Room) ;
@@ -1119,45 +1136,50 @@
         return [hit[0], hit[1]];
       }
 
+      function _hitDir(hit) {
+        return (typeof hit.d === 'string') ? hit.d
+             : (typeof hit[2] === 'string') ? hit[2]
+             : null;
+      }
+
       if (show.vrays || show.hrays) {
         var raySW = (OVERLAY_RAY_STROKE * pxScale).toFixed(2);
+        var _rayColors = {
+          n: COLORS.vray_n, s: COLORS.vray_s,
+          w: COLORS.hray_w, e: COLORS.hray_e
+        };
         (room.hits || []).forEach(function (hit) {
+          var dir = _hitDir(hit);
+          if (!dir) return;
+          var isV = (dir === 'n' || dir === 's');
+          if ((isV && !show.vrays) || (!isV && !show.hrays)) return;
           var hp = _hitToPx(hit);
           var hx = hp[0], hy = hp[1];
-          if (hy < cy && show.vrays) {
+          if (isV) {
             els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
-              '" y2="' + hy + '" stroke="' + COLORS.vray_n +
+              '" y2="' + hy + '" stroke="' + _rayColors[dir] +
               '" stroke-width="' + raySW + '"/>');
-          } else if (hy > cy && show.vrays) {
-            els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
-              '" y2="' + hy + '" stroke="' + COLORS.vray_s +
-              '" stroke-width="' + raySW + '"/>');
-          } else if (hx < cx && show.hrays) {
+          } else {
             els.push('<line x1="' + cx + '" y1="' + hy + '" x2="' + hx +
-              '" y2="' + hy + '" stroke="' + COLORS.hray_w +
-              '" stroke-width="' + raySW + '"/>');
-          } else if (hx > cx && show.hrays) {
-            els.push('<line x1="' + cx + '" y1="' + hy + '" x2="' + hx +
-              '" y2="' + hy + '" stroke="' + COLORS.hray_e +
+              '" y2="' + hy + '" stroke="' + _rayColors[dir] +
               '" stroke-width="' + raySW + '"/>');
           }
         });
         // Hits as dots
         var hitR = (OVERLAY_HIT_RADIUS * pxScale).toFixed(2);
+        var _hitColors = {
+          n: COLORS.hit_n, s: COLORS.hit_s,
+          w: COLORS.hit_w, e: COLORS.hit_e
+        };
         (room.hits || []).forEach(function (hit) {
+          var dir = _hitDir(hit);
+          if (!dir) return;
+          var isV = (dir === 'n' || dir === 's');
+          if ((isV && !show.vrays) || (!isV && !show.hrays)) return;
           var hp = _hitToPx(hit);
           var hx = hp[0], hy = hp[1];
-          var isV = (hy !== cy), isH = (hx !== cx);
-          if ((isV && show.vrays) || (isH && show.hrays)) {
-            var hc, hdx = hx - cx, hdy = hy - cy;
-            if (Math.abs(hdy) > Math.abs(hdx)) {
-              hc = (hdy < 0) ? COLORS.hit_n : COLORS.hit_s;
-            } else {
-              hc = (hdx < 0) ? COLORS.hit_w : COLORS.hit_e;
-            }
-            els.push('<circle cx="' + hx + '" cy="' + hy +
-              '" r="' + hitR + '" fill="' + hc + '"/>');
-          }
+          els.push('<circle cx="' + hx + '" cy="' + hy +
+            '" r="' + hitR + '" fill="' + _hitColors[dir] + '"/>');
         });
         // Pillar hits: orange dots drawn on top of yellow ones.
         (room.pillar_hits || []).forEach(function (hit) {
@@ -2145,6 +2167,9 @@
             }
             if (Array.isArray(canon.pillar_hits)) {
               updates.pillar_hits = canon.pillar_hits;
+            }
+            if (Array.isArray(canon.coarse_hits)) {
+              updates.coarse_hits = canon.coarse_hits;
             }
             // Merge auto exclusion zones: keep manual, replace auto.
             if (Array.isArray(canon.auto_exclusion_zones) &&

@@ -619,6 +619,8 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     """
     # === Phase 1: coarse distances by direction (mode, not max) ===
     coarse_dists = {'north': [], 'south': [], 'west': [], 'east': []}
+    coarse_hits: dict[str, list[tuple[int, int]]] = {
+        'north': [], 'south': [], 'west': [], 'east': []}
 
     # Rays initiaux
     for name, dx, dy in [('north', 0, -1), ('south', 0, 1),
@@ -626,6 +628,7 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
         d = ray_single(binary, cx, cy, dx, dy)
         if d > 0:
             coarse_dists[name].append(d)
+            coarse_hits[name].append((cx + dx * d, cy + dy * d))
 
     max_ns = max((coarse_dists['north'] + coarse_dists['south']) or [0])
     max_ew = max((coarse_dists['west'] + coarse_dists['east']) or [0])
@@ -640,10 +643,12 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
             d = ray_single(binary, rx, cy, 0, -1)
             if d > 0:
                 coarse_dists['north'].append(d)
+                coarse_hits['north'].append((rx, cy - d))
                 max_ns = max(max_ns, d)
             d = ray_single(binary, rx, cy, 0, 1)
             if d > 0:
                 coarse_dists['south'].append(d)
+                coarse_hits['south'].append((rx, cy + d))
                 max_ns = max(max_ns, d)
         step += 1
 
@@ -657,10 +662,12 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
             d = ray_single(binary, cx, ry, -1, 0)
             if d > 0:
                 coarse_dists['west'].append(d)
+                coarse_hits['west'].append((cx - d, ry))
                 max_ew = max(max_ew, d)
             d = ray_single(binary, cx, ry, 1, 0)
             if d > 0:
                 coarse_dists['east'].append(d)
+                coarse_hits['east'].append((cx + d, ry))
                 max_ew = max(max_ew, d)
         step += 1
 
@@ -675,30 +682,40 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     coarse_max = {d: max(coarse_dists[d]) if coarse_dists[d] else 0
                   for d in coarse_dists}
 
-    # Compute seed_caps for diagnostic only — NOT applied to coarse_max.
-    # D-160 tried capping coarse_max by neighbor seed distance but this
-    # was too aggressive (rooms between close seeds got very small bboxes).
-    # The post-hoc _not_past_seed filter handles overshoot instead.
+    coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
+    coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
+
+    # Compute seed_caps: nearest neighbor seed on each axis.
+    # Tolerance = room dimension on the perpendicular axis (coarse pass).
+    # For E/W caps, only consider seeds within ±coarse_ns (room height).
+    # For N/S caps, only consider seeds within ±coarse_ew (room width).
+    # This prevents a distant seed on the perpendicular axis from
+    # incorrectly capping the exploration range.
     seed_caps = {'north': None, 'south': None, 'east': None, 'west': None}
     if other_seeds:
         for ox, oy in other_seeds:
             dx_s = ox - cx
             dy_s = oy - cy
-            if dx_s > 0 and (seed_caps['east'] is None
-                             or dx_s < seed_caps['east']):
-                seed_caps['east'] = dx_s
-            if dx_s < 0 and (seed_caps['west'] is None
-                             or -dx_s < seed_caps['west']):
-                seed_caps['west'] = -dx_s
-            if dy_s > 0 and (seed_caps['south'] is None
-                             or dy_s < seed_caps['south']):
-                seed_caps['south'] = dy_s
-            if dy_s < 0 and (seed_caps['north'] is None
-                             or -dy_s < seed_caps['north']):
-                seed_caps['north'] = -dy_s
-
-    coarse_ns = max(coarse_mode['north'], coarse_mode['south'])
-    coarse_ew = max(coarse_mode['west'], coarse_mode['east'])
+            # East/West caps (vertical comb): seed must be on same
+            # horizontal band (within N/S extent of the room).
+            if abs(dy_s) <= coarse_ns:
+                if dx_s > 0 and (seed_caps['east'] is None
+                                 or dx_s < seed_caps['east']):
+                    seed_caps['east'] = dx_s
+                if dx_s < 0 and (seed_caps['west'] is None
+                                 or -dx_s < seed_caps['west']):
+                    seed_caps['west'] = -dx_s
+            # North/South caps (horizontal comb): only consider seeds
+            # beyond the north or south wall — seeds within the N/S
+            # extent are lateral neighbors, not N/S neighbors.
+            if (dy_s < 0 and abs(dy_s) >= coarse_mode['north']
+                    or dy_s > 0 and dy_s >= coarse_mode['south']):
+                if dy_s > 0 and (seed_caps['south'] is None
+                                 or dy_s < seed_caps['south']):
+                    seed_caps['south'] = dy_s
+                if dy_s < 0 and (seed_caps['north'] is None
+                                 or -dy_s < seed_caps['north']):
+                    seed_caps['north'] = -dy_s
 
     # Bbox (start positions) = symmetric, based on mode (dominant wall).
     # v0.4.7 behavior — seed assumed roughly centered.
@@ -706,17 +723,21 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     bbox_x1 = cx + coarse_ew
     bbox_y0 = cy - coarse_ns
     bbox_y1 = cy + coarse_ns
-    # D-165b: extend bbox to reach neighboring seeds when coarse_mode
-    # is too short (e.g. obstacle on the seed line blocks coarse rays).
-    # seed_caps serve as minimum extent, never shrink the bbox.
-    if seed_caps['west'] is not None and seed_caps['west'] > coarse_ew:
-        bbox_x0 = cx - seed_caps['west']
-    if seed_caps['east'] is not None and seed_caps['east'] > coarse_ew:
-        bbox_x1 = cx + seed_caps['east']
-    if seed_caps['north'] is not None and seed_caps['north'] > coarse_ns:
-        bbox_y0 = cy - seed_caps['north']
-    if seed_caps['south'] is not None and seed_caps['south'] > coarse_ns:
-        bbox_y1 = cy + seed_caps['south']
+    # D-169b: seed_caps limit exploration — rays must not scan
+    # beyond a neighbor seed on the perpendicular axis.
+    # For vertical rays (N/S), the scan range in x is capped at the
+    # nearest neighbor seed's x.  For horizontal rays (E/W), capped
+    # at the nearest neighbor seed's y.
+    # D-165b extension is removed: it extended the bbox TO the
+    # neighbor seed, causing rays to explore the neighbor's room.
+    if seed_caps['west'] is not None:
+        bbox_x0 = max(bbox_x0, cx - seed_caps['west'])
+    if seed_caps['east'] is not None:
+        bbox_x1 = min(bbox_x1, cx + seed_caps['east'])
+    if seed_caps['north'] is not None:
+        bbox_y0 = max(bbox_y0, cy - seed_caps['north'])
+    if seed_caps['south'] is not None:
+        bbox_y1 = min(bbox_y1, cy + seed_caps['south'])
     # Ray range = based on max (to traverse doors), capped by seed distance
     max_north = coarse_max['north'] + RAY_MARGIN_PX
     max_south = coarse_max['south'] + RAY_MARGIN_PX
@@ -741,16 +762,22 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     all_obstacles: list[tuple[int, int, int, int]] = []
 
     # Vertical rays (N and S)
+    # stop_mask hits (d < -1) are recorded at abs(d) — they represent
+    # rays stopped by corridor/exterior color, revealing openings.
     rx = cx
     while rx >= bbox_x0:
         d = ray_single(binary, rx, cy, 0, -1, max_dist=max_north,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['north'].append((rx, cy - d))
+        elif d < -1:
+            dir_hits['north'].append((rx, cy - abs(d)))
         d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['south'].append((rx, cy + d))
+        elif d < -1:
+            dir_hits['south'].append((rx, cy + abs(d)))
         rx -= step_px
     rx = cx + step_px
     while rx <= bbox_x1:
@@ -758,10 +785,14 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['north'].append((rx, cy - d))
+        elif d < -1:
+            dir_hits['north'].append((rx, cy - abs(d)))
         d = ray_single(binary, rx, cy, 0, 1, max_dist=max_south,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['south'].append((rx, cy + d))
+        elif d < -1:
+            dir_hits['south'].append((rx, cy + abs(d)))
         rx += step_px
 
     # Horizontal rays (E and W)
@@ -771,10 +802,14 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['west'].append((cx - d, ry))
+        elif d < -1:
+            dir_hits['west'].append((cx - abs(d), ry))
         d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['east'].append((cx + d, ry))
+        elif d < -1:
+            dir_hits['east'].append((cx + abs(d), ry))
         ry -= step_px
     ry = cy + step_px
     while ry <= bbox_y1:
@@ -782,51 +817,23 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['west'].append((cx - d, ry))
+        elif d < -1:
+            dir_hits['west'].append((cx - abs(d), ry))
         d = ray_single(binary, cx, ry, 1, 0, max_dist=max_east,
                        stop_mask=stop_mask)
         if d > 0:
             dir_hits['east'].append((cx + d, ry))
+        elif d < -1:
+            dir_hits['east'].append((cx + abs(d), ry))
         ry += step_px
 
     raw_counts = {d: len(dir_hits[d]) for d in dir_hits}
 
-    # Filter hits that go beyond a neighboring seed (v0.4.7 logic).
+    # D-169b: the post-hoc _not_past_seed filter is removed.
+    # Exploration is now bounded by seed_caps (bbox capped at the
+    # nearest neighbor seed on each axis) so rays never reach
+    # another room's territory.
     seed_filter_detail: dict = {}
-    if other_seeds:
-        def _not_past_seed(hx, hy, direction):
-            for ox, oy in other_seeds:
-                if direction == 'east' and ox > cx and hx > ox:
-                    if abs(hy - oy) < abs(hy - cy) * 2:
-                        return False, (ox, oy)
-                elif direction == 'west' and ox < cx and hx < ox:
-                    if abs(hy - oy) < abs(hy - cy) * 2:
-                        return False, (ox, oy)
-                elif direction == 'south' and oy > cy and hy > oy:
-                    if abs(hx - ox) < abs(hx - cx) * 2:
-                        return False, (ox, oy)
-                elif direction == 'north' and oy < cy and hy < oy:
-                    if abs(hx - ox) < abs(hx - cx) * 2:
-                        return False, (ox, oy)
-            return True, None
-
-        for direction in dir_hits:
-            kept = []
-            removed = []
-            for hx, hy in dir_hits[direction]:
-                ok, blocker = _not_past_seed(hx, hy, direction)
-                if ok:
-                    kept.append((hx, hy))
-                else:
-                    removed.append({
-                        'hit': [int(hx), int(hy)],
-                        'blocker': [int(blocker[0]), int(blocker[1])],
-                    })
-            seed_filter_detail[direction] = {
-                'kept': len(kept),
-                'removed': len(removed),
-                'removed_hits': removed[:20],  # first 20
-            }
-            dir_hits[direction] = kept
 
     # Deduplicate obstacle bboxes (multiple rays may hit same pillar)
     unique_obs = list(set(all_obstacles)) if all_obstacles else []
@@ -845,7 +852,7 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
         ]
 
     all_hits = [h for hits in dir_hits.values() for h in hits]
-    return all_hits, dir_hits
+    return all_hits, dir_hits, coarse_hits
 
 
 def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
@@ -1386,6 +1393,76 @@ def snap_through_white(binary, rect, max_advance=8):
     return (x0, y0, x1, y1)
 
 
+def snap_to_wall(binary, rect, max_advance_per_face=None):
+    """Extend each face outward until a wall (solid pixels) is found.
+
+    Unlike snap_through_white (which advances <=8px for fine alignment),
+    this function handles the case where a face has NO wall at all —
+    the rectangle stopped too early because of parasitic hits from an
+    adjacent room. It advances until finding a line with solid pixels.
+
+    Args:
+        binary: binary image (True = solid).
+        rect: (x0, y0, x1, y1).
+        max_advance_per_face: dict {face: max_px} limiting how far each
+            face can advance. Prevents unbounded extension. Default: 200px
+            for each face.
+
+    Returns:
+        (x0, y0, x1, y1) — extended rectangle.
+    """
+    x0, y0, x1, y1 = rect
+    h, w = binary.shape
+    defaults = 200
+    caps = max_advance_per_face or {}
+
+    def _has_wall(line_pixels):
+        """A line has a wall if it contains at least 1 solid pixel."""
+        return np.any(line_pixels)
+
+    # North: check if current edge touches a wall, if not advance
+    if x1 > x0 and not _has_wall(binary[max(0, y0 - 1), x0:x1]):
+        limit = caps.get('north', defaults)
+        for _ in range(limit):
+            if y0 <= 0:
+                break
+            y0 -= 1
+            if _has_wall(binary[y0, x0:x1]):
+                break
+
+    # South
+    if x1 > x0 and y1 + 1 < h and not _has_wall(binary[min(h - 1, y1 + 1), x0:x1]):
+        limit = caps.get('south', defaults)
+        for _ in range(limit):
+            if y1 >= h - 1:
+                break
+            y1 += 1
+            if _has_wall(binary[y1, x0:x1]):
+                break
+
+    # West
+    if y1 > y0 and not _has_wall(binary[y0:y1, max(0, x0 - 1)]):
+        limit = caps.get('west', defaults)
+        for _ in range(limit):
+            if x0 <= 0:
+                break
+            x0 -= 1
+            if _has_wall(binary[y0:y1, x0]):
+                break
+
+    # East
+    if y1 > y0 and x1 + 1 < w and not _has_wall(binary[y0:y1, min(w - 1, x1 + 1)]):
+        limit = caps.get('east', defaults)
+        for _ in range(limit):
+            if x1 >= w - 1:
+                break
+            x1 += 1
+            if _has_wall(binary[y0:y1, x1]):
+                break
+
+    return (x0, y0, x1, y1)
+
+
 DOOR_PROBE_PX = 4   # ~2cm, offset for probing door position
 DOOR_GROUP_GAP_PX = 25  # max gap between pixels of the same arc (~door width)
 WALL_MARGIN_PX = 3   # exclude pixels close to perpendicular walls
@@ -1738,6 +1815,8 @@ class CombResult:
     pillars: list[dict] = field(default_factory=list)
     pillar_hits: list[tuple[int, int]] = field(default_factory=list)
     dir_hits: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    coarse_hits: dict[str, list[tuple[int, int]]] = field(
+        default_factory=dict)
 
 
 def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
@@ -1760,10 +1839,11 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     """
     if scale_cm_per_px is not None:
         _apply_detection_config(scale_cm_per_px, detection_overrides)
-    all_hits, dir_hits = comb_collect_hits(binary, cx, cy, step_px,
-                                           other_seeds=other_seeds,
-                                           diag=diag,
-                                           stop_mask=stop_mask)
+    all_hits, dir_hits, coarse_hits = comb_collect_hits(
+        binary, cx, cy, step_px,
+        other_seeds=other_seeds,
+        diag=diag,
+        stop_mask=stop_mask)
 
     # Phase 2b: filter out narrow pillar hits before rectangle fitting.
     # Door seeds define exclusion squares so arc fragments near doors
@@ -1802,13 +1882,27 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     if rect is None:
         return CombResult(
             bbox=(cx - 1, cy - 1, cx + 1, cy + 1),
-            hits=all_hits, doors=[], dir_hits=dir_hits)
+            hits=all_hits, doors=[], dir_hits=dir_hits,
+            coarse_hits=coarse_hits)
 
     if diag is not None:
         diag['rect_after_largest'] = rect
 
     # Expand each edge outward through fully white lines
     rect = snap_through_white(binary, rect)
+
+    # Step 3: if a face has no wall (edge is on white pixels), extend
+    # outward until finding solid pixels. Limit by coarse_max to avoid
+    # unbounded extension. Handles cases where parasitic hits from
+    # adjacent rooms caused the rectangle to stop too early.
+    _cm = diag.get('coarse_max', {}) if diag else {}
+    _snap_caps = {
+        'north': _cm.get('north', 200),
+        'south': _cm.get('south', 200),
+        'west': _cm.get('west', 200),
+        'east': _cm.get('east', 200),
+    }
+    rect = snap_to_wall(binary, rect, max_advance_per_face=_snap_caps)
 
     if diag is not None:
         diag['rect_after_snap'] = rect
@@ -1845,7 +1939,7 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     return CombResult(
         bbox=rect, hits=all_hits, doors=doors,
         pillars=pillars, pillar_hits=pillar_hit_coords,
-        dir_hits=dir_hits)
+        dir_hits=dir_hits, coarse_hits=coarse_hits)
 
 
 # Automatic exclusion zone extension removed.
@@ -1985,7 +2079,12 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
             'doors': doors,
             'exterior_faces': exterior_faces,
             'corridor_face': corridor_face,
-            'hits': [(int(hx), int(hy)) for hx, hy in cr.hits],
+            'hits': [[int(h[0]), int(h[1]), face[0]]
+                     for face, fhits in cr.dir_hits.items()
+                     for h in fhits],
+            'coarse_hits': [[int(h[0]), int(h[1]), face[0]]
+                            for face, fhits in cr.coarse_hits.items()
+                            for h in fhits],
         }
         logger.debug(f"  room '{name}': bbox=({x0},{y0},{x1},{y1}) {width_px}×{height_px}px, "
                      f"win={len(windows)} open={len(openings)} door={len(doors)}")
