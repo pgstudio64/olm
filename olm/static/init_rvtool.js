@@ -426,6 +426,12 @@
           }
           lines.push("");
           lines.push("--- DOOR DETECTION ---");
+          lines.push("rect_after_largest: " +
+            JSON.stringify(diag.rect_after_largest || "?"));
+          lines.push("rect_after_snap: " +
+            JSON.stringify(diag.rect_after_snap || "?"));
+          lines.push("rect_after_pillars: " +
+            JSON.stringify(diag.rect_after_pillars || "?"));
           lines.push("binarize_threshold: " +
             (diag.binarize_threshold || "?"));
           lines.push("door_width_px: " +
@@ -441,6 +447,9 @@
             } else {
               parts.push("OK doors=" + (df.doors_found || 0));
             }
+            if (df.all_beyond != null) parts.push("beyond=" + df.all_beyond);
+            if (df.beyond_dists && df.beyond_dists.length)
+              parts.push("dists=[" + df.beyond_dists.join(",") + "]");
             if (df.far_hits != null) parts.push("far=" + df.far_hits);
             if (df.wall_px != null) parts.push("wall=" + df.wall_px);
             if (df.wall_hits != null) parts.push("whits=" + df.wall_hits);
