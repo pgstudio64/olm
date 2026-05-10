@@ -7,6 +7,30 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-172 · Rotation des directions de hits + fix aller-retour portes au rescan (2026-05-10)
+
+### Decision
+1. Ajouter `rotateDir` / `rotateDirInv` dans `canonical_io.js` pour pivoter les directions de hits (n/s/e/w) en meme temps que les coordonnees.
+2. Envoyer les portes en cm (pas px) au backend lors du rescan, avec miroir offset + flip charniere pour north/east.
+3. `_renderRoom` appelle toujours `toStorage` pour garantir que `offset_px` est calcule depuis `offset_cm` pour toutes les pieces.
+4. Supprimer le `westInvert` du rendu Floor — exception inutile maintenant que toutes les portes passent par `toStorage`.
+5. Le backend restitue les portes fournies par le caller (au lieu de toujours re-detecter).
+
+### Justification
+- Les rays etaient invisibles pour les pieces avec couloir lateral (east/west) car les directions n'etaient pas pivotees avec les coordonnees.
+- Les portes alternaient de position a chaque rescan car l'offset etait envoye en px canonique au backend, reconverti en cm au retour avec un miroir unilateral.
+- Les portes disparaissaient en Floor apres rescan car `offset_px` etait perdu par `feat()` et `_renderRoom` ne recalculait pas les px pour les pieces sans corridor.
+- Le `westInvert` etait une exception qui ne fonctionnait plus apres la generalisation de `_renderRoom`.
+
+### Impact
+- `canonical_io.js` : `rotateDir`, `rotateDirInv` exposes
+- `ingestion.js` : rotation directions hits, conversion portes cm batch rescan, suppression westInvert, `_renderRoom` generalise
+- `editor.js` : rotation directions hits dans `loadRoomHitsAndSeedFromIngState`
+- `init_rvtool.js` : conversion portes cm rescan unitaire
+- `extract.py` : restitution portes fournies
+
+---
+
 ## D-171 · Enregistrer les hits stop_mask dans le fine comb (2026-05-10)
 
 ### Decision

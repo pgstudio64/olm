@@ -3,6 +3,24 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.38] — 2026-05-10
+
+### Fixed
+
+- **Rays invisibles couloir lateral (D-172)** : les directions de hits
+  (n/s/e/w) n'etaient pas pivotees avec les coordonnees pour les pieces
+  avec corridor east/west/north. Ajout de `rotateDir`/`rotateDirInv`.
+- **Alternance porte au rescan (D-172)** : les portes alternaient de
+  position a chaque rescan car l'offset etait envoye en px canonique au
+  backend. Conversion en cm avec miroir offset + flip charniere.
+- **Portes invisibles en Floor apres rescan (D-172)** : `_renderRoom`
+  appelle maintenant toujours `toStorage` pour calculer `offset_px`
+  depuis `offset_cm` pour toutes les pieces.
+- **Porte inversee mur ouest Floor (D-172)** : suppression du
+  `westInvert` — exception inutile apres generalisation de `_renderRoom`.
+- **Backend restitue portes fournies** : le backend renvoie les portes
+  du caller au lieu de toujours re-detecter.
+
 ## [v0.4.37] — 2026-05-10
 
 ### Fixed
