@@ -747,16 +747,33 @@
         // preserves them. In OCR mode, rescan from scratch (no doors sent).
         var _isOcr = ((ingst._selectedPlan && ingst._selectedPlan.mode)
                        || 'ocr') === 'ocr';
+        var _Wc = state.room_width_cm || 0;
+        var _Dc = state.room_depth_cm || 0;
         var doorsPx = _isOcr ? [] : (state.room_doors || []).map(function (d) {
           var absFace = d.face;
           var invMap = cio && cio.INV_FACE_MAPS
             ? cio.INV_FACE_MAPS[cfAbsForZones] : null;
           if (invMap && invMap[d.face]) absFace = invMap[d.face];
+          // Conversion complète canon → absolu (même logique que
+          // toStorage.xformBack) : miroir offset + flip hinge pour
+          // north/east, sinon l'offset alterne à chaque rescan.
+          var _canonFaceLen = (d.face === 'north' || d.face === 'south')
+            ? _Wc : _Dc;
+          var offAbs = d.offset_cm || 0;
+          var hingeAbs = d.hinge_side;
+          if (cfAbsForZones === 'north' || cfAbsForZones === 'east') {
+            offAbs = _canonFaceLen - offAbs - (d.width_cm || 0);
+            if (d.hinge_side) {
+              hingeAbs = (d.hinge_side === 'left') ? 'right' : 'left';
+            }
+          }
           var entry = {
             face: absFace,
-            offset_cm: d.offset_cm || 0,
+            offset_cm: offAbs,
             width_cm: d.width_cm || 0,
           };
+          if (hingeAbs) entry.hinge_side = hingeAbs;
+          if (d.opens_inward != null) entry.opens_inward = d.opens_inward;
           if (d.seed_x != null) entry.seed_x = d.seed_x;
           if (d.seed_y != null) entry.seed_y = d.seed_y;
           return entry;
