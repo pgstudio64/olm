@@ -1473,21 +1473,38 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
             diag.setdefault('door_faces', []).append(fd)
         return None, []
 
-    # --- Far hits: hits beyond the wall within tolerance ---
+    # --- All hits beyond the bbox edge (no distance filter) ---
     if face == "south":
-        far = [h for h in hits if h[1] > y1
-               and min_dist <= h[1] - y1 <= max_dist]
+        all_beyond = [h for h in hits if h[1] > y1]
+        beyond_dists = sorted(set(h[1] - y1 for h in all_beyond))
     elif face == "north":
-        far = [h for h in hits if h[1] < y0
-               and min_dist <= y0 - h[1] <= max_dist]
+        all_beyond = [h for h in hits if h[1] < y0]
+        beyond_dists = sorted(set(y0 - h[1] for h in all_beyond))
     elif face == "east":
-        far = [h for h in hits if h[0] > x1
-               and min_dist <= h[0] - x1 <= max_dist]
+        all_beyond = [h for h in hits if h[0] > x1]
+        beyond_dists = sorted(set(h[0] - x1 for h in all_beyond))
     elif face == "west":
-        far = [h for h in hits if h[0] < x0
-               and min_dist <= x0 - h[0] <= max_dist]
+        all_beyond = [h for h in hits if h[0] < x0]
+        beyond_dists = sorted(set(x0 - h[0] for h in all_beyond))
     else:
         return _finish('unknown_face')
+
+    fd['all_beyond'] = len(all_beyond)
+    fd['beyond_dists'] = beyond_dists[:30]  # first 30 unique distances
+
+    # --- Far hits: hits beyond the wall within tolerance ---
+    if face == "south":
+        far = [h for h in all_beyond
+               if min_dist <= h[1] - y1 <= max_dist]
+    elif face == "north":
+        far = [h for h in all_beyond
+               if min_dist <= y0 - h[1] <= max_dist]
+    elif face == "east":
+        far = [h for h in all_beyond
+               if min_dist <= h[0] - x1 <= max_dist]
+    elif face == "west":
+        far = [h for h in all_beyond
+               if min_dist <= x0 - h[0] <= max_dist]
 
     fd['far_hits'] = len(far)
     if not far:
@@ -1635,19 +1652,11 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
                 seeds_by_face.setdefault(f, []).append(s)
 
     for face in ("south", "north", "east", "west"):
-        face_seeds = seeds_by_face.get(face)
-        # D-145 : when seeds are provided but none target this face, we
-        # trust that no door exists there and skip the scan — avoids
-        # false positives on faces where the user knows there are none.
-        if door_seeds is not None and not face_seeds:
-            if diag is not None:
-                diag.setdefault('door_faces', []).append({
-                    'face': face, 'rejected': 'no_seeds_for_face',
-                })
-            continue
+        # Door seeds are hints, not restrictions: always scan all faces.
+        # Seeds are passed for diagnostic purposes only.
         new_edge, face_doors = _detect_doors_on_face(
             binary, (x0, y0, x1, y1), hits, face,
-            door_width_px, tolerance, face_seeds=face_seeds,
+            door_width_px, tolerance, face_seeds=None,
             binary_arcs=binary_arcs, diag=diag)
         if new_edge is not None:
             if face == "south": y1 = new_edge
@@ -1719,8 +1728,14 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
             bbox=(cx - 1, cy - 1, cx + 1, cy + 1),
             hits=all_hits, doors=[], dir_hits=dir_hits)
 
+    if diag is not None:
+        diag['rect_after_largest'] = rect
+
     # Expand each edge outward through fully white lines
     rect = snap_through_white(binary, rect)
+
+    if diag is not None:
+        diag['rect_after_snap'] = rect
 
     # Extend bbox edges to include pillar wall position (mode_coord_px).
     # The rectangle may stop at the pillar tip; extend to the real wall.
@@ -1738,6 +1753,9 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
             elif pf == 'east':
                 rx1 = max(rx1, mc)
         rect = (rx0, ry0, rx1, ry1)
+
+    if diag is not None:
+        diag['rect_after_pillars'] = rect
 
     # Phase 3: door arc expansion — `binary` (cleaned) is used for the
     # contact/far-hit heuristics; `binary_for_arcs` (pre-clean, D-145)
