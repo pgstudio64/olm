@@ -1519,52 +1519,50 @@ def _seed_scan_range(x0, y0, x1, y1, face, face_seeds, door_width_px,
     return sorted(coords)
 
 
-def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
-                          face_seeds=None, binary_arcs=None, diag=None):
-    """Detect door swings on one face of the rectangle.
+def _detect_doors_on_face(binary, rect, face_hits, face,
+                          door_width_px, tolerance,
+                          face_seeds=None, binary_arcs=None, diag=None,
+                          filter_rect=None):
+    """Detect door swings on one face using hit-based arc analysis (D-173).
+
+    Algorithm:
+      1. Find the real wall = mode of perpendicular coordinates among
+         all hits for this face (most hits align on the wall).
+      2. Hits shorter than the real wall = arc candidates.
+      3. Verify arc profile: monotonic distance from hinge to free jamb.
+      4. Verify wall opening: wall interrupted in the arc zone.
+      5. Door width = extent of the arc zone along the wall.
 
     Args:
-        binary: cleaned binary (post `remove_non_ortho`). Used for the
-            wall-contact heuristic and for the far-hits distance check.
-        binary_arcs: (OPT, D-145) pre-`remove_non_ortho` binary used to
-            scan the arc pixels. Preserves the curved arc that `binary`
-            loses to `remove_non_ortho`. When None, falls back to
-            `binary` (legacy behavior — arcs may be missed).
-        face_seeds: (OPT, D-145) list of `{seed_x, seed_y}` anchoring
-            the arc scan near expected door positions. When provided,
-            the along-wall scan is restricted to small windows around
-            each seed; false positives outside those windows are avoided.
-        diag: (OPT) dict — when provided, filled with per-face diagnostic
-            data for door detection troubleshooting.
+        binary: cleaned binary. Used for wall-opening heuristic.
+        face_hits: hits for THIS face direction only (e.g. south hits
+            for face="south"). Each hit = (x, y).
+        face: "south", "north", "east" or "west".
+        face_seeds: (OPT) reserved for future confirmation logic.
+        binary_arcs: (OPT) not used by the new algo but kept for
+            interface compatibility.
+        diag: (OPT) dict for diagnostic output.
+        filter_rect: (OPT) pre-pillar-extension rect. Limits the
+            along-axis range of hits to avoid false positives from
+            pillar extension on adjacent faces.
 
     Returns:
-        (new_edge, door_infos) or (None, []).
+        (wall_px, door_infos) or (None, []).
     """
     from collections import Counter
     x0, y0, x1, y1 = rect
-    min_dist = door_width_px * (1 - tolerance)
-    max_dist = door_width_px * (1 + tolerance)
-    m = WALL_MARGIN_PX
     face_len = (x1 - x0) if face in ("south", "north") else (y1 - y0)
-    scan = _seed_scan_range(x0, y0, x1, y1, face, face_seeds,
-                            door_width_px, tolerance, m)
-    arc_bin = binary_arcs if binary_arcs is not None else binary
 
     # Diagnostic dict for this face (filled progressively).
     fd: dict = {
         'face': face,
         'rect': [x0, y0, x1, y1],
         'face_len_px': face_len,
-        'scan_range': [min(scan), max(scan)] if scan else [],
-        'scan_count': len(scan),
         'door_width_px': door_width_px,
         'tolerance': tolerance,
-        'dist_range_px': [round(min_dist, 1), round(max_dist, 1)],
-        'wall_margin_px': m,
         'has_seeds': bool(face_seeds),
         'seeds_count': len(face_seeds) if face_seeds else 0,
-        'using_binary_arcs': binary_arcs is not None,
-        'min_door_arc_hits': MIN_DOOR_ARC_HITS,
+        'total_face_hits': len(face_hits),
     }
 
     def _finish(reason, extra=None):
@@ -1576,209 +1574,211 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
             diag.setdefault('door_faces', []).append(fd)
         return None, []
 
-    # --- All hits beyond the bbox edge (no distance filter) ---
-    if face == "south":
-        all_beyond = [h for h in hits if h[1] > y1]
-        beyond_dists = sorted(set(h[1] - y1 for h in all_beyond))
-    elif face == "north":
-        all_beyond = [h for h in hits if h[1] < y0]
-        beyond_dists = sorted(set(y0 - h[1] for h in all_beyond))
-    elif face == "east":
-        all_beyond = [h for h in hits if h[0] > x1]
-        beyond_dists = sorted(set(h[0] - x1 for h in all_beyond))
-    elif face == "west":
-        all_beyond = [h for h in hits if h[0] < x0]
-        beyond_dists = sorted(set(x0 - h[0] for h in all_beyond))
-    else:
-        return _finish('unknown_face')
+    if not face_hits:
+        return _finish('no_face_hits')
 
-    fd['all_beyond'] = len(all_beyond)
-    fd['beyond_dists'] = beyond_dists[:50]
-
-    # Beyond hits with coordinates and individual distances
+    # Filter hits to along-axis range of filter_rect (pre-pillar bbox).
+    fx0, fy0, fx1, fy1 = filter_rect if filter_rect else rect
     if face in ("south", "north"):
-        beyond_detail = sorted(
-            [{'x': int(h[0]), 'y': int(h[1]),
-              'd': int(h[1] - y1) if face == "south" else int(y0 - h[1])}
-             for h in all_beyond], key=lambda h: h['d'])
+        face_hits = [h for h in face_hits if fx0 <= h[0] <= fx1]
     else:
-        beyond_detail = sorted(
-            [{'x': int(h[0]), 'y': int(h[1]),
-              'd': int(h[0] - x1) if face == "east" else int(x0 - h[0])}
-             for h in all_beyond], key=lambda h: h['d'])
-    fd['beyond_hits'] = beyond_detail[:60]
+        face_hits = [h for h in face_hits if fy0 <= h[1] <= fy1]
 
-    # --- Far hits: hits beyond the wall within tolerance ---
-    if face == "south":
-        far = [h for h in all_beyond
-               if min_dist <= h[1] - y1 <= max_dist]
-    elif face == "north":
-        far = [h for h in all_beyond
-               if min_dist <= y0 - h[1] <= max_dist]
-    elif face == "east":
-        far = [h for h in all_beyond
-               if min_dist <= h[0] - x1 <= max_dist]
-    elif face == "west":
-        far = [h for h in all_beyond
-               if min_dist <= x0 - h[0] <= max_dist]
+    if not face_hits:
+        return _finish('no_face_hits_in_range')
 
-    fd['far_hits'] = len(far)
-
-    # Far hits with coordinates
+    # === Step 1: find the real wall (mode of perpendicular coords) ===
     if face in ("south", "north"):
-        far_detail = [{'x': int(h[0]), 'y': int(h[1]),
-                       'd': int(h[1] - y1) if face == "south"
-                       else int(y0 - h[1])} for h in far]
+        perp_vals = [h[1] for h in face_hits]
     else:
-        far_detail = [{'x': int(h[0]), 'y': int(h[1]),
-                       'd': int(h[0] - x1) if face == "east"
-                       else int(x0 - h[0])} for h in far]
-    fd['far_detail'] = sorted(far_detail, key=lambda h: h['d'])
+        perp_vals = [h[0] for h in face_hits]
 
-    if not far:
-        return _finish('no_far_hits')
+    perp_counter = Counter(perp_vals)
+    wall, wall_count = perp_counter.most_common(1)[0]
 
-    # --- Wall position = mode of far-hit coordinates ---
-    if face in ("south", "north"):
-        perp_counter = Counter(h[1] for h in far)
-    else:
-        perp_counter = Counter(h[0] for h in far)
-    wall, n = perp_counter.most_common(1)[0]
     fd['wall_px'] = int(wall)
-    fd['wall_hits'] = int(n)
-    # Full distribution of perpendicular coordinates
+    fd['wall_hits'] = int(wall_count)
     fd['wall_distribution'] = [
         {'pos': int(pos), 'count': int(cnt)}
-        for pos, cnt in perp_counter.most_common()
+        for pos, cnt in perp_counter.most_common()[:20]
     ]
 
-    # --- Contact: wall pixels on the face edge ---
+    if wall_count < 3:
+        return _finish('wall_too_few_hits',
+                       {'wall_count': int(wall_count)})
+
+    # === Step 2: identify arc hits (shorter than the wall) ===
     if face == "south":
-        wy = y1 + 1
-        contact = sum(1 for x in range(x0, x1 + 1)
-                      if 0 <= wy < binary.shape[0] and binary[wy, x])
+        arc_hits = [(h[0], h[1]) for h in face_hits if h[1] < wall]
     elif face == "north":
-        wy = y0 - 1
-        contact = sum(1 for x in range(x0, x1 + 1)
-                      if 0 <= wy < binary.shape[0] and binary[wy, x])
+        arc_hits = [(h[0], h[1]) for h in face_hits if h[1] > wall]
     elif face == "east":
-        wx = x1 + 1
-        contact = sum(1 for y in range(y0, y1 + 1)
-                      if 0 <= wx < binary.shape[1] and binary[y, wx])
+        arc_hits = [(h[0], h[1]) for h in face_hits if h[0] < wall]
     else:  # west
-        wx = x0 - 1
-        contact = sum(1 for y in range(y0, y1 + 1)
-                      if 0 <= wx < binary.shape[1] and binary[y, wx])
-    fd['contact_px'] = int(contact)
-    fd['contact_ratio'] = round(contact / face_len, 3) if face_len else 0
-    fd['contact_check_pos'] = int(wy) if face in ("south", "north") \
-        else int(wx)
-    fd['contact_threshold'] = 0.20
+        arc_hits = [(h[0], h[1]) for h in face_hits if h[0] > wall]
 
-    if n < MIN_DOOR_ARC_HITS:
-        return _finish('too_few_wall_hits',
-                       {'min_required': MIN_DOOR_ARC_HITS})
-    if contact > face_len * 0.20:
-        return _finish('too_much_contact', {'max_ratio': 0.20})
+    fd['arc_hits_count'] = len(arc_hits)
 
-    # --- Arc pixel scan ---
+    if not arc_hits:
+        return _finish('no_arc_hits')
+
+    # === Step 3: verify arc profile ===
+    if face in ("south", "north"):
+        along_vals = [h[0] for h in arc_hits]
+    else:
+        along_vals = [h[1] for h in arc_hits]
+
+    arc_min_along = min(along_vals)
+    arc_max_along = max(along_vals)
+    arc_span = arc_max_along - arc_min_along + 1
+
+    fd['arc_span_px'] = int(arc_span)
+    fd['arc_along_range'] = [int(arc_min_along), int(arc_max_along)]
+
+    if arc_span >= face_len * 0.8:
+        return _finish('arc_too_wide',
+                       {'arc_span': int(arc_span),
+                        'face_len': int(face_len)})
+
+    if len(arc_hits) < 3:
+        return _finish('arc_too_few_hits',
+                       {'arc_hits': len(arc_hits)})
+
+    # Monotonicity: sort by along-axis, compute distance from wall.
+    sorted_arc = sorted(
+        arc_hits,
+        key=lambda h: h[0] if face in ("south", "north") else h[1])
     if face == "south":
-        probe = wall - DOOR_PROBE_PX
-        pixels = [x for x in scan
-                  if 0 <= probe < arc_bin.shape[0] and arc_bin[probe, x]]
+        dists = [wall - h[1] for h in sorted_arc]
     elif face == "north":
-        probe = wall + DOOR_PROBE_PX
-        pixels = [x for x in scan
-                  if 0 <= probe < arc_bin.shape[0] and arc_bin[probe, x]]
+        dists = [h[1] - wall for h in sorted_arc]
     elif face == "east":
-        probe = wall - DOOR_PROBE_PX
-        pixels = [y for y in scan
-                  if 0 <= probe < arc_bin.shape[1] and arc_bin[y, probe]]
-    else:  # west
-        probe = wall + DOOR_PROBE_PX
-        pixels = [y for y in scan
-                  if 0 <= probe < arc_bin.shape[1] and arc_bin[y, probe]]
+        dists = [wall - h[0] for h in sorted_arc]
+    else:
+        dists = [h[0] - wall for h in sorted_arc]
 
-    fd['probe_px'] = int(probe)
-    fd['arc_pixels'] = len(pixels)
+    if dists[0] >= dists[-1]:
+        hinge_side = "left"
+        profile_dists = dists
+    else:
+        hinge_side = "right"
+        profile_dists = list(reversed(dists))
 
-    groups = _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX)
-    fd['groups'] = [{'start': min(g), 'end': max(g),
-                     'width': max(g) - min(g) + 1} for g in groups]
+    violations = sum(1 for i in range(1, len(profile_dists))
+                     if profile_dists[i] > profile_dists[i - 1])
+    violation_ratio = violations / max(1, len(profile_dists) - 1)
 
-    if not pixels:
-        return _finish('no_arc_pixels')
+    fd['arc_profile_dists'] = [int(d) for d in dists[:30]]
+    fd['arc_hinge_side'] = hinge_side
+    fd['arc_violations'] = violations
+    fd['arc_violation_ratio'] = round(violation_ratio, 3)
+
+    if violation_ratio > 0.30:
+        return _finish('arc_not_monotonic',
+                       {'violation_ratio': round(violation_ratio, 3)})
+
+    # Arc depth variation: hinge is far from wall, free jamb at wall.
+    dist_range = max(dists) - min(dists)
+    fd['arc_dist_range'] = int(dist_range)
+    if dist_range < 3:
+        return _finish('arc_too_flat',
+                       {'dist_range': int(dist_range)})
+
+    # === Step 4: verify wall opening ===
+    arc_zone_start = arc_min_along
+    arc_zone_end = arc_max_along
+    if face in ("south", "north"):
+        wall_pixels_in_arc = sum(
+            1 for x in range(arc_zone_start, arc_zone_end + 1)
+            if 0 <= wall < binary.shape[0]
+            and 0 <= x < binary.shape[1]
+            and binary[wall, x])
+    else:
+        wall_pixels_in_arc = sum(
+            1 for y in range(arc_zone_start, arc_zone_end + 1)
+            if 0 <= wall < binary.shape[1]
+            and 0 <= y < binary.shape[0]
+            and binary[y, wall])
+
+    arc_zone_len = arc_zone_end - arc_zone_start + 1
+    wall_fill_ratio = wall_pixels_in_arc / max(1, arc_zone_len)
+
+    fd['wall_pixels_in_arc'] = int(wall_pixels_in_arc)
+    fd['arc_zone_len'] = int(arc_zone_len)
+    fd['wall_fill_ratio'] = round(wall_fill_ratio, 3)
+
+    if wall_fill_ratio > 0.50:
+        return _finish('wall_not_interrupted',
+                       {'wall_fill_ratio': round(wall_fill_ratio, 3)})
+
+    # === Step 5: build door info ===
     origin = x0 if face in ("south", "north") else y0
-    size = (x1 - x0) if face in ("south", "north") else (y1 - y0)
-    doors = []
-    for g in groups:
-        width = max(g) - min(g) + 1
-        offset = min(g) - origin
-        hinge_side = "left" if (offset < size / 2) else "right"
-        # Hinge/free jamb positions (absolute px on the wall)
-        jamb_hinge = min(g)
-        jamb_free = max(g)
-        # D-145 : seed au centre de l'arc détecté, légèrement en retrait
-        # du mur (position du probe). Permet au prochain rescan de
-        # scoper la recherche autour de cette position.
-        mid = (jamb_hinge + jamb_free) / 2
-        if face == "south":
-            seed_x = int(round(mid))
-            seed_y = int(round(wall - DOOR_PROBE_PX))
-        elif face == "north":
-            seed_x = int(round(mid))
-            seed_y = int(round(wall + DOOR_PROBE_PX))
-        elif face == "east":
-            seed_x = int(round(wall - DOOR_PROBE_PX))
-            seed_y = int(round(mid))
-        else:  # west
-            seed_x = int(round(wall + DOOR_PROBE_PX))
-            seed_y = int(round(mid))
-        # Door opens inward: the arc is inside the room (between seed
-        # and the wall), so the rectangle had to expand outward to
-        # reach the real wall behind the arc.
-        doors.append({
-            "face": face,
-            "offset_px": offset,
-            "width_px": width,
-            "hinge_side": hinge_side,
-            "opens_inward": True,
-            "jamb_hinge_px": jamb_hinge,
-            "jamb_free_px": jamb_free,
-            "wall_px": wall,
-            "seed_x": seed_x,
-            "seed_y": seed_y,
-        })
+    offset = arc_min_along - origin
+    door_width = arc_span
+
+    fd['door_offset_px'] = int(offset)
+    fd['door_width_detected_px'] = int(door_width)
+    fd['wall_confirmation'] = int(wall_count)
+
+    jamb_hinge = arc_min_along if hinge_side == "left" else arc_max_along
+    jamb_free = arc_max_along if hinge_side == "left" else arc_min_along
+    mid = (arc_min_along + arc_max_along) / 2
+    if face == "south":
+        seed_x = int(round(mid))
+        seed_y = int(round(wall - DOOR_PROBE_PX))
+    elif face == "north":
+        seed_x = int(round(mid))
+        seed_y = int(round(wall + DOOR_PROBE_PX))
+    elif face == "east":
+        seed_x = int(round(wall - DOOR_PROBE_PX))
+        seed_y = int(round(mid))
+    else:  # west
+        seed_x = int(round(wall + DOOR_PROBE_PX))
+        seed_y = int(round(mid))
+
+    door = {
+        "face": face,
+        "offset_px": offset,
+        "width_px": door_width,
+        "hinge_side": hinge_side,
+        "opens_inward": True,
+        "jamb_hinge_px": jamb_hinge,
+        "jamb_free_px": jamb_free,
+        "wall_px": wall,
+        "seed_x": seed_x,
+        "seed_y": seed_y,
+    }
 
     # Success — record diag
     fd['rejected'] = None
-    fd['doors_found'] = len(doors)
+    fd['doors_found'] = 1
     if diag is not None:
         diag.setdefault('door_faces', []).append(fd)
 
-    return wall, doors
+    return wall, [door]
 
 
-def expand_door_arcs(binary, rect, hits, cx, cy,
+def expand_door_arcs(binary, rect, dir_hits, cx, cy,
                      door_width_px=23, tolerance=0.35,
                      door_seeds=None, binary_arcs=None,
-                     diag=None):
-    """Phase 3: detect door swings and expand the rectangle.
+                     diag=None, snap_rect=None):
+    """Phase 3: detect door swings and expand the rectangle (D-173).
 
     Args:
-        binary: cleaned binary used for contact / far-hit checks.
-        binary_arcs: (OPT, D-145) pre-`remove_non_ortho` binary used to
-            scan the arc pixels. Falls back to `binary` when not given.
-        door_seeds: (OPT, D-145) list of `{face, seed_x, seed_y}`. When
-            given, only faces that have at least one seed are scanned,
-            and the scan on each such face is restricted to the area
-            around its seeds (see `_seed_scan_range`). When None, every
-            face is scanned over its full width (OCR / legacy behavior).
+        binary: cleaned binary used for wall-opening heuristic.
+        dir_hits: dict {face: [(x,y), ...]} — hits per direction.
+        door_seeds: (OPT) list of {face, seed_x, seed_y}. Passed to
+            _detect_doors_on_face for diagnostic / future use.
+        binary_arcs: (OPT) kept for interface compatibility.
+        snap_rect: (OPT) pre-pillar-extension rect used for the
+            along-axis hit filter. Prevents a pillar on one face
+            from widening the detection range of other faces.
 
     Returns:
         (expanded_rect, doors) where doors = list of door_info dicts.
     """
     x0, y0, x1, y1 = rect
+    orig_rect = (x0, y0, x1, y1)
     doors = []
 
     seeds_by_face: dict[str, list] = {}
@@ -1789,12 +1789,13 @@ def expand_door_arcs(binary, rect, hits, cx, cy,
                 seeds_by_face.setdefault(f, []).append(s)
 
     for face in ("south", "north", "east", "west"):
-        # Door seeds are hints, not restrictions: always scan all faces.
-        # Seeds are passed for diagnostic purposes only.
+        face_hits = dir_hits.get(face, [])
         new_edge, face_doors = _detect_doors_on_face(
-            binary, (x0, y0, x1, y1), hits, face,
-            door_width_px, tolerance, face_seeds=None,
-            binary_arcs=binary_arcs, diag=diag)
+            binary, orig_rect, face_hits, face,
+            door_width_px, tolerance,
+            face_seeds=seeds_by_face.get(face),
+            binary_arcs=binary_arcs, diag=diag,
+            filter_rect=snap_rect)
         if new_edge is not None:
             if face == "south": y1 = new_edge
             elif face == "north": y0 = new_edge
@@ -1907,6 +1908,14 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     if diag is not None:
         diag['rect_after_snap'] = rect
 
+    # snap_rect = rectangle BEFORE pillar extension (D-173).  Pillar
+    # extension enlarges the bbox on one face to reach the real wall
+    # behind a pillar.  This must NOT widen the hit-filter range of
+    # OTHER faces.  snap_rect is passed to _detect_doors_on_face as
+    # filter_rect so each face filters hits against the original
+    # (pre-pillar) bounds.
+    snap_rect = rect
+
     # Extend bbox edges to include pillar wall position (mode_coord_px).
     # The rectangle may stop at the pillar tip; extend to the real wall.
     if pillars:
@@ -1927,14 +1936,14 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     if diag is not None:
         diag['rect_after_pillars'] = rect
 
-    # Phase 3: door arc expansion — `binary` (cleaned) is used for the
-    # contact/far-hit heuristics; `binary_for_arcs` (pre-clean, D-145)
-    # is used only for the arc-pixel scan so arcs survive the scan.
-    rect, doors = expand_door_arcs(binary, rect, all_hits, cx, cy,
+    # Phase 3: door arc expansion (D-173) — analyse les hits par
+    # direction pour trouver les arcs de porte.
+    rect, doors = expand_door_arcs(binary, rect, dir_hits, cx, cy,
                                    door_width_px=door_width_px,
                                    door_seeds=door_seeds,
                                    binary_arcs=binary_for_arcs,
-                                   diag=diag)
+                                   diag=diag,
+                                   snap_rect=snap_rect)
 
     return CombResult(
         bbox=rect, hits=all_hits, doors=doors,
