@@ -791,26 +791,42 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
     raw_counts = {d: len(dir_hits[d]) for d in dir_hits}
 
     # Filter hits that go beyond a neighboring seed (v0.4.7 logic).
+    seed_filter_detail: dict = {}
     if other_seeds:
         def _not_past_seed(hx, hy, direction):
             for ox, oy in other_seeds:
                 if direction == 'east' and ox > cx and hx > ox:
                     if abs(hy - oy) < abs(hy - cy) * 2:
-                        return False
+                        return False, (ox, oy)
                 elif direction == 'west' and ox < cx and hx < ox:
                     if abs(hy - oy) < abs(hy - cy) * 2:
-                        return False
+                        return False, (ox, oy)
                 elif direction == 'south' and oy > cy and hy > oy:
                     if abs(hx - ox) < abs(hx - cx) * 2:
-                        return False
+                        return False, (ox, oy)
                 elif direction == 'north' and oy < cy and hy < oy:
                     if abs(hx - ox) < abs(hx - cx) * 2:
-                        return False
-            return True
+                        return False, (ox, oy)
+            return True, None
 
         for direction in dir_hits:
-            dir_hits[direction] = [(hx, hy) for hx, hy in dir_hits[direction]
-                                   if _not_past_seed(hx, hy, direction)]
+            kept = []
+            removed = []
+            for hx, hy in dir_hits[direction]:
+                ok, blocker = _not_past_seed(hx, hy, direction)
+                if ok:
+                    kept.append((hx, hy))
+                else:
+                    removed.append({
+                        'hit': [int(hx), int(hy)],
+                        'blocker': [int(blocker[0]), int(blocker[1])],
+                    })
+            seed_filter_detail[direction] = {
+                'kept': len(kept),
+                'removed': len(removed),
+                'removed_hits': removed[:20],  # first 20
+            }
+            dir_hits[direction] = kept
 
     # Deduplicate obstacle bboxes (multiple rays may hit same pillar)
     unique_obs = list(set(all_obstacles)) if all_obstacles else []
@@ -819,9 +835,14 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
         filtered_counts = {d: len(dir_hits[d]) for d in dir_hits}
         diag['hits_raw'] = raw_counts
         diag['hits_filtered'] = filtered_counts
+        diag['seed_filter'] = seed_filter_detail
         diag['other_seeds_count'] = len(other_seeds) if other_seeds else 0
         diag['obstacles_px'] = [[x0, y0, x1, y1]
                                 for x0, y0, x1, y1 in unique_obs]
+        # South hits detail: coordinates of all south hits after filter
+        diag['south_hits'] = [
+            [int(hx), int(hy)] for hx, hy in dir_hits.get('south', [])
+        ]
 
     all_hits = [h for hits in dir_hits.values() for h in hits]
     return all_hits, dir_hits
@@ -1455,13 +1476,18 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
     # Diagnostic dict for this face (filled progressively).
     fd: dict = {
         'face': face,
+        'rect': [x0, y0, x1, y1],
         'face_len_px': face_len,
         'scan_range': [min(scan), max(scan)] if scan else [],
         'scan_count': len(scan),
+        'door_width_px': door_width_px,
+        'tolerance': tolerance,
         'dist_range_px': [round(min_dist, 1), round(max_dist, 1)],
+        'wall_margin_px': m,
         'has_seeds': bool(face_seeds),
         'seeds_count': len(face_seeds) if face_seeds else 0,
         'using_binary_arcs': binary_arcs is not None,
+        'min_door_arc_hits': MIN_DOOR_ARC_HITS,
     }
 
     def _finish(reason, extra=None):
@@ -1490,7 +1516,20 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
         return _finish('unknown_face')
 
     fd['all_beyond'] = len(all_beyond)
-    fd['beyond_dists'] = beyond_dists[:30]  # first 30 unique distances
+    fd['beyond_dists'] = beyond_dists[:50]
+
+    # Beyond hits with coordinates and individual distances
+    if face in ("south", "north"):
+        beyond_detail = sorted(
+            [{'x': int(h[0]), 'y': int(h[1]),
+              'd': int(h[1] - y1) if face == "south" else int(y0 - h[1])}
+             for h in all_beyond], key=lambda h: h['d'])
+    else:
+        beyond_detail = sorted(
+            [{'x': int(h[0]), 'y': int(h[1]),
+              'd': int(h[0] - x1) if face == "east" else int(x0 - h[0])}
+             for h in all_beyond], key=lambda h: h['d'])
+    fd['beyond_hits'] = beyond_detail[:60]
 
     # --- Far hits: hits beyond the wall within tolerance ---
     if face == "south":
@@ -1507,16 +1546,34 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
                if min_dist <= x0 - h[0] <= max_dist]
 
     fd['far_hits'] = len(far)
+
+    # Far hits with coordinates
+    if face in ("south", "north"):
+        far_detail = [{'x': int(h[0]), 'y': int(h[1]),
+                       'd': int(h[1] - y1) if face == "south"
+                       else int(y0 - h[1])} for h in far]
+    else:
+        far_detail = [{'x': int(h[0]), 'y': int(h[1]),
+                       'd': int(h[0] - x1) if face == "east"
+                       else int(x0 - h[0])} for h in far]
+    fd['far_detail'] = sorted(far_detail, key=lambda h: h['d'])
+
     if not far:
         return _finish('no_far_hits')
 
     # --- Wall position = mode of far-hit coordinates ---
     if face in ("south", "north"):
-        wall, n = Counter(h[1] for h in far).most_common(1)[0]
+        perp_counter = Counter(h[1] for h in far)
     else:
-        wall, n = Counter(h[0] for h in far).most_common(1)[0]
+        perp_counter = Counter(h[0] for h in far)
+    wall, n = perp_counter.most_common(1)[0]
     fd['wall_px'] = int(wall)
     fd['wall_hits'] = int(n)
+    # Full distribution of perpendicular coordinates
+    fd['wall_distribution'] = [
+        {'pos': int(pos), 'count': int(cnt)}
+        for pos, cnt in perp_counter.most_common()
+    ]
 
     # --- Contact: wall pixels on the face edge ---
     if face == "south":
@@ -1537,6 +1594,9 @@ def _detect_doors_on_face(binary, rect, hits, face, door_width_px, tolerance,
                       if 0 <= wx < binary.shape[1] and binary[y, wx])
     fd['contact_px'] = int(contact)
     fd['contact_ratio'] = round(contact / face_len, 3) if face_len else 0
+    fd['contact_check_pos'] = int(wy) if face in ("south", "north") \
+        else int(wx)
+    fd['contact_threshold'] = 0.20
 
     if n < MIN_DOOR_ARC_HITS:
         return _finish('too_few_wall_hits',
@@ -1711,6 +1771,11 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
     _det_cfg = DEFAULT_DETECTION_CONFIG_CM.to_px(
         scale_cm_per_px if scale_cm_per_px else 0.5)
+    if diag is not None:
+        diag['hits_after_seed_filter'] = {
+            d: len(dir_hits[d]) for d in dir_hits
+        }
+
     pillars, pillar_hit_coords = _filter_pillar_hits(
         dir_hits, cx, cy, MIN_OBSTACLE_WIDTH_PX,
         min_pillar_size_px=MIN_PILLAR_SIZE_PX,
@@ -1721,6 +1786,17 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     )
     # Rebuild all_hits from filtered dir_hits (pillar hits removed).
     all_hits_filtered = [h for hits in dir_hits.values() for h in hits]
+
+    if diag is not None:
+        diag['hits_after_pillar_filter'] = {
+            d: len(dir_hits[d]) for d in dir_hits
+        }
+        diag['pillar_hits_removed'] = len(pillar_hit_coords)
+        diag['pillars_detected'] = [
+            {'face': p['face'], 'pos': p['pos_along_px'],
+             'width': p['width_px'], 'depth': p['depth_px']}
+            for p in pillars
+        ]
 
     rect = largest_rect_no_hits(all_hits_filtered, cx, cy)
     if rect is None:

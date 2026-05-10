@@ -37,6 +37,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - ~~*D2 — Door seeds invisibles en Floor*~~ → D-158 : toggle Seeds séparé + rendu door seeds en Floor et Room.
 - *D4 — Portes mal identifiées / pièce réduite côté sud* : détection de portes imprécise, bbox tronqué au sud sur certaines pièces
 - *D8 — Rays invisibles en Floor après Rescan All* : après un Rescan All en vue Floor, les rays ne s'affichent pas (mais visibles après rescan individuel en Room)
+- *D9 — Message seuil binarisation décale les paramètres* : dans Settings, le message indiquant la prise en compte au prochain lancement du serveur décale et inverse les paramètres en dessous (voir capture)
 
 **Retours tests production (2026-05-08)** :
 
