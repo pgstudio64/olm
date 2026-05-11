@@ -1191,12 +1191,21 @@
           els.push('<circle cx="' + hx + '" cy="' + hy +
             '" r="' + hitR + '" fill="' + _hitColors[dir] + '"/>');
         });
-        // Pillar hits: orange dots drawn on top of yellow ones.
+        // Pillar hits: orange rays + dots drawn on top of regular ones.
         (room.pillar_hits || []).forEach(function (hit) {
           var hp = _hitToPx(hit);
           var hx = hp[0], hy = hp[1];
           var isV = (hy !== cy), isH = (hx !== cx);
           if ((isV && show.vrays) || (isH && show.hrays)) {
+            if (isV) {
+              els.push('<line x1="' + hx + '" y1="' + cy + '" x2="' + hx +
+                '" y2="' + hy + '" stroke="' + COLORS.pillar_hit +
+                '" stroke-width="' + raySW + '" opacity="0.5"/>');
+            } else {
+              els.push('<line x1="' + cx + '" y1="' + hy + '" x2="' + hx +
+                '" y2="' + hy + '" stroke="' + COLORS.pillar_hit +
+                '" stroke-width="' + raySW + '" opacity="0.5"/>');
+            }
             els.push('<circle cx="' + hx + '" cy="' + hy +
               '" r="' + hitR + '" fill="' + COLORS.pillar_hit + '"/>');
           }
