@@ -1533,12 +1533,15 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
       4. Verify wall opening: wall interrupted in the arc zone.
       5. Door width = extent of the arc zone along the wall.
 
+    When face_seeds contains a seed near this wall, thresholds are relaxed
+    (seed confirms presence, arc determines geometry).
+
     Args:
         binary: cleaned binary. Used for wall-opening heuristic.
         face_hits: hits for THIS face direction only (e.g. south hits
             for face="south"). Each hit = (x, y).
         face: "south", "north", "east" or "west".
-        face_seeds: (OPT) reserved for future confirmation logic.
+        face_seeds: (OPT) list of {seed_x, seed_y} near this face.
         binary_arcs: (OPT) not used by the new algo but kept for
             interface compatibility.
         diag: (OPT) dict for diagnostic output.
@@ -1553,6 +1556,8 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
     x0, y0, x1, y1 = rect
     face_len = (x1 - x0) if face in ("south", "north") else (y1 - y0)
 
+    seed_confirmed = bool(face_seeds)
+
     # Diagnostic dict for this face (filled progressively).
     fd: dict = {
         'face': face,
@@ -1560,8 +1565,9 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
         'face_len_px': face_len,
         'door_width_px': door_width_px,
         'tolerance': tolerance,
-        'has_seeds': bool(face_seeds),
+        'has_seeds': seed_confirmed,
         'seeds_count': len(face_seeds) if face_seeds else 0,
+        'seed_confirmed': seed_confirmed,
         'total_face_hits': len(face_hits),
     }
 
@@ -1603,7 +1609,8 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
         for pos, cnt in perp_counter.most_common()[:20]
     ]
 
-    if wall_count < 3:
+    min_wall_hits = 1 if seed_confirmed else 3
+    if wall_count < min_wall_hits:
         return _finish('wall_too_few_hits',
                        {'wall_count': int(wall_count)})
 
@@ -1620,7 +1627,27 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
     fd['arc_hits_count'] = len(arc_hits)
 
     if not arc_hits:
-        return _finish('no_arc_hits')
+        if not seed_confirmed:
+            return _finish('no_arc_hits')
+        origin = x0 if face in ("south", "north") else y0
+        face_end = x1 if face in ("south", "north") else y1
+        seed_along = face_seeds[0]["seed_x"] if face in ("south", "north") \
+            else face_seeds[0]["seed_y"]
+        fb_offset = max(0, min(face_end - origin - door_width_px,
+                               seed_along - origin - door_width_px // 2))
+        fb_door = {
+            "face": face,
+            "offset_px": fb_offset,
+            "width_px": min(door_width_px, face_end - origin),
+            "hinge_side": "left",
+            "opens_inward": True,
+        }
+        fd['rejected'] = None
+        fd['doors_found'] = 1
+        fd['seed_fallback'] = True
+        if diag is not None:
+            diag.setdefault('door_faces', []).append(fd)
+        return wall, [fb_door]
 
     # === Step 3: verify arc profile ===
     if face in ("south", "north"):
@@ -1640,7 +1667,8 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
                        {'arc_span': int(arc_span),
                         'face_len': int(face_len)})
 
-    if len(arc_hits) < 3:
+    min_arc_hits = 1 if seed_confirmed else 3
+    if len(arc_hits) < min_arc_hits:
         return _finish('arc_too_few_hits',
                        {'arc_hits': len(arc_hits)})
 
@@ -1673,14 +1701,16 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
     fd['arc_violations'] = violations
     fd['arc_violation_ratio'] = round(violation_ratio, 3)
 
-    if violation_ratio > 0.30:
+    max_violation_ratio = 0.60 if seed_confirmed else 0.30
+    if violation_ratio > max_violation_ratio:
         return _finish('arc_not_monotonic',
                        {'violation_ratio': round(violation_ratio, 3)})
 
     # Arc depth variation: hinge is far from wall, free jamb at wall.
     dist_range = max(dists) - min(dists)
     fd['arc_dist_range'] = int(dist_range)
-    if dist_range < 3:
+    min_dist_range = 1 if seed_confirmed else 3
+    if dist_range < min_dist_range:
         return _finish('arc_too_flat',
                        {'dist_range': int(dist_range)})
 
@@ -1707,7 +1737,8 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
     fd['arc_zone_len'] = int(arc_zone_len)
     fd['wall_fill_ratio'] = round(wall_fill_ratio, 3)
 
-    if wall_fill_ratio > 0.50:
+    max_wall_fill = 0.80 if seed_confirmed else 0.50
+    if wall_fill_ratio > max_wall_fill:
         return _finish('wall_not_interrupted',
                        {'wall_fill_ratio': round(wall_fill_ratio, 3)})
 
@@ -1761,7 +1792,8 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
 def expand_door_arcs(binary, rect, dir_hits, cx, cy,
                      door_width_px=23, tolerance=0.35,
                      door_seeds=None, binary_arcs=None,
-                     diag=None, snap_rect=None):
+                     diag=None, snap_rect=None,
+                     scale_cm_per_px=0.5):
     """Phase 3: detect door swings and expand the rectangle (D-173).
 
     Args:
@@ -1782,18 +1814,42 @@ def expand_door_arcs(binary, rect, dir_hits, cx, cy,
     doors = []
 
     seeds_by_face: dict[str, list] = {}
+    faceless_seeds: list = []
     if door_seeds:
         for s in door_seeds:
             f = s.get("face")
             if f in ("south", "north", "east", "west"):
                 seeds_by_face.setdefault(f, []).append(s)
+            elif "seed_x" in s and "seed_y" in s:
+                faceless_seeds.append(s)
+
+    perp_tolerance_px = max(door_width_px * 3, int(200 / scale_cm_per_px)) \
+        if scale_cm_per_px > 0 else door_width_px * 3
+
+    def _seeds_for_face(face):
+        result = list(seeds_by_face.get(face, []))
+        for s in faceless_seeds:
+            sx, sy = s["seed_x"], s["seed_y"]
+            if face == "south":
+                if abs(sy - y1) <= perp_tolerance_px and x0 <= sx <= x1:
+                    result.append(s)
+            elif face == "north":
+                if abs(sy - y0) <= perp_tolerance_px and x0 <= sx <= x1:
+                    result.append(s)
+            elif face == "east":
+                if abs(sx - x1) <= perp_tolerance_px and y0 <= sy <= y1:
+                    result.append(s)
+            elif face == "west":
+                if abs(sx - x0) <= perp_tolerance_px and y0 <= sy <= y1:
+                    result.append(s)
+        return result or None
 
     for face in ("south", "north", "east", "west"):
         face_hits = dir_hits.get(face, [])
         new_edge, face_doors = _detect_doors_on_face(
             binary, orig_rect, face_hits, face,
             door_width_px, tolerance,
-            face_seeds=seeds_by_face.get(face),
+            face_seeds=_seeds_for_face(face),
             binary_arcs=binary_arcs, diag=diag,
             filter_rect=snap_rect)
         if new_edge is not None:
@@ -1943,7 +1999,8 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
                                    door_seeds=door_seeds,
                                    binary_arcs=binary_for_arcs,
                                    diag=diag,
-                                   snap_rect=snap_rect)
+                                   snap_rect=snap_rect,
+                                   scale_cm_per_px=scale_cm_per_px)
 
     return CombResult(
         bbox=rect, hits=all_hits, doors=doors,

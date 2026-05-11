@@ -37,7 +37,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - ~~*D2 — Door seeds invisibles en Floor*~~ → D-158 : toggle Seeds séparé + rendu door seeds en Floor et Room.
 - *D4 — Portes mal identifiées / pièce réduite côté sud* : détection de portes imprécise, bbox tronqué au sud sur certaines pièces
 - *D8 — Rays invisibles en Floor après Rescan All* : après un Rescan All en vue Floor, les rays ne s'affichent pas (mais visibles après rescan individuel en Room)
-- *D9 — Message seuil binarisation décale les paramètres* : dans Settings, le message indiquant la prise en compte au prochain lancement du serveur décale et inverse les paramètres en dessous (voir capture)
+- ~~*D9 — Message seuil binarisation décale les paramètres*~~ : corrigé session 2026-05-11 (span déplacé dans le div flex).
 
 **Retours tests production (2026-05-08)** :
 
@@ -72,9 +72,9 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - Selon l'échelle, la détection est plus ou moins efficace (ex: fenêtres non identifiées).
 
 **Bugs prioritaires** :
-- ~~**B1 — Inversion ouest/est en mode Room**~~ : corrigé D-169 v0.4.34. Condition de flip d'offset dans canonical_io.js inversée ("west" au lieu de "east").
-- **B2 — Import / ouverture plan pas propre** : lors de l'import ou de l'ouverture d'un nouveau plan, la colonne de gauche n'est pas peuplée et le message "import en cours" ne s'affiche pas. Lors d'une seconde ouverture, les données de l'ancien plan restent affichées pendant tout l'import.
-- **B3 — Import preprocessed lent sans rescan** : un import preprocessed sans rescan (tout est dans le JSON) devrait être quasi-instantané. Actuellement c'est lent. À analyser — identifier ce qui prend du temps.
+- ~~**B1 — Inversion ouest/est en mode Room**~~ : corrigé D-169 v0.4.34.
+- ~~**B2 — Import / ouverture plan pas propre**~~ : corrigé session 2026-05-11.
+- **B3 — Import preprocessed lent sans rescan** : un import preprocessed sans rescan (tout est dans le JSON) devrait être quasi-instantané. Actuellement c'est lent. À analyser.
 
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.
@@ -324,7 +324,7 @@ Objectif : ingestion simplifiée — rectangles + murs + fenêtres + ouvertures.
 - [x] ~~Bug overlay post-simplification Import~~ — corrigé : overlays persistés dans `olm_overlays/` ([app.py:594-600](../olm/server/app.py#L594-L600)).
 - [x] ~~Bug Save inactif après pan/scale/fullscreen~~ — non reproduit au 2026-04-19.
 
-- [ ] **Grille 1m côté négatif invisible (Floor)** : les lignes `-1m`, `-2m`, etc. sont bien générées par `renderShared.gridSvg` avec `marginRatio=0.3` mais restent hors du viewBox SVG `{x:0, y:0, w:planW, h:planH}`. Pour les afficher il faudrait élargir le viewBox initial (ex : décaler vb.x/vb.y de -margin au load) ou changer les conventions. Pré-existant, signalé après P2.
+- [x] ~~**Grille 1m côté négatif invisible (Floor)**~~ : corrigé — refactor gridSvg en SVG patterns, couverture complète y compris coordonnées négatives.
 
 Abandonné (inutile) : saisie manuelle d'échelle (cm/px ou points de calage) et saisie de code pièce à l'import — l'échelle vient de `plan_scale` du JSON v2 en Préprocessé ou des métadonnées OCR, le code pièce vient de Settings.
 
@@ -653,19 +653,10 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
 
 ### Court terme (bugs bloquants UX / régressions potentielles)
 
-0. **Double-clic sur pièce sélectionnée en Floor → naviguer vers Room** :
-   quand une pièce est déjà sélectionnée en Floor view, un double-clic
-   devrait basculer vers la vue Room de cette pièce (même comportement
-   que le double-clic sur une pièce non sélectionnée). Priorité haute.
-1. **Persistance Save room : bbox_px non mis à jour si resize** (R-04
-   Review, limite D-127). Fix : calculer `effBbox` au save comme dans
-   le handler re-analyze et le persister. Impact fort sur le workflow
-   resize → Save → re-ouverture.
-2. **Bug "No matching patterns"** (R-04 Office) : aucun candidat
-   trouvé. Investigation prioritaire, bloque le matching.
-3. **Bug bouton Save (clic physique)** (dette R-12) : à revérifier ;
-   si encore reproductible, corriger l'overlay transparent qui
-   intercepte les events.
+0. ~~**Double-clic Floor → Room**~~ : corrigé session 2026-05-11.
+1. ~~**Persistance bbox resize**~~ : corrigé session 2026-05-11 (sync fpRoomAmendments).
+2. **Bug "No matching patterns"** (R-04 Office) : aucun candidat trouvé. Investigation prioritaire.
+3. **Bug bouton Save (clic physique)** (dette R-12) : à revérifier.
 
 ### Court terme (dette technique à faible risque)
 

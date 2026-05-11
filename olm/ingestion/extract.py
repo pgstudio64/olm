@@ -1905,18 +1905,21 @@ def extract_room_features(
     comb_step_px = COMB_STEP_PX
     door_px = max(1, int(round(door_width_cm * px_per_cm_f)))
 
-    # Construire door_seeds à partir de doors_px pour scoper le scan
-    # d'arcs de portes (D-145). Seules les entrées avec seed_x/seed_y
-    # sont utilisées ; les autres sont ignorées.
+    # Construire door_seeds à partir de doors_px. Deux formes acceptées :
+    # - {face, seed_x, seed_y} : seed enrichi (Rescan, pillar exclusion)
+    # - {seed_x, seed_y} : seed preprocessing brut (confirmation arc)
     door_seeds: list[dict] | None = None
     if doors_px:
         ds = []
         for d in doors_px:
-            f = d.get("face")
             sx = d.get("seed_x")
             sy = d.get("seed_y")
-            if f and sx is not None and sy is not None:
-                ds.append({"face": f, "seed_x": int(sx), "seed_y": int(sy)})
+            if sx is not None and sy is not None:
+                entry: dict = {"seed_x": int(sx), "seed_y": int(sy)}
+                f = d.get("face")
+                if f:
+                    entry["face"] = f
+                ds.append(entry)
         if ds:
             door_seeds = ds
 
