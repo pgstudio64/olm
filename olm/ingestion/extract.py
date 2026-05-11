@@ -1598,12 +1598,18 @@ def extract_rooms_from_preprocessed(
         # detected doors so their seeds remain visible on the floor plan.
         _feat = _import_features.get(p["room_id"])
         auto_exclusions: list[dict] = []
+        _hits = []
+        _coarse_hits = []
+        _pillar_hits = []
         if _feat:
             windows = _feat.get("windows", [])
             openings = _feat.get("openings", [])
             _seed_only = [d for d in doors if "width_cm" not in d]
             doors = _feat.get("doors", []) + _seed_only
             auto_exclusions = _feat.get("auto_exclusion_zones", [])
+            _hits = _feat.get("hits", [])
+            _coarse_hits = _feat.get("coarse_hits", [])
+            _pillar_hits = _feat.get("pillar_hits", [])
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
@@ -1623,6 +1629,9 @@ def extract_rooms_from_preprocessed(
             "openings": openings,
             "doors": doors,
             "exclusion_zones": auto_exclusions or p["exclusion_zones_raw"],
+            "hits": _hits,
+            "coarse_hits": _coarse_hits,
+            "pillar_hits": _pillar_hits,
             "exterior_faces": [],
             # corridor_face : dérivé uniquement d'une porte explicite
             # (source fiable). Les openings ne permettent pas d'inférer le

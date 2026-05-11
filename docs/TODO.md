@@ -71,6 +71,9 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 - Échelle auto-détectée fausse (1:300 au lieu de 1:200 sur un autre plan) — même famille que le problème critique ci-dessus.
 - Selon l'échelle, la détection est plus ou moins efficace (ex: fenêtres non identifiées).
 
+**PRIORITÉ CRITIQUE** :
+- **PERF — Import preprocessed 2× plus lent** : régression perf constatée sur plans réalistes après v0.4.45. Analyser et corriger. Profiler `extract_rooms_from_preprocessed` et `extract_room_features`.
+
 **Bugs prioritaires** :
 - ~~**B1 — Inversion ouest/est en mode Room**~~ : corrigé D-169 v0.4.34.
 - ~~**B2 — Import / ouverture plan pas propre**~~ : corrigé session 2026-05-11.
