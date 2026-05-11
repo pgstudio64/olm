@@ -40,10 +40,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <button class="btn" id="btnExportPlan" title="Export floor plan data" style="display:none;flex-shrink:0;">Export</button>
       <button class="btn" id="btnClosePlan" title="Close current floor plan" style="display:none;flex-shrink:0;">Close</button>
       <div id="eraseWrapper" style="display:none;position:relative;flex-shrink:0;">
-        <button class="btn" id="btnErasePlan" title="Erase data">Erase ▾</button>
+        <button class="btn" id="btnErasePlan" title="Reinit or clear data">Reinit ▾</button>
         <div id="eraseMenu" style="display:none;position:absolute;top:100%;left:0;z-index:100;min-width:140px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
-          <button class="btn" id="btnEraseAll" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">All</button>
-          <button class="btn" id="btnEraseLayout" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Layout only</button>
+          <button class="btn" id="btnEraseAll" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Reinit plan</button>
+          <button class="btn" id="btnEraseLayout" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Clear layout</button>
         </div>
       </div>
     </div>

@@ -505,13 +505,13 @@
         var newPlanId = this.dataset.planId;
         var newPlanMode = this.dataset.planMode;
         _setSelectedPlan(newPlanId, newPlanMode);
+        ingState.rooms = [];
         _closePlanPopup();
         // Show status immediately in the always-visible header
         var hdr = document.getElementById('hdrCurrentPlan');
         if (hdr) hdr.textContent = newPlanId + ' — Importing...';
         // Make toolbar visible so ingStatus updates are seen
         _showPlanLoadedUI(newPlanId);
-        ingState.rooms = [];
 
         // Load PNG + metadata in parallel
         var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
@@ -557,6 +557,17 @@
                 if (data.image_size && data.image_size[0] > 0) {
                   ingState.planW = data.image_size[0];
                   ingState.planH = data.image_size[1];
+                }
+                // Pre-fill left column from metadata (before full import)
+                if (data.rooms_summary && data.rooms_summary.length) {
+                  ingState.rooms = data.rooms_summary.map(function (r) {
+                    return { name: r.name || '', bbox_px: r.bbox_px,
+                             width_cm: 0, depth_cm: 0 };
+                  });
+                  updateIngRoomList();
+                  updatePlanDependentUI();
+                  var rc = document.getElementById('rvFloorRooms');
+                  if (rc) rc.textContent = ingState.rooms.length;
                 }
               }
               metaReady = true;
@@ -786,7 +797,8 @@
       var isZoom = !inRoomView && ingState.zoomRoom === r.name;
       var active = (isBboxSel || isNavSel || isZoom)
         ? 'font-weight:bold;color:var(--accent);' : 'color:var(--text-dim);';
-      var dims = r.width_cm + 'x' + r.depth_cm;
+      var dims = (r.width_cm > 0 && r.depth_cm > 0)
+        ? r.width_cm + 'x' + r.depth_cm : '';
       var manualTag = r.manual ? ' <span style="font-size:9px;color:var(--accent2,#c8a050);">M</span>' : '';
       html += '<div style="display:flex;align-items:center;gap:4px;padding:2px 4px 2px 4px;margin-right:16px;' + active +
         '"><span style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-ing-room="' + r.name + '">' +
@@ -1037,7 +1049,8 @@
     var sWin     = (OVERLAY_WIN_STROKE * pxScale).toFixed(2);
     var sOpen    = (OVERLAY_OPEN_STROKE * pxScale).toFixed(2);
     var sDoor    = (OVERLAY_DOOR_STROKE * pxScale).toFixed(2);
-    var sName    = (OVERLAY_NAME_FONT * pxScale).toFixed(1);
+    // Room name scales with the plan (no pxScale) — proportional to viewBox.
+    var sName    = Math.max(12, vb.w * 0.012).toFixed(1);
     var sCart    = (OVERLAY_CART_STROKE * pxScale).toFixed(2);
     var sSel     = (OVERLAY_SELECT_STROKE * pxScale).toFixed(2);
     var sHandle  = Math.round(OVERLAY_HANDLE_SIZE * pxScale);
@@ -1300,7 +1313,8 @@
         var mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
         els.push('<text x="' + mx + '" y="' + my +
           '" text-anchor="middle" dominant-baseline="central" fill="' +
-          COLORS.name + '" font-size="' + sName + '" font-weight="bold" font-family="monospace" style="pointer-events:none;">' +
+          COLORS.name + '" font-size="' + sName +
+          '" font-weight="bold" font-family="monospace" style="pointer-events:none;">' +
           room.name + '</text>');
       }
 
@@ -1421,8 +1435,15 @@
           var now = Date.now();
           if (be._lastSelectTime && (now - be._lastSelectTime) < DOUBLE_CLICK_DELAY_MS) {
             be._lastSelectTime = 0;
+            // Commit any pending bbox modification before leaving
             be.selectedName = null;
+            be.sessionStartBbox = null;
             be.mode = 'idle';
+            be.handle = null;
+            be.dragStart = null;
+            be.preDragBbox = null;
+            populateRoomsJson();
+            updateIngRoomList();
             // Navigate to this room in Review
             if (window.fpData) {
               var fpRooms = window.fpData.rooms || [];
@@ -1433,7 +1454,8 @@
             if (window.ingShowRoomView) window.ingShowRoomView();
             return;
           }
-          // Start moving
+          // Not a double-click — record time for next attempt, then start moving
+          be._lastSelectTime = now;
           var room = ingState.rooms.find(function(r) { return r.name === name; });
           if (!room) return;
           var p = screenToIngSvg(e);
@@ -1592,7 +1614,11 @@
         be.selectedName = null;
         be.sessionStartBbox = null;
         be.mode = 'idle';
+        be.handle = null;
         be.dragStart = null;
+        be.preDragBbox = null;
+        populateRoomsJson();
+        updateIngRoomList();
         renderIngestion();
       }
     });
@@ -1940,6 +1966,17 @@
           fr.exclusion_zones = (room.exclusion_zones || []).slice();
           fr.transparent_zones = (room.transparent_zones || []).slice();
           fr.surface_m2_bbox = room.surface_m2 || fr.surface_m2_bbox;
+        }
+        // Sync room amendments (used by Review) with new dimensions
+        var ra = window.fpRoomAmendments && window.fpRoomAmendments[room.name];
+        if (ra) {
+          ra.bbox_px = room.bbox_px ? room.bbox_px.slice() : ra.bbox_px;
+          ra.width_cm = room.width_cm;
+          ra.depth_cm = room.depth_cm;
+          ra.width_px = room.width_px;
+          ra.height_px = room.height_px;
+          if (room.seed_px) ra.seed_px = room.seed_px.slice();
+          ra.surface_m2_bbox = room.surface_m2 || ra.surface_m2_bbox;
         }
       }
       if (typeof window.fpLoadAndMatch === 'function') {
@@ -2383,6 +2420,15 @@
         if (status) status.textContent = 'Error: ' + e;
       });
   }
+
+  // Re-render on window resize so pxScale-dependent sizes stay correct.
+  var _resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(function () {
+      if (ingState.planUrl) renderIngestion();
+    }, 150);
+  });
 
   // Expose for external use
   window.ingestionState = ingState;

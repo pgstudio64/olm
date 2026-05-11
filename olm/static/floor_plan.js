@@ -287,7 +287,8 @@
     (localRoom.doors || []).forEach(function(d) {
       var f = faceMap[d.face] || d.face || "?";
       var dir = d.opens_inward !== false ? "INT" : "EXT";
-      var side = (d.hinge_side === "left") ? "L" : "R";
+      // NF convention: L/R = swing direction (hinge left → swings right → "R")
+      var side = (d.hinge_side === "left") ? "R" : "L";
       dsl += "\nDOOR " + f + " " + (d.offset_cm || 0) + " " + (d.width_cm || 90) + " " + dir + " " + side;
     });
     (localRoom.exclusion_zones || []).forEach(function(e) {
@@ -326,9 +327,9 @@
       if (radio) radio.checked = true;
     }
 
-    // Reset action buttons on room change
-    document.getElementById("fpBtnEditPattern").disabled = true;
-    document.getElementById("fpBtnAdjustLayout").disabled = true;
+    // Action buttons always enabled (handlers guard against missing candidate)
+    document.getElementById("fpBtnEditPattern").disabled = false;
+    document.getElementById("fpBtnAdjustLayout").disabled = false;
     // Show Discard if amendment exists
     var hasAmendment = !!fpAmendments[room.name];
     document.getElementById("fpBtnDiscard").style.display = hasAmendment ? "" : "none";

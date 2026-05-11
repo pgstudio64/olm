@@ -31,9 +31,11 @@ _FACE_MAP: dict[str, Face] = {
 
 _FACE_REV: dict[Face, str] = {v: k for k, v in _FACE_MAP.items()}
 
+# NF convention: L/R = swing direction (where the leaf goes), not hinge side.
+# L (goes left) = hinge on right; R (goes right) = hinge on left.
 _HINGE_MAP: dict[str, HingeSide] = {
-    "L": HingeSide.LEFT,
-    "R": HingeSide.RIGHT,
+    "L": HingeSide.RIGHT,
+    "R": HingeSide.LEFT,
 }
 
 _HINGE_REV: dict[HingeSide, str] = {v: k for k, v in _HINGE_MAP.items()}

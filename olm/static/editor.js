@@ -135,7 +135,8 @@ function buildRoomDSL() {
   });
   (state.room_doors || []).forEach(function(d) {
     var dir = d.opens_inward ? "INT" : "EXT";
-    var hinge = d.hinge_side === "left" ? "L" : "R";
+    // NF convention: L/R = swing direction (hinge left → swings right → "R")
+    var hinge = d.hinge_side === "left" ? "R" : "L";
     lines.push("DOOR " + faceToCode(d.face) + " " + d.offset_cm + " " + d.width_cm + " " + dir + " " + hinge);
   });
   state.room_exclusions.forEach(function(z) {
@@ -388,7 +389,9 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
             ' data-opening-resize="' + type + '-' + index + '-' + h.ex +
             '" style="cursor:' + cur + ';"/>' });
         });
-        var bx = cx + delOff, by = cy - delOff;
+        var bx = cx + delOff;
+        var by = (face === "south") ? cy + delOff
+               : cy - delOff;
         elements.push({ z: 9.4, s: '<circle cx="' + bx.toFixed(1) +
           '" cy="' + by.toFixed(1) + '" r="' + delR.toFixed(1) + '"' +
           ' fill="' + COLOR_DANGER + '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
@@ -400,6 +403,78 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
           '" text-anchor="middle" fill="' + COLOR_WALL_DEFAULT + '" font-size="' +
           delFs.toFixed(1) + '" font-weight="bold"' +
           ' style="pointer-events:none;">×</text>' });
+        // Door property badges: hinge (L/R) and direction (INT/EXT)
+        if (type === "door") {
+          var doorObj = (state.room_doors || [])[index];
+          if (doorObj) {
+            var hingeLabel = (doorObj.hinge_side === "left") ? "R" : "L";
+            var dirLabel = (doorObj.opens_inward !== false) ? "IN" : "EX";
+            var bw = 16 * hzf, bh = 10 * hzf, bgap = 3 * hzf;
+            var bFontSz = 7 * hzf;
+            // Hinge badge
+            var hbx = bx + delR + bgap;
+            elements.push({ z: 9.4, s: '<rect x="' + hbx.toFixed(1) +
+              '" y="' + (by - bh / 2).toFixed(1) +
+              '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) +
+              '" rx="' + (2 * hzf).toFixed(1) + '" fill="' + COLOR_NEUTRAL +
+              '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
+              (0.5 * hzf).toFixed(2) + '"' +
+              ' data-door-hinge="' + index +
+              '" style="cursor:pointer;" />' });
+            elements.push({ z: 9.5, s: '<text x="' +
+              (hbx + bw / 2).toFixed(1) + '" y="' +
+              (by + bFontSz * 0.35).toFixed(1) +
+              '" text-anchor="middle" fill="' + COLOR_WALL_DEFAULT +
+              '" font-size="' + bFontSz.toFixed(1) + '" font-weight="bold"' +
+              ' style="pointer-events:none;">' + hingeLabel + '</text>' });
+            // Direction badge
+            var dbx = hbx + bw + bgap;
+            elements.push({ z: 9.4, s: '<rect x="' + dbx.toFixed(1) +
+              '" y="' + (by - bh / 2).toFixed(1) +
+              '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) +
+              '" rx="' + (2 * hzf).toFixed(1) + '" fill="' + COLOR_NEUTRAL +
+              '" stroke="' + COLOR_WALL_DEFAULT + '" stroke-width="' +
+              (0.5 * hzf).toFixed(2) + '"' +
+              ' data-door-dir="' + index +
+              '" style="cursor:pointer;" />' });
+            elements.push({ z: 9.5, s: '<text x="' +
+              (dbx + bw / 2).toFixed(1) + '" y="' +
+              (by + bFontSz * 0.35).toFixed(1) +
+              '" text-anchor="middle" fill="' + COLOR_WALL_DEFAULT +
+              '" font-size="' + bFontSz.toFixed(1) + '" font-weight="bold"' +
+              ' style="pointer-events:none;">' + dirLabel + '</text>' });
+          }
+        }
+        // Live DSL label for the selected opening
+        var FACE_SHORT = { north: "N", south: "S", east: "E", west: "W" };
+        var dslLabel = type.toUpperCase() + " " +
+          (FACE_SHORT[face] || face) + " " +
+          Math.round(offset_cm) + " " + Math.round(width_cm);
+        if (type === "door") {
+          var dObj = (state.room_doors || [])[index];
+          if (dObj) {
+            var dDir = (dObj.opens_inward !== false) ? "INT" : "EXT";
+            var dSide = (dObj.hinge_side === "left") ? "R" : "L";
+            dslLabel += " " + dDir + " " + dSide;
+          }
+        }
+        var lblFs = 8 * hzf;
+        var lblY = (face === "south")
+          ? by + delR + lblFs + 4 * hzf
+          : by - delR - 4 * hzf;
+        var lblPad = 2 * hzf;
+        var lblW = dslLabel.length * lblFs * 0.62 + lblPad * 2;
+        var lblH = lblFs + lblPad * 2;
+        elements.push({ z: 9.55, s: '<rect x="' + (bx - lblPad).toFixed(1) +
+          '" y="' + (lblY - lblFs + lblPad * 0.3).toFixed(1) +
+          '" width="' + lblW.toFixed(1) + '" height="' + lblH.toFixed(1) +
+          '" rx="' + (2 * hzf).toFixed(1) +
+          '" fill="rgba(30,30,30,0.75)" style="pointer-events:none;"/>' });
+        elements.push({ z: 9.6, s: '<text x="' + bx.toFixed(1) +
+          '" y="' + lblY.toFixed(1) +
+          '" fill="' + COLOR_WALL_DEFAULT + '" font-size="' +
+          lblFs.toFixed(1) + '" font-family="monospace"' +
+          ' style="pointer-events:none;">' + dslLabel + '</text>' });
       }
     }
     (state.room_windows || []).forEach(function (w, i) {
