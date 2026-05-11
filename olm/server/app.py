@@ -571,6 +571,80 @@ def api_plan_metadata(plan_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/plans/<plan_id>/save", methods=["POST"])
+def api_plan_save(plan_id):
+    """Save the full plan JSON to disk (overwrites existing file)."""
+    try:
+        plans_dir = _get_plans_dir()
+        json_path = os.path.join(plans_dir, plan_id + ".json")
+        data = request.json
+        if not data:
+            return jsonify({"error": "Empty payload"}), 400
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return jsonify({"ok": True, "path": json_path})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/plans/<plan_id>/reinit", methods=["POST"])
+def api_plan_reinit(plan_id):
+    """Strip a plan JSON to preprocessing-only data and save to disk.
+
+    Keeps: file, page_width_px, page_height_px, drawing_scale_text,
+           render_dpi, and per room: surface, seed_x, seed_y,
+           seed-only doors ({seed_x, seed_y} without face).
+    Removes: everything added by detection or user (bbox_px, windows,
+             openings, enriched doors, exclusion_zones, etc.).
+    """
+    try:
+        plans_dir = _get_plans_dir()
+        json_path = os.path.join(plans_dir, plan_id + ".json")
+        if not os.path.exists(json_path):
+            return jsonify({"error": f"JSON not found for '{plan_id}'"}), 404
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Preserve root-level preprocessing fields only
+        clean = {}
+        for key in ("file", "page_width_px", "page_height_px",
+                     "drawing_scale_text", "render_dpi"):
+            if key in data:
+                clean[key] = data[key]
+
+        # Clean each room: keep only preprocessing fields
+        rooms_raw = data.get("rooms", {})
+        clean_rooms = {}
+        if isinstance(rooms_raw, dict):
+            for room_id, r in rooms_raw.items():
+                if not isinstance(r, dict):
+                    continue
+                room = {}
+                for key in ("surface", "seed_x", "seed_y"):
+                    if key in r:
+                        room[key] = r[key]
+                # Keep seed-only doors (no face = preprocessing)
+                seed_doors = []
+                for d in (r.get("doors") or []):
+                    if isinstance(d, dict) and "seed_x" in d and not d.get("face"):
+                        seed_doors.append({
+                            "seed_x": d["seed_x"],
+                            "seed_y": d["seed_y"],
+                        })
+                if seed_doors:
+                    room["doors"] = seed_doors
+                clean_rooms[room_id] = room
+        clean["rooms"] = clean_rooms
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(clean, f, indent=2, ensure_ascii=False)
+        return jsonify({"ok": True, "path": json_path})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/ingestion/binarize", methods=["POST"])
 def api_ingestion_binarize():
     """Return the binarized version of a plan image (for visualization).

@@ -1407,6 +1407,7 @@ def extract_rooms_from_preprocessed(
             "doors_raw": r.get("doors") or [],
             "openings_raw": r.get("openings") or [],
             "windows_raw": r.get("windows") or [],
+            "exclusion_zones_raw": r.get("exclusion_zones") or [],
             "canonical_top_face": r.get("canonical_top_face"),
         })
 
@@ -1593,11 +1594,13 @@ def extract_rooms_from_preprocessed(
         # Seed-only Input doors (no width_cm) are preserved alongside
         # detected doors so their seeds remain visible on the floor plan.
         _feat = _import_features.get(p["room_id"])
+        auto_exclusions: list[dict] = []
         if _feat:
             windows = _feat.get("windows", [])
             openings = _feat.get("openings", [])
             _seed_only = [d for d in doors if "width_cm" not in d]
             doors = _feat.get("doors", []) + _seed_only
+            auto_exclusions = _feat.get("auto_exclusion_zones", [])
 
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
@@ -1616,6 +1619,7 @@ def extract_rooms_from_preprocessed(
             "windows": windows,
             "openings": openings,
             "doors": doors,
+            "exclusion_zones": auto_exclusions or p["exclusion_zones_raw"],
             "exterior_faces": [],
             # corridor_face : dérivé uniquement d'une porte explicite
             # (source fiable). Les openings ne permettent pas d'inférer le
@@ -2056,9 +2060,6 @@ def extract_room_features(
                 "hinge_side": d.get("hinge_side"),
                 "opens_inward": bool(d.get("opens_inward", True)),
             }
-            if "seed_x" in d and "seed_y" in d:
-                entry["seed_x"] = int(d["seed_x"])
-                entry["seed_y"] = int(d["seed_y"])
             doors_out.append(entry)
 
     # --- Pillar → exclusion zones auto ---

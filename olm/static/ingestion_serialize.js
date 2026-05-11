@@ -198,8 +198,6 @@
           if (d.hinge_side) o.hinge_side = d.hinge_side;
           if (typeof d.opens_inward === 'boolean') o.opens_inward = d.opens_inward;
           if (d.origin) o.origin = d.origin;
-          if (typeof d.seed_x === 'number') o.seed_x = _px(d.seed_x);
-          if (typeof d.seed_y === 'number') o.seed_y = _px(d.seed_y);
           return o;
         });
       }
@@ -222,6 +220,18 @@
             width_px:  _px(w.width_px),
           };
           if (w.origin) out.origin = w.origin;
+          return out;
+        });
+      }
+      if (Array.isArray(r.exclusion_zones) && r.exclusion_zones.length > 0) {
+        roomObj.exclusion_zones = r.exclusion_zones.map(function (z) {
+          var out = {
+            x_cm: z.x_cm,
+            y_cm: z.y_cm,
+            width_cm: z.width_cm,
+            depth_cm: z.depth_cm,
+          };
+          if (z.origin) out.origin = z.origin;
           return out;
         });
       }
@@ -261,6 +271,41 @@
     return { payload: out, planName: planName };
   }
 
+  // Save to disk via server endpoint.
+  function savePlanToDisk() {
+    var ingState = window.ingState;
+    if (!ingState || !ingState.rooms || ingState.rooms.length === 0) {
+      alert('No rooms to save. Load a floor plan first.');
+      return;
+    }
+    var res = serializeForStorage();
+    if (!res || !res.planName) {
+      alert('Cannot determine plan name.');
+      return;
+    }
+    var planId = res.planName;
+    var statusEl = document.getElementById('ingStatus');
+    if (statusEl) statusEl.textContent = 'Saving...';
+    fetch('/api/plans/' + encodeURIComponent(planId) + '/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(res.payload),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          alert('Save error: ' + data.error);
+          if (statusEl) statusEl.textContent = 'Save failed';
+        } else {
+          if (statusEl) statusEl.textContent = 'Saved';
+        }
+      })
+      .catch(function (e) {
+        alert('Save error: ' + e);
+        if (statusEl) statusEl.textContent = 'Save failed';
+      });
+  }
+
   // Wrapper UI : déclenche le téléchargement du JSON v3.
   function devExportV3Json() {
     var ingState = window.ingState;
@@ -291,5 +336,6 @@
     serializeForStorage:  serializeForStorage,
   };
   window.populateRoomsJson = populateRoomsJson;
+  window.savePlanToDisk    = savePlanToDisk;
   window.devExportV3Json   = devExportV3Json;
 })();

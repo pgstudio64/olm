@@ -322,6 +322,11 @@ async function init() {
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       var isLayoutTab = btn.dataset.tab === "lytDesign" || btn.dataset.tab === "lytCatalogue";
+      // Block tab switch while room amend mode is active (must Save or Cancel first)
+      if (state.roomAmendMode && btn.dataset.tab !== "fpReview") {
+        alert("Save or cancel room changes before switching tabs.");
+        return;
+      }
       // Cancel amend mode when leaving Layout tabs
       if (!isLayoutTab) {
         if (_cancelAmendIfActive() === false) return;
@@ -623,13 +628,12 @@ async function init() {
   var descEl = document.getElementById("tabDescription");
   if (descEl) descEl.textContent = TAB_DESCRIPTIONS["fpImport"] || "";
 
-  // Save button
+  // Save button — writes directly to plan JSON on disk
   document.getElementById("btnSavePlan").addEventListener("click", function() {
-    // TODO R-11: replace with POST /api/save that writes the enriched JSON with olm_state to disk
-    if (typeof window.devExportV3Json === "function") {
-      window.devExportV3Json();
+    if (typeof window.savePlanToDisk === "function") {
+      window.savePlanToDisk();
     } else {
-      alert("Save not available yet — load a floor plan first.");
+      alert("Save not available — load a floor plan first.");
     }
   });
 
@@ -718,29 +722,39 @@ async function init() {
   // Erase All — clear all data but keep plan loaded
   document.getElementById("btnEraseAll").addEventListener("click", function() {
     document.getElementById("eraseMenu").style.display = "none";
-    if (!confirm("Erase all data (floor plan + layouts)?")) return;
-    // Clear layout data (D-94: reset in place)
-    window.olmStore.reset("amendments");
-    window.fpData.rooms.forEach(function(r) {
-      r.candidates = [];
-      r.selectedCandidate = null;
-    });
-    window.fpData.currentIdx = 0;
-    // Clear Design/Review canvases
-    var fpCanvas = document.getElementById("fpCanvas");
-    if (fpCanvas) fpCanvas.innerHTML = "";
-    var rvCanvas = document.getElementById("rvCanvas");
-    if (rvCanvas) rvCanvas.innerHTML = "";
-    // Clear ingestion room amendments (bbox edits, exclusions, openings)
-    var rooms = window.ingState ? window.ingState.rooms : [];
-    rooms.forEach(function(r) {
-      r.exclusion_zones = [];
-      r.transparent_zones = [];
-      r.amendments = null;
-    });
-    // Re-render and switch to Import
-    var importBtn = document.querySelector('.tab-btn[data-tab="fpImport"]');
-    if (importBtn) importBtn.click();
+    var sel = window.ingState && window.ingState._selectedPlan;
+    var planId = sel && sel.id;
+    if (!planId) { alert("No plan loaded."); return; }
+    if (!confirm("Reinit: strip all detection and manual data from '" +
+        planId + "' and re-import from scratch?")) return;
+    var statusEl = document.getElementById("ingStatus");
+    if (statusEl) statusEl.textContent = "Reinit...";
+    fetch("/api/plans/" + encodeURIComponent(planId) + "/reinit", {
+      method: "POST",
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          alert("Reinit error: " + data.error);
+          if (statusEl) statusEl.textContent = "Reinit failed";
+          return;
+        }
+        // Re-trigger import of the cleaned plan
+        var planItem = document.querySelector(
+          '.plan-item[data-plan-id="' + planId + '"]');
+        if (planItem) {
+          planItem.click();
+        } else {
+          // Fallback: switch to Import tab
+          var importBtn = document.querySelector(
+            '.tab-btn[data-tab="fpImport"]');
+          if (importBtn) importBtn.click();
+        }
+      })
+      .catch(function (e) {
+        alert("Reinit error: " + e);
+        if (statusEl) statusEl.textContent = "Reinit failed";
+      });
   });
 
   // Erase Layout only — remove layout data, keep floorplan amendments

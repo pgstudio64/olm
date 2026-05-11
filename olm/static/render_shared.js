@@ -75,7 +75,7 @@
         '" x2="' + (hingeCoord + leafOff) + '" y2="' + arcEnd +
         '" stroke="' + COLOR_DOOR_LEAF + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
     } else if (face === 'west') {
-      sweepDir = swingLeft ? 0 : 1;
+      sweepDir = swingLeft ? 1 : 0;
       if (!opensInward) sweepDir = 1 - sweepDir;
       arcEnd = opensInward ? wallCoord + dw : wallCoord - dw;
       leafOff = swingLeft ? -mag : mag;
