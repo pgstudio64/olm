@@ -36,7 +36,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 **Défauts production restants (2026-04-29)** :
 - ~~*D2 — Door seeds invisibles en Floor*~~ → D-158 : toggle Seeds séparé + rendu door seeds en Floor et Room.
 - *D4 — Portes mal identifiées / pièce réduite côté sud* : détection de portes imprécise, bbox tronqué au sud sur certaines pièces
-- *D8 — Rays invisibles en Floor après Rescan All* : après un Rescan All en vue Floor, les rays ne s'affichent pas (mais visibles après rescan individuel en Room)
+- ~~*D8 — Rays invisibles en Floor après Rescan All*~~ : corrigé par le refactoring 3 couches SVG (session 2026-05-11).
 - ~~*D9 — Message seuil binarisation décale les paramètres*~~ : corrigé session 2026-05-11 (span déplacé dans le div flex).
 
 **Retours tests production (2026-05-08)** :
