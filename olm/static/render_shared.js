@@ -15,7 +15,8 @@
 //
 //   renderShared.gridSvg({ vb, cmPerPx, dotColor, lineColor,
 //                          marginRatio, minStartAt0 })
-//       Retourne un tableau de chaînes SVG (points 10 cm + lignes 1 m).
+//       Retourne { defs, fills } : un bloc <defs> avec 0-2 <pattern>
+//       et 0-2 <rect fill="url(#...)"> couvrant la zone de grille.
 //
 // Constantes couleurs exposées : COLOR_DOOR_ARC, COLOR_DOOR_LEAF,
 //   COLOR_WINDOW, COLOR_OPENING.
@@ -29,8 +30,8 @@
 
   // Default grid colors (used by ingestion SVG). editor.js passes its own
   // darker shades (COLOR_GRID / COLOR_GRID_METER from block_constants.js).
-  var DEFAULT_GRID_DOT  = '#6e6a62';
-  var DEFAULT_GRID_LINE = '#6e6a62';
+  var DEFAULT_GRID_DOT  = '#8a8680';
+  var DEFAULT_GRID_LINE = '#8a8680';
 
   /**
    * Build SVG strings for a hinged door (arc + leaf line).
@@ -101,8 +102,11 @@
     return [arcPath, leafLine];
   }
 
+  // Unique pattern ID counter — incremented each call to avoid <defs> collisions.
+  var _gridSeq = 0;
+
   /**
-   * Build SVG strings for a grid (10 cm dots + 1 m lines) over a viewbox.
+   * Build SVG pattern definitions and fill rects for a grid (10 cm dots + 1 m lines).
    *
    * @param {object} opts
    * @param {object} opts.vb           { x, y, w, h } current viewBox.
@@ -111,21 +115,24 @@
    * @param {string} [opts.lineColor]  Color for 1 m lines.
    * @param {number} [opts.marginRatio=0.5] Render margin as a fraction of
    *                                   max(vb.w, vb.h) — survives panning.
-   * @param {boolean} [opts.minStartAt0=false] Clamp the first 1 m line
-   *                                   origin to 0 (editor behaviour).
-   * @returns {{dots: string[], lines: string[]}} Separate arrays so callers
-   *          can apply different z-indices (editor uses z=-0.5 for dots,
-   *          z=-0.4 for lines). Concatenate dots + lines for flat output.
+   * @param {boolean} [opts.minStartAt0=false] Clamp the fill rect origin
+   *                                   to 0 (editor behaviour).
+   * @returns {{ defs: string, fills: string }} A <defs> block with 0-2
+   *          <pattern> elements and 0-2 <rect fill="url(#...)"> strings.
    */
   function gridSvg(opts) {
     var vb = opts.vb;
     var cmPerPx = opts.cmPerPx;
-    if (!vb || !cmPerPx || cmPerPx <= 0) return { dots: [], lines: [] };
+    if (!vb || !cmPerPx || cmPerPx <= 0) return { defs: '', fills: '' };
 
     var dotColor = opts.dotColor || DEFAULT_GRID_DOT;
     var lineColor = opts.lineColor || DEFAULT_GRID_LINE;
     var marginRatio = (typeof opts.marginRatio === 'number') ? opts.marginRatio : 0.5;
     var minStartAt0 = !!opts.minStartAt0;
+
+    var seq = ++_gridSeq;
+    var dotId = 'olmGridDot_' + seq;
+    var lineId = 'olmGridLine_' + seq;
 
     var step10cm = 10 / cmPerPx;
     var step1m = 100 / cmPerPx;
@@ -135,44 +142,46 @@
     var gxE = vb.x + vb.w + margin;
     var gyE = vb.y + vb.h + margin;
 
-    var dots = [];
-    var lines = [];
+    var patternDefs = '';
+    var fills = '';
 
-    // 10 cm dots — skip when zoomed out too far (would overlap).
-    // Cap max visual size: r ne dépasse pas 1.5 px (via _currentZf).
-    if (vb.w / step10cm < 150) {
+    // Dot pattern — skip when zoomed out too far (would overlap).
+    if (vb.w / step10cm < 250) {
       var zf = window._currentZf || 1;
-      var r = Math.min(0.6, 2 * zf);
-      for (var gx = gxS; gx <= gxE; gx += step10cm) {
-        for (var gy = gyS; gy <= gyE; gy += step10cm) {
-          dots.push('<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) +
-            '" r="' + r.toFixed(2) + '" fill="' + dotColor + '"/>');
-        }
-      }
+      var r = Math.max(0.3, Math.min(step10cm * 0.08, 2 * zf));
+      var halfStep = step10cm / 2;
+      patternDefs += '<pattern id="' + dotId + '" width="' + step10cm.toFixed(4) +
+        '" height="' + step10cm.toFixed(4) + '" patternUnits="userSpaceOnUse">' +
+        '<circle cx="' + halfStep.toFixed(4) + '" cy="' + halfStep.toFixed(4) +
+        '" r="' + r.toFixed(2) + '" fill="' + dotColor + '"/>' +
+        '</pattern>';
+      fills += '<rect x="' + gxS.toFixed(1) + '" y="' + gyS.toFixed(1) +
+        '" width="' + (gxE - gxS).toFixed(1) + '" height="' + (gyE - gyS).toFixed(1) +
+        '" fill="url(#' + dotId + ')"/>';
     }
 
-    // 1 m lines
-    var mxS, myS;
-    if (minStartAt0) {
-      mxS = Math.max(0, Math.floor(vb.x / step1m) * step1m);
-      myS = Math.max(0, Math.floor(vb.y / step1m) * step1m);
-    } else {
-      mxS = Math.floor((vb.x - margin) / step1m) * step1m;
-      myS = Math.floor((vb.y - margin) / step1m) * step1m;
-    }
+    // Line pattern
+    var lineRectX = gxS;
+    var lineRectY = gyS;
+    var lineRectW = gxE - gxS;
+    var lineRectH = gyE - gyS;
+    var lineZf = window._currentZf || 1;
+    var lineW = Math.min(1.5, Math.max(0.5, 1.5 * lineZf));
+    patternDefs += '<pattern id="' + lineId + '" width="' + step1m.toFixed(4) +
+      '" height="' + step1m.toFixed(4) + '" patternUnits="userSpaceOnUse">' +
+      '<line x1="0" y1="0" x2="' + step1m.toFixed(4) + '" y2="0"' +
+      ' stroke="' + lineColor + '" stroke-width="' + lineW.toFixed(2) + '"/>' +
+      '<line x1="0" y1="0" x2="0" y2="' + step1m.toFixed(4) + '"' +
+      ' stroke="' + lineColor + '" stroke-width="' + lineW.toFixed(2) + '"/>' +
+      '</pattern>';
+    fills += '<rect x="' + lineRectX.toFixed(1) + '" y="' + lineRectY.toFixed(1) +
+      '" width="' + lineRectW.toFixed(1) + '" height="' + lineRectH.toFixed(1) +
+      '" fill="url(#' + lineId + ')"/>';
 
-    for (var mx = mxS; mx <= gxE; mx += step1m) {
-      lines.push('<line x1="' + mx.toFixed(1) + '" y1="' + gyS.toFixed(1) +
-        '" x2="' + mx.toFixed(1) + '" y2="' + gyE.toFixed(1) +
-        '" stroke="' + lineColor + '" stroke-width="0.5"/>');
-    }
-    for (var my = myS; my <= gyE; my += step1m) {
-      lines.push('<line x1="' + gxS.toFixed(1) + '" y1="' + my.toFixed(1) +
-        '" x2="' + gxE.toFixed(1) + '" y2="' + my.toFixed(1) +
-        '" stroke="' + lineColor + '" stroke-width="0.5"/>');
-    }
-
-    return { dots: dots, lines: lines };
+    return {
+      defs: '<defs>' + patternDefs + '</defs>',
+      fills: fills,
+    };
   }
 
   window.renderShared = {

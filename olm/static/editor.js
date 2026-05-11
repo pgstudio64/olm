@@ -1158,22 +1158,8 @@ function _renderImpl(targetSvg) {
   if (totalH < roomTotalH) totalH = roomTotalH;
 
   // Grid: 10cm dots + 1m lines + graduated ruler (z=0: behind everything)
-  if (state.gridVisible) {
-    const meterPx = 100 * SCALE;
-    const vb = state.viewBox;
-    var gridParts = window.renderShared.gridSvg({
-      vb: vb,
-      cmPerPx: 1 / SCALE,
-      dotColor: COLOR_GRID,
-      lineColor: COLOR_GRID_METER,
-      marginRatio: 1.0,
-      minStartAt0: true,
-    });
-    gridParts.dots.forEach(function(s) { elements.push({ z: -0.5, s: s }); });
-    gridParts.lines.forEach(function(s) { elements.push({ z: -0.4, s: s }); });
-
-    // Meter labels rendered by updateRulers() around the SVG (rulers HTML).
-  }
+  // Grid SVG is rendered via pattern cache into its own layer — see below.
+  // Meter labels rendered by updateRulers() around the SVG (rulers HTML).
 
   // Overlay raster background (only for Review/Design canvases, not the Pattern Editor)
   var isEditor = svg && svg.id === "canvas";
@@ -1225,11 +1211,48 @@ function _renderImpl(targetSvg) {
   // Hide canvas background when overlay is active (avoid dark veil)
   svg.style.background = state.overlay ? 'transparent' : '';
 
-  elements.sort(function(a, b) { return a.z - b.z; });
+  const svgId = svg.id || 'canvas';
+  const bgId = svgId + '-bg';
+  const gridId = svgId + '-grid';
+  const overlayId = svgId + '-overlay';
+  if (!document.getElementById(bgId)) {
+    svg.innerHTML = '<g id="' + bgId + '"></g><g id="' + gridId + '"></g><g id="' + overlayId + '"></g>';
+  }
+
+  const elementsBg = elements.filter(function(e) { return e.z < 0; });
+  const elementsOverlay = elements.filter(function(e) { return e.z >= 0; });
+  elementsBg.sort(function(a, b) { return a.z - b.z; });
+  elementsOverlay.sort(function(a, b) { return a.z - b.z; });
 
   // D-83: data is already in local coordinates — render directly, no SVG rotation needed.
   // Only the overlay needs rotation (handled separately via overlay transform).
-  svg.innerHTML = elements.map(function(e) { return e.s; }).join("\n");
+  document.getElementById(bgId).innerHTML = elementsBg.map(function(e) { return e.s; }).join('\n');
+
+  const editorVb = state.viewBox;
+  const editorGridKey = JSON.stringify({
+    x: editorVb.x, y: editorVb.y, w: editorVb.w, h: editorVb.h,
+    on: !!state.gridVisible,
+    zf: window._currentZf || 1,
+  });
+  if (svg._gridCacheKey !== editorGridKey) {
+    svg._gridCacheKey = editorGridKey;
+    const gridLayer = document.getElementById(gridId);
+    if (state.gridVisible) {
+      const gridParts = window.renderShared.gridSvg({
+        vb: editorVb,
+        cmPerPx: 1 / SCALE,
+        dotColor: COLOR_GRID,
+        lineColor: COLOR_GRID_METER,
+        marginRatio: 1.0,
+        minStartAt0: true,
+      });
+      gridLayer.innerHTML = gridParts.defs + '\n' + gridParts.fills;
+    } else {
+      gridLayer.innerHTML = '';
+    }
+  }
+
+  document.getElementById(overlayId).innerHTML = elementsOverlay.map(function(e) { return e.s; }).join('\n');
 
   // Store dimensions for zoomFit
   state._lastContentW = totalW;

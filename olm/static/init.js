@@ -501,6 +501,31 @@ async function init() {
   setupPan(document.getElementById("fpCanvas"));
   setupPan(document.getElementById("rvCanvas"));
 
+  function setupWheelZoom(svg) {
+    if (!svg) return;
+    svg.addEventListener("wheel", function(e) {
+      e.preventDefault();
+      var vb = state.viewBox;
+      var isZoomIn = e.deltaY < 0;
+      var factor = isZoomIn ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
+      if (!isZoomIn && state._fitViewBox) {
+        if (vb.w * factor > state._fitViewBox.w * ZOOM_OUT_MAX_FIT_RATIO) return;
+      }
+      var rect = svg.getBoundingClientRect();
+      var mx = vb.x + (e.clientX - rect.left) / rect.width * vb.w;
+      var my = vb.y + (e.clientY - rect.top) / rect.height * vb.h;
+      vb.x = mx - (mx - vb.x) * factor;
+      vb.y = my - (my - vb.y) * factor;
+      vb.w *= factor;
+      vb.h *= factor;
+      state.zoom = 1 / (vb.w / (state._fitViewBox ? state._fitViewBox.w : vb.w));
+      render(svg);
+    }, { passive: false });
+  }
+  setupWheelZoom(canvas);
+  setupWheelZoom(document.getElementById("fpCanvas"));
+  setupWheelZoom(document.getElementById("rvCanvas"));
+
   // rvTool (forbidden-zone interaction for Review amend mode) extracted
   // to olm/static/init_rvtool.js as of D-94 P3.
 
