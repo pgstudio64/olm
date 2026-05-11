@@ -1285,6 +1285,7 @@ def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
     overlay_png_path: str,
+    window_mode: str = "simple",
 ) -> list:
     """Parse les pièces depuis un JSON preprocessé v3 + PNG enhanced/overlay.
 
@@ -1508,6 +1509,8 @@ def extract_rooms_from_preprocessed(
                 binary_raw_precomputed=_bin_raw,
                 color_image=_color_img,
                 other_seeds=_other or None,
+                doors_px=p["doors_raw"],
+                window_mode=window_mode,
             )
             p["bbox_px_opt"] = tuple(features["bbox_px"])
             _import_features[p["room_id"]] = features
@@ -1702,6 +1705,7 @@ def extract_room_features(
     other_seeds: list[tuple[int, int]] | None = None,
     diag: dict | None = None,
     detection_overrides: dict | None = None,
+    window_mode: str = "detailed",
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145 / D-156).
 
@@ -1983,7 +1987,6 @@ def extract_room_features(
         segs = walls.get(face, [])
         any_window = False
 
-        # D-156 : vérification extérieure par couleur (quand disponible).
         face_is_exterior = (
             rgb_arr is not None
             and _face_borders_color(
@@ -1991,33 +1994,53 @@ def extract_room_features(
                 margin_px=_ext_margin_px)
         )
 
-        for seg in segs:
-            if seg.kind not in ("window", "opening"):
-                continue
-            off = seg.start_px
-            w = seg.end_px - seg.start_px
-            if w <= 0:
-                continue
-            entry = {
-                "face": face,
-                "offset_px": int(off),
-                "width_px": int(w),
-                "offset_cm": int(round(off * scale_cm_per_px)),
-                "width_cm": int(round(w * scale_cm_per_px)),
-            }
-            if seg.kind == "window":
-                # D-156 : fenêtres uniquement sur faces extérieures.
-                # Sans image couleur (rgb_arr is None) → comportement
-                # legacy (toutes les fenêtres texture conservées).
-                if rgb_arr is None or face_is_exterior:
-                    windows.append(entry)
-                    any_window = True
-            else:
-                openings.append(entry)
-
-        # Note : pas de fallback full-face. Le filtre extérieur sert
-        # uniquement à éliminer les faux positifs fenêtres sur faces
-        # intérieures, pas à créer des fenêtres sur des murs pleins.
+        if window_mode == "simple":
+            # Mode simple : une fenêtre pleine face par face extérieure.
+            if face_is_exterior:
+                face_len_px = (nx1 - nx0) if face in ("north", "south") \
+                    else (ny1 - ny0)
+                windows.append({
+                    "face": face,
+                    "offset_px": 0,
+                    "width_px": int(face_len_px),
+                    "offset_cm": 0,
+                    "width_cm": int(round(face_len_px * scale_cm_per_px)),
+                })
+            # Openings : garder celles détectées par texture (portes, passages)
+            for seg in segs:
+                if seg.kind == "opening":
+                    off = seg.start_px
+                    w = seg.end_px - seg.start_px
+                    if w > 0:
+                        openings.append({
+                            "face": face,
+                            "offset_px": int(off),
+                            "width_px": int(w),
+                            "offset_cm": int(round(off * scale_cm_per_px)),
+                            "width_cm": int(round(w * scale_cm_per_px)),
+                        })
+        else:
+            # Mode détaillé : algo texture existant.
+            for seg in segs:
+                if seg.kind not in ("window", "opening"):
+                    continue
+                off = seg.start_px
+                w = seg.end_px - seg.start_px
+                if w <= 0:
+                    continue
+                entry = {
+                    "face": face,
+                    "offset_px": int(off),
+                    "width_px": int(w),
+                    "offset_cm": int(round(off * scale_cm_per_px)),
+                    "width_cm": int(round(w * scale_cm_per_px)),
+                }
+                if seg.kind == "window":
+                    if rgb_arr is None or face_is_exterior:
+                        windows.append(entry)
+                        any_window = True
+                else:
+                    openings.append(entry)
 
     # Règle métier : une face ne peut pas avoir à la fois fenêtres et
     # openings. Si les deux coexistent, les openings sont des artefacts du
@@ -2038,11 +2061,14 @@ def extract_room_features(
         for h in face_hits:
             coarse_hits_out.append([int(h[0]), int(h[1]), d])
 
-    # Portes : si le caller en fournit (import preprocessed / JSON),
+    # Portes : si le caller fournit des portes enrichies (avec face),
     # les restituer telles quelles. Sinon, détecter depuis les arcs.
+    # Les seed-only doors (sans face) ne court-circuitent pas la détection.
     doors_out: list[dict] = []
-    if doors_px:
-        doors_out = list(doors_px)
+    _enriched_doors = [d for d in (doors_px or []) if d.get("face")]
+    _seedonly_doors = [d for d in (doors_px or []) if not d.get("face")]
+    if _enriched_doors:
+        doors_out = _enriched_doors + _seedonly_doors
     else:
         # Filtre largeur min/max porte (cf. DetectionConfigCm).
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
@@ -2052,7 +2078,8 @@ def extract_room_features(
         for d in cr.doors:
             off = int(d.get("offset_px", 0))
             wpx = int(d.get("width_px", 0))
-            if wpx < _min_door_w_px or wpx > _max_door_w_px:
+            is_seed = d.get("seed_confirmed") or d.get("seed_fallback")
+            if not is_seed and (wpx < _min_door_w_px or wpx > _max_door_w_px):
                 continue
             entry = {
                 "face": d.get("face"),
@@ -2064,6 +2091,7 @@ def extract_room_features(
                 "opens_inward": bool(d.get("opens_inward", True)),
             }
             doors_out.append(entry)
+        doors_out.extend(_seedonly_doors)
 
     # --- Pillar → exclusion zones auto ---
     # Convert pillar detections to room-local exclusion zones (cm).

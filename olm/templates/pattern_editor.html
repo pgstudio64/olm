@@ -101,6 +101,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="settings-grid">
         <label class="settings-label">Plans directory</label>
         <input type="text" id="cfgPlansDir" class="settings-input" style="width:100%;" placeholder="project/plans">
+        <label class="settings-label" title="Simple = one window per exterior face. Detailed = texture analysis.">Window detection</label>
+        <select id="cfgWindowMode" class="settings-input" style="width:120px;" title="Simple = one window per exterior face. Detailed = texture analysis.">
+          <option value="simple">Simple</option>
+          <option value="detailed">Detailed</option>
+        </select>
       </div>
     </div>
     <div class="settings-section">
@@ -113,42 +118,20 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="settings-section">
       <div class="section-title">OCR Detection</div>
       <div class="settings-grid">
-        <label class="settings-label">Cartouche margin (cm)</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgCartoucheMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
-          <span style="font-size:9px;color:var(--text-dim);">Margin around room labels for cartouche erasure</span>
-        </div>
-        <label class="settings-label">Text skip margin (cm)</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgTextSkipMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
-          <span style="font-size:9px;color:var(--text-dim);">Margin around text bboxes for wall classifier</span>
-        </div>
-        <label class="settings-label">Binarize threshold</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgBinarizeThreshold" class="settings-input" style="width:70px;" min="50" max="250" step="5">
-          <span style="font-size:9px;color:var(--text-dim);">Grayscale level below which a pixel is wall (0-255)</span>
-          <span style="font-size:9px;color:orange;">⚠ Au prochain redémarrage</span>
-        </div>
-        <label class="settings-label">Max door width (cm)</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgMaxDoorWidth" class="settings-input" style="width:70px;" min="80" max="300" step="10">
-          <span style="font-size:9px;color:var(--text-dim);">Doors wider than this are rejected as false positives</span>
-        </div>
-        <label class="settings-label">Min opening depth (cm)</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgMinOpeningDepth" class="settings-input" style="width:70px;" min="20" max="200" step="10">
-          <span style="font-size:9px;color:var(--text-dim);">Opening needs free space behind — otherwise reclassified as wall</span>
-        </div>
-        <label class="settings-label">Min obstacle width (cm)</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgMinObstacleWidth" class="settings-input" style="width:70px;" min="10" max="100" step="5">
-          <span style="font-size:9px;color:var(--text-dim);">Pillars narrower than this are traversed by rays</span>
-        </div>
-        <label class="settings-label">Max pillar size (cm)</label>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <input type="number" id="cfgMaxPillarSize" class="settings-input" style="width:70px;" min="10" max="100" step="5">
-          <span style="font-size:9px;color:var(--text-dim);">Max side of a square pillar</span>
-        </div>
+        <label class="settings-label" title="Margin around room labels for cartouche erasure">Cartouche margin (cm)</label>
+        <input type="number" id="cfgCartoucheMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
+        <label class="settings-label" title="Margin around text bboxes for wall classifier">Text skip margin (cm)</label>
+        <input type="number" id="cfgTextSkipMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
+        <label class="settings-label" title="Grayscale level below which a pixel is wall (0-255). Requires server restart.">Binarize threshold <span style="font-size:9px;color:orange;">⚠</span></label>
+        <input type="number" id="cfgBinarizeThreshold" class="settings-input" style="width:70px;" min="50" max="250" step="5">
+        <label class="settings-label" title="Doors wider than this are rejected as false positives">Max door width (cm)</label>
+        <input type="number" id="cfgMaxDoorWidth" class="settings-input" style="width:70px;" min="80" max="300" step="10">
+        <label class="settings-label" title="Opening needs free space behind — otherwise reclassified as wall">Min opening depth (cm)</label>
+        <input type="number" id="cfgMinOpeningDepth" class="settings-input" style="width:70px;" min="20" max="200" step="10">
+        <label class="settings-label" title="Pillars narrower than this are traversed by rays">Min obstacle width (cm)</label>
+        <input type="number" id="cfgMinObstacleWidth" class="settings-input" style="width:70px;" min="10" max="100" step="5">
+        <label class="settings-label" title="Max side of a square pillar">Max pillar size (cm)</label>
+        <input type="number" id="cfgMaxPillarSize" class="settings-input" style="width:70px;" min="10" max="100" step="5">
         <label class="settings-label">Comb step (cm)</label>
         <div style="display:flex;gap:4px;align-items:center;">
           <input type="number" id="cfgCombStep" class="settings-input" style="width:70px;" min="3" max="30" step="1">

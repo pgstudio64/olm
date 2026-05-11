@@ -946,8 +946,11 @@ def api_import_preprocessed():
             json_data["_detection_overrides"] = _det_overrides
 
         # --- Extraction ---
+        _window_mode = request.form.get("window_mode", "simple")
         from olm.ingestion.extract import extract_rooms_from_preprocessed
-        rooms = extract_rooms_from_preprocessed(json_data, enhanced_path, overlay_path)
+        rooms = extract_rooms_from_preprocessed(
+            json_data, enhanced_path, overlay_path,
+            window_mode=_window_mode)
 
         # Image size : lire depuis le JSON v3 si présent, sinon depuis le PNG
         page_w = int(json_data.get("page_width_px") or 0)
@@ -1390,7 +1393,8 @@ def api_room_reanalyze():
         threshold = int(data.get("threshold", _get_default_threshold()))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
-        # Seeds of all other rooms — limits rays at room boundaries.
+        window_mode = data.get("window_mode", "detailed") \
+            if mode != "ocr" else "detailed"
         raw_other = data.get("other_seeds_px") or []
         other_seeds_px = [(int(s[0]), int(s[1]))
                           for s in raw_other if s and len(s) >= 2]
@@ -1447,6 +1451,7 @@ def api_room_reanalyze():
             corridor_rgb=_get_corridor_rgb(),
             other_seeds=other_seeds_px or None,
             detection_overrides=_get_detection_overrides(),
+            window_mode=window_mode,
         )
         return jsonify(result)
     except Exception as e:
@@ -1474,6 +1479,8 @@ def api_debug_room_diagnostic():
         threshold = int(data.get("threshold", _get_default_threshold()))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
+        _wm = data.get("window_mode", "detailed")
+        window_mode = _wm if mode != "ocr" else "detailed"
         raw_other = data.get("other_seeds_px") or []
         other_seeds_px = [(int(s[0]), int(s[1]))
                           for s in raw_other if s and len(s) >= 2]
@@ -1524,6 +1531,7 @@ def api_debug_room_diagnostic():
             other_seeds=other_seeds_px or None,
             diag=diag,
             detection_overrides=_get_detection_overrides(),
+            window_mode=window_mode,
         )
         # Keep hits in the response so the frontend can display
         # rays after rescan (D-169b).
@@ -1750,6 +1758,8 @@ def api_room_reanalyze_batch():
         rooms = data.get("rooms") or []
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
+        window_mode = data.get("window_mode", "detailed") \
+            if mode != "ocr" else "detailed"
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1843,6 +1853,7 @@ def api_room_reanalyze_batch():
                     corridor_rgb=_get_corridor_rgb(),
                     other_seeds=other_seeds or None,
                     detection_overrides=_get_detection_overrides(),
+                    window_mode=window_mode,
                 )
                 results.append({"name": name, **features})
             except Exception as e:

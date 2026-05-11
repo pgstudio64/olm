@@ -2074,6 +2074,7 @@
         var ingLwBatchEl = document.getElementById('ingLockWalls');
         var lockWallsFloor = !!(ingLwBatchEl && ingLwBatchEl.checked);
         try {
+          var _wm = ((window.APP_CONFIG || {}).ingestion || {}).window_mode || 'simple';
           var payload = {
             plan_path: ingState.planPathEnhanced,
             overlay_path: ingState.planPath || '',
@@ -2082,6 +2083,7 @@
             clip_to_bbox: lockWallsFloor,
             mode: (ingState._selectedPlan && ingState._selectedPlan.mode)
                   || 'ocr',
+            window_mode: _wm,
             rooms: [],
           };
           var validRooms = [];
@@ -2333,6 +2335,8 @@
     var ds2 = getDrawingScale();
     if (ds2) formData.append('drawing_scale', ds2);
     formData.append('render_dpi', String(getRenderDpi()));
+    formData.append('window_mode',
+      ((window.APP_CONFIG || {}).ingestion || {}).window_mode || 'simple');
 
     fetch('/api/import/preprocessed', { method: 'POST', body: formData })
       .then(function (r) { return r.json(); })

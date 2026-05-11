@@ -1615,14 +1615,21 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
                        {'wall_count': int(wall_count)})
 
     # === Step 2: identify arc hits (shorter than the wall) ===
+    # Minimum distance from wall to be considered arc (not wall noise).
+    # Wall thickness is typically 10-20 cm; hits closer are noise.
+    min_arc_dist_px = max(3, door_width_px // 4)
     if face == "south":
-        arc_hits = [(h[0], h[1]) for h in face_hits if h[1] < wall]
+        arc_hits = [(h[0], h[1]) for h in face_hits
+                    if wall - h[1] > min_arc_dist_px]
     elif face == "north":
-        arc_hits = [(h[0], h[1]) for h in face_hits if h[1] > wall]
+        arc_hits = [(h[0], h[1]) for h in face_hits
+                    if h[1] - wall > min_arc_dist_px]
     elif face == "east":
-        arc_hits = [(h[0], h[1]) for h in face_hits if h[0] < wall]
+        arc_hits = [(h[0], h[1]) for h in face_hits
+                    if wall - h[0] > min_arc_dist_px]
     else:  # west
-        arc_hits = [(h[0], h[1]) for h in face_hits if h[0] > wall]
+        arc_hits = [(h[0], h[1]) for h in face_hits
+                    if h[0] - wall > min_arc_dist_px]
 
     fd['arc_hits_count'] = len(arc_hits)
 
@@ -1641,6 +1648,7 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
             "width_px": min(door_width_px, face_end - origin),
             "hinge_side": "left",
             "opens_inward": True,
+            "seed_fallback": True,
         }
         fd['rejected'] = None
         fd['doors_found'] = 1
@@ -1773,11 +1781,10 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
         "width_px": door_width,
         "hinge_side": hinge_side,
         "opens_inward": True,
+        "seed_confirmed": seed_confirmed,
         "jamb_hinge_px": jamb_hinge,
         "jamb_free_px": jamb_free,
         "wall_px": wall,
-        "seed_x": seed_x,
-        "seed_y": seed_y,
     }
 
     # Success — record diag
@@ -1826,22 +1833,27 @@ def expand_door_arcs(binary, rect, dir_hits, cx, cy,
     perp_tolerance_px = max(door_width_px * 3, int(200 / scale_cm_per_px)) \
         if scale_cm_per_px > 0 else door_width_px * 3
 
+    def _nearest_face(sx, sy):
+        dists = {
+            "north": abs(sy - y0),
+            "south": abs(sy - y1),
+            "west": abs(sx - x0),
+            "east": abs(sx - x1),
+        }
+        return min(dists, key=dists.get)
+
     def _seeds_for_face(face):
         result = list(seeds_by_face.get(face, []))
         for s in faceless_seeds:
             sx, sy = s["seed_x"], s["seed_y"]
-            if face == "south":
-                if abs(sy - y1) <= perp_tolerance_px and x0 <= sx <= x1:
-                    result.append(s)
-            elif face == "north":
-                if abs(sy - y0) <= perp_tolerance_px and x0 <= sx <= x1:
-                    result.append(s)
-            elif face == "east":
-                if abs(sx - x1) <= perp_tolerance_px and y0 <= sy <= y1:
-                    result.append(s)
-            elif face == "west":
-                if abs(sx - x0) <= perp_tolerance_px and y0 <= sy <= y1:
-                    result.append(s)
+            if _nearest_face(sx, sy) != face:
+                continue
+            if face in ("south", "north"):
+                perp = abs(sy - (y1 if face == "south" else y0))
+            else:
+                perp = abs(sx - (x1 if face == "east" else x0))
+            if perp <= perp_tolerance_px:
+                result.append(s)
         return result or None
 
     for face in ("south", "north", "east", "west"):
