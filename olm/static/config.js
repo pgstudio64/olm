@@ -182,6 +182,12 @@ function renderGeneralSettings() {
     el.onchange = function() { saveConfigField(["ingestion", "plans_dir"], this.value); };
   }
 
+  el = document.getElementById("cfgWindowMode");
+  if (el) {
+    el.value = (APP_CONFIG.ingestion || {}).window_mode || "simple";
+    el.onchange = function() { saveConfigField(["ingestion", "window_mode"], this.value); };
+  }
+
   var matching = APP_CONFIG.matching || {};
   el = document.getElementById("cfgWDensity");
   if (el) { el.value = matching.w_density != null ? matching.w_density : 0.5; el.onchange = function() { saveConfigField(["matching", "w_density"], parseFloat(this.value)||0.5); }; }

@@ -788,6 +788,7 @@
               door_width_cm: doorWidthCm,
               clip_to_bbox: lockWallsFlag,
               mode: planMode,
+              window_mode: ((window.APP_CONFIG || {}).ingestion || {}).window_mode || 'simple',
               other_seeds_px: otherSeeds,
             }),
           });
