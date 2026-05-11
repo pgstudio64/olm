@@ -443,81 +443,57 @@
           }
           doorFaces.forEach(function (df) {
             lines.push("");
-            lines.push("  === " + df.face.toUpperCase() + " === " +
-              (df.rejected ? "REJECTED=" + df.rejected
-                : "OK doors=" + (df.doors_found || 0)));
+            var status = df.rejected ? "REJECTED=" + df.rejected
+              : "OK doors=" + (df.doors_found || 0);
+            if (df.seed_confirmed) status += " [SEED CONFIRMED]";
+            if (df.seed_fallback) status += " [SEED FALLBACK]";
+            lines.push("  === " + df.face.toUpperCase() + " === " + status);
             lines.push("  rect: " + JSON.stringify(df.rect));
             lines.push("  face_len: " + df.face_len_px +
               "  door_width: " + (df.door_width_px || "?") +
               "  tolerance: " + (df.tolerance || "?"));
-            lines.push("  dist_range: [" +
-              (df.dist_range_px || []).join(", ") + "]" +
-              "  min_arc_hits: " + (df.min_door_arc_hits || "?"));
-            lines.push("  scan: [" +
-              (df.scan_range || []).join("-") + "]" +
-              " (" + (df.scan_count || 0) + " px)" +
-              "  seeds: " + (df.has_seeds ? df.seeds_count : "none"));
-            lines.push("  binary_arcs: " + (df.using_binary_arcs || false));
+            lines.push("  seeds: " + (df.has_seeds ? df.seeds_count : "none") +
+              "  total_hits: " + (df.total_face_hits || 0));
 
-            // Step 1: beyond hits
-            lines.push("  -- step 1: hits beyond bbox --");
-            lines.push("  all_beyond: " + (df.all_beyond || 0));
-            if (df.beyond_dists && df.beyond_dists.length)
-              lines.push("  dists: [" + df.beyond_dists.join(",") + "]");
-            if (df.beyond_hits && df.beyond_hits.length) {
-              var bh = df.beyond_hits;
-              var bxs = bh.map(function (h) { return h.x; });
-              lines.push("  beyond x=[" + Math.min.apply(null, bxs) +
-                ".." + Math.max.apply(null, bxs) + "]" +
-                "  d=[" + bh[0].d + ".." + bh[bh.length - 1].d + "]");
-            }
-
-            // Step 2: far hits (distance-filtered)
-            lines.push("  -- step 2: far hits (dist filter) --");
-            lines.push("  far_hits: " + (df.far_hits || 0));
-            if (df.far_detail && df.far_detail.length) {
-              var fh = df.far_detail;
-              var fxs = fh.map(function (h) { return h.x; });
-              lines.push("  far x=[" + Math.min.apply(null, fxs) +
-                ".." + Math.max.apply(null, fxs) + "]" +
-                "  d=[" + fh[0].d + ".." + fh[fh.length - 1].d + "]");
-            }
-
-            // Step 3: wall mode
             if (df.wall_px != null) {
-              lines.push("  -- step 3: wall position (mode) --");
+              lines.push("  -- wall (mode) --");
               lines.push("  wall_px: " + df.wall_px +
                 "  wall_hits: " + df.wall_hits);
               if (df.wall_distribution && df.wall_distribution.length) {
-                lines.push("  distribution:");
-                df.wall_distribution.forEach(function (w) {
+                df.wall_distribution.slice(0, 5).forEach(function (w) {
                   lines.push("    pos=" + w.pos + " count=" + w.count);
                 });
               }
             }
 
-            // Step 4: contact
-            if (df.contact_px != null) {
-              lines.push("  -- step 4: contact --");
-              lines.push("  contact_px: " + df.contact_px +
-                "/" + df.face_len_px +
-                " = " + (df.contact_ratio * 100).toFixed(1) + "%" +
-                "  check_pos: " + (df.contact_check_pos || "?") +
-                "  threshold: " + ((df.contact_threshold || 0.20) * 100) +
-                "%");
+            if (df.arc_hits_count != null) {
+              lines.push("  -- arc --");
+              lines.push("  arc_hits: " + df.arc_hits_count +
+                "  arc_span: " + (df.arc_span_px || "?") +
+                "  range: " + JSON.stringify(df.arc_along_range || []));
             }
 
-            // Step 5: arc scan
-            if (df.arc_pixels != null) {
-              lines.push("  -- step 5: arc pixel scan --");
-              lines.push("  probe_px: " + df.probe_px +
-                "  arc_pixels: " + df.arc_pixels);
-              if (df.groups && df.groups.length) {
-                df.groups.forEach(function (g) {
-                  lines.push("    group: " + g.start + "-" + g.end +
-                    " w=" + g.width);
-                });
-              }
+            if (df.arc_hinge_side) {
+              lines.push("  -- arc profile --");
+              lines.push("  hinge: " + df.arc_hinge_side +
+                "  violations: " + (df.arc_violations || 0) +
+                "/" + ((df.arc_profile_dists || []).length) +
+                " = " + ((df.arc_violation_ratio || 0) * 100).toFixed(1) + "%");
+              lines.push("  dist_range: " + (df.arc_dist_range || "?"));
+            }
+
+            if (df.wall_fill_ratio != null) {
+              lines.push("  -- wall opening --");
+              lines.push("  wall_fill: " + (df.wall_fill_ratio * 100).toFixed(1) +
+                "%  (" + (df.wall_pixels_in_arc || 0) + "/" +
+                (df.arc_zone_len || 0) + " px)");
+            }
+
+            if (df.door_offset_px != null) {
+              lines.push("  -- result --");
+              lines.push("  offset: " + df.door_offset_px +
+                "  width: " + (df.door_width_detected_px || "?") +
+                "  wall_confirmation: " + (df.wall_confirmation || "?"));
             }
           });
 

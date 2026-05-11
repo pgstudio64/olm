@@ -1321,9 +1321,9 @@ function updateRulers(targetSvg) {
   // Origine (0,0) = coin NW de la pièce (fallback SVG origin si non défini).
   var nw = state._roomNW || { x: 0, y: 0 };
 
-  // Horizontal labels (top + bottom) — couvrent toute la vb visible, valeurs négatives incluses
-  var mxStart = Math.floor((vb.x - nw.x) / meterPx) * meterPx + nw.x;
-  var mxEnd = vb.x + vb.w;
+  var rulerMargin = vb.w * 0.5;
+  var mxStart = Math.floor((vb.x - rulerMargin - nw.x) / meterPx) * meterPx + nw.x;
+  var mxEnd = vb.x + vb.w + rulerMargin;
   for (var mx = mxStart; mx <= mxEnd; mx += meterPx) {
     var p = svgToWrap(mx, 0);
     if (p.x < 22 || p.x > wrapRect.width - 22) continue;
@@ -1331,9 +1331,8 @@ function updateRulers(targetSvg) {
     htmlH += '<span style="left:' + p.x.toFixed(0) + 'px;">' + m + 'm</span>';
   }
 
-  // Vertical labels (left + right)
-  var myStart = Math.floor((vb.y - nw.y) / meterPx) * meterPx + nw.y;
-  var myEnd = vb.y + vb.h;
+  var myStart = Math.floor((vb.y - rulerMargin - nw.y) / meterPx) * meterPx + nw.y;
+  var myEnd = vb.y + vb.h + rulerMargin;
   for (var my = myStart; my <= myEnd; my += meterPx) {
     var p = svgToWrap(0, my);
     if (p.y < 0 || p.y > wrapRect.height - 36) continue;
