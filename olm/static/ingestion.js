@@ -1043,6 +1043,7 @@
     var pxH = svg._lastPxH || svgRect.height || 600;
     var svgScale = Math.min(pxW / vb.w, pxH / vb.h);
     var pxScale = 1 / svgScale;
+    window._currentZf = pxScale;
 
     // Pre-compute scaled overlay sizes (D-155)
     var sBbox    = (OVERLAY_BBOX_STROKE * pxScale).toFixed(2);
@@ -1058,30 +1059,24 @@
     var sEraseW  = (WALL_ERASE_STROKE_WIDTH * pxScale).toFixed(2);
     var sFeatureOff = (WALL_FEATURE_OFFSET * pxScale).toFixed(2);
 
+    if (!document.getElementById('ing-bg')) {
+      svg.innerHTML = '<g id="ing-bg"></g><g id="ing-grid"></g><g id="ing-overlay"></g>';
+    }
+
+    var elsBg = [];
     var els = [];
 
     // Full-viewport background to avoid white edges when viewbox extends beyond image
-    els.push('<rect x="' + vb.x + '" y="' + vb.y + '" width="' + vb.w + '" height="' + vb.h +
+    elsBg.push('<rect x="' + vb.x + '" y="' + vb.y + '" width="' + vb.w + '" height="' + vb.h +
       '" fill="#1e1e1e"/>');
 
     // Background: floor plan image (as overlay)
     if (ingState.overlayVisible && ingState.planUrl) {
-      els.push('<image href="' + ingState.planUrl +
+      elsBg.push('<image href="' + ingState.planUrl +
         '" x="0" y="0" width="' + W + '" height="' + H +
         '" opacity="' + ingState.opacity +
         '" image-rendering="pixelated"' +
         ' style="image-rendering:pixelated;image-rendering:crisp-edges" />');
-    }
-
-    // Grid: 10cm dots + 1m lines (same style as pattern editor)
-    if (ingState.show.grid && ingState.scale > 0) {
-      var gridParts = window.renderShared.gridSvg({
-        vb: ingState.vb,
-        cmPerPx: ingState.scale,
-        marginRatio: 0.3,
-      });
-      gridParts.dots.forEach(function (s) { els.push(s); });
-      gridParts.lines.forEach(function (s) { els.push(s); });
     }
 
     var show = ingState.show;
@@ -1411,7 +1406,30 @@
       });
     }
 
-    svg.innerHTML = els.join('\n');
+    document.getElementById('ing-bg').innerHTML = elsBg.join('\n');
+
+    var gridCacheKey = JSON.stringify({
+      x: vb.x, y: vb.y, w: vb.w, h: vb.h,
+      scale: ingState.scale,
+      on: !!ingState.show.grid,
+      zf: window._currentZf || 1,
+    });
+    if (svg._gridCacheKey !== gridCacheKey) {
+      svg._gridCacheKey = gridCacheKey;
+      var gridEl = document.getElementById('ing-grid');
+      if (ingState.show.grid && ingState.scale > 0) {
+        var gridParts = window.renderShared.gridSvg({
+          vb: ingState.vb,
+          cmPerPx: ingState.scale,
+          marginRatio: 0.3,
+        });
+        gridEl.innerHTML = gridParts.defs + '\n' + gridParts.fills;
+      } else {
+        gridEl.innerHTML = '';
+      }
+    }
+
+    document.getElementById('ing-overlay').innerHTML = els.join('\n');
 
     // Click handler: merge checkboxes
     svg.querySelectorAll('[data-merge]').forEach(function(el) {
