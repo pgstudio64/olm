@@ -3,7 +3,7 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
-## [v0.4.46] — 2026-05-13
+## [v0.4.47] — 2026-05-13
 
 ### Added
 - **Mode dev `--dev` (D-179)** : option CLI pour activer les outils developpeur. Toggles
