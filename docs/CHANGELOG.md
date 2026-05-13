@@ -3,6 +3,25 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.46] — 2026-05-13
+
+### Fixed
+- **Ouverture parasite à chaque porte (D-174)** : `_filter_openings_overlapping_doors`
+  supprime les openings qui chevauchent geometriquement une porte sur la meme face.
+- **min_door_width_cm 70 → 55 (D-174)** : evite de filtrer les portes legitimement
+  detectees dont l'arc est legerement sous-dimensionne.
+- **Porte fantome sans arc (D-175)** : suppression du mecanisme `seed_fallback` —
+  les seeds de porte relaxent les seuils mais ne creent plus de porte sans arc.
+- **Detection fenetre exterior (D-177)** : `_face_is_exterior` remplace la bande fixe
+  50 cm par un scan directionnel proportionnel au bbox avec verification de seeds interposees.
+
+### Added
+- **Clustering multi-portes par face (D-176)** : detecte N portes sur une meme face
+  quand les arcs sont distincts (gap > door_width/2). Resout piece 914 (2 portes nord).
+- **Toggle "Hide detection colors" (D-178)** : Settings > Floor > Rendering. Remplace
+  les pixels bleu/vert par du blanc sur l'image affichee. Generation lazy, zero impact
+  detection/navigation.
+
 ## [v0.4.39] — 2026-05-10
 
 ### Changed

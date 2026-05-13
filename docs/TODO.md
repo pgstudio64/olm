@@ -73,11 +73,16 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 
 **PRIORITÉ CRITIQUE** :
 - **PERF — Import preprocessed 2× plus lent** : régression perf constatée sur plans réalistes après v0.4.45. Analyser et corriger. Profiler `extract_rooms_from_preprocessed` et `extract_room_features`.
+- ~~**Ouverture parasite à chaque porte**~~ : corrigé D-174 — `_filter_openings_overlapping_doors`.
+- **Ouverture impossible → mur** : quand une ouverture couvre plus de X% (seuil à définir, entre 70% et 100%) de la longueur d'une face non-couloir, c'est un artefact de détection (ray-cast traversant vers la pièce voisine). Dans un bureau réel, une face latérale ou de fond n'est jamais ouverte à 90%. Filtrer ces ouvertures et les remplacer par un mur plein. Seuil paramétrable dans detection_config.
+- **Zones d'exclusion manuelles KO dans Room** : l'ajout manuel d'une zone d'exclusion via le dessin à la souris produit des coordonnées fantaisistes et la zone n'est pas visible. À investiguer (conversion coordonnées écran → room-local).
+- ~~**Fenêtres simples KO si bbox trop loin du bleu**~~ : corrigé D-177 — `_face_is_exterior` remplace la bande fixe 50 cm par un scan directionnel proportionnel au bbox avec vérification de seeds.
 
 **Bugs prioritaires** :
 - ~~**B1 — Inversion ouest/est en mode Room**~~ : corrigé D-169 v0.4.34.
 - ~~**B2 — Import / ouverture plan pas propre**~~ : corrigé session 2026-05-11.
 - **B3 — Import preprocessed lent sans rescan** : un import preprocessed sans rescan (tout est dans le JSON) devrait être quasi-instantané. Actuellement c'est lent. À analyser.
+- **B4 — Zoom out Floor dépasse le plan** : en mode Floor, le zoom out ne devrait pas aller au-delà de la taille du plan. Limiter le dézoom max pour que le plan remplisse la vue.
 
 **Chantiers identifiés (non traités)** :
 - ~~*Paramètres OCR dans Settings*~~ → D-155 : `cartouche_margin_cm` et `text_skip_margin_cm` exposés dans Floor > OCR Detection. Propagés au backend via `_get_detection_overrides()` → `DetectionConfigCm.from_dict()`.

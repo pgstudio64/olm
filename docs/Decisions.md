@@ -7,6 +7,48 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-178 · Affichage plan sans couleurs de detection (2026-05-13)
+
+Toggle "Hide detection colors" dans Settings > Floor > Rendering. Remplace les pixels bleu (exterior) et vert (corridor) par du blanc sur l'image affichee. Generation lazy au premier toggle ON via canvas + toBlob + createObjectURL. Detection inchangee (utilise les fichiers serveur originaux). Preference persistee en localStorage.
+
+Impact : `ingestion.js` (_buildCleanPlanUrl), `config.js` (toggle binding), `store.js` (state), `pattern_editor.html` (checkbox).
+
+---
+
+## D-177 · Detection fenetre exterior par scan directionnel avec seeds (2026-05-13)
+
+Remplace `_face_borders_color` (bande fixe 50 cm) par `_face_is_exterior` dans `extract_room_features`. Nouveau algo : pour chaque face, scanne rangee par rangee vers l'exterieur (distance max = dimension perpendiculaire du bbox). Si >30% de pixels bleus trouves avant tout seed d'une autre piece, la face est exterieure. Regle le probleme des fenetres non detectees quand la bbox est eloignee de la zone bleue (rangements exclus, murs epais).
+
+Impact : `extract.py` — nouvelle fonction `_face_is_exterior`, remplace l'appel a `_face_borders_color` dans le flux fenetre.
+
+---
+
+## D-176 · Clustering multi-portes par face (2026-05-13)
+
+`_detect_doors_on_face` peut desormais detecter N portes sur une meme face. Quand `arc_too_wide` est declenche (arc >80% de la face), les arc hits sont clusterises par gaps > `door_width_px / 2`. Chaque cluster est valide independamment (profil monotone, wall opening). Pas de nouvelle constante — reutilise `door_width_px`. Resout le cas de la piece 914 (2 portes sur face nord).
+
+Impact : `test_comb.py` — `_detect_doors_on_face` restructure avec boucle sur clusters.
+
+---
+
+## D-175 · Suppression seed_fallback portes (2026-05-13)
+
+Le mecanisme `seed_fallback` dans `_detect_doors_on_face` creait une porte fantome quand un seed de porte existait mais aucun arc n'etait detecte. Supprime : les seeds de porte relaxent les seuils de detection d'arc mais ne creent plus jamais de porte a eux seuls. Regle les portes fantomes sur 922 et 911.
+
+Impact : `test_comb.py` — bloc seed_fallback supprime (lignes 1636-1658).
+
+---
+
+## D-174 · Filtrage openings chevauchant portes + min_door_width 55 cm (2026-05-13)
+
+Deux corrections detection :
+1. `_filter_openings_overlapping_doors` — supprime les openings dont l'intervalle [offset_cm, offset_cm+width_cm] chevauche une porte sur la meme face. Appelee dans `extract_room_features` et `extract_rooms_from_preprocessed`.
+2. `min_door_width_cm` abaisse de 70 a 55 cm dans `detection_config.py`. Evite de filtrer des portes legitimement detectees dont l'arc est legerement sous-dimensionne sur des plans a petite echelle.
+
+Impact : `extract.py` (nouvelle fonction + 2 appels), `detection_config.py` (seuil).
+
+---
+
 ## D-173 · Nouvel algo detection portes par hits — WIP (2026-05-10)
 
 ### Contexte

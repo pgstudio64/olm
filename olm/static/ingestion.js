@@ -1016,6 +1016,54 @@
   // nombreux call sites de ce module.
   var populateRoomsJson = window.populateRoomsJson;
 
+  // --- Build a "clean" plan URL with detection colors replaced by white ---
+  var _cleanBuildInProgress = false;
+  function _buildCleanPlanUrl() {
+    if (_cleanBuildInProgress || !ingState.planUrl) return;
+    _cleanBuildInProgress = true;
+
+    var ing = (window.APP_CONFIG && window.APP_CONFIG.ingestion) || {};
+    var extRgb = ing.preprocessed_exterior_rgb || [135, 206, 235];
+    var corRgb = ing.preprocessed_corridor_rgb || [193, 247, 179];
+    var tol = 5;  // tolerance for clean PNG colors
+
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function () {
+      var cvs = document.createElement("canvas");
+      cvs.width = img.naturalWidth;
+      cvs.height = img.naturalHeight;
+      var ctx = cvs.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      var id = ctx.getImageData(0, 0, cvs.width, cvs.height);
+      var d = id.data;
+      for (var i = 0; i < d.length; i += 4) {
+        var r = d[i], g = d[i + 1], b = d[i + 2];
+        if ((Math.abs(r - extRgb[0]) <= tol &&
+             Math.abs(g - extRgb[1]) <= tol &&
+             Math.abs(b - extRgb[2]) <= tol) ||
+            (Math.abs(r - corRgb[0]) <= tol &&
+             Math.abs(g - corRgb[1]) <= tol &&
+             Math.abs(b - corRgb[2]) <= tol)) {
+          d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+        }
+      }
+      ctx.putImageData(id, 0, 0);
+      cvs.toBlob(function (blob) {
+        if (blob) {
+          if (ingState.planUrlClean) {
+            try { URL.revokeObjectURL(ingState.planUrlClean); } catch (e) {}
+          }
+          ingState.planUrlClean = URL.createObjectURL(blob);
+        }
+        _cleanBuildInProgress = false;
+        if (ingState.hideDetectionColors) renderIngestion();
+      }, "image/png");
+    };
+    img.onerror = function () { _cleanBuildInProgress = false; };
+    img.src = ingState.planUrl;
+  }
+
   // --- Render the ingestion results as SVG ---
   function renderIngestion() {
     var svg = document.getElementById('ingSvg');
@@ -1072,7 +1120,15 @@
 
     // Background: floor plan image (as overlay)
     if (ingState.overlayVisible && ingState.planUrl) {
-      elsBg.push('<image href="' + ingState.planUrl +
+      var _displayUrl = ingState.planUrl;
+      if (ingState.hideDetectionColors) {
+        if (ingState.planUrlClean) {
+          _displayUrl = ingState.planUrlClean;
+        } else {
+          _buildCleanPlanUrl();
+        }
+      }
+      elsBg.push('<image href="' + _displayUrl +
         '" x="0" y="0" width="' + W + '" height="' + H +
         '" opacity="' + ingState.opacity +
         '" image-rendering="pixelated"' +
@@ -2422,6 +2478,11 @@
         var overlayUrl = _toUrl(data.overlay_path || data.image_path);
         var enhancedUrl = _toUrl(data.enhanced_path);
         ingState.planUrl = overlayUrl || enhancedUrl;
+        // Invalider l'image clean si le plan change.
+        if (ingState.planUrlClean) {
+          try { URL.revokeObjectURL(ingState.planUrlClean); } catch (e) {}
+          ingState.planUrlClean = "";
+        }
         // Chemins bruts serveur (pour /api/room/reanalyze qui lit le PNG -SD).
         ingState.planPath = data.overlay_path || data.image_path || "";
         ingState.planPathEnhanced = data.enhanced_path || ingState.planPath;

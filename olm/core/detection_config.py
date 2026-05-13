@@ -68,7 +68,7 @@ class DetectionConfigCm:
     # filtrée (côté OCR : reclassée wall ; côté preprocessed : rejetée
     # au chargement JSON). Élimine les micro-portes parasites issues
     # du JSON producer ou d'erreurs de classification.
-    min_door_width_cm: float = 70.0
+    min_door_width_cm: float = 55.0
     # Largeur maximale d'une porte. Au-delà de ce seuil, la détection
     # est considérée comme un faux positif (ex. mur entier classé porte).
     max_door_width_cm: float = 120.0

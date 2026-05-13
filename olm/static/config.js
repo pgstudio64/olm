@@ -263,6 +263,20 @@ function renderFloorplanSettings() {
       saveConfigField(["ingestion", "render_dpi"], parseInt(this.value) || 300);
     };
   }
+  // Hide detection colors toggle
+  var hdcEl = document.getElementById("cfgHideDetectionColors");
+  if (hdcEl) {
+    hdcEl.checked = !!window.ingState && !!window.ingState.hideDetectionColors;
+    hdcEl.onchange = function () {
+      if (window.ingState) {
+        window.ingState.hideDetectionColors = this.checked;
+        try { localStorage.setItem("olm_hideDetectionColors", this.checked ? "1" : ""); }
+        catch (e) { /* ignore */ }
+        if (typeof window.renderIngestion === "function") window.renderIngestion();
+      }
+    };
+  }
+
   // OCR Detection overrides (D-155)
   var cmEl = document.getElementById("cfgCartoucheMargin");
   if (cmEl) {
