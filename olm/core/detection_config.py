@@ -73,6 +73,12 @@ class DetectionConfigCm:
     # est considérée comme un faux positif (ex. mur entier classé porte).
     max_door_width_cm: float = 120.0
 
+    # --- Filtre ouvertures impossibles ---
+    # Ratio max de couverture d'une face non-couloir par des ouvertures.
+    # Au-delà, on sonde derrière le bbox pour vérifier s'il y a un mur
+    # (artefact ray-cast traversant vers la pièce voisine).
+    max_opening_face_ratio: float = 0.7
+
     # --- Couleur faces (corridor / extérieur) ---
     corridor_width_cm: float = 60.0     # largeur min supposée d'un couloir ;
                                          # l'échantillonnage cible le milieu

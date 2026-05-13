@@ -272,6 +272,19 @@
   }
 
   // Save to disk via server endpoint.
+  function _flashSaveBtn(text, color) {
+    var btn = document.getElementById('btnSavePlan');
+    if (!btn) return;
+    var orig = btn.textContent;
+    var origColor = btn.style.color;
+    btn.textContent = text;
+    btn.style.color = color || '';
+    setTimeout(function () {
+      btn.textContent = orig;
+      btn.style.color = origColor;
+    }, 2000);
+  }
+
   function savePlanToDisk() {
     var ingState = window.ingState;
     if (!ingState || !ingState.rooms || ingState.rooms.length === 0) {
@@ -296,13 +309,16 @@
         if (data.error) {
           alert('Save error: ' + data.error);
           if (statusEl) statusEl.textContent = 'Save failed';
+          _flashSaveBtn('Save failed', 'var(--bad)');
         } else {
           if (statusEl) statusEl.textContent = 'Saved';
+          _flashSaveBtn('Saved', 'var(--ok)');
         }
       })
       .catch(function (e) {
         alert('Save error: ' + e);
         if (statusEl) statusEl.textContent = 'Save failed';
+        _flashSaveBtn('Save failed', 'var(--bad)');
       });
   }
 

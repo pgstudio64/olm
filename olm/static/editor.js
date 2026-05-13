@@ -679,6 +679,8 @@ function _roomVisualInfo(corridorFace, roomWPx, roomHPx) {
 function render(targetSvg) {
   try { _renderImpl(targetSvg); }
   catch(e) { console.error("render() error:", e); setStatus("RENDER ERROR: " + e.message); }
+  // Minimap refresh after each render (Room / Office views).
+  if (window._minimapRefresh) window._minimapRefresh();
 }
 function _renderImpl(targetSvg) {
   const svg = targetSvg || document.getElementById("canvas");
@@ -2215,9 +2217,9 @@ function enterRoomAmendMode(room) {
   var rvLockWallsCb = document.getElementById("rvLockWalls");
   if (rvLockWallsCb) rvLockWallsCb.checked = !!state.walls_user_edited;
   var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
-  if (rvBtnCheck) rvBtnCheck.style.display = "";
+  if (rvBtnCheck) rvBtnCheck.style.display = APP_CONFIG.dev_mode ? "" : "none";
   var rvBtnDiag = document.getElementById("rvBtnDiag");
-  if (rvBtnDiag) rvBtnDiag.style.display = "";
+  if (rvBtnDiag) rvBtnDiag.style.display = APP_CONFIG.dev_mode ? "" : "none";
 
   // Disable navigation during edit
   document.getElementById("rvBtnPrev").disabled = true;

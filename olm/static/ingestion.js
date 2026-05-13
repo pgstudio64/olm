@@ -77,6 +77,8 @@
       var el = document.getElementById(id);
       if (el) el.style.display = '';
     });
+    // Build clean plan image (colors removed) for minimap + hide-colors.
+    _buildCleanPlanUrl();
   }
 
   // --- Shared re-analyze canonicalisation (D-112/D-113) ---------------------
@@ -1058,6 +1060,7 @@
         }
         _cleanBuildInProgress = false;
         if (ingState.hideDetectionColors) renderIngestion();
+        if (window._minimapRefresh) window._minimapRefresh();
       }, "image/png");
     };
     img.onerror = function () { _cleanBuildInProgress = false; };
@@ -2196,6 +2199,7 @@
               seed_px: seedPx,
               transparent_zones: absTransparents,
               doors: absDoors,
+              corridor_face: r.corridor_face_abs || "",
             });
             validRooms.push(r);
           });

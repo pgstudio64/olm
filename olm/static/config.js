@@ -23,7 +23,14 @@ async function loadAppConfig() {
   // D-156 : afficher la version OLM dans le header Settings.
   var verEl = document.getElementById("settingsVersion");
   if (verEl && APP_CONFIG.olm_version) {
-    verEl.textContent = "v" + APP_CONFIG.olm_version;
+    var suffix = APP_CONFIG.dev_mode ? " [DEV]" : "";
+    verEl.textContent = "v" + APP_CONFIG.olm_version + suffix;
+  }
+  // Apply dev-mode class on body to reveal dev-only elements.
+  if (APP_CONFIG.dev_mode) {
+    document.body.classList.add("dev-mode");
+  } else {
+    document.body.classList.remove("dev-mode");
   }
 }
 
