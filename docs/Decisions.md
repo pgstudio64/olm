@@ -7,6 +7,30 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-181 · Minimap schematique Room/Office (2026-05-13)
+
+Miniature du plan d'etage affichee dans le coin haut-gauche des vues Room et Office. Montre la position de la piece courante (rectangle orange) dans le contexte de l'etage. Fond noir avec 3 tons de gris (pieces sombres, exterieur moyen, couloir clair) depuis le PNG -SD. Contours 1px blancs des pieces detectees. Fenetres de la piece courante en bleu (1px plie, 3px deplie). Clic pour basculer entre taille pliee et depliee. Pre-traitement image au chargement du plan (cache). Conversion canonique→absolu via `rotateRectInv` pour les fenetres.
+
+Impact : nouveau fichier `olm/static/minimap.js`, `pattern_editor.html` (2 canvas), `style.css` (.minimap), `editor.js` (hook _minimapRefresh), `floor_plan.js` (_minimapRefresh impl + plan -SD URL).
+
+---
+
+## D-180 · Filtre ouvertures impossibles (2026-05-13)
+
+Quand des ouvertures couvrent plus de `max_opening_face_ratio` (defaut 0.7) d'une face non-couloir, sonde l'image binaire au-dela du bbox pour verifier si un mur existe derriere. Si majorite des sondes trouvent un mur → artefact ray-cast → suppression. Sinon vrai passage → conservation. Nouveau parametre `max_opening_face_ratio` dans `DetectionConfigCm`. Applique dans `extract_room_features` (param `corridor_face`) et `extract_rooms_from_preprocessed` (post color-detection). Frontend envoie `corridor_face` dans les payloads re-analyze. Tests unitaires 10/10.
+
+Impact : `detection_config.py`, `extract.py` (_filter_impossible_openings), `app.py` (endpoints + overrides), `init_rvtool.js`, `ingestion.js`, `test_impossible_openings.py`.
+
+---
+
+## D-179 · Mode dev (--dev) et separation parametres dev/metier (2026-05-13)
+
+Option `--dev` au lancement du serveur (`python -m olm.server.app --dev`). Active les outils developpeur : toggles Seeds/V-Rays/H-Rays/Rooms/Windows/Doors/Openings dans Import, Seeds/V-Rays/H-Rays dans Review, boutons Check orient et Diag. Parametres Settings separes : section "Developer" dans Floor (Hide detection colors, OCR Detection, Standard colors). Elements dev marques `.dev-only` (CSS) ou gardes JS (`APP_CONFIG.dev_mode`). Apparence distincte `.dev-ctrl` (bordure pointillee bleue).
+
+Impact : `app.py` (argparse, DEV_MODE, /api/config), `config.js`, `style.css`, `pattern_editor.html`, `editor.js`.
+
+---
+
 ## D-178 · Affichage plan sans couleurs de detection (2026-05-13)
 
 Toggle "Hide detection colors" dans Settings > Floor > Rendering. Remplace les pixels bleu (exterior) et vert (corridor) par du blanc sur l'image affichee. Generation lazy au premier toggle ON via canvas + toBlob + createObjectURL. Detection inchangee (utilise les fichiers serveur originaux). Preference persistee en localStorage.

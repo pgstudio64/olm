@@ -74,7 +74,7 @@ sélectif terminé. D-154 + D-155 + D-156 ajoutés post-replay.
 **PRIORITÉ CRITIQUE** :
 - **PERF — Import preprocessed 2× plus lent** : régression perf constatée sur plans réalistes après v0.4.45. Analyser et corriger. Profiler `extract_rooms_from_preprocessed` et `extract_room_features`.
 - ~~**Ouverture parasite à chaque porte**~~ : corrigé D-174 — `_filter_openings_overlapping_doors`.
-- **Ouverture impossible → mur** : quand une ouverture couvre plus de X% (seuil à définir, entre 70% et 100%) de la longueur d'une face non-couloir, c'est un artefact de détection (ray-cast traversant vers la pièce voisine). Dans un bureau réel, une face latérale ou de fond n'est jamais ouverte à 90%. Filtrer ces ouvertures et les remplacer par un mur plein. Seuil paramétrable dans detection_config.
+- **Ouverture impossible → recherche du mur derrière** : quand une ouverture couvre plus de ~70% de la longueur d'une face non-couloir, c'est un artefact de détection (ray-cast traversant vers la pièce voisine). Dans un bureau réel, une face latérale ou de fond n'est jamais ouverte à 70%+. Au lieu de remplacer bêtement par un mur plein, chercher le mur réel derrière l'ouverture (il peut être incomplet — ex. mur avec porte ou décalé). Seuil paramétrable dans detection_config.
 - **Zones d'exclusion manuelles KO dans Room** : l'ajout manuel d'une zone d'exclusion via le dessin à la souris produit des coordonnées fantaisistes et la zone n'est pas visible. À investiguer (conversion coordonnées écran → room-local).
 - ~~**Fenêtres simples KO si bbox trop loin du bleu**~~ : corrigé D-177 — `_face_is_exterior` remplace la bande fixe 50 cm par un scan directionnel proportionnel au bbox avec vérification de seeds.
 
@@ -668,7 +668,32 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
 
 ### Court terme (dette technique à faible risque)
 
-4. **Audit ingestion.js — actions faciles** (rapport
+4. **Rationalisation des constantes-rustines** (rapport
+   [`docs/audit_constants_rustines.md`](audit_constants_rustines.md)) :
+   audit complet de ~30 valeurs numériques en dur (9 critiques, 14 modérées).
+   Priorité : **mode preprocessed** (le mode OCR dépend de constantes
+   additionnelles qui seront traitées dans un second temps).
+   - [ ] **Triple binarize_threshold** : unifier les 3 sources (test_comb L52,
+     extract.py L204, extract.py L1834) sur `detection_config.binarize_threshold`.
+   - [ ] **Défauts px module test_comb** (L52-59) : remplacer les `XX_PX = N`
+     par des valeurs dérivées de `DEFAULT_DETECTION_CONFIG_CM.to_px(scale)`
+     ou faire échouer si `_apply_detection_config` n'a pas été appelée.
+   - [ ] **Défauts px dans extract.py** : convertir en cm les signatures
+     (`margin_px=8`, `tolerance=40`, `max_depth=30`, `min_component_px=5`,
+     `max_absorb_px=120`, `max_dist=500`).
+   - [ ] **Multiplicateurs `step_px`** : `gap_threshold = 3 * step_px` et
+     `min_count = 3` → exprimer en cm via `detection_config`
+     (`pillar_group_gap_cm`, `min_pillar_hits` dérivé).
+   - [ ] **Seuils ratio sans nom** : `ARC_MONOTONICITY_RATIO = 0.7`,
+     bornes OCR `(0.5, 2000.0)`, angle filtre `5°` dupliqué → nommer et
+     centraliser dans `detection_config`.
+   - [ ] **Grades circulation A-F** : extraire le tableau
+     `(palier, connectivité_pct, worst_detour)` dans `matching_config`.
+   - [ ] **Calibration scale** : exposer `MIN_CALIB_SURFACE_M2` dans
+     `project/config.json`.
+   - [ ] Assertion défensive : vérifier que `_apply_detection_config` a été
+     appelée avant toute utilisation des constantes module de `test_comb.py`.
+5. **Audit ingestion.js — actions faciles** (rapport
    [`docs/AUDIT_ingestion_2026-04-21.md`](AUDIT_ingestion_2026-04-21.md)) :
    - Bloc CONSTANTS en tête de fichier (magic numbers identifiés :
      zooms, double-click delay, padding, seuils px…).
@@ -677,7 +702,7 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
      `_setupPostExtractionUI(planId)` (~50 lignes dédupliquées).
    - Renommage variables ambiguës (`am` → `amendments`, `_sig` →
      `_createOpeningSignature`, etc.).
-5. [x] ~~**Fonction `_syncRoomToAllStores(name, updates)`**~~ ✅ 2026-04-21.
+6. [x] ~~**Fonction `_syncRoomToAllStores(name, updates)`**~~ ✅ 2026-04-21.
    Nouveau module [`olm/static/room_sync_helpers.js`](../olm/static/room_sync_helpers.js)
    expose `syncRoomToAllStores(name, updates, fallbackCanonRoom)` +
    `splitOpeningsToFrontEnd(combined)`. Migré partout :
@@ -690,20 +715,20 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
 
 ### Moyen terme (features)
 
-6. **R-11 Full round trip — `olm_state`** : chantier stratégique pour
+7. **R-11 Full round trip — `olm_state`** : chantier stratégique pour
    la persistance des amendements entre sessions. Prérequis à toute
    montée en charge utilisateur.
-7. **Commentaires markdown par pièce** (R-09 obsolète → D-100) : petit
+8. **Commentaires markdown par pièce** (R-09 obsolète → D-100) : petit
    chantier, utile, encore non attaqué.
-8. **Export PDF** (R-04 Export) : fond de plan raster + overlay
+9. **Export PDF** (R-04 Export) : fond de plan raster + overlay
    aménagement. Demande utilisateur récurrente.
 
 ### Long terme (refondations)
 
-9. **Pipeline Préprocessé refondu (D-105)** : gros chantier incluant
-   ray-cast depuis seed + détection fenêtres combinée texture/couleur.
-   Sous-items encore tous à faire.
-10. **R-07 Packaging Windows sans admin** : préalable au déploiement
+10. **Pipeline Préprocessé refondu (D-105)** : gros chantier incluant
+    ray-cast depuis seed + détection fenêtres combinée texture/couleur.
+    Sous-items encore tous à faire.
+11. **R-07 Packaging Windows sans admin** : préalable au déploiement
     sur le poste cible.
 
 ---

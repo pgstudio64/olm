@@ -1,10 +1,11 @@
 """Flask server for the pattern management and creation tool.
 
-Entry point: python pattern_server.py → http://localhost:5051
+Entry point: python -m olm.server.app [--dev]
 Storage: catalogue/patterns.json
 """
 from __future__ import annotations
 
+import argparse
 import functools
 import json
 import logging
@@ -12,6 +13,8 @@ import os
 import re
 import traceback
 from io import StringIO
+
+DEV_MODE: bool = False
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -86,7 +89,8 @@ def _get_detection_overrides() -> dict | None:
                  "corridor_width_cm", "exterior_width_cm",
                  "max_door_width_cm", "min_opening_depth_cm",
                  "min_obstacle_width_cm", "min_pillar_size_cm",
-                 "max_pillar_size_cm", "comb_step_cm"):
+                 "max_pillar_size_cm", "comb_step_cm",
+                 "max_opening_face_ratio"):
         if key in _ing:
             overrides[key] = float(_ing[key])
     if "binarize_threshold" in _ing:
@@ -1097,11 +1101,12 @@ def api_spacing():
 
 @app.route("/api/config", methods=["GET"])
 def api_config_get():
-    """Return the full configuration (+ OLM version)."""
+    """Return the full configuration (+ OLM version + dev_mode)."""
     from olm.core import app_config
     from olm import __version__
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
+    cfg["dev_mode"] = DEV_MODE
     return jsonify(cfg)
 
 
@@ -1398,6 +1403,7 @@ def api_room_reanalyze():
         raw_other = data.get("other_seeds_px") or []
         other_seeds_px = [(int(s[0]), int(s[1]))
                           for s in raw_other if s and len(s) >= 2]
+        corridor_face_abs = data.get("corridor_face", "") or ""
 
         if not plan_path or not os.path.exists(plan_path):
             return jsonify({"error": "plan_path missing or invalid"}), 400
@@ -1452,6 +1458,7 @@ def api_room_reanalyze():
             other_seeds=other_seeds_px or None,
             detection_overrides=_get_detection_overrides(),
             window_mode=window_mode,
+            corridor_face=corridor_face_abs,
         )
         return jsonify(result)
     except Exception as e:
@@ -1854,6 +1861,7 @@ def api_room_reanalyze_batch():
                     other_seeds=other_seeds or None,
                     detection_overrides=_get_detection_overrides(),
                     window_mode=window_mode,
+                    corridor_face=r.get("corridor_face", "") or "",
                 )
                 results.append({"name": name, **features})
             except Exception as e:
@@ -2165,6 +2173,12 @@ def api_coverage():
 
 
 if __name__ == "__main__":
-    print("Pattern editor — http://localhost:5051")
+    parser = argparse.ArgumentParser(description="OLM server")
+    parser.add_argument("--dev", action="store_true",
+                        help="Enable developer mode (shows debug tools)")
+    args = parser.parse_args()
+    DEV_MODE = args.dev
+    mode_label = " [DEV]" if DEV_MODE else ""
+    print(f"Pattern editor{mode_label} — http://localhost:5051")
     print(f"Catalogue: {CATALOGUE_PATH}")
     app.run(debug=True, port=5051)

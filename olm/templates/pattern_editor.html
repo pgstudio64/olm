@@ -113,12 +113,19 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="settings-grid" style="align-items:center;">
         <label class="settings-label">Render DPI</label>
         <input type="number" id="cfgRenderDpi" class="settings-input" style="width:70px;" min="72" max="600" step="1">
-        <label class="settings-label" title="Replace blue (exterior) and green (corridor) detection colors with white on the displayed plan">Hide detection colors</label>
-        <input type="checkbox" id="cfgHideDetectionColors" style="width:auto;">
       </div>
     </div>
+    <!-- Dev section: Floor -->
+    <div class="dev-only">
+      <div class="section-title-dev">Developer</div>
+      <div class="settings-section">
+        <div class="settings-grid" style="align-items:center;">
+          <label class="settings-label" title="Replace blue (exterior) and green (corridor) detection colors with white on the displayed plan">Hide detection colors</label>
+          <input type="checkbox" id="cfgHideDetectionColors" style="width:auto;">
+        </div>
+      </div>
     <div class="settings-section">
-      <div class="section-title">OCR Detection</div>
+      <div class="section-title" style="color:var(--accent2);border-color:var(--accent2);">OCR Detection</div>
       <div class="settings-grid">
         <label class="settings-label" title="Margin around room labels for cartouche erasure">Cartouche margin (cm)</label>
         <input type="number" id="cfgCartoucheMargin" class="settings-input" style="width:70px;" min="0" max="20" step="0.5">
@@ -147,7 +154,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </div>
     </div>
     <div class="settings-section">
-      <div class="section-title">Standard colors</div>
+      <div class="section-title" style="color:var(--accent2);border-color:var(--accent2);">Standard colors</div>
       <div class="settings-grid">
         <label class="settings-label">Exterior</label>
         <div style="display:flex;gap:4px;align-items:center;">
@@ -177,6 +184,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
       </div>
     </div>
+    </div><!-- /dev-only -->
   </div>
 
   <!-- LAYOUT -->
@@ -297,13 +305,13 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="fp-main">
         <div id="ingPlanView" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
           <div class="fp-nav" id="ingToolbar" style="display:none;">
-            <label><input type="checkbox" id="ing_bbox" checked> Rooms</label>
-            <label><input type="checkbox" id="ing_window" checked> Windows</label>
-            <label><input type="checkbox" id="ing_door" checked> Doors</label>
-            <label><input type="checkbox" id="ing_opening" checked> Openings</label>
-            <label><input type="checkbox" id="ing_seeds"> Seeds</label>
-            <label><input type="checkbox" id="ing_vrays"> V-Rays</label>
-            <label><input type="checkbox" id="ing_hrays"> H-Rays</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_bbox" checked> Rooms</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_window" checked> Windows</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_door" checked> Doors</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_opening" checked> Openings</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_seeds"> Seeds</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_vrays"> V-Rays</label>
+            <label class="dev-only dev-ctrl"><input type="checkbox" id="ing_hrays"> H-Rays</label>
             <span style="flex:1;"></span>
             <label><input type="checkbox" id="ingOverlayToggle" checked> Overlay</label>
             <input type="range" id="ingOpacity" min="0" max="100" value="30" style="width:60px;" title="Overlay opacity">
@@ -355,9 +363,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           </div>
           <div class="fp-canvas-wrap" id="rvCanvasWrap">
             <div class="canvas-toolbar">
-              <label><input type="checkbox" id="rvSeedsToggle"> Seeds</label>
-              <label><input type="checkbox" id="rvVraysToggle"> V-Rays</label>
-              <label><input type="checkbox" id="rvHraysToggle"> H-Rays</label>
+              <label class="dev-only dev-ctrl"><input type="checkbox" id="rvSeedsToggle"> Seeds</label>
+              <label class="dev-only dev-ctrl"><input type="checkbox" id="rvVraysToggle"> V-Rays</label>
+              <label class="dev-only dev-ctrl"><input type="checkbox" id="rvHraysToggle"> H-Rays</label>
               <span style="flex:1;"></span>
               <label><input type="checkbox" id="rvOverlayToggle" onchange="window._rvRefresh && window._rvRefresh()"> Overlay</label>
               <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
@@ -370,9 +378,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <label id="rvLockWallsWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock walls: re-scan openings &amp; windows but keep the walls detected earlier (auto-checked when you resized the bbox).">
                 <input type="checkbox" id="rvLockWalls"> Lock walls
               </label>
-              <button class="btn btn-toolbar" id="rvBtnCheckOrient" style="display:none;background:var(--surface);color:var(--text-dim);border:1px solid var(--surface2);opacity:0.7;" title="Check canonical orientation: corridor south, exterior north (D-119). Outil de dev.">Check orient.</button>
+              <button class="btn btn-toolbar dev-ctrl" id="rvBtnCheckOrient" style="display:none;background:var(--surface);opacity:0.7;" title="Check canonical orientation: corridor south, exterior north (D-119). Outil de dev.">Check orient.</button>
               <span id="rvOrientBadge" style="display:none;font-size:11px;padding:2px 6px;border-radius:3px;"></span>
-              <button class="btn btn-toolbar" id="rvBtnDiag" style="display:none;background:var(--surface);color:var(--text-dim);border:1px solid var(--surface2);opacity:0.7;" title="Run detection diagnostic (D-160)">Diag</button>
+              <button class="btn btn-toolbar dev-ctrl" id="rvBtnDiag" style="display:none;background:var(--surface);opacity:0.7;" title="Run detection diagnostic (D-160)">Diag</button>
               <div id="rvAddMenuWrap" style="display:none;position:relative;">
                 <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add items &#9662;</button>
                 <div id="rvAddMenu" style="display:none;position:absolute;top:100%;right:0;z-index:20;background:var(--surface);border:1px solid var(--border);font-size:11px;min-width:160px;">
@@ -391,6 +399,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <span style="flex:1;"></span>
             </div>
             <svg id="rvCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
+            <div class="minimap" id="rvMinimap" title="Click to toggle">
+              <canvas id="rvMinimapCanvas"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -446,6 +457,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             <button class="btn btn-toolbar" id="fpZoomIn" title="Zoom in">+</button>
           </div>
           <svg id="fpCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
+          <div class="minimap" id="fpMinimap" title="Click to toggle">
+            <canvas id="fpMinimapCanvas"></canvas>
+            <span class="minimap-label">Map</span>
+          </div>
         </div>
       </div>
       <div class="fp-sidebar" id="fpDesignSidebar" style="width:170px;min-width:120px;max-width:350px;">
@@ -735,6 +750,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <script src="/static/ingestion.js?v={{ v }}"></script>
 <script src="/static/init.js?v={{ v }}"></script>
 <script src="/static/init_rvtool.js?v={{ v }}"></script>
+<script src="/static/minimap.js?v={{ v }}"></script>
 <script src="/static/init_resize.js?v={{ v }}"></script>
 <div id="dslHelpTooltip" style="display:none;position:fixed;z-index:9999;padding:12px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text);white-space:pre;box-shadow:0 4px 20px rgba(0,0,0,0.5);max-height:80vh;overflow-y:auto;"><span class="tooltip-close" onclick="this.parentElement.style.display='none'">&times;</span>ROOM 600x500          <span style="color:var(--text-dim)">-- room 600cm wide, 500cm deep</span>
 WINDOW N              <span style="color:var(--text-dim)">-- full-width window on north wall</span>

@@ -47,6 +47,30 @@
     overflow: hidden;
   }
 
+  /* ── Dev mode ──────────────────────────────────────── */
+  .dev-only { display: none !important; }
+  body.dev-mode .dev-only { display: revert !important; }
+  /* Dev toolbar controls: dashed border + dim color */
+  .dev-ctrl {
+    border-style: dashed !important;
+    border-color: var(--accent2) !important;
+    color: var(--accent2) !important;
+    opacity: 0.8;
+  }
+  .dev-ctrl:hover { opacity: 1; }
+  /* Dev section title in Settings */
+  .section-title-dev {
+    color: var(--accent2);
+    font-size: var(--fs-xs);
+    font-weight: bold;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: var(--sp-xl);
+    margin-bottom: var(--sp-sm);
+    padding-bottom: var(--sp-xs);
+    border-bottom: 1px dashed var(--accent2);
+  }
+
   .tab-row {
     background: var(--bg);
     flex-shrink: 0;
@@ -948,7 +972,7 @@
   /* Settings / form inputs — replaces repeated inline styles */
   .settings-grid {
     display: grid;
-    grid-template-columns: 200px 120px;
+    grid-template-columns: 200px 1fr;
     gap: var(--sp-xs) var(--sp-md);
     font-size: var(--fs-md);
   }
@@ -1076,3 +1100,18 @@
     cursor: grab;
   }
   .svg-canvas.panning { cursor: grabbing; }
+
+  /* ── Minimap ────────────────────────────────────────── */
+  .minimap {
+    position: absolute;
+    top: 62px;   /* below canvas-toolbar (~32px) + ruler-top (18px) + margin */
+    left: 36px;  /* past ruler-left (22px) + margin */
+    z-index: 15;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    overflow: hidden;
+    padding: 0;
+  }
+  .minimap canvas { display: block; border-radius: 4px; }

@@ -877,6 +877,34 @@
       fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
     };
 
+    // --- Minimap refresh hook ---
+    window._minimapRefresh = function () {
+      if (!window.renderMinimap) return;
+      var ov = window.fpOverlay || null;
+      // Use the -SD plan (no cartouches) for the minimap.
+      var ist = window.ingState;
+      if (ov && ist && ist.planPathEnhanced) {
+        var sdUrl = '/api/image?path=' + encodeURIComponent(ist.planPathEnhanced);
+        ov = Object.assign({}, ov, { dataUrl: sdUrl });
+      }
+      var room = fpCurrent();
+      var roomData = room ? (fpRoomAmendments[room.name] || room) : null;
+      var rooms = fpRooms();
+      var vb = state.viewBox;
+
+      // Detect which view is active to pick the right canvas.
+      var rvTab = document.getElementById("tabFpReview");
+      if (rvTab && rvTab.classList.contains("active")) {
+        window.renderMinimap("rvMinimapCanvas", "rvMinimap",
+                             roomData, rooms, ov);
+      }
+      var fpTab = document.getElementById("tabLytDesign");
+      if (fpTab && fpTab.classList.contains("active")) {
+        window.renderMinimap("fpMinimapCanvas", "fpMinimap",
+                             roomData, rooms, ov);
+      }
+    };
+
     // --- Plan view / Room view toggle ---
     window.ingShowRoomView = function() {
       var reviewBtn = document.querySelector('.tab-btn[data-tab="fpReview"]');
@@ -933,9 +961,9 @@
 
     // Keyboard nav — Design tab (Left/Right = rooms, Up/Down = candidates)
     document.addEventListener("keydown", function(e) {
-      var officeLayoutTab = document.getElementById("tabOfficeLayout");
+      var designTab = document.getElementById("tabLytDesign");
       var reviewSubtab = document.getElementById("tabFpReview");
-      var inDesign = officeLayoutTab && officeLayoutTab.classList.contains("active");
+      var inDesign = designTab && designTab.classList.contains("active");
       var inReview = reviewSubtab && reviewSubtab.classList.contains("active");
       if (!inDesign && !inReview) return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;

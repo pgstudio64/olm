@@ -790,6 +790,7 @@
               mode: planMode,
               window_mode: ((window.APP_CONFIG || {}).ingestion || {}).window_mode || 'simple',
               other_seeds_px: otherSeeds,
+              corridor_face: amend.originalRoom.corridor_face_abs || "",
             }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);

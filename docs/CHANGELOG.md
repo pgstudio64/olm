@@ -5,7 +5,25 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [v0.4.46] — 2026-05-13
 
+### Added
+- **Mode dev `--dev` (D-179)** : option CLI pour activer les outils developpeur. Toggles
+  Seeds/V-Rays/H-Rays, boutons Check orient/Diag caches par defaut. Parametres Settings
+  separes en sections metier et developer.
+- **Filtre ouvertures impossibles (D-180)** : supprime les ouvertures couvrant >70% d'une
+  face non-couloir quand un mur est detecte derriere (artefact ray-cast). Parametre
+  `max_opening_face_ratio` dans `DetectionConfigCm`.
+- **Minimap Room/Office (D-181)** : miniature schematique du plan dans les vues Room et
+  Office. Fond 3 tons de gris (plan -SD), contours des pieces, piece courante en orange,
+  fenetres en bleu. Clic pour toggle taille pliee/depliee.
+- **Feedback Save visible** : le bouton Save affiche "Saved" en vert pendant 2s, visible
+  depuis tous les onglets.
+- **Navigation clavier Office** : correction de l'id de l'onglet (`tabOfficeLayout` →
+  `tabLytDesign`), les fleches gauche/droite fonctionnent en Office.
+- **TODO rationalisation constantes** : campagne basee sur `docs/audit_constants_rustines.md`,
+  priorite mode preprocessed.
+
 ### Fixed
+- **Grid Settings 2e colonne** : `120px` → `1fr` pour que les hints ne debordent pas.
 - **Ouverture parasite à chaque porte (D-174)** : `_filter_openings_overlapping_doors`
   supprime les openings qui chevauchent geometriquement une porte sur la meme face.
 - **min_door_width_cm 70 → 55 (D-174)** : evite de filtrer les portes legitimement

@@ -1768,6 +1768,24 @@ def extract_rooms_from_preprocessed(
         except Exception as e:
             logger.warning("Face color detection failed: %s", e)
 
+    # Filtre ouvertures impossibles — appliqué après résolution de
+    # corridor_face.  Nécessite le binaire (disponible uniquement si
+    # des pièces ont été détectées à l'import).
+    if needs_detect and _import_features:
+        from olm.core.detection_config import DetectionConfigCm as _DCCm2
+        _dcfg_filt = _DCCm2.from_dict(
+            json_data.get("_detection_overrides"))
+        for room_dict in result:
+            cf = room_dict.get("corridor_face", "")
+            bb = room_dict.get("bbox_px")
+            ops = room_dict.get("openings")
+            if cf and bb and ops and room_dict["name"] in _import_features:
+                room_dict["openings"] = _filter_impossible_openings(
+                    ops, tuple(bb), cf, _bin, scale_cm_per_px,
+                    max_ratio=_dcfg_filt.max_opening_face_ratio,
+                    probe_depth_cm=_dcfg_filt.min_opening_depth_cm,
+                )
+
     logger.info(
         "extract_rooms_from_preprocessed v3 : %d room(s) chargée(s) "
         "(cm_per_px=%.4f)",
@@ -1777,6 +1795,119 @@ def extract_rooms_from_preprocessed(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Filtrage ouvertures impossibles (artefact ray-cast → pièce voisine)
+# ---------------------------------------------------------------------------
+
+
+def _filter_impossible_openings(
+    openings: list[dict],
+    bbox_px: tuple,
+    corridor_face: str,
+    binary: np.ndarray,
+    scale_cm_per_px: float,
+    max_ratio: float = 0.7,
+    probe_depth_cm: float = 60.0,
+) -> list[dict]:
+    """Supprime les ouvertures couvrant plus de *max_ratio* d'une face.
+
+    Quand des ouvertures couvrent une proportion excessive d'une face
+    non-couloir, c'est en général un artefact : les rays ont traversé
+    vers la pièce voisine. Pour vérifier, on sonde l'image binaire
+    au-delà du bord du bbox (perpendiculairement à la face).  Si on
+    trouve un mur derrière (majorité des sondes), les ouvertures de
+    cette face sont supprimées.  Sinon, c'est un vrai passage → on
+    les conserve.
+
+    Args:
+        openings: liste d'ouvertures {face, offset_cm, width_cm, ...}.
+        bbox_px: (x0, y0, x1, y1) du bbox détecté.
+        corridor_face: face côté couloir (exclue du filtre).
+        binary: image binaire (True = mur).
+        scale_cm_per_px: échelle.
+        max_ratio: seuil de couverture au-delà duquel on sonde.
+        probe_depth_cm: profondeur de sonde en cm au-delà du bbox.
+
+    Returns:
+        Liste d'ouvertures filtrée.
+    """
+    if not openings or not corridor_face:
+        return openings
+
+    x0, y0, x1, y1 = (int(v) for v in bbox_px)
+    h, w = binary.shape
+    probe_depth_px = max(1, int(round(probe_depth_cm / scale_cm_per_px)))
+    step_px = max(1, int(round(5.0 / scale_cm_per_px)))  # sonde ~5 cm
+
+    # Regrouper les ouvertures par face.
+    by_face: dict[str, list[dict]] = {}
+    for o in openings:
+        by_face.setdefault(o.get("face", ""), []).append(o)
+
+    faces_to_drop: set[str] = set()
+
+    for face, face_ops in by_face.items():
+        if face == corridor_face:
+            continue
+
+        # Longueur de la face en cm.
+        if face in ("north", "south"):
+            face_len_cm = (x1 - x0) * scale_cm_per_px
+        else:
+            face_len_cm = (y1 - y0) * scale_cm_per_px
+        if face_len_cm <= 0:
+            continue
+
+        total_open_cm = sum(o.get("width_cm", 0) for o in face_ops)
+        if total_open_cm / face_len_cm <= max_ratio:
+            continue
+
+        # Sonder au-delà du bbox, perpendiculairement à la face.
+        wall_count = 0
+        probe_count = 0
+
+        if face in ("north", "south"):
+            for px_pos in range(x0, x1, step_px):
+                if not (0 <= px_pos < w):
+                    continue
+                probe_count += 1
+                dy_range = range(1, probe_depth_px + 1)
+                for dy in dy_range:
+                    py = (y0 - dy) if face == "north" else (y1 + dy)
+                    if not (0 <= py < h):
+                        break
+                    if binary[py, px_pos]:
+                        wall_count += 1
+                        break
+        else:  # east / west
+            for py_pos in range(y0, y1, step_px):
+                if not (0 <= py_pos < h):
+                    continue
+                probe_count += 1
+                dx_range = range(1, probe_depth_px + 1)
+                for dx in dx_range:
+                    px = (x0 - dx) if face == "west" else (x1 + dx)
+                    if not (0 <= px < w):
+                        break
+                    if binary[py_pos, px]:
+                        wall_count += 1
+                        break
+
+        # Majorité des sondes trouvent un mur → artefact.
+        if probe_count > 0 and wall_count > probe_count // 2:
+            faces_to_drop.add(face)
+            logger.info(
+                "Impossible opening filter: face %s dropped "
+                "(%.0f%% coverage, %d/%d probes hit wall behind)",
+                face, total_open_cm / face_len_cm * 100,
+                wall_count, probe_count,
+            )
+
+    if not faces_to_drop:
+        return openings
+    return [o for o in openings if o.get("face") not in faces_to_drop]
+
+
 # Filtrage croisé ouvertures / portes
 # ---------------------------------------------------------------------------
 
@@ -1844,6 +1975,7 @@ def extract_room_features(
     diag: dict | None = None,
     detection_overrides: dict | None = None,
     window_mode: str = "detailed",
+    corridor_face: str = "",
 ) -> dict:
     """Ré-analyse complète d'UNE pièce (D-104 / D-105 / D-145 / D-156).
 
@@ -2228,6 +2360,18 @@ def extract_room_features(
 
     # Filtrer les openings qui chevauchent une porte détectée.
     openings = _filter_openings_overlapping_doors(openings, doors_out)
+
+    # Filtrer les ouvertures impossibles (artefact ray-cast → voisin).
+    if corridor_face:
+        from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc2
+        _ddc_ov = _ddc2 if not detection_overrides else (
+            type(_ddc2).from_dict(detection_overrides))
+        openings = _filter_impossible_openings(
+            openings, bbox_new, corridor_face, binary,
+            scale_cm_per_px,
+            max_ratio=_ddc_ov.max_opening_face_ratio,
+            probe_depth_cm=_ddc_ov.min_opening_depth_cm,
+        )
 
     # --- Pillar → exclusion zones auto ---
     # Convert pillar detections to room-local exclusion zones (cm).
