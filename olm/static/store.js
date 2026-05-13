@@ -56,6 +56,11 @@
       merges: {},
       opacity: 0.3,
       overlayVisible: true,
+      hideDetectionColors: !!(function () {
+        try { return localStorage.getItem("olm_hideDetectionColors"); }
+        catch (e) { return ""; }
+      })(),
+      planUrlClean: "",
       vb: { x: 0, y: 0, w: 1920, h: 1080 },
       pan: null,
       bboxEditor: {

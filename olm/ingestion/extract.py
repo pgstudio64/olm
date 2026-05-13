@@ -1281,6 +1281,89 @@ def _face_borders_color(
     return int(np.sum(matches)) > len(pixels) * 0.3
 
 
+def _face_is_exterior(
+    img_array: np.ndarray,
+    bbox_px: tuple,
+    face: str,
+    exterior_rgb: tuple,
+    other_seeds: list[tuple[int, int]] | None = None,
+    tolerance: int = 40,
+) -> bool:
+    """Détecte si une face borde l'extérieur (bleu) sans pièce interposée.
+
+    Scanne rangée par rangée depuis la face vers l'extérieur, sur toute
+    la largeur/hauteur de la face. Distance max = dimension perpendiculaire
+    du bbox (profondeur pour N/S, largeur pour E/W).
+
+    Retourne True si du bleu (>30% d'une rangée) est trouvé avant tout
+    seed d'une autre pièce.
+    """
+    h, w = img_array.shape[:2]
+    x0, y0, x1, y1 = bbox_px
+    bbox_w = x1 - x0
+    bbox_h = y1 - y0
+    target = np.array(exterior_rgb, dtype=int)
+
+    # Distance max de recherche = dimension perpendiculaire du bbox.
+    if face in ("north", "south"):
+        max_dist = bbox_h
+        along_start, along_end = x0, x1
+    else:
+        max_dist = bbox_w
+        along_start, along_end = y0, y1
+
+    if max_dist <= 0 or along_end <= along_start:
+        return False
+
+    seeds = other_seeds or []
+
+    for dist in range(1, max_dist + 1):
+        # Coordonnée perpendiculaire de la rangée scannée.
+        if face == "north":
+            py = y0 - dist
+            if py < 0:
+                break
+            row = img_array[py, along_start:along_end]
+        elif face == "south":
+            py = y1 + dist - 1
+            if py >= h:
+                break
+            row = img_array[py, along_start:along_end]
+        elif face == "west":
+            px = x0 - dist
+            if px < 0:
+                break
+            row = img_array[along_start:along_end, px]
+        else:  # east
+            px = x1 + dist - 1
+            if px >= w:
+                break
+            row = img_array[along_start:along_end, px]
+
+        if row.size == 0:
+            break
+
+        # Vérifier si un seed d'une autre pièce est dans cette rangée.
+        for sx, sy in seeds:
+            if face == "north" and sy == py and along_start <= sx < along_end:
+                return False
+            elif face == "south" and sy == py and along_start <= sx < along_end:
+                return False
+            elif face == "west" and sx == px and along_start <= sy < along_end:
+                return False
+            elif face == "east" and sx == px and along_start <= sy < along_end:
+                return False
+
+        # Vérifier si >30% des pixels de la rangée matchent le bleu.
+        pixels = row.reshape(-1, 3)
+        diffs = np.abs(pixels.astype(int) - target)
+        matches = np.sum(np.all(diffs <= tolerance, axis=1))
+        if matches > len(pixels) * 0.3:
+            return True
+
+    return False
+
+
 def extract_rooms_from_preprocessed(
     json_data: dict,
     enhanced_png_path: str,
@@ -1611,6 +1694,9 @@ def extract_rooms_from_preprocessed(
             _coarse_hits = _feat.get("coarse_hits", [])
             _pillar_hits = _feat.get("pillar_hits", [])
 
+        # Filtrer les openings qui chevauchent une porte détectée.
+        openings = _filter_openings_overlapping_doors(openings, doors)
+
         # surface_m2      = valeur cartouche PDF (vérité terrain, figée).
         # surface_m2_bbox = calculée depuis le bbox courant (dérive si bbox
         # change). Les deux coexistent pour gérer les pièces non-rectangulaires
@@ -1688,6 +1774,49 @@ def extract_rooms_from_preprocessed(
         len(result), scale_cm_per_px,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Filtrage croisé ouvertures / portes
+# ---------------------------------------------------------------------------
+
+
+def _filter_openings_overlapping_doors(
+    openings: list[dict],
+    doors: list[dict],
+) -> list[dict]:
+    """Supprime les openings qui chevauchent géométriquement une porte.
+
+    Le ray-cast classe comme 'opening' tout segment sans mur, y compris
+    les zones de porte (l'arc interrompt le mur). Si une porte a été
+    détectée au même endroit, l'opening est un artefact → suppression.
+
+    Utilise offset_cm / width_cm (disponibles dans les deux pipelines).
+    """
+    if not doors or not openings:
+        return openings
+    # Portes avec géométrie exploitable (face + dimensions).
+    geo_doors = [
+        d for d in doors
+        if d.get("face") and d.get("width_cm")
+    ]
+    if not geo_doors:
+        return openings
+
+    def _overlaps_any_door(op: dict) -> bool:
+        op_face = op.get("face")
+        op_start = op.get("offset_cm", 0)
+        op_end = op_start + op.get("width_cm", 0)
+        for d in geo_doors:
+            if d["face"] != op_face:
+                continue
+            d_start = d.get("offset_cm", 0)
+            d_end = d_start + d.get("width_cm", 0)
+            if op_start < d_end and d_start < op_end:
+                return True
+        return False
+
+    return [o for o in openings if not _overlaps_any_door(o)]
 
 
 # ---------------------------------------------------------------------------
@@ -1987,20 +2116,15 @@ def extract_room_features(
                 rgb_arr = None
         except Exception:
             pass
-    # D-156 : marge suffisante pour traverser le mur ET atteindre la zone
-    # extérieure. Le bbox s'arrête à la face intérieure du mur ; il faut
-    # aller au-delà de l'épaisseur du mur (~15-30 cm) pour toucher la zone
-    # colorée. On prend 50 cm / scale pour couvrir les cas courants.
-    _ext_margin_px = max(10, int(50.0 / scale_cm_per_px)) if rgb_arr is not None else 8
     for face in ("north", "south", "east", "west"):
         segs = walls.get(face, [])
         any_window = False
 
         face_is_exterior = (
             rgb_arr is not None
-            and _face_borders_color(
+            and _face_is_exterior(
                 rgb_arr, bbox_new, face, exterior_rgb,
-                margin_px=_ext_margin_px)
+                other_seeds=other_seeds)
         )
 
         if window_mode == "simple":
@@ -2101,6 +2225,9 @@ def extract_room_features(
             }
             doors_out.append(entry)
         doors_out.extend(_seedonly_doors)
+
+    # Filtrer les openings qui chevauchent une porte détectée.
+    openings = _filter_openings_overlapping_doors(openings, doors_out)
 
     # --- Pillar → exclusion zones auto ---
     # Convert pillar detections to room-local exclusion zones (cm).

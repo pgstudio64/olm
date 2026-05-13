@@ -1634,166 +1634,148 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
     fd['arc_hits_count'] = len(arc_hits)
 
     if not arc_hits:
-        if not seed_confirmed:
-            return _finish('no_arc_hits')
-        origin = x0 if face in ("south", "north") else y0
-        face_end = x1 if face in ("south", "north") else y1
-        seed_along = face_seeds[0]["seed_x"] if face in ("south", "north") \
-            else face_seeds[0]["seed_y"]
-        fb_offset = max(0, min(face_end - origin - door_width_px,
-                               seed_along - origin - door_width_px // 2))
-        fb_door = {
-            "face": face,
-            "offset_px": fb_offset,
-            "width_px": min(door_width_px, face_end - origin),
-            "hinge_side": "left",
-            "opens_inward": True,
-            "seed_fallback": True,
-        }
-        fd['rejected'] = None
-        fd['doors_found'] = 1
-        fd['seed_fallback'] = True
-        if diag is not None:
-            diag.setdefault('door_faces', []).append(fd)
-        return wall, [fb_door]
+        return _finish('no_arc_hits')
 
-    # === Step 3: verify arc profile ===
-    if face in ("south", "north"):
-        along_vals = [h[0] for h in arc_hits]
-    else:
-        along_vals = [h[1] for h in arc_hits]
+    # === Step 3: compute arc span and cluster if needed ===
+    _along_key = (lambda h: h[0]) if face in ("south", "north") \
+        else (lambda h: h[1])
 
-    arc_min_along = min(along_vals)
-    arc_max_along = max(along_vals)
+    arc_sorted = sorted(arc_hits, key=_along_key)
+    arc_min_along = _along_key(arc_sorted[0])
+    arc_max_along = _along_key(arc_sorted[-1])
     arc_span = arc_max_along - arc_min_along + 1
 
     fd['arc_span_px'] = int(arc_span)
     fd['arc_along_range'] = [int(arc_min_along), int(arc_max_along)]
 
+    # Single arc or multi-door clustering.
     if arc_span >= face_len * 0.8:
-        return _finish('arc_too_wide',
-                       {'arc_span': int(arc_span),
-                        'face_len': int(face_len)})
+        # Arc too wide for a single door — try splitting into clusters
+        # at gaps larger than half the expected door width.
+        gap_threshold = door_width_px // 2
+        clusters: list[list] = [[arc_sorted[0]]]
+        for h in arc_sorted[1:]:
+            if _along_key(h) - _along_key(clusters[-1][-1]) > gap_threshold:
+                clusters.append([h])
+            else:
+                clusters[-1].append(h)
+        if len(clusters) < 2:
+            return _finish('arc_too_wide',
+                           {'arc_span': int(arc_span),
+                            'face_len': int(face_len)})
+    else:
+        clusters = [arc_sorted]
 
     min_arc_hits = 1 if seed_confirmed else 3
-    if len(arc_hits) < min_arc_hits:
+    if len(clusters) == 1 and len(arc_hits) < min_arc_hits:
         return _finish('arc_too_few_hits',
                        {'arc_hits': len(arc_hits)})
 
-    # Monotonicity: sort by along-axis, compute distance from wall.
-    sorted_arc = sorted(
-        arc_hits,
-        key=lambda h: h[0] if face in ("south", "north") else h[1])
-    if face == "south":
-        dists = [wall - h[1] for h in sorted_arc]
-    elif face == "north":
-        dists = [h[1] - wall for h in sorted_arc]
-    elif face == "east":
-        dists = [wall - h[0] for h in sorted_arc]
-    else:
-        dists = [h[0] - wall for h in sorted_arc]
-
-    if dists[0] >= dists[-1]:
-        hinge_side = "left"
-        profile_dists = dists
-    else:
-        hinge_side = "right"
-        profile_dists = list(reversed(dists))
-
-    violations = sum(1 for i in range(1, len(profile_dists))
-                     if profile_dists[i] > profile_dists[i - 1])
-    violation_ratio = violations / max(1, len(profile_dists) - 1)
-
-    fd['arc_profile_dists'] = [int(d) for d in dists[:30]]
-    fd['arc_hinge_side'] = hinge_side
-    fd['arc_violations'] = violations
-    fd['arc_violation_ratio'] = round(violation_ratio, 3)
-
-    max_violation_ratio = 0.60 if seed_confirmed else 0.30
-    if violation_ratio > max_violation_ratio:
-        return _finish('arc_not_monotonic',
-                       {'violation_ratio': round(violation_ratio, 3)})
-
-    # Arc depth variation: hinge is far from wall, free jamb at wall.
-    dist_range = max(dists) - min(dists)
-    fd['arc_dist_range'] = int(dist_range)
-    min_dist_range = 1 if seed_confirmed else 3
-    if dist_range < min_dist_range:
-        return _finish('arc_too_flat',
-                       {'dist_range': int(dist_range)})
-
-    # === Step 4: verify wall opening ===
-    arc_zone_start = arc_min_along
-    arc_zone_end = arc_max_along
-    if face in ("south", "north"):
-        wall_pixels_in_arc = sum(
-            1 for x in range(arc_zone_start, arc_zone_end + 1)
-            if 0 <= wall < binary.shape[0]
-            and 0 <= x < binary.shape[1]
-            and binary[wall, x])
-    else:
-        wall_pixels_in_arc = sum(
-            1 for y in range(arc_zone_start, arc_zone_end + 1)
-            if 0 <= wall < binary.shape[1]
-            and 0 <= y < binary.shape[0]
-            and binary[y, wall])
-
-    arc_zone_len = arc_zone_end - arc_zone_start + 1
-    wall_fill_ratio = wall_pixels_in_arc / max(1, arc_zone_len)
-
-    fd['wall_pixels_in_arc'] = int(wall_pixels_in_arc)
-    fd['arc_zone_len'] = int(arc_zone_len)
-    fd['wall_fill_ratio'] = round(wall_fill_ratio, 3)
-
-    max_wall_fill = 0.80 if seed_confirmed else 0.50
-    if wall_fill_ratio > max_wall_fill:
-        return _finish('wall_not_interrupted',
-                       {'wall_fill_ratio': round(wall_fill_ratio, 3)})
-
-    # === Step 5: build door info ===
+    # === Steps 3b–5: validate each cluster and build doors ===
     origin = x0 if face in ("south", "north") else y0
-    offset = arc_min_along - origin
-    door_width = arc_span
+    max_violation_ratio = 0.60 if seed_confirmed else 0.30
+    min_dist_range = 1 if seed_confirmed else 3
+    max_wall_fill = 0.80 if seed_confirmed else 0.50
+    all_doors: list[dict] = []
 
-    fd['door_offset_px'] = int(offset)
-    fd['door_width_detected_px'] = int(door_width)
-    fd['wall_confirmation'] = int(wall_count)
+    for ci, cluster in enumerate(clusters):
+        if len(cluster) < min_arc_hits:
+            continue
 
-    jamb_hinge = arc_min_along if hinge_side == "left" else arc_max_along
-    jamb_free = arc_max_along if hinge_side == "left" else arc_min_along
-    mid = (arc_min_along + arc_max_along) / 2
-    if face == "south":
-        seed_x = int(round(mid))
-        seed_y = int(round(wall - DOOR_PROBE_PX))
-    elif face == "north":
-        seed_x = int(round(mid))
-        seed_y = int(round(wall + DOOR_PROBE_PX))
-    elif face == "east":
-        seed_x = int(round(wall - DOOR_PROBE_PX))
-        seed_y = int(round(mid))
-    else:  # west
-        seed_x = int(round(wall + DOOR_PROBE_PX))
-        seed_y = int(round(mid))
+        c_min = _along_key(cluster[0])
+        c_max = _along_key(cluster[-1])
+        c_span = c_max - c_min + 1
 
-    door = {
-        "face": face,
-        "offset_px": offset,
-        "width_px": door_width,
-        "hinge_side": hinge_side,
-        "opens_inward": True,
-        "seed_confirmed": seed_confirmed,
-        "jamb_hinge_px": jamb_hinge,
-        "jamb_free_px": jamb_free,
-        "wall_px": wall,
-    }
+        # Per-cluster arc_too_wide (single cluster shouldn't span >80%)
+        if c_span >= face_len * 0.8:
+            continue
+
+        # Monotonicity: distance from wall along the cluster.
+        if face == "south":
+            dists = [wall - h[1] for h in cluster]
+        elif face == "north":
+            dists = [h[1] - wall for h in cluster]
+        elif face == "east":
+            dists = [wall - h[0] for h in cluster]
+        else:
+            dists = [h[0] - wall for h in cluster]
+
+        if dists[0] >= dists[-1]:
+            hinge_side = "left"
+            profile_dists = dists
+        else:
+            hinge_side = "right"
+            profile_dists = list(reversed(dists))
+
+        violations = sum(1 for i in range(1, len(profile_dists))
+                         if profile_dists[i] > profile_dists[i - 1])
+        violation_ratio = violations / max(1, len(profile_dists) - 1)
+        if violation_ratio > max_violation_ratio:
+            continue
+
+        dist_range = max(dists) - min(dists)
+        if dist_range < min_dist_range:
+            continue
+
+        # Wall opening check.
+        if face in ("south", "north"):
+            wall_fill = sum(
+                1 for x in range(c_min, c_max + 1)
+                if 0 <= wall < binary.shape[0]
+                and 0 <= x < binary.shape[1]
+                and binary[wall, x])
+        else:
+            wall_fill = sum(
+                1 for y in range(c_min, c_max + 1)
+                if 0 <= wall < binary.shape[1]
+                and 0 <= y < binary.shape[0]
+                and binary[y, wall])
+
+        wall_fill_ratio = wall_fill / max(1, c_span)
+        if wall_fill_ratio > max_wall_fill:
+            continue
+
+        # Build door info.
+        offset = c_min - origin
+        jamb_hinge = c_min if hinge_side == "left" else c_max
+        jamb_free = c_max if hinge_side == "left" else c_min
+        mid = (c_min + c_max) / 2
+        if face == "south":
+            sx, sy = int(round(mid)), int(round(wall - DOOR_PROBE_PX))
+        elif face == "north":
+            sx, sy = int(round(mid)), int(round(wall + DOOR_PROBE_PX))
+        elif face == "east":
+            sx, sy = int(round(wall - DOOR_PROBE_PX)), int(round(mid))
+        else:
+            sx, sy = int(round(wall + DOOR_PROBE_PX)), int(round(mid))
+
+        all_doors.append({
+            "face": face,
+            "offset_px": offset,
+            "width_px": c_span,
+            "hinge_side": hinge_side,
+            "opens_inward": True,
+            "seed_confirmed": seed_confirmed,
+            "jamb_hinge_px": jamb_hinge,
+            "jamb_free_px": jamb_free,
+            "wall_px": wall,
+        })
+
+    if not all_doors:
+        reason = 'arc_too_wide' if arc_span >= face_len * 0.8 \
+            else 'arc_cluster_validation_failed'
+        return _finish(reason,
+                       {'arc_span': int(arc_span),
+                        'face_len': int(face_len),
+                        'clusters': len(clusters)})
 
     # Success — record diag
     fd['rejected'] = None
-    fd['doors_found'] = 1
+    fd['doors_found'] = len(all_doors)
     if diag is not None:
         diag.setdefault('door_faces', []).append(fd)
 
-    return wall, [door]
+    return wall, all_doors
 
 
 def expand_door_arcs(binary, rect, dir_hits, cx, cy,
