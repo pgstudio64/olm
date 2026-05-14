@@ -3,6 +3,13 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.85] — 2026-05-14 — Zone coords int in canonical transforms
+
+### Fixed
+- `xformZone`/`xformZoneBack` in `canonical_io.js`: arithmetic on room dimensions (W, D) produced floats even from int inputs. Added `Math.round` to all zone coordinate assignments.
+
+---
+
 ## [v0.4.84] — 2026-05-14 — Bbox shift fix + exclusion zones int at load/save
 
 ### Fixed
