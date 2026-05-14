@@ -24,7 +24,14 @@ class DetectionConfigCm:
     """
 
     # --- Binarisation ---
-    binarize_threshold: int = 140            # niveaux gris (0-255), < = mur
+    binarize_threshold: int = 110            # niveaux gris (0-255), < = mur
+                                             # Valeur alignee sur project/config.json
+                                             # (terrain, ajustee par l'utilisateur).
+                                             # Ce defaut sert aux tests unitaires et
+                                             # a la CLI directe. En prod, le serveur
+                                             # charge l'override via
+                                             # _apply_detection_config(scale, overrides)
+                                             # depuis config.json.
     ortho_angle_tolerance_deg: float = 5.0   # tolérance orthogonalité
 
     # --- Classification / sizing des segments de mur ---
