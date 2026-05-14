@@ -7,6 +7,22 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-185 · UX fixes : grille, overlay -SD, zoom clamp Room (2026-05-14)
+
+5 corrections UX. (1) Grille dots 10cm : bornes alignees sur step1m pour couvrir le meme espace que les lignes 1m ; rayon minimum proportionnel au viewport (`vb.w/1000`) pour garantir ~1.2px a l'ecran (etait invisible en Room et Floor a zoom out). (2) Overlay Room : utilise `planPathEnhanced` (PNG -SD) au lieu du PNG brut pour fpOverlay. (3) Toggle "Hide detection colors" aligne a gauche dans Settings. (4) `hideDetectionColors` default `false` (suppression lecture localStorage au demarrage). (5) Zoom in Room/Office clampe a 500 cm (5m) de largeur visible minimum.
+
+Impact : `render_shared.js`, `ingestion.js`, `editor.js`, `store.js`, `pattern_editor.html`.
+
+---
+
+## D-184 · Centralisation constantes-rustines dans detection_config (2026-05-14)
+
+Audit de robustesse : 30 constantes empiriques identifiees, 9 critiques, 14 moderees. Actions : (1) 7 nouveaux champs dans `DetectionConfigCm` (`pillar_group_gap_cm`, `arc_monotonicity_ratio`, `wall_thickness_max_cm`, `ocr_min/max_surface_m2`, `text_search_dist_cm`) + 4 champs derives dans `DetectionConfigPx`. (2) Deduplication : `binarize()` default 180→140 aligne config, `ORTHO_ANGLE_TOLERANCE` importe depuis config, `max_absorb_px` 120→60 aligne config. (3) `gap_threshold=3*step_px` → `pillar_group_gap_px` config, `len(group)<3` → `min_pillar_hits` config, `0.7` monotonie → `arc_monotonicity_ratio` config. (4) Grades A-F en tableau `CIRCULATION_GRADES`, constantes nommees `MIN_ISOLATED_AREA_M2`/`LARGE_ISOLATED_AREA_M2`. (5) Suppression code mort (`_group_pixels`, definitions dupliquees DOOR_PROBE/GROUP_GAP/WALL_MARGIN). Aucun changement de comportement a scale 0.5 cm/px.
+
+Impact : `detection_config.py`, `test_comb.py`, `extract.py`, `circulation_analysis.py`.
+
+---
+
 ## D-183 · Hide detection colors : general + Room/Office (2026-05-13)
 
 Le toggle "Hide detection colors" passe de la section Developer a la section Rendering (parametres generaux). Desormais applique a Floor, Room et Office (pas seulement Floor). Le state `planUrlClean` est utilise dans `floor_plan.js` pour construire l'overlay Room et Office quand le toggle est actif. Le changement du toggle declenche un refresh immediat via `fpRenderCurrent()`. Default false, persiste via localStorage.

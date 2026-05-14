@@ -3,6 +3,20 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.50] — 2026-05-14
+
+### Changed
+- **Centralisation constantes-rustines (D-184)** : 7 nouveaux champs dans DetectionConfigCm,
+  deduplication binarize_threshold (180→140), ORTHO_ANGLE_TOLERANCE, max_absorb_px (120→60).
+  Seuils empiriques (`gap_threshold`, `len(group)<3`, `0.7` monotonie) remplaces par config.
+  Grades circulation A-F en tableau CIRCULATION_GRADES. Suppression code mort.
+- **Grille dots visible (D-185)** : bornes alignees sur step1m, rayon min proportionnel
+  au viewport pour visibilite en Room et Floor a tout zoom.
+- **Overlay Room -SD (D-185)** : utilise planPathEnhanced au lieu du PNG brut.
+- **Hide detection colors default false (D-185)** : sans lecture localStorage au demarrage.
+- **Zoom in Room clampe (D-185)** : minimum 500 cm (5m) de largeur visible.
+- **Toggle Hide detection colors aligne (D-185)** : checkbox a gauche dans Settings.
+
 ## [v0.4.49] — 2026-05-13
 
 ### Changed
