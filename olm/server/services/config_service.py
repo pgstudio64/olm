@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 # Paths — resolved once at import time
 # ---------------------------------------------------------------------------
 
-# olm/server → olm → AI-OLM
-_SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE_DIR = _SERVER_DIR                     # olm/
+# olm/server/services/config_service.py → olm/server/services → olm/server → olm
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))            # olm/
 PROJECT_ROOT = os.path.dirname(BASE_DIR)   # AI-OLM/
 
 _CONFIG_PATH = os.path.join(PROJECT_ROOT, "project", "config.json")
