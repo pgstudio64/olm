@@ -57,6 +57,9 @@ MIN_DOOR_ARC_HITS = 3   # min hits per direction to validate a door arc
 MIN_OBSTACLE_WIDTH_PX = 15  # default ~30cm at 0.5 cm/px; updated by _apply
 MIN_PILLAR_SIZE_PX = 8    # default ~15cm at 0.5 cm/px; updated by _apply
 MAX_PILLAR_SIZE_PX = 60   # default ~30cm at 0.5 cm/px; updated by _apply
+DOOR_PROBE_PX = 24        # default 12cm at 0.5 cm/px; updated by _apply
+DOOR_GROUP_GAP_PX = 150   # default 75cm at 0.5 cm/px; updated by _apply
+WALL_MARGIN_PX = 18       # default 9cm at 0.5 cm/px; updated by _apply
 
 # --- Scale auto-calibration from OCR surfaces ---
 # Minimum annotated surface (m²) for a room to be used in scale calibration.
@@ -358,8 +361,10 @@ def find_seeds_by_ocr(image):
         # Parse the surface value (universal "X.XX" format with optional ",")
         room_surface = 0.0
         try:
+            from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+            _dcfg = DEFAULT_DETECTION_CONFIG_CM
             val = float(anchor["text"].replace(",", "."))
-            if 0.5 < val < 2000.0:
+            if _dcfg.ocr_min_surface_m2 < val < _dcfg.ocr_max_surface_m2:
                 room_surface = val
         except ValueError:
             pass
@@ -858,7 +863,10 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
 def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
                         min_pillar_size_px=8, max_pillar_size_px=60,
                         door_seeds=None, min_door_width_px=0,
-                        step_px=10):
+                        step_px=10,
+                        pillar_group_gap_px=None,
+                        min_pillar_hits=3,
+                        arc_monotonicity_ratio=0.7):
     """Filter out hits caused by narrow pillars (< min_obstacle_width_px).
 
     For each face, the dominant wall position is the mode of the hit
@@ -939,10 +947,10 @@ def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
         # Sort inward hits by along-coordinate to find contiguous groups.
         inward_sorted = sorted(inward_indices, key=lambda i: along[i])
 
-        # Group contiguous hits (gap < 2 * step between rays).
-        # Use a generous gap threshold: hits from adjacent rays are
-        # spaced by step_px (~10-20 px). Allow 3× step as gap tolerance.
-        gap_threshold = 3 * step_px
+        # Group contiguous hits: gap < pillar_group_gap_px (from config,
+        # default ~15 cm). Hits from adjacent rays are spaced by step_px.
+        gap_threshold = (pillar_group_gap_px if pillar_group_gap_px
+                         is not None else 3 * step_px)
         groups: list[list[int]] = []
         current_group = [inward_sorted[0]]
         for k in range(1, len(inward_sorted)):
@@ -958,7 +966,7 @@ def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
         # and displacement pattern is constant (not progressive like an arc).
         indices_to_remove: set[int] = set()
         for group in groups:
-            if len(group) < 3:
+            if len(group) < min_pillar_hits:
                 continue  # Too few hits to be a reliable pillar.
             along_vals = [along[i] for i in group]
             group_width = max(along_vals) - min(along_vals)
@@ -977,8 +985,9 @@ def _filter_pillar_hits(dir_hits, cx, cy, min_obstacle_width_px,
                 positive = sum(1 for d in diffs if d > 0)
                 negative = sum(1 for d in diffs if d < 0)
                 n = len(diffs)
-                # If > 70% of diffs are same sign → monotonic → arc.
-                if positive > 0.7 * n or negative > 0.7 * n:
+                # If > ratio of diffs are same sign → monotonic → arc.
+                if (positive > arc_monotonicity_ratio * n
+                        or negative > arc_monotonicity_ratio * n):
                     continue  # Progressive displacement → door arc.
 
             # Reject if group centre falls near a door seed (any face).
@@ -1463,28 +1472,6 @@ def snap_to_wall(binary, rect, max_advance_per_face=None):
     return (x0, y0, x1, y1)
 
 
-DOOR_PROBE_PX = 4   # ~2cm, offset for probing door position
-DOOR_GROUP_GAP_PX = 25  # max gap between pixels of the same arc (~door width)
-WALL_MARGIN_PX = 3   # exclude pixels close to perpendicular walls
-
-
-def _group_pixels(pixels, max_gap=DOOR_GROUP_GAP_PX):
-    """Group contiguous pixels (with max gap)."""
-    if not pixels:
-        return []
-    pixels = sorted(pixels)
-    groups = []
-    current = [pixels[0]]
-    for p in pixels[1:]:
-        if p - current[-1] <= max_gap:
-            current.append(p)
-        else:
-            groups.append(current)
-            current = [p]
-    groups.append(current)
-    return groups
-
-
 def _seed_scan_range(x0, y0, x1, y1, face, face_seeds, door_width_px,
                      tolerance, margin):
     """Return the list of along-the-wall coordinates to scan for arc pixels.
@@ -1914,6 +1901,9 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
         door_seeds=door_seeds,
         min_door_width_px=_det_cfg.min_door_width_px,
         step_px=step_px,
+        pillar_group_gap_px=_det_cfg.pillar_group_gap_px,
+        min_pillar_hits=_det_cfg.min_pillar_hits,
+        arc_monotonicity_ratio=_det_cfg.arc_monotonicity_ratio,
     )
     # Rebuild all_hits from filtered dir_hits (pillar hits removed).
     all_hits_filtered = [h for hits in dir_hits.values() for h in hits]

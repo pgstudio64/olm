@@ -30,7 +30,10 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 RAY_FAN_STEP = 3             # sample every N pixels along the fan (3 = 3x faster)
-ORTHO_ANGLE_TOLERANCE = 5    # degrees tolerance for orthogonal filter
+
+# Tolérance d'orthogonalité — source unique dans DetectionConfigCm.
+from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _DCFG
+ORTHO_ANGLE_TOLERANCE = _DCFG.ortho_angle_tolerance_deg
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +204,7 @@ def clean_text_from_image(image: Image.Image,
 # ---------------------------------------------------------------------------
 
 def binarize(image: Image.Image,
-             threshold: int = 180,
+             threshold: int = _DCFG.binarize_threshold,
              morph_dilate_px: int = 1,
              ) -> tuple[np.ndarray, np.ndarray]:
     """Binarize image into two variants.
@@ -209,6 +212,7 @@ def binarize(image: Image.Image,
     Args:
         image: grayscale (or convertible) PIL image.
         threshold: grayscale cutoff (pixels < threshold → wall).
+            Default from DetectionConfigCm.binarize_threshold.
         morph_dilate_px: number of dilation passes (MaxFilter 3×3).
 
     Returns:
@@ -401,7 +405,13 @@ def _compute_mode(distances: np.ndarray) -> int:
 
 def _measure_wall_thickness(binary: np.ndarray, x: int, y: int,
                             dx: int, dy: int, max_depth: int = 30) -> int:
-    """Measure how many contiguous black pixels in a given direction."""
+    """Measure how many contiguous black pixels in a given direction.
+
+    Args:
+        max_depth: max probe depth in px. Default 30 px (~15 cm at 0.5
+            cm/px). Callers with a known scale should pass
+            ``cfg.wall_thickness_max_px`` from DetectionConfigPx.
+    """
     h, w = binary.shape
     thickness = 0
     px, py = x, y
@@ -481,15 +491,20 @@ def detect_room_three_phase(binary: np.ndarray, binary_raw: np.ndarray,
                              step=phase2_step)
         refined_modes[direction] = _compute_mode(distances)
 
-    # Wall thickness compensation
+    # Wall thickness compensation — max depth from detection_config
+    _wall_max_px = _DCFG.to_px(scale_cm_per_px).wall_thickness_max_px
     n_thick = _measure_wall_thickness(binary, cx,
-                                      cy - refined_modes["north"], 0, -1)
+                                      cy - refined_modes["north"], 0, -1,
+                                      max_depth=_wall_max_px)
     s_thick = _measure_wall_thickness(binary, cx,
-                                      cy + refined_modes["south"], 0, 1)
+                                      cy + refined_modes["south"], 0, 1,
+                                      max_depth=_wall_max_px)
     w_thick = _measure_wall_thickness(binary,
-                                      cx - refined_modes["west"], cy, -1, 0)
+                                      cx - refined_modes["west"], cy, -1, 0,
+                                      max_depth=_wall_max_px)
     e_thick = _measure_wall_thickness(binary,
-                                      cx + refined_modes["east"], cy, 1, 0)
+                                      cx + refined_modes["east"], cy, 1, 0,
+                                      max_depth=_wall_max_px)
 
     x0 = cx - refined_modes["west"] - (w_thick // 2)
     y0 = cy - refined_modes["north"] - (n_thick // 2)
@@ -742,8 +757,12 @@ def _fill_skips(ray_kinds: list[str]):
 
 
 def _merge_adjacent_segments(segments: list[WallSegment],
-                             max_absorb_px: int = 120) -> list[WallSegment]:
+                             max_absorb_px: int = 60) -> list[WallSegment]:
     """Merge segments of the same kind separated by small intermediate segments.
+
+    Args:
+        max_absorb_px: max gap to absorb. Default 60 px (= max_absorb_cm
+            30 at 0.5 cm/px). Callers should pass ``cfg.max_absorb_px``.
 
     Two-pass approach:
       Pass 1: Absorb small intermediate segments into their neighbors.
@@ -945,7 +964,13 @@ def extract_rooms(image: Image.Image,
 
 def _find_nearest(texts: list[DetectedText], cx: int, cy: int,
                   max_dist: float = 500) -> DetectedText | None:
-    """Find the nearest text to a given point."""
+    """Find the nearest text to a given point.
+
+    Args:
+        max_dist: maximum search distance in px. Default 500 px
+            (~250 cm at 0.5 cm/px = text_search_dist_cm).
+            Used only in OCR mode (extract_rooms).
+    """
     best = None
     best_dist = max_dist
     for t in texts:
@@ -1962,7 +1987,7 @@ def extract_room_features(
     transparent_zones_cm: list | None = None,
     doors_px: list | None = None,
     door_width_cm: int = 90,
-    threshold: int = 140,
+    threshold: int = _DCFG.binarize_threshold,
     classify_step_cm: float = 15.0,
     binary_precomputed: np.ndarray | None = None,
     binary_raw_precomputed: np.ndarray | None = None,

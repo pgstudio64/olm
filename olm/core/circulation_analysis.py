@@ -843,6 +843,21 @@ def _compute_desk_paths(
     return results
 
 
+# Seuils de grade circulation : (grade, min_connectivity_pct, max_detour).
+# Grade attribué si connectivity >= min ET worst_detour < max.
+# D n'a pas de contrainte de détour. F = tout le reste.
+CIRCULATION_GRADES: list[tuple[str, float, float]] = [
+    ("A", 100.0, 1.30),
+    ("B",  90.0, 1.60),
+    ("C",  70.0, 2.00),
+    ("D",  50.0, float("inf")),
+]
+
+# Seuils de violation pour zones isolées
+MIN_ISOLATED_AREA_M2 = 0.50   # zone isolée significative (> un pilier)
+LARGE_ISOLATED_AREA_M2 = 2.0  # zone isolée large (> un poste de travail)
+
+
 def _compute_grade(connectivity_pct: float, worst_detour: float) -> str:
     """Compute the circulation quality grade.
 
@@ -853,14 +868,9 @@ def _compute_grade(connectivity_pct: float, worst_detour: float) -> str:
     Returns:
         Grade "A" to "F".
     """
-    if connectivity_pct >= 100.0 and worst_detour < 1.30:
-        return "A"
-    if connectivity_pct >= 90.0 and worst_detour < 1.60:
-        return "B"
-    if connectivity_pct >= 70.0 and worst_detour < 2.00:
-        return "C"
-    if connectivity_pct >= 50.0:
-        return "D"
+    for grade, min_conn, max_det in CIRCULATION_GRADES:
+        if connectivity_pct >= min_conn and worst_detour < max_det:
+            return grade
     return "F"
 
 
@@ -884,7 +894,6 @@ def _compute_violations(
         List of violation messages.
     """
     violations: list[str] = []
-    MIN_ISOLATED_AREA_M2 = 0.50
 
     significant = [
         z for z in isolated_zones
@@ -896,14 +905,18 @@ def _compute_violations(
             f"({isolated_area_pct:.0f}% area)"
         )
 
-    if worst_detour > 2.0:
-        violations.append(f"DETOUR_EXCESSIVE: ratio {worst_detour:.2f} depuis porte")
+    # Seuil détour excessif = palier C du tableau des grades
+    max_detour_c = CIRCULATION_GRADES[2][2]  # "C" → 2.00
+    if worst_detour > max_detour_c:
+        violations.append(
+            f"DETOUR_EXCESSIVE: ratio {worst_detour:.2f} depuis porte")
 
     cell_area_m2 = cell_size_m ** 2
     for col, row, w, h in isolated_zones:
         area_m2 = w * h * cell_area_m2
-        if area_m2 > 2.0:
-            violations.append(f"LARGE_ISOLATED: zone {col},{row} = {area_m2:.1f} m²")
+        if area_m2 > LARGE_ISOLATED_AREA_M2:
+            violations.append(
+                f"LARGE_ISOLATED: zone {col},{row} = {area_m2:.1f} m²")
 
     return violations
 
