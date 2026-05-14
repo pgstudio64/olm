@@ -46,6 +46,21 @@ markers = [
     "slow: tests longs (OCR, ray-cast sur image réelle)",
 ]
 
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",  # handled by line-length
+    "E701",  # multiple statements on one line (colon) — P2.3 follow-up
+    "E702",  # multiple statements on one line (semicolon) — P2.3 follow-up
+    "E731",  # lambda assignment — P2.3 follow-up
+    "F841",  # local variable assigned but never used — P2.3 follow-up
+    "E402",  # module-level import not at top — P2.3 follow-up
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["olm*"]

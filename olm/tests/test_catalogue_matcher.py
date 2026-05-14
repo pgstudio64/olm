@@ -1,30 +1,25 @@
 """Tests for catalogue_matcher — 7-step matching pipeline."""
 from __future__ import annotations
 
-import copy
-
 import pytest
 
-from olm.core.room_model import RoomSpec, ExclusionZone, OpeningSpec, WindowSpec, Face, HingeSide
 from olm.core.catalogue_matcher import (
-    count_desks,
-    pareto_front,
     PatternCandidate,
-    select_candidates,
     SelectionResult,
-    mirror_pattern,
     adapt_to_room,
-    compute_desk_positions,
-    DeskPosition,
-    remove_conflicting_desks,
-    largest_free_rectangle_m2,
-    generate_auto_name,
     compact_catalogue_names,
+    compute_desk_positions,
+    count_desks,
+    generate_auto_name,
+    largest_free_rectangle_m2,
     load_catalogue,
-    _BLOCK_N_DESKS,
+    mirror_pattern,
+    pareto_front,
+    remove_conflicting_desks,
+    select_candidates,
 )
-from olm.core.pattern_generator import DESK_W_CM, DESK_D_CM
-
+from olm.core.pattern_generator import DESK_D_CM, DESK_W_CM
+from olm.core.room_model import ExclusionZone, RoomSpec
 
 # ---------------------------------------------------------------------------
 # Helpers

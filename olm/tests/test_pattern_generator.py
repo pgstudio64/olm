@@ -1,14 +1,28 @@
-import os
 import json
+import os
 import tempfile
 
 from olm.core.pattern_generator import (
-    BLOCK_1, BLOCK_2_FACE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
-    PASSAGE_CM, PASSAGE_SINGLE_CM, CHAIR_CLEARANCE_CM, DESK_D_CM, DESK_W_CM,
-    compose_row, compose_double_row, FaceZone, DoubleRowPattern,
-    export_catalogue, render_pattern_svg,
-    rotate_pattern_90, rotate_double_row_90, mirror_double_row,
-    PATTERNS, DOUBLE_ROW_PATTERNS, PATTERNS_ALL, DOUBLE_ROW_PATTERNS_ALL,
+    BLOCK_1,
+    BLOCK_2_FACE,
+    BLOCK_4_FACE,
+    BLOCK_6_FACE,
+    CHAIR_CLEARANCE_CM,
+    DESK_D_CM,
+    DESK_W_CM,
+    DOUBLE_ROW_PATTERNS,
+    DOUBLE_ROW_PATTERNS_ALL,
+    PASSAGE_CM,
+    PASSAGE_SINGLE_CM,
+    PATTERNS,
+    PATTERNS_ALL,
+    FaceZone,
+    compose_double_row,
+    compose_row,
+    export_catalogue,
+    mirror_double_row,
+    render_pattern_svg,
+    rotate_pattern_90,
 )
 
 

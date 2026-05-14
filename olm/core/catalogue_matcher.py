@@ -13,21 +13,27 @@ Module: cross-matching 3 standards x target rooms.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
-from dataclasses import dataclass, field
-
-import copy
+from dataclasses import dataclass
 
 from olm.core.app_config import get_standard_label
+from olm.core.pattern_generator import (
+    BLOCK_1,
+    BLOCK_2_FACE,
+    BLOCK_2_ORTHO_L,
+    BLOCK_2_ORTHO_R,
+    BLOCK_2_SIDE,
+    BLOCK_3_SIDE,
+    BLOCK_4_FACE,
+    BLOCK_6_FACE,
+    DESK_D_CM,
+    DESK_W_CM,
+)
 from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
-from olm.core.pattern_generator import (
-    DESK_W_CM, DESK_D_CM,
-    BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
-    BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -1165,6 +1171,7 @@ def largest_free_rectangle_m2(
         Area in m² of the largest free rectangle.
     """
     import numpy as np
+
     from olm.core.matching_config import GRID_CELL_CM
 
     cols = room.width_cm // GRID_CELL_CM
@@ -1392,7 +1399,6 @@ def compact_catalogue_names(catalogue: list[dict]) -> list[dict]:
     Returns:
         Catalogue with compacted names (modified in place AND returned).
     """
-    import re
     from collections import defaultdict
 
     groups: dict[tuple, list[dict]] = defaultdict(list)

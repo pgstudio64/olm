@@ -1,6 +1,12 @@
 """Tests for room_model.py."""
 from olm.core.room_model import (
-    Face, HingeSide, WindowSpec, OpeningSpec, ExclusionZone, RoomSpec, FloorPlan,
+    ExclusionZone,
+    Face,
+    FloorPlan,
+    HingeSide,
+    OpeningSpec,
+    RoomSpec,
+    WindowSpec,
 )
 
 

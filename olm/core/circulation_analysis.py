@@ -13,13 +13,12 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Dict, Deque, List, Optional, Set, Tuple
 
 import numpy as np
 
 from olm.core.matching_config import GRID_CELL_CM
+from olm.core.spacing_config import get_default
 from olm.core.types import CellType
-from olm.core.spacing_config import ALL_CONFIGS, get_default
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +80,15 @@ def build_grid(
     """
     # Local imports to avoid module-level circular dependency
     from olm.core.pattern_generator import (
+        BLOCK_1,
+        BLOCK_2_FACE,
+        BLOCK_2_ORTHO_L,
+        BLOCK_2_ORTHO_R,
+        BLOCK_2_SIDE,
+        BLOCK_3_SIDE,
+        BLOCK_4_FACE,
+        BLOCK_6_FACE,
         rotate_face_candidates,
-        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
-        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
     )
     _BLOCKS = {b.name: b for b in [
         BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
@@ -271,7 +276,7 @@ def _build_adjacency(
 def _find_entry_rect(
     rects: list[tuple[int, int, int, int]],
     grid: np.ndarray,
-) -> Optional[int]:
+) -> int | None:
     """Return the index of the rectangle that contains a DOOR cell.
 
     Args:
@@ -429,9 +434,16 @@ def _desk_access_cells(
     for arrow rendering.
     """
     from olm.core.pattern_generator import (
-        DESK_W_CM, DESK_D_CM, rotate_face_candidates,
-        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
-        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
+        BLOCK_1,
+        BLOCK_2_FACE,
+        BLOCK_2_ORTHO_L,
+        BLOCK_2_ORTHO_R,
+        BLOCK_2_SIDE,
+        BLOCK_3_SIDE,
+        BLOCK_4_FACE,
+        BLOCK_6_FACE,
+        DESK_W_CM,
+        rotate_face_candidates,
     )
     _BLOCKS = {b.name: b for b in [
         BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
@@ -457,7 +469,7 @@ def _desk_access_cells(
 
     def _best_walkable(
         candidates: list[tuple[int, int]], mid_r: float, mid_c: float,
-    ) -> Optional[tuple[int, int]]:
+    ) -> tuple[int, int] | None:
         valid = [(r, c) for r, c in candidates if int(grid[r, c]) in walkable]
         if not valid:
             return None
@@ -467,7 +479,7 @@ def _desk_access_cells(
     def _access_for_zone(
         face: str, zone_x: int, zone_y: int, zone_eo: int, zone_ns: int,
         nsup_cm: int, desk_id: str,
-    ) -> Optional[DeskAccess]:
+    ) -> DeskAccess | None:
         """Compute the access point for a desk zone on a given face."""
         c1 = zone_x // GRID_CELL_CM
         c2 = (zone_x + zone_eo) // GRID_CELL_CM
@@ -612,7 +624,7 @@ def _cell_bfs_path(
     grid: np.ndarray,
     start_cells: list[tuple[int, int]],
     target: tuple[int, int],
-) -> Optional[list[tuple[int, int]]]:
+) -> list[tuple[int, int]] | None:
     """Cell-level Dijkstra from start_cells to target.
 
     Per-cell cost favours the corridor centre: a cell at distance d from
@@ -632,7 +644,7 @@ def _cell_bfs_path(
     K_CENTER = 3.0
 
     dist: dict[tuple[int, int], float] = {}
-    prev: dict[tuple[int, int], Optional[tuple[int, int]]] = {}
+    prev: dict[tuple[int, int], tuple[int, int] | None] = {}
     heap: list[tuple[float, int, int]] = []
 
     for sc in start_cells:
@@ -645,7 +657,7 @@ def _cell_bfs_path(
         d, r, c = heapq.heappop(heap)
         if (r, c) == target:
             path: list[tuple[int, int]] = []
-            cur: Optional[tuple[int, int]] = (r, c)
+            cur: tuple[int, int] | None = (r, c)
             while cur is not None:
                 path.append(cur)
                 cur = prev[cur]
@@ -762,7 +774,7 @@ def _cluster_door_cells(
         if start in visited:
             continue
         cluster: list[tuple[int, int]] = []
-        queue: Deque[tuple[int, int]] = deque([start])
+        queue: deque[tuple[int, int]] = deque([start])
         visited.add(start)
         while queue:
             r, c = queue.popleft()

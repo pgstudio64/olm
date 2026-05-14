@@ -6,7 +6,12 @@ Factorizes the duplicated conversion code formerly in ``app.py``
 from __future__ import annotations
 
 from olm.core.room_model import (
-    ExclusionZone, Face, HingeSide, OpeningSpec, RoomSpec, WindowSpec,
+    ExclusionZone,
+    Face,
+    HingeSide,
+    OpeningSpec,
+    RoomSpec,
+    WindowSpec,
 )
 
 

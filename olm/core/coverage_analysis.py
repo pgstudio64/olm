@@ -11,14 +11,21 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from olm.core.catalogue_matcher import (
-    MatchScore, MatchingResult, load_catalogue, match_room,
+    MatchScore,
+    load_catalogue,
+    match_room,
 )
 from olm.core.room_model import (
-    ExclusionZone, Face, HingeSide, OpeningSpec, RoomSpec, WindowSpec,
+    ExclusionZone,
+    Face,
+    HingeSide,
+    OpeningSpec,
+    RoomSpec,
+    WindowSpec,
 )
 
 logger = logging.getLogger(__name__)

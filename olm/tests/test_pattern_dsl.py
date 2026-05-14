@@ -1,6 +1,7 @@
 """Tests for pattern_dsl.py."""
 import pytest
-from olm.core.pattern_dsl import parse_dsl, to_dsl, parse_catalogue_dsl, DSLError
+
+from olm.core.pattern_dsl import DSLError, parse_catalogue_dsl, parse_dsl, to_dsl
 
 
 class TestParseDSL:
