@@ -1712,12 +1712,10 @@ def api_floor_plan_match():
     """
     try:
         from olm.core.catalogue_matcher import (
-            match_room, select_candidates, generate_mirrors,
-            adapt_to_room, remove_conflicting_desks, score_candidate,
-            compute_desk_positions, count_desks,
+            match_room, compute_desk_positions,
         )
-        from olm.core.room_model import (
-            ExclusionZone, Face, HingeSide, OpeningSpec, RoomSpec, WindowSpec,
+        from olm.server.services.serialization import (
+            room_from_json, room_to_json,
         )
 
         data = request.json
@@ -1728,72 +1726,12 @@ def api_floor_plan_match():
         results = []
 
         for r in data["rooms"]:
-            # D-141 : skip silencieux des entries non-enrichies (pas de
-            # "face"). Cas d'un JSON v3 Input minimal où le pipeline
-            # d'enrichissement (ray-cast / détection) n'a pas tourné ou
-            # n'a rien attaché. Sans ce filtre, un KeyError "face" casse
-            # l'endpoint match (symptôme "Error: 'face'" côté UI).
-            windows = [
-                WindowSpec(
-                    Face(w["face"]), w["offset_cm"], w["width_cm"],
-                    origin=w.get("origin"),
-                )
-                for w in r.get("windows", [])
-                if "face" in w and "offset_cm" in w and "width_cm" in w
-            ]
-            openings = [
-                OpeningSpec(
-                    Face(o["face"]), o["offset_cm"],
-                    o.get("width_cm", 90),
-                    o.get("has_door", True),
-                    o.get("opens_inward", True),
-                    HingeSide(o.get("hinge_side", "left")),
-                    origin=o.get("origin"),
-                )
-                for o in r.get("openings", [])
-                if "face" in o and "offset_cm" in o
-            ]
-            exclusions = [
-                ExclusionZone(
-                    z["x_cm"], z["y_cm"], z["width_cm"], z["depth_cm"],
-                )
-                for z in r.get("exclusion_zones", [])
-            ]
-            room = RoomSpec(
-                width_cm=r["width_cm"], depth_cm=r["depth_cm"],
-                windows=windows, openings=openings,
-                exclusion_zones=exclusions, name=r.get("name", ""),
-            )
-
+            room = room_from_json(r)
             match_result = match_room(catalogue, room)
 
-            # Build the response for this room
-            room_result = {
-                "name": room.name,
-                "width_cm": room.width_cm,
-                "depth_cm": room.depth_cm,
-                "windows": [
-                    {"face": w.face.value, "offset_cm": w.offset_cm,
-                     "width_cm": w.width_cm,
-                     **({"origin": w.origin} if w.origin else {})}
-                    for w in room.windows
-                ],
-                "openings": [
-                    {"face": o.face.value, "offset_cm": o.offset_cm,
-                     "width_cm": o.width_cm, "has_door": o.has_door,
-                     "opens_inward": o.opens_inward,
-                     "hinge_side": o.hinge_side.value,
-                     **({"origin": o.origin} if o.origin else {})}
-                    for o in room.openings
-                ],
-                "exclusion_zones": [
-                    {"x_cm": z.x_cm, "y_cm": z.y_cm,
-                     "width_cm": z.width_cm, "depth_cm": z.depth_cm}
-                    for z in room.exclusion_zones
-                ],
-                "by_standard": {},
-                "all_candidates": [],
-            }
+            room_result = room_to_json(room)
+            room_result["by_standard"] = {}
+            room_result["all_candidates"] = []
 
             for score in match_result.all_scores:
                 # Compute desk positions for rendering
@@ -1852,56 +1790,13 @@ def api_coverage():
         from olm.core.coverage_analysis import (
             analyse_coverage, load_rooms_json, report_to_dict,
         )
-        from olm.core.room_model import (
-            ExclusionZone, Face, HingeSide, OpeningSpec, RoomSpec, WindowSpec,
-        )
+        from olm.server.services.serialization import room_from_json
 
         data = request.json
         if not data or "rooms" not in data:
             return jsonify({"error": "Required field: rooms"}), 400
 
-        # Build RoomSpec objects from JSON
-        rooms = []
-        for r in data["rooms"]:
-            # D-141 : skip silencieux des entries non-enrichies (cf.
-            # /api/floor-plan/match ci-dessus).
-            windows = [
-                WindowSpec(
-                    face=Face(w["face"]),
-                    offset_cm=w["offset_cm"],
-                    width_cm=w["width_cm"],
-                )
-                for w in r.get("windows", [])
-                if "face" in w and "offset_cm" in w and "width_cm" in w
-            ]
-            openings = [
-                OpeningSpec(
-                    face=Face(o["face"]),
-                    offset_cm=o["offset_cm"],
-                    width_cm=o.get("width_cm", 90),
-                    has_door=o.get("has_door", True),
-                    opens_inward=o.get("opens_inward", True),
-                    hinge_side=HingeSide(o.get("hinge_side", "left")),
-                )
-                for o in r.get("openings", [])
-                if "face" in o and "offset_cm" in o
-            ]
-            exclusions = [
-                ExclusionZone(
-                    x_cm=z["x_cm"], y_cm=z["y_cm"],
-                    width_cm=z["width_cm"], depth_cm=z["depth_cm"],
-                )
-                for z in r.get("exclusion_zones", [])
-            ]
-            rooms.append(RoomSpec(
-                width_cm=r["width_cm"],
-                depth_cm=r["depth_cm"],
-                windows=windows,
-                openings=openings,
-                exclusion_zones=exclusions,
-                name=r.get("name", ""),
-            ))
-
+        rooms = [room_from_json(r) for r in data["rooms"]]
         catalogue = _load_catalogue()
         report = analyse_coverage(rooms, catalogue)
         return jsonify(report_to_dict(report))
