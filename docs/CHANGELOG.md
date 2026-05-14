@@ -3,6 +3,11 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.56] — 2026-05-14 — P1.3 tests circulation_analysis (82 %)
+
+### Added
+- **test_circulation_analysis.py** : 20 tests couvrant `_compute_grade` (5 paliers + 3 frontieres), `_compute_violations` (4 cas), `build_grid` (2), `analyse()` integration (6 dont piece en L et multi-portes). Couverture dediee : 82 %. 225 tests au total.
+
 ## [v0.4.55] — 2026-05-14 — fix api_plan_metadata JSON v3
 
 ### Fixed
