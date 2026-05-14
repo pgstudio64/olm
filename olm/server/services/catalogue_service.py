@@ -9,9 +9,9 @@ import json
 import logging
 import os
 
-from olm.core.catalogue_matcher import generate_auto_name, compact_catalogue_names
-from olm.core.pattern_dsl import parse_dsl, to_dsl, DSLError
-from olm.core.room_dsl import parse_room_dsl, RoomDSLError
+from olm.core.catalogue_matcher import compact_catalogue_names, generate_auto_name
+from olm.core.pattern_dsl import parse_dsl, to_dsl
+from olm.core.room_dsl import parse_room_dsl
 
 logger = logging.getLogger(__name__)
 

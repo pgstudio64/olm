@@ -11,8 +11,7 @@ défauts — les autres conservent leur valeur par défaut.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields, asdict
-from typing import Any
+from dataclasses import asdict, dataclass, fields
 
 
 @dataclass(frozen=True)
@@ -122,7 +121,7 @@ class DetectionConfigCm:
     text_skip_margin_cm: float = 6.0    # marge autour des bbox texte pour
                                          # skip zones (wall classifier)
 
-    def to_px(self, scale_cm_per_px: float) -> "DetectionConfigPx":
+    def to_px(self, scale_cm_per_px: float) -> DetectionConfigPx:
         """Convertit les valeurs cm en px au scale courant."""
         px_per_cm = 1.0 / scale_cm_per_px
         def _px(cm: float) -> int:
@@ -174,7 +173,7 @@ class DetectionConfigCm:
         )
 
     @classmethod
-    def from_dict(cls, data: dict | None) -> "DetectionConfigCm":
+    def from_dict(cls, data: dict | None) -> DetectionConfigCm:
         """Crée une instance, en écrasant les défauts par les clés fournies."""
         if not data:
             return cls()

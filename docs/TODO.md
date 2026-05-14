@@ -27,8 +27,9 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 - **Écritures atomiques** temp+rename + `.bak` sur save (~5 h).
 - [x] **P2.1** ~~`MAX_CONTENT_LENGTH` Flask + whitelist MIME upload~~ — v0.4.59. 50 MB, whitelist MIME 4 types, handler 413, 3 tests.
 - **Logger Python + `RotatingFileHandler`** (pas JSON, format standard) (~6 h).
-- **Endpoint `/health`** (config lisible, catalogue valide) (~2 h).
-- **GitHub Actions basique** : `ruff check` + `pytest` au push (~3 h).
+- [x] **P2.2** ~~Endpoint `/health`~~ — v0.4.60. `GET /health` 200/503, 4 checks, 2 tests.
+- [x] **P2.3** ~~GitHub Actions basique~~ — v0.4.61. `ruff check` + `pytest --cov` au push/PR. Config ruff dans `pyproject.toml`. 47 warnings ruff restants (E701, F841, E402, E731, E702).
+- **P2.3 follow-up** : nettoyer les 47 warnings ruff restants (16 E701, 15 F841, 9 E402, 5 E731, 2 E702).
 - **`USER_GUIDE.md`** : workflow import → review → export, captures intégrées (~6 h).
 
 **Total restant : ~87 h sur 2-3 mois.**

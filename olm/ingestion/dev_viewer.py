@@ -1,10 +1,12 @@
-import os, sys, io, time
+import io
+import os
+import sys
 
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _BASE)
 sys.path.insert(0, os.path.join(_BASE, 'olm', 'ingestion'))
 
-from flask import Flask, send_file, render_template_string, request
+from flask import Flask, render_template_string, request, send_file
 
 app = Flask(__name__)
 
@@ -87,16 +89,20 @@ def img():
     show_candidates = request.args.get('candidates', '0') == '1'
 
     import numpy as np
+    from comb_detection import (
+        COMB_STEP_PX,
+        comb_collect_hits,
+        erase_cartouches,
+        expand_door_arcs,
+        find_seeds_by_ocr,
+        largest_rect_no_hits,
+        load_image,
+        snap_through_white,
+    )
+    from comb_detection import binarize as comb_binarize
     from PIL import Image, ImageDraw, ImageFont
-    from olm.ingestion.extract import binarize, remove_non_ortho
+
     from olm.ingestion.wall_classify import _classify_wall_direct
-    from comb_detection import (load_image, find_seeds_by_ocr, erase_cartouches,
-                                binarize as comb_binarize,
-                                remove_non_ortho as comb_rno,
-                                detect_room, comb_collect_hits,
-                                largest_rect_no_hits,
-                                snap_through_white, expand_door_arcs,
-                                COMB_STEP_PX)
 
     plan_path = os.path.join(_BASE, 'project', 'plans', 'test_floorplan3.png')
     img_gray = load_image(plan_path)

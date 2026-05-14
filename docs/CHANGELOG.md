@@ -3,6 +3,18 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.61] — 2026-05-14 — P2.3 CI GitHub Actions
+
+### Added
+- **P2.3 — CI GitHub Actions** : workflow `.github/workflows/ci.yml`
+  (push main + PR). `ruff check olm/` + `pytest olm/tests/ --cov`.
+  Python 3.11, ubuntu-latest.
+- Config ruff dans `pyproject.toml` : `line-length=100`, `target-version="py310"`,
+  rules E/F/W/I/UP, ignore E501.
+- 111 erreurs ruff corrigées automatiquement (`--fix`).
+- Ticket follow-up dans TODO.md pour les 47 warnings restants
+  (E701, F841, E402, E731, E702).
+
 ## [v0.4.60] — 2026-05-14 — P2.2 Health endpoint
 
 ### Added

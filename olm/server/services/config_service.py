@@ -11,9 +11,16 @@ import logging
 import os
 
 from olm.core.pattern_generator import (
-    BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
-    BLOCK_6_FACE, BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R,
-    DESK_W_CM, DESK_D_CM,
+    BLOCK_1,
+    BLOCK_2_FACE,
+    BLOCK_2_ORTHO_L,
+    BLOCK_2_ORTHO_R,
+    BLOCK_2_SIDE,
+    BLOCK_3_SIDE,
+    BLOCK_4_FACE,
+    BLOCK_6_FACE,
+    DESK_D_CM,
+    DESK_W_CM,
 )
 from olm.core.spacing_config import ALL_CONFIGS
 
@@ -171,7 +178,6 @@ _BLOCK_DESK_FACTORS = {
 
 def _block_def_to_json(block) -> dict:
     """Convert a Block to a JSON dict, recomputing dimensions from config."""
-    from olm.core.pattern_generator import DESK_W_CM, DESK_D_CM
     factors = _BLOCK_DESK_FACTORS.get(block.name)
     if factors:
         fw, fd, gw, gd = factors
@@ -270,8 +276,8 @@ def invalidate_block_cache(standard_name: str | None = None) -> None:
 
 def get_config() -> dict:
     """Return full config dict augmented with olm_version and dev_mode."""
-    from olm.core import app_config
     from olm import __version__
+    from olm.core import app_config
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
     cfg["dev_mode"] = _DEV_MODE
@@ -323,8 +329,8 @@ def get_blocks(standard: str | None = None) -> dict:
     Returns:
         Dict with ``blocks``, ``standard``, and ``constants``.
     """
-    from olm.core.spacing_config import get_default_name, get_default
     import olm.core.pattern_generator as pg
+    from olm.core.spacing_config import get_default, get_default_name
     default_name = get_default_name() or ""
     std = standard or default_name
     cfg = ALL_CONFIGS.get(std, get_default())
@@ -456,7 +462,8 @@ def update_spacing(data: dict) -> dict:
     Raises:
         ValueError: if ``standard`` is missing.
     """
-    from olm.core.spacing_config import update_config as sp_update, reset_config
+    from olm.core.spacing_config import reset_config
+    from olm.core.spacing_config import update_config as sp_update
     name = data.get("standard")
     values = data.get("values", {})
     if not name:

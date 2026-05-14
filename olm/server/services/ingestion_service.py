@@ -20,8 +20,11 @@ import numpy as np
 from PIL import Image as PILImage
 
 from olm.server.services.config_service import (
-    get_plans_dir, get_detection_overrides, get_default_threshold,
-    get_exterior_rgb, get_corridor_rgb, load_project_config,
+    get_corridor_rgb,
+    get_default_threshold,
+    get_detection_overrides,
+    get_exterior_rgb,
+    get_plans_dir,
 )
 
 logger = logging.getLogger(__name__)
@@ -770,7 +773,9 @@ def orientation_check(data: dict) -> dict:
         raise ValueError("bbox_px must be [x0,y0,x1,y1]")
 
     from olm.ingestion.orientation_check import (
-        check_all_faces, check_corridor_south, check_exterior_north,
+        check_all_faces,
+        check_corridor_south,
+        check_exterior_north,
         check_windows_exterior,
     )
     faces = check_all_faces(plan_path, bbox_px, ocf)
@@ -807,7 +812,8 @@ def orientation_report(data: dict) -> dict:
         raise ValueError("rooms must be non-empty list")
 
     from olm.ingestion.orientation_check import (
-        check_corridor_south, check_exterior_north,
+        check_corridor_south,
+        check_exterior_north,
         check_windows_exterior,
     )
 
@@ -916,7 +922,8 @@ def reanalyze_batch(data: dict) -> dict:
 
     if mode == "ocr":
         from olm.ingestion.comb_detection import (
-            find_seeds_by_ocr, erase_cartouches,
+            erase_cartouches,
+            find_seeds_by_ocr,
         )
         _seeds, _cart_bboxes_px = find_seeds_by_ocr(img)
         gray_global = erase_cartouches(gray_global, _cart_bboxes_px)

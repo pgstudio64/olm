@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from olm.ingestion.extract import _filter_impossible_openings
 

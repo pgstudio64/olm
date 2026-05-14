@@ -21,8 +21,11 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from olm.core.pattern_dsl import DSLError
 from olm.core.room_dsl import RoomDSLError
 from olm.server.services.config_service import (
-    BASE_DIR, PROJECT_ROOT, get_plans_dir, set_dev_mode,
+    BASE_DIR,
+    PROJECT_ROOT,
     _validate_upload,
+    get_plans_dir,
+    set_dev_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,8 +68,10 @@ def serve_static(filename: str):
 @app.route("/")
 def index():
     """Serve the pattern editor page with cache-bust version."""
-    from flask import render_template
     import time
+
+    from flask import render_template
+
     from olm import __version__
     return render_template("pattern_editor.html",
                            v=__version__ + '.' + str(int(time.time())))
@@ -210,8 +215,8 @@ def _resolve_plan_upload() -> tuple[str, bool]:
 @app.route("/api/ingestion/extract", methods=["POST"])
 def api_ingestion_extract():
     """Extract rooms from a raster floor plan image."""
-    from olm.server.services.ingestion_service import extract_rooms
     from olm.server.services.config_service import get_default_threshold
+    from olm.server.services.ingestion_service import extract_rooms
     if 'image' in request.files:
         ok, err = _validate_upload(request.files['image'])
         if not ok:
@@ -240,8 +245,8 @@ def api_ingestion_extract():
 @app.route("/api/ingestion/debug", methods=["POST"])
 def api_ingestion_debug():
     """Extract rooms with detailed debug logs."""
-    from olm.server.services.ingestion_service import extract_rooms_debug
     from olm.server.services.config_service import get_default_threshold
+    from olm.server.services.ingestion_service import extract_rooms_debug
     if 'image' in request.files:
         ok, err = _validate_upload(request.files['image'])
         if not ok:
@@ -270,8 +275,8 @@ def api_ingestion_debug():
 @app.route("/api/ingestion/binarize", methods=["POST"])
 def api_ingestion_binarize():
     """Return the binarized version of a plan image."""
-    from olm.server.services.ingestion_service import binarize_image
     from olm.server.services.config_service import get_default_threshold
+    from olm.server.services.ingestion_service import binarize_image
     if 'image' in request.files:
         ok, err = _validate_upload(request.files['image'])
         if not ok:
@@ -296,12 +301,15 @@ def api_ingestion_binarize():
 @app.route("/api/import/ocr", methods=["POST"])
 def api_import_ocr():
     """Mode OCR: upload image (PNG/JPEG/PDF)."""
-    from olm.server.services.ingestion_service import (
-        import_ocr, cleanup_old_overlays, drawing_scale_to_cm_per_px,
-        resolve_plan_id_image,
-    )
     from olm.server.services.config_service import (
-        get_default_threshold, load_project_config,
+        get_default_threshold,
+        load_project_config,
+    )
+    from olm.server.services.ingestion_service import (
+        cleanup_old_overlays,
+        drawing_scale_to_cm_per_px,
+        import_ocr,
+        resolve_plan_id_image,
     )
     cleanup_old_overlays()
     _ing_cfg = load_project_config().get("ingestion", {})
@@ -357,7 +365,8 @@ def api_import_ocr():
 def api_import_preprocessed():
     """Mode Preprocessed: import from plan_id or uploaded files."""
     from olm.server.services.ingestion_service import (
-        import_preprocessed, resolve_preprocessed_files,
+        import_preprocessed,
+        resolve_preprocessed_files,
     )
     _temp_paths: list[str] = []
     try:
@@ -679,7 +688,8 @@ def api_blocks():
 def api_spacing():
     """GET: return spacing configs. POST: update a standard."""
     from olm.server.services.config_service import (
-        get_spacing, update_spacing,
+        get_spacing,
+        update_spacing,
     )
     if request.method == "POST":
         try:

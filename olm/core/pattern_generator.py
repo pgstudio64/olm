@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 
 from olm.core.app_config import get as _cfg_get
 
@@ -633,8 +633,8 @@ def export_pareto_catalogue() -> list[dict]:
     front = pareto_front(all_patterns)
     single = [p for p in front if not hasattr(p, "central_corridor_cm")]
     double = [p for p in front if hasattr(p, "central_corridor_cm")]
-    import tempfile
     import os
+    import tempfile
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         tmp_path = tmp.name
     export_catalogue(single, double, tmp_path)

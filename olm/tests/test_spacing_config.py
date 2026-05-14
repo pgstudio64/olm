@@ -1,5 +1,5 @@
 """Tests for spacing_config.py — generic (no business standard names)."""
-from olm.core.spacing_config import SpacingConfig, ALL_CONFIGS, get_default, get_default_name
+from olm.core.spacing_config import ALL_CONFIGS, SpacingConfig, get_default, get_default_name
 
 
 def test_all_configs_loaded():

@@ -11,9 +11,9 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict, dataclass, fields
 
-from olm.core.app_config import get_spacing, get_all_standards
-from olm.core.app_config import update_spacing as _update_spacing
+from olm.core.app_config import get_all_standards, get_spacing
 from olm.core.app_config import reset_spacing as _reset_spacing
+from olm.core.app_config import update_spacing as _update_spacing
 
 logger = logging.getLogger(__name__)
 

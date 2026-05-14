@@ -18,10 +18,9 @@ import logging
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
-import numpy as np
 import cv2
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 logger = logging.getLogger(__name__)
@@ -33,6 +32,7 @@ RAY_FAN_STEP = 3             # sample every N pixels along the fan (3 = 3x faste
 
 # Tolérance d'orthogonalité — source unique dans DetectionConfigCm.
 from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _DCFG
+
 ORTHO_ANGLE_TOLERANCE = _DCFG.ortho_angle_tolerance_deg
 
 
@@ -47,7 +47,7 @@ class DetectedText:
     confidence: float = 1.0
 
 
-from olm.ingestion.wall_classify import WallSegment, _classify_wall_direct
+from olm.ingestion.wall_classify import _classify_wall_direct
 
 
 @dataclass
@@ -1293,8 +1293,9 @@ def extract_rooms_from_preprocessed(
     _import_features: dict[str, dict] = {}
     if needs_detect:
         from PIL import Image as _PILImage
-        from olm.ingestion.comb_detection import _apply_detection_config
+
         from olm.core.detection_config import DetectionConfigCm as _DCCm
+        from olm.ingestion.comb_detection import _apply_detection_config
         _det_ov = json_data.get("_detection_overrides")
         _dcfg_import = _DCCm.from_dict(_det_ov)
         _apply_detection_config(scale_cm_per_px, _det_ov)

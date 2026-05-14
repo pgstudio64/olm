@@ -15,7 +15,6 @@ Requires: Pillow, numpy.
 import argparse
 import json
 import logging
-import sys
 
 import numpy as np
 from PIL import Image
@@ -55,7 +54,8 @@ def colorize(
     h, w = img_array.shape[:2]
     seeds = room_seeds or []
 
-    from scipy.ndimage import label as ndlabel, binary_dilation
+    from scipy.ndimage import binary_dilation
+    from scipy.ndimage import label as ndlabel
 
     # Detect corner color (exterior background — may be gray, not white)
     corner_color = img_array[0, 0].astype(int)

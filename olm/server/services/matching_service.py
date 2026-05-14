@@ -7,10 +7,12 @@ from __future__ import annotations
 import logging
 
 from olm.core.catalogue_matcher import (
-    match_room, compute_desk_positions,
+    compute_desk_positions,
+    match_room,
 )
 from olm.core.coverage_analysis import (
-    analyse_coverage, report_to_dict,
+    analyse_coverage,
+    report_to_dict,
 )
 from olm.server.services.catalogue_service import load_catalogue
 from olm.server.services.config_service import get_block_defs

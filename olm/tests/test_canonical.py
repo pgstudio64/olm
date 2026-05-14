@@ -4,7 +4,6 @@ import pytest
 
 from olm.core.canonical import canonicalize_room, decanonicalize_room
 
-
 # ── Fixture : pièce de référence avec tous les éléments ──────────────────
 
 def _make_room(corridor_face: str) -> dict:

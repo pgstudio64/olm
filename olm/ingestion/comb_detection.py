@@ -15,15 +15,15 @@ Usage:
   python /tmp/test_comb.py 916          # room 916 only
 """
 
+import logging
 import os
 import re
 import tempfile
-import logging
 from dataclasses import dataclass, field
-import numpy as np
+
 import cv2
+import numpy as np
 from PIL import Image, ImageDraw
-from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,8 @@ def _apply_detection_config(scale_cm_per_px: float,
             (ex. ``{"cartouche_margin_cm": 5.0}``). Clés inconnues ignorées.
     """
     from olm.core.detection_config import (
-        DEFAULT_DETECTION_CONFIG_CM, DetectionConfigCm,
+        DEFAULT_DETECTION_CONFIG_CM,
+        DetectionConfigCm,
     )
     base = (DetectionConfigCm.from_dict(config_overrides)
             if config_overrides else DEFAULT_DETECTION_CONFIG_CM)
@@ -175,7 +176,6 @@ def load_image(path):
 def find_seeds_by_ocr(image):
     _ensure_config_applied()
     import subprocess
-    import json as json_lib
 
     room_code = get_room_code()
     logger.debug(f"OCR: searching for room code '{room_code}'")
@@ -2111,8 +2111,8 @@ def _extract_rooms_one_pass(
     Returns:
         Liste de room dicts (sans width_cm/depth_cm).
     """
-    from olm.ingestion.wall_classify import _classify_wall_direct
     from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+    from olm.ingestion.wall_classify import _classify_wall_direct
 
     _cfg_px = DEFAULT_DETECTION_CONFIG_CM.to_px(scale)
 

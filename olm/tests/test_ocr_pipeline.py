@@ -11,9 +11,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import Any
 
-import numpy as np
 import pytest
 
 # ── Skip si tesseract absent ou image OCR absente ─────────────────────

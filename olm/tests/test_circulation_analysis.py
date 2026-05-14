@@ -9,18 +9,13 @@ import numpy as np
 import pytest
 
 from olm.core.circulation_analysis import (
-    CirculationResult,
-    CIRCULATION_GRADES,
-    MIN_ISOLATED_AREA_M2,
-    LARGE_ISOLATED_AREA_M2,
     _compute_grade,
     _compute_violations,
-    build_grid,
     analyse,
+    build_grid,
 )
 from olm.core.matching_config import GRID_CELL_CM
 from olm.core.types import CellType
-
 
 # ---------------------------------------------------------------------------
 # Helpers — factories synthetiques
