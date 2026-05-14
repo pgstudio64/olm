@@ -1420,12 +1420,6 @@ def extract_rooms_from_preprocessed(
             _coarse_hits = _feat.get("coarse_hits", [])
             _pillar_hits = _feat.get("pillar_hits", [])
 
-        # Croisement porte/ouverture au coin : si une porte est au coin
-        # d'une face et une ouverture au même coin sur la face adjacente,
-        # réattribuer la porte à la face de l'ouverture (D-198).
-        doors, openings = _reassign_corner_door_from_opening(
-            doors, openings, width_cm, depth_cm)
-
         # Filtrer les openings qui chevauchent une porte détectée.
         openings = _filter_openings_overlapping_doors(openings, doors)
 
@@ -1642,108 +1636,6 @@ def _filter_impossible_openings(
 
 # Filtrage croisé ouvertures / portes
 # ---------------------------------------------------------------------------
-
-
-_ADJACENT_FACES: dict[str, list[str]] = {
-    "north": ["west", "east"],
-    "south": ["west", "east"],
-    "east": ["north", "south"],
-    "west": ["north", "south"],
-}
-
-
-def _reassign_corner_door_from_opening(
-    doors: list[dict],
-    openings: list[dict],
-    width_cm: float,
-    depth_cm: float,
-) -> tuple[list[dict], list[dict]]:
-    """Reassign a door to an adjacent face when an opening confirms the gap.
-
-    When a door is detected at a corner on face A and an opening exists
-    on the adjacent face B at the same corner, the door is moved to face B
-    and the opening is consumed (removed).
-
-    Uses offset_cm / width_cm in the room's absolute reference frame.
-
-    Args:
-        doors: list of door dicts (modified in place).
-        openings: list of opening dicts.
-        width_cm: room width (horizontal faces length).
-        depth_cm: room depth (vertical faces length).
-
-    Returns:
-        (doors, filtered_openings).
-    """
-    if not doors or not openings:
-        return doors, openings
-
-    def _face_len(face: str) -> float:
-        return width_cm if face in ("north", "south") else depth_cm
-
-    def _at_corner(face: str, offset_cm: float, w_cm: float,
-                   tolerance_cm: float = 30.0) -> str | None:
-        """Return the adjacent face at the corner, or None if not at a corner.
-
-        For a horizontal face: offset near 0 → 'west' corner; offset near
-        face_len → 'east' corner.  For a vertical face: near 0 → 'north';
-        near face_len → 'south'.
-        """
-        fl = _face_len(face)
-        if offset_cm <= tolerance_cm:
-            return "west" if face in ("north", "south") else "north"
-        if offset_cm + w_cm >= fl - tolerance_cm:
-            return "east" if face in ("north", "south") else "south"
-        return None
-
-    consumed_openings: set[int] = set()
-
-    for door in doors:
-        d_face = door.get("face", "")
-        d_off = door.get("offset_cm", 0)
-        d_w = door.get("width_cm", 0)
-        if not d_face or not d_w:
-            continue
-
-        corner_adj = _at_corner(d_face, d_off, d_w)
-        if not corner_adj:
-            continue
-        if corner_adj not in _ADJACENT_FACES.get(d_face, []):
-            continue
-
-        # Look for an opening on the adjacent face at the same corner.
-        adj_fl = _face_len(corner_adj)
-        for oi, op in enumerate(openings):
-            if oi in consumed_openings:
-                continue
-            if op.get("face") != corner_adj:
-                continue
-            op_off = op.get("offset_cm", 0)
-            op_w = op.get("width_cm", 0)
-            # The opening must be at the matching end of the adjacent face.
-            # e.g., door on east face near south corner → opening on south
-            # face near east end (offset + width ≈ face_len).
-            op_corner = _at_corner(corner_adj, op_off, op_w)
-            if op_corner != d_face:
-                continue
-
-            # Match: reassign door to adjacent face, consume opening.
-            logger.debug(
-                "corner_reassign: door %s (off=%d w=%d) → %s "
-                "(opening off=%d w=%d consumed)",
-                d_face, d_off, d_w, corner_adj, op_off, op_w)
-            door["face"] = corner_adj
-            door["offset_cm"] = op_off
-            door["width_cm"] = op_w
-            if "offset_px" in op:
-                door["offset_px"] = op["offset_px"]
-            if "width_px" in op:
-                door["width_px"] = op["width_px"]
-            consumed_openings.add(oi)
-            break
-
-    filtered = [o for i, o in enumerate(openings) if i not in consumed_openings]
-    return doors, filtered
 
 
 def _filter_openings_overlapping_doors(
@@ -2191,12 +2083,6 @@ def extract_room_features(
             }
             doors_out.append(entry)
         doors_out.extend(_seedonly_doors)
-
-    # Croisement porte/ouverture au coin (D-198).
-    _w_cm = (nx1 - nx0) * scale_cm_per_px
-    _d_cm = (ny1 - ny0) * scale_cm_per_px
-    doors_out, openings = _reassign_corner_door_from_opening(
-        doors_out, openings, _w_cm, _d_cm)
 
     # Filtrer les openings qui chevauchent une porte détectée.
     openings = _filter_openings_overlapping_doors(openings, doors_out)
