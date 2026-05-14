@@ -5,6 +5,7 @@ Handles all operations on the pattern catalogue (group D endpoints).
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import os
 
