@@ -3,6 +3,15 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.49] — 2026-05-13
+
+### Changed
+- **Minimap tailles adaptatives (D-182)** : 3 tailles (S/M/L) derivees des constantes
+  existantes, paire active selon la hauteur du viewport. Plus de taille fixe.
+- **Hide detection colors general (D-183)** : toggle deplace de la section Developer vers
+  Rendering (parametres generaux). Applique desormais a Floor, Room et Office. Refresh
+  immediat au changement.
+
 ## [v0.4.47] — 2026-05-13
 
 ### Added

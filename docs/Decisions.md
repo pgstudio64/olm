@@ -7,6 +7,22 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-183 · Hide detection colors : general + Room/Office (2026-05-13)
+
+Le toggle "Hide detection colors" passe de la section Developer a la section Rendering (parametres generaux). Desormais applique a Floor, Room et Office (pas seulement Floor). Le state `planUrlClean` est utilise dans `floor_plan.js` pour construire l'overlay Room et Office quand le toggle est actif. Le changement du toggle declenche un refresh immediat via `fpRenderCurrent()`. Default false, persiste via localStorage.
+
+Impact : `pattern_editor.html` (checkbox deplacee), `floor_plan.js` (2 overlays), `config.js` (refresh Room/Office).
+
+---
+
+## D-182 · Minimap tailles adaptatives viewport (2026-05-13)
+
+3 tailles de minimap (S/M/L) derivees de MAX_DIM et COLLAPSED_RATIO, sans constantes supplementaires. La paire active (collapsed/expanded) est choisie selon la hauteur du viewport : fenetre <= 2*MAX_DIM → paire (S, M), fenetre > 2*MAX_DIM → paire (M, L). Recalcule a chaque rendu, adaptatif au resize.
+
+Impact : `minimap.js` (SIZE_S/M/L, VIEWPORT_THRESHOLD, _sizePair).
+
+---
+
 ## D-181 · Minimap schematique Room/Office (2026-05-13)
 
 Miniature du plan d'etage affichee dans le coin haut-gauche des vues Room et Office. Montre la position de la piece courante (rectangle orange) dans le contexte de l'etage. Fond noir avec 3 tons de gris (pieces sombres, exterieur moyen, couloir clair) depuis le PNG -SD. Contours 1px blancs des pieces detectees. Fenetres de la piece courante en bleu (1px plie, 3px deplie). Clic pour basculer entre taille pliee et depliee. Pre-traitement image au chargement du plan (cache). Conversion canonique→absolu via `rotateRectInv` pour les fenetres.

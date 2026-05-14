@@ -390,8 +390,11 @@
         ovOffX = room.bbox_px[0] / ov.pxPerCm;  // px → cm
         ovOffY = room.bbox_px[1] / ov.pxPerCm;
       }
+      var ist = window.ingState;
+      var ovUrl = (ist && ist.hideDetectionColors && ist.planUrlClean)
+        ? ist.planUrlClean : ov.dataUrl;
       state.overlay = {
-        dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
+        dataUrl: ovUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
         offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,
       };
     } else {
@@ -549,8 +552,11 @@
         roomOvY = room.bbox_px[1] / ov.pxPerCm;
       }
       var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
+      var ist2 = window.ingState;
+      var ovUrl2 = (ist2 && ist2.hideDetectionColors && ist2.planUrlClean)
+        ? ist2.planUrlClean : ov.dataUrl;
       state.overlay = {
-        dataUrl: ov.dataUrl,
+        dataUrl: ovUrl2,
         pxPerCm: ov.pxPerCm,
         opacity: fpOvOpacity,
         offsetX: roomOvX,
