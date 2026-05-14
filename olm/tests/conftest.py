@@ -133,7 +133,9 @@ def monkeypatch_catalogue(monkeypatch):
         "olm.server.services.catalogue_service.load_catalogue",
         lambda: fake_catalogue,
     )
+    # matching_service imports load_catalogue — patch its local ref too
     monkeypatch.setattr(
-        "olm.server.app.load_catalogue", lambda: fake_catalogue,
+        "olm.server.services.matching_service.load_catalogue",
+        lambda: fake_catalogue,
     )
     return fake_catalogue
