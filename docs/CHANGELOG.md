@@ -3,6 +3,16 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.54] — 2026-05-14 — P1.2 Split app.py en services + P1.5
+
+### Changed
+- **D-190 — Split app.py** (P1.2) : `app.py` 2184 -> 675 lignes (-69 %). Creation `olm/server/services/` avec 5 modules : `config_service` (372 l.), `serialization` (93 l.), `catalogue_service` (269 l.), `matching_service` (212 l.), `ingestion_service` (968 l.). Routes Flask pures + delegation. Deduplication sérialisation RoomSpec <-> JSON (2 blocs de 35 lignes -> 1 fonction). Aucune modification de contrat API.
+- **P1.5 integre** : 12 `traceback.print_exc()` remplaces par `logger.exception()` dans les routes migrées. Zero `traceback.print_exc()` restant dans `app.py`.
+- **conftest.py** : monkeypatch mis a jour pour les nouvelles refs de services.
+
+### Fixed
+- **BASE_DIR config_service** : resolution de chemin corrigée (3 `dirname` au lieu de 2, car `config_service.py` est sous `olm/server/services/`). Detecte par smoke-test automatise.
+
 ## [v0.4.53] — 2026-05-14 — P1.1 Renommage test_comb + wall_classify
 
 ### Changed

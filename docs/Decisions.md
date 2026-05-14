@@ -7,6 +7,16 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-190 · Split app.py en services — P1.2 + P1.5 (2026-05-14)
+
+**Decision** : `app.py` 2184 -> 675 l. (-69 %). Creation de `olm/server/services/` avec 5 modules : `config_service` (372 l.), `serialization` (93 l.), `catalogue_service` (269 l.), `matching_service` (212 l.), `ingestion_service` (968 l.). Routes Flask pures + delegation dans `app.py`. P1.5 integre : 12 `traceback.print_exc()` remplaces par `logger.exception()`.
+
+**Justification** : preparation a l'industrialisation (D-188), modularite, testabilite par service, navigation facilitee. Le monolithe `app.py` (55 fonctions, 40 routes, 6 roles melanges) etait identifie comme dette critique par l'audit 2026-05.
+
+**Impact** : `olm/server/app.py`, `olm/server/services/*` (nouveau), `olm/tests/conftest.py` (monkeypatch mis a jour). Aucune modification de contrat API (URL, payload, reponse). 202 tests pass, 40/40 routes preservees, 0 cycle d'import, smoke-test UI OK (Floor, Room, Rescan All, Office, Save). `app.py` reste a 675 l. (cible 500 indicative non atteinte) : le surplus est de la plomberie Flask non factorisable sans coupler les services a Flask. Cible revisee acceptee. Reference : ARCHITECTURE_TARGET.md par. 6.1.
+
+---
+
 ## D-189 · P1.1 Renommage test_comb + extraction wall_classify (2026-05-14)
 
 Decision : casser le cycle d'import bidirectionnel extract.py <-> test_comb.py. Trois actions :
