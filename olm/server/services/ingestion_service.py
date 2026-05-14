@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image as PILImage
 
 from olm.server.services.config_service import (
+    atomic_write_json,
     get_corridor_rgb,
     get_default_threshold,
     get_detection_overrides,
@@ -169,8 +170,7 @@ def save_plan(plan_id: str, data: dict) -> dict:
         raise ValueError("Empty payload")
     plans_dir = get_plans_dir()
     json_path = os.path.join(plans_dir, plan_id + ".json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    atomic_write_json(json_path, data)
     return {"ok": True, "path": json_path}
 
 
@@ -216,8 +216,7 @@ def reinit_plan(plan_id: str) -> dict:
             clean_rooms[room_id] = room
     clean["rooms"] = clean_rooms
 
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(clean, f, indent=2, ensure_ascii=False)
+    atomic_write_json(json_path, clean)
     return {"ok": True, "path": json_path}
 
 

@@ -5,7 +5,6 @@ Handles all operations on the pattern catalogue (group D endpoints).
 from __future__ import annotations
 
 import copy
-import json
 import logging
 import os
 
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Catalogue paths — resolved from config_service
 # ---------------------------------------------------------------------------
 
-from olm.server.services.config_service import PROJECT_ROOT
+from olm.server.services.config_service import PROJECT_ROOT, atomic_write_json
 
 CATALOGUE_DIR = os.path.join(PROJECT_ROOT, "project", "catalogue")
 CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
@@ -42,8 +41,7 @@ def load_catalogue() -> list[dict]:
 def save_catalogue(patterns: list[dict]) -> None:
     """Save the catalogue to the JSON file."""
     os.makedirs(CATALOGUE_DIR, exist_ok=True)
-    with open(CATALOGUE_PATH, "w", encoding="utf-8") as f:
-        json.dump({"patterns": patterns}, f, indent=2, ensure_ascii=False)
+    atomic_write_json(CATALOGUE_PATH, {"patterns": patterns})
 
 
 def find_pattern(patterns: list[dict], name: str) -> int:

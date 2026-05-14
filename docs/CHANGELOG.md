@@ -3,6 +3,16 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.65] — 2026-05-14 — P2.6 Atomic JSON writes + .bak
+
+### Added
+- **P2.6 — Ecritures atomiques** (D-188) : helper `atomic_write_json` dans
+  `config_service.py` — pattern `.bak` + `.tmp` + `os.replace`.
+- Migre les 7 endpoints d'ecriture : save plan, reinit plan, save/delete/import
+  catalogue, update config, update spacing.
+- `app_config._save()` enrichi du `.bak` (deja atomique, manquait le backup).
+- 7 tests : unitaires `atomic_write_json` (4) + integration save plan (3).
+
 ## [v0.4.64] — 2026-05-14 — P2.5 Mono-user session lock
 
 ### Added
