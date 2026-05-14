@@ -1293,7 +1293,7 @@ def extract_rooms_from_preprocessed(
     _import_features: dict[str, dict] = {}
     if needs_detect:
         from PIL import Image as _PILImage
-        from olm.ingestion.test_comb import _apply_detection_config
+        from olm.ingestion.comb_detection import _apply_detection_config
         from olm.core.detection_config import DetectionConfigCm as _DCCm
         _det_ov = json_data.get("_detection_overrides")
         _dcfg_import = _DCCm.from_dict(_det_ov)
@@ -1898,9 +1898,9 @@ def extract_room_features(
     # D-145 : on passe binary_for_arcs et door_seeds pour que
     # expand_door_arcs utilise la binaire pré-clean et scope le scan
     # autour des seeds de portes connus.
-    from olm.ingestion.test_comb import detect_room as _comb_detect_room
+    from olm.ingestion.comb_detection import detect_room as _comb_detect_room
     px_per_cm_f = 1.0 / scale_cm_per_px
-    from olm.ingestion.test_comb import COMB_STEP_PX
+    from olm.ingestion.comb_detection import COMB_STEP_PX
     comb_step_px = COMB_STEP_PX
     door_px = max(1, int(round(door_width_cm * px_per_cm_f)))
 
