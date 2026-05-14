@@ -694,8 +694,10 @@ class TestReassignCornerDoors:
         result = _reassign_corner_doors([d], rect, wall_gaps, 20)
         assert result[0]["face"] == "south"
 
-    def test_no_reassign_when_current_has_gap(self):
-        """Porte east au coin SE, gap sur east aussi → pas de reassign."""
+    def test_reassign_even_when_current_has_gap(self):
+        """Porte east au coin SE, gap sur south → reassign meme si east
+        montre aussi un gap (le scan bbox est peu fiable sur la face
+        detectee car le mur reel peut etre au-dela du bbox)."""
         from olm.ingestion.comb_detection import _reassign_corner_doors
         d = self._make_door("east", 180, 200)
         rect = (0, 0, 200, 200)
@@ -704,7 +706,7 @@ class TestReassignCornerDoors:
             "east": [(185, 200, 0.1)], "west": [],
         }
         result = _reassign_corner_doors([d], rect, wall_gaps, 20)
-        assert result[0]["face"] == "east"
+        assert result[0]["face"] == "south"
 
     def test_no_reassign_when_no_adjacent_gap(self):
         """Porte east au coin SE, pas de gap sur south → pas de reassign."""

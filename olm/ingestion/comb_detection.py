@@ -1930,14 +1930,11 @@ def _reassign_corner_doors(doors: list[dict], rect: tuple,
             if not adj_has_gap:
                 continue
 
-            # Check: does the current face also have a gap?
-            cur_corner = cx_ if d_face in ("north", "south") else cy_
-            cur_has_gap = _has_gap_near(d_face, cur_corner, door_width_px)
-            if cur_has_gap:
-                # Both faces have gaps — keep original (dedup handles this).
-                continue
-
-            # Adjacent face has gap, current doesn't → reassign.
+            # The adjacent wall has a gap at this corner → reassign.
+            # We don't check the current face via _scan_wall_gaps because
+            # the bbox edge may not coincide with the actual wall (the door
+            # detection often extends beyond the bbox), making the scan
+            # unreliable for the detected face.
             logger.debug(
                 "corner_reassign: door on %s reassigned to %s "
                 "(gap on %s, no gap on %s)",
