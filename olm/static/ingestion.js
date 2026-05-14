@@ -726,9 +726,12 @@
           window.fpLoadAndMatch(ingState.rooms);
         }
 
-        // Set overlay for Review/Design from the ingestion plan
+        // Set overlay for Review/Design from the ingestion plan (prefer -SD).
+        var _enhOvUrl = ingState.planPathEnhanced
+          ? '/api/image?path=' + encodeURIComponent(ingState.planPathEnhanced)
+          : ingState.planUrl;
         window.fpOverlay = {
-          dataUrl: ingState.planUrl,
+          dataUrl: _enhOvUrl,
           pxPerCm: 1.0 / ingState.scale,
           imgW: ingState.planW,
           imgH: ingState.planH,
@@ -1489,7 +1492,7 @@
         var gridParts = window.renderShared.gridSvg({
           vb: ingState.vb,
           cmPerPx: ingState.scale,
-          marginRatio: 0.3,
+          marginRatio: 0.5,
         });
         gridEl.innerHTML = gridParts.defs + '\n' + gridParts.fills;
       } else {

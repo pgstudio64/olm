@@ -137,10 +137,12 @@
     var step10cm = 10 / cmPerPx;
     var step1m = 100 / cmPerPx;
     var margin = Math.max(vb.w, vb.h) * marginRatio;
-    var gxS = Math.floor((vb.x - margin) / step10cm) * step10cm;
-    var gyS = Math.floor((vb.y - margin) / step10cm) * step10cm;
-    var gxE = vb.x + vb.w + margin;
-    var gyE = vb.y + vb.h + margin;
+    // Align both start AND end to step1m so dots and lines cover the
+    // exact same area (step1m is a multiple of step10cm).
+    var gxS = Math.floor((vb.x - margin) / step1m) * step1m;
+    var gyS = Math.floor((vb.y - margin) / step1m) * step1m;
+    var gxE = Math.ceil((vb.x + vb.w + margin) / step1m) * step1m;
+    var gyE = Math.ceil((vb.y + vb.h + margin) / step1m) * step1m;
 
     var patternDefs = '';
     var fills = '';
@@ -148,7 +150,8 @@
     // Dot pattern — skip when zoomed out too far (would overlap).
     if (vb.w / step10cm < 250) {
       var zf = window._currentZf || 1;
-      var r = Math.max(0.3, Math.min(step10cm * 0.08, 2 * zf));
+      // Min radius = vb.w/1000: ensures ~1.2 px on a 1200 px screen.
+      var r = Math.max(vb.w / 1000, Math.min(step10cm * 0.08, 2 * zf));
       var halfStep = step10cm / 2;
       patternDefs += '<pattern id="' + dotId + '" width="' + step10cm.toFixed(4) +
         '" height="' + step10cm.toFixed(4) + '" patternUnits="userSpaceOnUse">' +
