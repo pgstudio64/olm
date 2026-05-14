@@ -7,6 +7,18 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-192 · Fix schema JSON v3 — origin autorisé sur exclusion_zone (2026-05-14, v0.4.67)
+
+**Décision** : autoriser `origin` (type string, optionnel) sur le sub-schema `exclusion_zone` dans `olm/core/schemas/plan_v3.json`. Le sub-schema étant réutilisé pour `transparent_zones`, le fix corrige les deux d'un coup.
+
+**Justification** : oubli ponctuel de P2.7 (v0.4.66). Les sub-schemas `window`, `opening` et `door` autorisaient déjà `origin`, mais `exclusion_zone` ne l'avait pas. Le frontend pose `origin` systématiquement (`"auto"` ou `"manual"`) via la merge logic D-104. Conséquence : le Save échouait avec `"Additional properties are not allowed ('origin' was unexpected)"` dès le premier import `preprocessed_big_pillars` contenant des zones d'exclusion marquées auto.
+
+**Impact** : schema descriptif élargi, 2 tests ajoutés, pas de migration de données (les JSON produits par le frontend étaient déjà conformes à l'intention).
+
+**Référence** : D-104 (merge logic auto/manual), D-188 (cible robustesse), P2.7 (v0.4.66 audit follow-up).
+
+---
+
 ## D-191 · Pipeline OCR 2-pass avec calibration scale (2026-05-14, implémenté en v0.4.57)
 
 **Décision** : refactoriser le pipeline OCR de `extract_all_rooms` (`olm/ingestion/comb_detection.py`) en 3 phases : *discovery* (1ère passe ray-cast avec scale fallback) → *calibration* (médiane des `sqrt(surface_cm²/bbox_px²)` sur pièces avec surface OCR valide) → *re-detection* (2e passe avec scale corrigé). Si l'utilisateur fournit `drawing_scale` (ou s'il est lu via OCR sur le cartouche), sauter *discovery* et *calibration* → 1-pass.
@@ -17,7 +29,11 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 **Cas d'usage validé** : D-188 (cible mono-utilisateur robuste) — OCR doit fonctionner sans intervention quand un utilisateur importe un plan sans `-SD` préparé.
 
-**Référence** : AUDIT_2026-05-v2.md § 4.2 (diagnostic OCR cassé post-P1.2), D-155 (auto-calibration scale), TODO.md Phase 1 / P1.6.
+**Limite connue (mesurée v0.4.57)** : le 2-pass auto (sans `drawing_scale` fourni) ne converge pas exactement vers le scale réel. Sur `test_floorplan_ocr.png` (1:350 + 300 DPI, scale théorique 2.96 cm/px), le 2-pass calibre à 3.654 cm/px (~23 % d'écart). Cause : la Phase 1 utilise scale=0.5 fallback → bboxes sous-estimées → calibration biaisée → Phase 3 améliore (3.954 → 3.654) mais reste sur un point fixe local biaisé. Conséquence pratique : 1 fenêtre détectée au lieu de ~60 en 2-pass auto, vs 61 fenêtres avec `drawing_scale` fourni. Les portes sont moins sensibles (11 vs 12).
+
+**Recommandation utilisateur** : pour qualité optimale, **toujours saisir l'échelle du plan** (champ `drawing_scale` du formulaire d'import OCR). Le 2-pass auto sert de filet quand l'échelle est inconnue, pas de mode nominal. À documenter dans `USER_GUIDE.md` (Phase 2). Chantier futur possible : OCR de la mention « 1:N » sur le cartouche du plan (auto-fill du champ `drawing_scale`). Hors périmètre Phase 1 — voir TODO.md « Hors périmètre D-188 ».
+
+**Référence** : AUDIT_2026-05-v2.md § 5.7 (diagnostic OCR cassé post-P1.2), D-155 (auto-calibration scale), TODO.md Phase 1 / P1.6.
 
 ---
 

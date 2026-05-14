@@ -3,6 +3,13 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.67] — 2026-05-14 — Fix schema JSON v3 (origin sur exclusion_zone)
+
+### Fixed
+- Schema JSON v3 — `origin` autorisé sur exclusion_zone et transparent_zones (D-192). Corrige le Save error après import preprocessed déclenché par les zones marquées auto par le frontend.
+
+---
+
 ## [v0.4.66] — 2026-05-14 — P2.7 JSON v3 schema validation + USER_GUIDE
 
 ### Added
