@@ -746,6 +746,13 @@ async function init() {
     if (fpCanvas) fpCanvas.innerHTML = "";
     var rvCanvas = document.getElementById("rvCanvas");
     if (rvCanvas) rvCanvas.innerHTML = "";
+    // Clear Review room list and labels
+    var rvList = document.getElementById("rvRoomList");
+    if (rvList) rvList.innerHTML = "";
+    var rvLabel = document.getElementById("rvRoomLabel");
+    if (rvLabel) rvLabel.textContent = "-";
+    var rvNav = document.getElementById("rvNavInfo");
+    if (rvNav) rvNav.textContent = "0 / 0";
     // Reset overlay toggles
     if (window.syncOverlayToggle) window.syncOverlayToggle(false);
     // Reset plan selection (new list-based selector)
@@ -757,6 +764,11 @@ async function init() {
     // Reset ingestion state rooms (keeps ingState identity; only rooms cleared)
     window.ingState.rooms = [];
     window.ingState.firstScanDone = false;
+    window.ingState.focusedRoom = null;
+    window.ingState.bboxEditor = {
+      selectedName: null, sessionStartBbox: null,
+      mode: 'idle', handle: null, dragStart: null
+    };
     var ingLwReset = document.getElementById("ingLockWalls");
     if (ingLwReset) ingLwReset.checked = false;
     window.ingState.buildingId = '';
