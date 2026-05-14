@@ -6,7 +6,6 @@ Storage: catalogue/patterns.json
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import logging
 import os
@@ -21,111 +20,24 @@ from flask import Flask, jsonify, request, send_from_directory
 from olm.core.catalogue_matcher import generate_auto_name, compact_catalogue_names
 from olm.core.pattern_dsl import parse_dsl, to_dsl, DSLError
 from olm.core.room_dsl import parse_room_dsl, to_room_dsl, RoomDSLError
-from olm.core.pattern_generator import (
-    DESK_W_CM, DESK_D_CM, CHAIR_CLEARANCE_CM, PASSAGE_CM, PASSAGE_SINGLE_CM,
-    BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
-    BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R,
+from olm.server.services.config_service import (
+    BASE_DIR, PROJECT_ROOT,
+    get_plans_dir, get_detection_overrides, get_default_threshold,
+    get_exterior_rgb, get_corridor_rgb,
+    get_block_defs, invalidate_block_cache,
 )
-from olm.core.spacing_config import ALL_CONFIGS
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+logger = logging.getLogger(__name__)
 
 app = Flask(
     __name__,
     static_folder=None,
     template_folder=os.path.join(BASE_DIR, "templates"),
 )
-CATALOGUE_DIR = os.path.join(os.path.dirname(BASE_DIR), "project", "catalogue")
+CATALOGUE_DIR = os.path.join(PROJECT_ROOT, "project", "catalogue")
 CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
 
-
-_PROJECT_ROOT = os.path.dirname(BASE_DIR)
-_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "project", "config.json")
-
-
-@functools.lru_cache(maxsize=1)
-def _load_project_config() -> dict:
-    """Load and cache project/config.json. Returns {} on error."""
-    if not os.path.exists(_CONFIG_PATH):
-        return {}
-    try:
-        with open(_CONFIG_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            "Cannot read %s: %s", _CONFIG_PATH, exc)
-        return {}
-
-
-def _get_plans_dir() -> str:
-    """Return the plans directory path from config.json, or the default.
-
-    Reads ``ingestion.plans_dir`` from project/config.json. Relative paths are
-    resolved against the project root (parent of BASE_DIR). Falls back to
-    ``<root>/project/plans`` if the key is absent or the file unreadable.
-    """
-    _default = os.path.join(_PROJECT_ROOT, "project", "plans")
-    _plans_dir = _load_project_config().get("ingestion", {}).get(
-        "plans_dir", "")
-    if not _plans_dir:
-        return _default
-    if os.path.isabs(_plans_dir):
-        return _plans_dir
-    return os.path.join(_PROJECT_ROOT, _plans_dir)
-
-
-PLANS_DIR = _get_plans_dir()
-
-
-def _get_detection_overrides() -> dict | None:
-    """Read OCR detection overrides from config.json (D-155).
-
-    Returns a dict suitable for ``DetectionConfigCm.from_dict`` or None
-    if no overrides are configured.
-    """
-    _ing = _load_project_config().get("ingestion", {})
-    overrides = {}
-    for key in ("cartouche_margin_cm", "text_skip_margin_cm",
-                 "corridor_width_cm", "exterior_width_cm",
-                 "max_door_width_cm", "min_opening_depth_cm",
-                 "min_obstacle_width_cm", "min_pillar_size_cm",
-                 "max_pillar_size_cm", "comb_step_cm",
-                 "max_opening_face_ratio"):
-        if key in _ing:
-            overrides[key] = float(_ing[key])
-    if "binarize_threshold" in _ing:
-        overrides["binarize_threshold"] = int(_ing["binarize_threshold"])
-    return overrides or None
-
-
-_DEFAULT_EXTERIOR_RGB = (135, 206, 235)
-
-
-def _get_default_threshold() -> int:
-    """Read binarize threshold from config.json, default 110."""
-    _ing = _load_project_config().get("ingestion", {})
-    return int(_ing.get("binarize_threshold", 110))
-
-
-def _get_exterior_rgb() -> tuple:
-    """Read preprocessed exterior RGB from config.json (D-156)."""
-    rgb = _load_project_config().get("ingestion", {}).get(
-        "preprocessed_exterior_rgb")
-    if rgb and len(rgb) == 3:
-        return tuple(int(v) for v in rgb)
-    return _DEFAULT_EXTERIOR_RGB
-
-
-_DEFAULT_CORRIDOR_RGB = (193, 247, 179)
-
-
-def _get_corridor_rgb() -> tuple:
-    """Read preprocessed corridor RGB from config.json."""
-    rgb = _load_project_config().get("ingestion", {}).get(
-        "preprocessed_corridor_rgb")
-    if rgb and len(rgb) == 3:
-        return tuple(int(v) for v in rgb)
-    return _DEFAULT_CORRIDOR_RGB
+PLANS_DIR = get_plans_dir()
 
 
 _INCH_TO_CM = 2.54
@@ -169,123 +81,6 @@ def _find_pattern(patterns: list[dict], name: str) -> int:
     return -1
 
 
-_BASE_BLOCKS = [BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE, BLOCK_6_FACE,
-                BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R]
-
-# Face-to-face blocks: E/W zones = chair + passage (ES-06)
-_FACE_TO_FACE_BLOCKS = {"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"}
-
-# Orthogonal blocks: chair + passage_single zones on the chair faces
-_ORTHO_BLOCKS = {
-    "BLOCK_2_ORTHO_R": {"north", "east"},   # chairs desk1=N, desk2=E (L bottom-left)
-    "BLOCK_2_ORTHO_L": {"north", "west"},   # chairs desk1=N, desk2=W (L bottom-right)
-}
-
-
-# Block dimension formulas: (eo_factor_w, eo_factor_d, ns_factor_w, ns_factor_d)
-# eo_cm = fw * DESK_W + fd * DESK_D, ns_cm = gw * DESK_W + gd * DESK_D
-# DESK_W = width (180, wide side), DESK_D = depth (80, front-to-back)
-_BLOCK_DESK_FACTORS = {
-    "BLOCK_1":          (0, 1, 1, 0),   # eo=D,  ns=W
-    "BLOCK_2_FACE":     (0, 2, 1, 0),   # eo=2D, ns=W
-    "BLOCK_2_SIDE":     (0, 1, 2, 0),   # eo=D,  ns=2W
-    "BLOCK_3_SIDE":     (0, 1, 3, 0),   # eo=D,  ns=3W
-    "BLOCK_4_FACE":     (0, 2, 2, 0),   # eo=2D, ns=2W
-    "BLOCK_6_FACE":     (0, 2, 3, 0),   # eo=2D, ns=3W
-    "BLOCK_2_ORTHO_R":  (1, 0, 1, 1),   # eo=W,  ns=W+D
-    "BLOCK_2_ORTHO_L":  (1, 0, 1, 1),   # eo=W,  ns=W+D
-}
-
-
-def _block_def_to_json(block) -> dict:
-    """Convert a Block to a JSON dict, recomputing dimensions from config."""
-    from olm.core.pattern_generator import DESK_W_CM, DESK_D_CM
-    factors = _BLOCK_DESK_FACTORS.get(block.name)
-    if factors:
-        fw, fd, gw, gd = factors
-        eo = fw * DESK_W_CM + fd * DESK_D_CM
-        ns = gw * DESK_W_CM + gd * DESK_D_CM
-    else:
-        eo = block.eo_cm
-        ns = block.ns_cm
-    return {
-        "name": block.name,
-        "eo_cm": eo,
-        "ns_cm": ns,
-        "n_desks": block.n_desks,
-        "derogatory": block.derogatory,
-        "faces": {
-            "north": {"non_superposable_cm": block.faces.north.non_superposable_cm,
-                       "candidate_cm": block.faces.north.candidate_cm},
-            "south": {"non_superposable_cm": block.faces.south.non_superposable_cm,
-                       "candidate_cm": block.faces.south.candidate_cm},
-            "east":  {"non_superposable_cm": block.faces.east.non_superposable_cm,
-                       "candidate_cm": block.faces.east.candidate_cm},
-            "west":  {"non_superposable_cm": block.faces.west.non_superposable_cm,
-                       "candidate_cm": block.faces.west.candidate_cm},
-        },
-    }
-
-
-def _build_block_defs(cfg) -> dict:
-    """Build block definitions for a given standard.
-
-    Fixed zones (chair clearance) and circulation zones vary
-    according to the layout standard.
-    """
-    chair = cfg.chair_clearance_cm      # ES-01
-    passage = cfg.passage_cm            # ES-06
-    passage_single = cfg.access_single_desk_cm - chair  # ES-03 - ES-01
-
-    defs = {}
-    for block in _BASE_BLOCKS:
-        d = _block_def_to_json(block)
-        if block.name in _FACE_TO_FACE_BLOCKS:
-            # Face-to-face: E/W = chair + passage
-            for face in ("east", "west"):
-                d["faces"][face] = {
-                    "non_superposable_cm": chair,
-                    "candidate_cm": passage,
-                }
-        elif block.name in _ORTHO_BLOCKS:
-            # Ortho: chair + passage_single on the chair faces
-            chair_faces = _ORTHO_BLOCKS[block.name]
-            for face in ("north", "south", "east", "west"):
-                if face in chair_faces:
-                    d["faces"][face] = {
-                        "non_superposable_cm": chair,
-                        "candidate_cm": passage_single,
-                    }
-                else:
-                    d["faces"][face] = {
-                        "non_superposable_cm": 0,
-                        "candidate_cm": 0,
-                    }
-        else:
-            # Single/side: W = chair + passage_single
-            d["faces"]["west"] = {
-                "non_superposable_cm": chair,
-                "candidate_cm": passage_single,
-            }
-        defs[block.name] = d
-    return defs
-
-
-# Cache by standard
-_BLOCK_DEFS_CACHE: dict[str, dict] = {}
-
-
-def _get_block_defs(standard_name: str) -> dict:
-    """Return block defs for a standard (with cache)."""
-    if standard_name not in _BLOCK_DEFS_CACHE:
-        cfg = ALL_CONFIGS.get(standard_name)
-        if cfg is None:
-            from olm.core.spacing_config import get_default
-            cfg = get_default()
-        _BLOCK_DEFS_CACHE[standard_name] = _build_block_defs(cfg)
-    return _BLOCK_DEFS_CACHE[standard_name]
-
-
 @app.route("/")
 def index():
     """Serve the pattern editor page with cache-bust version."""
@@ -315,7 +110,7 @@ def serve_test_rooms():
 @app.route("/test_floor_plan.png")
 def serve_test_floor_plan():
     """DEV: serve test floor plan from project/plans/."""
-    plans_dir = _get_plans_dir()
+    plans_dir = get_plans_dir()
     # Try available test plans in order of preference
     for name in ("test_floorplan3.png", "test_floorplan.png", "test_floor_plan.png"):
         if os.path.exists(os.path.join(plans_dir, name)):
@@ -340,7 +135,7 @@ def api_ingestion_extract():
         plan_path = request.form.get('plan_path', '')
         scale_str = request.form.get('scale', '')
         scale = float(scale_str) if scale_str else None
-        threshold = int(request.form.get('threshold', _get_default_threshold()))
+        threshold = int(request.form.get('threshold', get_default_threshold()))
 
         if 'image' in request.files:
             f = request.files['image']
@@ -350,7 +145,7 @@ def api_ingestion_extract():
         elif plan_path:
             # Resolve relative plan names to project/plans/ directory
             if not os.path.isabs(plan_path):
-                plan_path = os.path.join(_get_plans_dir(), plan_path)
+                plan_path = os.path.join(get_plans_dir(), plan_path)
             if not os.path.exists(plan_path):
                 return jsonify({"error": f"Plan not found: {plan_path}"}), 404
         else:
@@ -362,7 +157,7 @@ def api_ingestion_extract():
 
         result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
                                    threshold=threshold,
-                                   detection_overrides=_get_detection_overrides())
+                                   detection_overrides=get_detection_overrides())
 
         # Clean up temp file if created
         if 'image' in request.files:
@@ -408,7 +203,7 @@ def api_ingestion_debug():
             plan_path = request.form.get('plan_path', '')
             scale_str = request.form.get('scale', '')
             scale = float(scale_str) if scale_str else None
-            threshold = int(request.form.get('threshold', _get_default_threshold()))
+            threshold = int(request.form.get('threshold', get_default_threshold()))
 
             if 'image' in request.files:
                 f = request.files['image']
@@ -418,7 +213,7 @@ def api_ingestion_debug():
             elif plan_path:
                 # Resolve relative plan names to project/plans/ directory
                 if not os.path.isabs(plan_path):
-                    plan_path = os.path.join(_get_plans_dir(), plan_path)
+                    plan_path = os.path.join(get_plans_dir(), plan_path)
                 if not os.path.exists(plan_path):
                     return jsonify({"error": f"Plan not found: {plan_path}"}), 404
             else:
@@ -430,7 +225,7 @@ def api_ingestion_debug():
 
             result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
                                        threshold=threshold,
-                                       detection_overrides=_get_detection_overrides())
+                                       detection_overrides=get_detection_overrides())
 
             # Clean up temp file if created
             if 'image' in request.files:
@@ -470,7 +265,7 @@ def api_plans():
                       "has_enhanced": bool,
                       "effective_mode": "ocr"|"preprocessed" }, ...] }
     """
-    plans_dir = _get_plans_dir()
+    plans_dir = get_plans_dir()
     if not os.path.isdir(plans_dir):
         return jsonify({"plans": []})
     _entry_defaults: dict = {
@@ -518,7 +313,7 @@ def api_plans():
 @app.route("/api/ingestion/plans", methods=["GET"])
 def api_ingestion_plans():
     """List available plan images in project/plans/."""
-    plans_dir = _get_plans_dir()
+    plans_dir = get_plans_dir()
     if not os.path.isdir(plans_dir):
         return jsonify({"plans": []})
     plans = [f for f in os.listdir(plans_dir)
@@ -529,7 +324,7 @@ def api_ingestion_plans():
 @app.route("/api/ingestion/plan/<filename>")
 def api_ingestion_plan_image(filename):
     """Serve a plan image from project/plans/."""
-    return send_from_directory(_get_plans_dir(), filename)
+    return send_from_directory(get_plans_dir(), filename)
 
 
 @app.route("/api/plans/<plan_id>/metadata")
@@ -539,7 +334,7 @@ def api_plan_metadata(plan_id):
     Used by the frontend to populate building/floor info and zoom to the
     rooms envelope while the full import runs in the background.
     """
-    plans_dir = _get_plans_dir()
+    plans_dir = get_plans_dir()
     json_path = os.path.join(plans_dir, plan_id + ".json")
     if not os.path.exists(json_path):
         return jsonify({"error": "JSON not found"}), 404
@@ -579,7 +374,7 @@ def api_plan_metadata(plan_id):
 def api_plan_save(plan_id):
     """Save the full plan JSON to disk (overwrites existing file)."""
     try:
-        plans_dir = _get_plans_dir()
+        plans_dir = get_plans_dir()
         json_path = os.path.join(plans_dir, plan_id + ".json")
         data = request.json
         if not data:
@@ -603,7 +398,7 @@ def api_plan_reinit(plan_id):
              openings, enriched doors, exclusion_zones, etc.).
     """
     try:
-        plans_dir = _get_plans_dir()
+        plans_dir = get_plans_dir()
         json_path = os.path.join(plans_dir, plan_id + ".json")
         if not os.path.exists(json_path):
             return jsonify({"error": f"JSON not found for '{plan_id}'"}), 404
@@ -660,7 +455,7 @@ def api_ingestion_binarize():
     from PIL import Image as PILImage
     try:
         plan_path = request.form.get('plan_path', '')
-        threshold = int(request.form.get('threshold', _get_default_threshold()))
+        threshold = int(request.form.get('threshold', get_default_threshold()))
 
         if 'image' in request.files:
             import tempfile
@@ -730,19 +525,12 @@ def api_import_ocr():
     except OSError:
         pass
 
-    # Valeurs par défaut depuis config.json
-    _config_path = os.path.join(os.path.dirname(BASE_DIR), "project", "config.json")
-    _default_scale: float = 0.5
-    _default_threshold = _get_default_threshold()
-    _pdf_render_dpi: int = 200
-    _detection_overrides: dict | None = None
-    if os.path.exists(_config_path):
-        with open(_config_path, encoding="utf-8") as _f:
-            _cfg = json.load(_f)
-        _ing = _cfg.get("ingestion", {})
-        _default_scale = float(_ing.get("scale_cm_per_px", _default_scale))
-        _pdf_render_dpi = int(_ing.get("pdf_render_dpi", _pdf_render_dpi))
-        # D-155 : detection overrides via _get_detection_overrides()
+    # Valeurs par défaut depuis config_service
+    from olm.server.services.config_service import load_project_config
+    _ing_cfg = load_project_config().get("ingestion", {})
+    _default_scale: float = float(_ing_cfg.get("scale_cm_per_px", 0.5))
+    _default_threshold = get_default_threshold()
+    _pdf_render_dpi: int = int(_ing_cfg.get("pdf_render_dpi", 200))
 
     try:
         # Drawing scale (e.g. "1 : 100") takes priority over raw scale_cm_per_px
@@ -799,7 +587,7 @@ def api_import_ocr():
 
         result = extract_all_rooms(plan_path, scale_cm_per_px=scale,
                                    threshold=threshold,
-                                   detection_overrides=_get_detection_overrides())
+                                   detection_overrides=get_detection_overrides())
 
         if use_temp:
             # Déplacer le PNG temporaire vers le dossier overlays persistant
@@ -890,13 +678,8 @@ def api_import_preprocessed():
             _temp_paths.append(overlay_path)
 
         # Inject semantic colors from config into json_data for face detection
-        _config_path_pp = os.path.join(os.path.dirname(BASE_DIR), "project", "config.json")
-        if os.path.exists(_config_path_pp):
-            with open(_config_path_pp, encoding="utf-8") as _fc:
-                _cfg_pp = json.load(_fc)
-            _ing_pp = _cfg_pp.get("ingestion", {})
-            json_data.setdefault("corridor_rgb", _ing_pp.get("preprocessed_corridor_rgb", [193, 247, 179]))
-            json_data.setdefault("exterior_rgb", _ing_pp.get("preprocessed_exterior_rgb", [135, 206, 235]))
+        json_data.setdefault("corridor_rgb", list(get_corridor_rgb()))
+        json_data.setdefault("exterior_rgb", list(get_exterior_rgb()))
 
         # --- Scale resolution ---
         # Priority: notation (text + dpi) > ruler (measured) > median
@@ -945,7 +728,7 @@ def api_import_preprocessed():
             json_data["_override_cm_per_px"] = explicit_scale
 
         # Pass detection overrides for color sampling widths
-        _det_overrides = _get_detection_overrides()
+        _det_overrides = get_detection_overrides()
         if _det_overrides:
             json_data["_detection_overrides"] = _det_overrides
 
@@ -1047,92 +830,47 @@ def serve_specs(filename: str):
 
 @app.route("/api/blocks", methods=["GET"])
 def api_blocks():
-    """Return block definitions for the requested standard.
-
-    Query param: ?standard=<name> (defaults to first available standard).
-    """
-    from olm.core.spacing_config import get_default_name, get_default
-    default_name = get_default_name() or ""
-    standard = request.args.get("standard", default_name)
-    cfg = ALL_CONFIGS.get(standard, get_default())
-    block_defs = _get_block_defs(standard)
-    import olm.core.pattern_generator as pg
-    return jsonify({
-        "blocks": block_defs,
-        "standard": standard,
-        "constants": {
-            "DESK_W_CM": pg.DESK_W_CM,
-            "DESK_D_CM": pg.DESK_D_CM,
-            "CHAIR_CLEARANCE_CM": cfg.chair_clearance_cm,
-            "PASSAGE_CM": cfg.passage_cm,
-            "PASSAGE_SINGLE_CM": cfg.access_single_desk_cm - cfg.chair_clearance_cm,
-        },
-    })
+    """Return block definitions for the requested standard."""
+    from olm.server.services.config_service import get_blocks
+    standard = request.args.get("standard")
+    return jsonify(get_blocks(standard))
 
 
 @app.route("/api/spacing", methods=["GET", "POST"])
 def api_spacing():
-    """GET: return the 3 spacing configurations.
-    POST: update a standard. Body: {"standard": "SITE", "values": {...}}.
-    """
+    """GET: return spacing configs. POST: update a standard."""
+    from olm.server.services.config_service import (
+        get_spacing, update_spacing,
+    )
     if request.method == "POST":
-        from olm.core.spacing_config import update_config, reset_config
         data = request.json
-        name = data.get("standard")
-        values = data.get("values", {})
-        if not name:
-            return jsonify({"error": "Required field: standard"}), 400
         try:
-            if data.get("reset"):
-                updated = reset_config(name)
-            else:
-                updated = update_config(name, values)
-            # Invalidate block defs cache for this standard
-            _BLOCK_DEFS_CACHE.pop(name, None)
-            return jsonify({"ok": True, "config": updated.to_dict()})
+            result = update_spacing(data)
+            return jsonify(result)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         except Exception as e:
             return jsonify({"error": str(e)}), 400
-
-    configs = {}
-    for name, cfg in ALL_CONFIGS.items():
-        configs[name] = cfg.to_dict()
-    return jsonify(configs)
+    return jsonify(get_spacing())
 
 
 @app.route("/api/config", methods=["GET"])
 def api_config_get():
     """Return the full configuration (+ OLM version + dev_mode)."""
-    from olm.core import app_config
-    from olm import __version__
-    cfg = dict(app_config._cfg)
-    cfg["olm_version"] = __version__
-    cfg["dev_mode"] = DEV_MODE
-    return jsonify(cfg)
+    from olm.server.services.config_service import get_config
+    return jsonify(get_config())
 
 
 @app.route("/api/config", methods=["POST"])
 def api_config_post():
-    """Update configuration keys and persist.
-
-    Body: {"key": "room_code", "value": "15"}
-    or:   {"path": ["matching", "w_density"], "value": 0.7}
-    """
-    from olm.core import app_config
+    """Update configuration keys and persist."""
+    from olm.server.services.config_service import update_config
     data = request.json
-    if "path" in data:
-        app_config.update_nested(data["path"], data["value"])
-    elif "key" in data:
-        app_config.update(data["key"], data["value"])
-    else:
-        return jsonify({"error": "Missing 'key' or 'path'"}), 400
-    # Invalidate block defs cache when desk dimensions change
-    key = data.get("key", "")
-    if key in ("desk_width_cm", "desk_depth_cm"):
-        import olm.core.pattern_generator as pg
-        pg.DESK_W_CM = app_config.get("desk_width_cm", 180)
-        pg.DESK_D_CM = app_config.get("desk_depth_cm", 80)
-        _BLOCK_DEFS_CACHE.clear()
-    return jsonify({"ok": True})
+    try:
+        result = update_config(data)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/patterns", methods=["GET"])
@@ -1395,7 +1133,7 @@ def api_room_reanalyze():
         transparents = data.get("transparent_zones", []) or []
         doors = data.get("doors", []) or []
         door_width_cm = int(data.get("door_width_cm", 90))
-        threshold = int(data.get("threshold", _get_default_threshold()))
+        threshold = int(data.get("threshold", get_default_threshold()))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
         window_mode = data.get("window_mode", "detailed") \
@@ -1431,7 +1169,7 @@ def api_room_reanalyze():
 
         # D-156 : appliquer la config de détection quel que soit le mode.
         from olm.ingestion.comb_detection import _apply_detection_config
-        _apply_detection_config(scale, _get_detection_overrides())
+        _apply_detection_config(scale, get_detection_overrides())
 
         # Mode OCR : reproduire l'erase cartouches du scan initial
         # (test_comb.extract_all_rooms). Sans ça, les seeds tombent sur du
@@ -1453,10 +1191,10 @@ def api_room_reanalyze():
             clip_to_bbox=clip_to_bbox,
             cartouche_bboxes_px=cart_bboxes_px,
             color_image=color_img,
-            exterior_rgb=_get_exterior_rgb(),
-            corridor_rgb=_get_corridor_rgb(),
+            exterior_rgb=get_exterior_rgb(),
+            corridor_rgb=get_corridor_rgb(),
             other_seeds=other_seeds_px or None,
-            detection_overrides=_get_detection_overrides(),
+            detection_overrides=get_detection_overrides(),
             window_mode=window_mode,
             corridor_face=corridor_face_abs,
         )
@@ -1483,7 +1221,7 @@ def api_debug_room_diagnostic():
         transparents = data.get("transparent_zones", []) or []
         doors = data.get("doors", []) or []
         door_width_cm = int(data.get("door_width_cm", 90))
-        threshold = int(data.get("threshold", _get_default_threshold()))
+        threshold = int(data.get("threshold", get_default_threshold()))
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
         mode = (data.get("mode") or "preprocessed").lower()
         _wm = data.get("window_mode", "detailed")
@@ -1513,7 +1251,7 @@ def api_debug_room_diagnostic():
             color_img = _PILImage.open(plan_path)
 
         from olm.ingestion.comb_detection import _apply_detection_config
-        _apply_detection_config(scale, _get_detection_overrides())
+        _apply_detection_config(scale, get_detection_overrides())
 
         cart_bboxes_px: list = []
         if mode == "ocr":
@@ -1533,11 +1271,11 @@ def api_debug_room_diagnostic():
             clip_to_bbox=clip_to_bbox,
             cartouche_bboxes_px=cart_bboxes_px,
             color_image=color_img,
-            exterior_rgb=_get_exterior_rgb(),
-            corridor_rgb=_get_corridor_rgb(),
+            exterior_rgb=get_exterior_rgb(),
+            corridor_rgb=get_corridor_rgb(),
             other_seeds=other_seeds_px or None,
             diag=diag,
-            detection_overrides=_get_detection_overrides(),
+            detection_overrides=get_detection_overrides(),
             window_mode=window_mode,
         )
         # Keep hits in the response so the frontend can display
@@ -1556,8 +1294,8 @@ def api_debug_room_diagnostic():
                 _rgb_arr = _np.array(color_img.convert("RGB"))
                 colors = _detect_face_colors(
                     _rgb_arr, detected_bbox,
-                    _get_corridor_rgb(),
-                    _get_exterior_rgb(),
+                    get_corridor_rgb(),
+                    get_exterior_rgb(),
                 )
                 result["color_detection"] = {
                     "corridor_face": colors["corridor_face"],
@@ -1565,8 +1303,8 @@ def api_debug_room_diagnostic():
                 }
                 result["corner_hits"] = colors.get("corner_hits", [])
                 result["color_params"] = {
-                    "corridor_rgb": list(_get_corridor_rgb()),
-                    "exterior_rgb": list(_get_exterior_rgb()),
+                    "corridor_rgb": list(get_corridor_rgb()),
+                    "exterior_rgb": list(get_exterior_rgb()),
                     "image_path": plan_path,
                     "image_mode": color_img.mode,
                     "image_size": list(color_img.size),
@@ -1760,7 +1498,7 @@ def api_room_reanalyze_batch():
         data = request.json or {}
         plan_path = data.get("plan_path", "")
         scale = float(data.get("scale_cm_per_px", 0.5))
-        threshold = int(data.get("threshold", _get_default_threshold()))
+        threshold = int(data.get("threshold", get_default_threshold()))
         door_width_cm = int(data.get("door_width_cm", 90))
         rooms = data.get("rooms") or []
         clip_to_bbox = bool(data.get("clip_to_bbox", False))
@@ -1803,7 +1541,7 @@ def api_room_reanalyze_batch():
         # Les constantes (ray margins, seuils portes…) doivent être
         # ajustées au scale du plan avant tout ray-cast.
         from olm.ingestion.comb_detection import _apply_detection_config
-        _apply_detection_config(scale, _get_detection_overrides())
+        _apply_detection_config(scale, get_detection_overrides())
 
         # Mode OCR : reproduire l'erase cartouches du scan initial
         # (test_comb.extract_all_rooms) AVANT la binarisation globale.
@@ -1856,10 +1594,10 @@ def api_room_reanalyze_batch():
                     binary_raw_precomputed=_binary_raw_global,
                     clip_to_bbox=clip_to_bbox,
                     color_image=color_img,
-                    exterior_rgb=_get_exterior_rgb(),
-                    corridor_rgb=_get_corridor_rgb(),
+                    exterior_rgb=get_exterior_rgb(),
+                    corridor_rgb=get_corridor_rgb(),
                     other_seeds=other_seeds or None,
-                    detection_overrides=_get_detection_overrides(),
+                    detection_overrides=get_detection_overrides(),
                     window_mode=window_mode,
                     corridor_face=r.get("corridor_face", "") or "",
                 )
@@ -1884,7 +1622,7 @@ MOCK_ROOM = {
 
 def _pattern_emprise_eo(pattern: dict) -> float:
     """Compute the EO footprint (width) of the first row of a pattern."""
-    block_defs = _get_block_defs("SITE")
+    block_defs = get_block_defs("SITE")
     rows = pattern.get("rows", [])
     if not rows:
         return 0.0
@@ -1905,7 +1643,7 @@ def _pattern_emprise_eo(pattern: dict) -> float:
 
 def _pattern_total_desks(pattern: dict) -> int:
     """Count the total number of desks in a pattern."""
-    block_defs = _get_block_defs("SITE")
+    block_defs = get_block_defs("SITE")
     total = 0
     for row in pattern.get("rows", []):
         for block in row.get("blocks", []):

@@ -23,9 +23,15 @@ def tmp_plans_dir(tmp_path, monkeypatch):
     """Redirige le repertoire plans vers un dossier temporaire."""
     plans = tmp_path / "plans"
     plans.mkdir()
-    monkeypatch.setattr("olm.server.app.PLANS_DIR", str(plans))
+    _plans_str = str(plans)
+    monkeypatch.setattr("olm.server.app.PLANS_DIR", _plans_str)
+    # Patch both the source function and the imported reference in app
     monkeypatch.setattr(
-        "olm.server.app._get_plans_dir", lambda: str(plans),
+        "olm.server.services.config_service.get_plans_dir",
+        lambda: _plans_str,
+    )
+    monkeypatch.setattr(
+        "olm.server.app.get_plans_dir", lambda: _plans_str,
     )
     return plans
 
