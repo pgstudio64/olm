@@ -38,7 +38,7 @@
 
 | Ligne | Snippet | Cat. | Pourquoi rustine | Suggestion |
 |---|---|---|---|---|
-| L52-59 | `BINARIZE_THRESHOLD = 140` … `MAX_PILLAR_SIZE_PX = 60` | A/E | Défauts px en dur calibrés pour `scale = 0.5 cm/px`. Si `_apply_detection_config` n'est pas appelée (chemin oublié, refactor, test unitaire isolé), ces valeurs s'appliquent silencieusement et produisent des résultats faux à 1.0 cm/px. | Remplacer chaque `XX_PX = N` par un *property* qui lit `DEFAULT_DETECTION_CONFIG_CM.to_px(...)` lazily, ou faire échouer (`= None`) tant que `_apply_detection_config` n'a pas été appelée. |
+| L52-59 | `BINARIZE_THRESHOLD = 140` … `MAX_PILLAR_SIZE_PX = 60` | A/E | ~~Défauts px en dur calibrés pour `scale = 0.5 cm/px`.~~ **Résolu D-186** : 14 constantes → None + guard `_ensure_config_applied()`. **Résolu D-187** : binarize_threshold aligné à 110. | ~~Remplacer chaque `XX_PX = N` par un *property*~~ → Fait. |
 | L362 | `if 0.5 < val < 2000.0:` | B | Bornes magiques sur valeur OCR (surface m²?). Coupe au-delà de 2000 m² → casse pour grandes pièces (open-spaces, halls). | Nommer `OCR_PLAUSIBLE_SURFACE_M2 = (0.5, 2000.0)` dans `detection_config` ou un module `ocr_filters.py` avec justification. |
 | L513 | `if 5 < angle < 85:` | B | Filtre angles "non-orthogonaux". Le 5 est cohérent avec `ortho_angle_tolerance_deg` mais dupliqué localement. | Lire `cfg.ortho_angle_tolerance_deg` au lieu de répéter. |
 | L945 | `gap_threshold = 3 * step_px` | A/B | Multiplicateur 3 empirique. Détermine si deux hits adjacents sont dans le même groupe (porte/poteau). À 0.5 cm/px ça fait 3×5=15 px = 7.5 cm ; à 2.5 cm/px ça fait 75 cm — comportement non-équivalent. | Convertir en cm : exposer `pillar_group_gap_cm` dans `DetectionConfigCm` (≈ 15-20 cm), passer en px via to_px. |

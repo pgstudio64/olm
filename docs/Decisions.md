@@ -7,6 +7,14 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-187 · Source unique binarize_threshold = 110 (2026-05-14)
+
+Valeur terrain (config.json ingestion.binarize_threshold) = 110, defauts modules = 140. Alignement : detection_config.py default 140 → 110 (avec docstring expliquant que le defaut sert uniquement aux tests et CLI — en prod le serveur charge l'override depuis config.json), app.py fallback _get_default_threshold 140 → 110, config.js fallback UI 140 → 110. extract.py lit _DCFG.binarize_threshold (suit le default, inchange). test_comb.py deja None (D-186). Source unique : config.json > detection_config.py default. Aucun changement comportemental en production (le chemin serveur lit toujours config.json via overrides).
+
+Impact : detection_config.py, app.py, config.js.
+
+---
+
 ## D-186 · Suppression defauts px en dur test_comb.py (2026-05-14)
 
 14 constantes px module (`BINARIZE_THRESHOLD`, `COMB_STEP_PX`, `MAX_RAY_PX`, `CARTOUCHE_MARGIN_PX`, `MIN_DOOR_ARC_HITS`, `MIN_OBSTACLE_WIDTH_PX`, `MIN_PILLAR_SIZE_PX`, `MAX_PILLAR_SIZE_PX`, `DOOR_PROBE_PX`, `DOOR_GROUP_GAP_PX`, `WALL_MARGIN_PX`, `COARSE_STEP_PX`, `RAY_MARGIN_PX`, `SNAP_SEARCH_PX`) remplacees par `None`. Nouveau guard `_ensure_config_applied()` leve `RuntimeError` si `_apply_detection_config` n'a pas ete appelee. Guard injecte dans `detect_room`, `find_seeds_by_ocr`, `comb_collect_hits`, `expand_door_arcs`, `binarize`. Default args `binarize(threshold=)`, `ray_single(max_dist=)`, `snap_rect_to_walls(search_px=)` passes a `None` avec resolution lazy. `extract_all_rooms`: lecture `BINARIZE_THRESHOLD` deplacee apres `_apply_detection_config`. Aucun changement comportemental — uniquement durcissement du chemin de configuration. Finding 🔴 audit constantes-rustines 2026-05-13.

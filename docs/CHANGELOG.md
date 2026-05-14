@@ -12,6 +12,7 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Fixed
 - **D-186 — Defauts px test_comb.py** (P0.3) : 14 constantes px module → None + guard `_ensure_config_applied()` qui leve RuntimeError si `_apply_detection_config` n'a pas ete appelee. Finding 🔴 audit 2026-05-13 corrige. Aucun changement comportemental.
+- **D-187 — Source unique binarize_threshold** (P0.4) : defaut 140 → 110 aligne sur config.json (terrain). detection_config.py, app.py, config.js. Triple binarize_threshold resolu.
 
 ## [v0.4.51] — 2026-05-14 — Documentation rétro-ingénierique
 

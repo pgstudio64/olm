@@ -304,10 +304,10 @@ function renderFloorplanSettings() {
   }
   var btEl = document.getElementById("cfgBinarizeThreshold");
   if (btEl) {
-    btEl.value = ing.binarize_threshold != null ? ing.binarize_threshold : 140;
+    btEl.value = ing.binarize_threshold != null ? ing.binarize_threshold : 110;
     btEl.onchange = function() {
       saveConfigField(["ingestion", "binarize_threshold"],
-                      parseInt(this.value) || 140);
+                      parseInt(this.value) || 110);
     };
   }
   var mdEl = document.getElementById("cfgMaxDoorWidth");

@@ -102,9 +102,9 @@ _DEFAULT_EXTERIOR_RGB = (135, 206, 235)
 
 
 def _get_default_threshold() -> int:
-    """Read binarize threshold from config.json, default 140."""
+    """Read binarize threshold from config.json, default 110."""
     _ing = _load_project_config().get("ingestion", {})
-    return int(_ing.get("binarize_threshold", 140))
+    return int(_ing.get("binarize_threshold", 110))
 
 
 def _get_exterior_rgb() -> tuple:

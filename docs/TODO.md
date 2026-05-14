@@ -700,8 +700,9 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
    audit complet de ~30 valeurs numériques en dur (9 critiques, 14 modérées).
    Priorité : **mode preprocessed** (le mode OCR dépend de constantes
    additionnelles qui seront traitées dans un second temps).
-   - [ ] **Triple binarize_threshold** : unifier les 3 sources (test_comb L52,
-     extract.py L204, extract.py L1834) sur `detection_config.binarize_threshold`.
+   - [x] **Triple binarize_threshold** : ~~unifier les 3 sources (test_comb L52,
+     extract.py L204, extract.py L1834) sur `detection_config.binarize_threshold`.~~
+     → D-187 : defaut 140 → 110 aligne config.json. Source unique resolue.
    - [x] **Défauts px module test_comb** (L52-59) : ~~remplacer les `XX_PX = N`
      par des valeurs dérivées de `DEFAULT_DETECTION_CONFIG_CM.to_px(scale)`
      ou faire échouer si `_apply_detection_config` n'a pas été appelée.~~
