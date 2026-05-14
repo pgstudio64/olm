@@ -7,6 +7,20 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-191 · Pipeline OCR 2-pass avec calibration scale (2026-05-14, implémenté en v0.4.57)
+
+**Décision** : refactoriser le pipeline OCR de `extract_all_rooms` (`olm/ingestion/comb_detection.py`) en 3 phases : *discovery* (1ère passe ray-cast avec scale fallback) → *calibration* (médiane des `sqrt(surface_cm²/bbox_px²)` sur pièces avec surface OCR valide) → *re-detection* (2e passe avec scale corrigé). Si l'utilisateur fournit `drawing_scale` (ou s'il est lu via OCR sur le cartouche), sauter *discovery* et *calibration* → 1-pass.
+
+**Justification** : le pipeline OCR à 1 passe utilisait `scale_fallback = 0.5` cm/px, incorrect pour la plupart des plans réels (échelles 1:200 à 1:500 → 1.7 à 4.2 cm/px). Les constantes pixels (`door_width_px`, `comb_step_px`, `min_door_arc_width_px`) étaient ainsi 3-6× hors calibrage, rendant la détection portes/fenêtres impossible et les bboxes 5× trop petites. L'auto-calibration D-155 produisait un scale cohérent (3.958 cm/px sur `test_floorplan_ocr.png` au lieu du 2.96 attendu) mais inutilisé pour une 2e passe. La dette n'avait jamais été détectée car invisible en mode preprocessed (le ray-cast voit les murs directement sur le `-SD`, pas besoin de seuils calibrés finement).
+
+**Impact** : `extract_all_rooms` refactorée en 3 phases, `_apply_detection_config` rappelable, nouveau `test_ocr_pipeline.py` (6 tests dont 1 non-régression preprocessed). Contrat HTTP `/api/import/ocr` inchangé. Mode preprocessed inchangé.
+
+**Cas d'usage validé** : D-188 (cible mono-utilisateur robuste) — OCR doit fonctionner sans intervention quand un utilisateur importe un plan sans `-SD` préparé.
+
+**Référence** : AUDIT_2026-05-v2.md § 4.2 (diagnostic OCR cassé post-P1.2), D-155 (auto-calibration scale), TODO.md Phase 1 / P1.6.
+
+---
+
 ## D-190 · Split app.py en services — P1.2 + P1.5 (2026-05-14)
 
 **Decision** : `app.py` 2184 -> 675 l. (-69 %). Creation de `olm/server/services/` avec 5 modules : `config_service` (372 l.), `serialization` (93 l.), `catalogue_service` (269 l.), `matching_service` (212 l.), `ingestion_service` (968 l.). Routes Flask pures + delegation dans `app.py`. P1.5 integre : 12 `traceback.print_exc()` remplaces par `logger.exception()`.

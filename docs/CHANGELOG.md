@@ -3,6 +3,23 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.57] — 2026-05-14 — P1.6 Pipeline OCR 2-pass (D-191)
+
+### Changed
+- **D-191 — Pipeline OCR 2-pass** : `extract_all_rooms` refactoree en 3 phases quand `scale_cm_per_px` non fourni : Phase 1 (discovery, scale fallback 0.5), Phase 2 (calibration mediane sqrt(surface_cm2/bbox_px2)), Phase 3 (re-detection avec scale corrige + re-erase_cartouches + re-binarize). Si scale fourni : 1-pass direct inchange.
+- Extraction helpers internes : `_calibrate_scale()` (mediane + log outliers > 20%), `_extract_rooms_one_pass()` (boucle ray-cast).
+- Constantes : `SCALE_FALLBACK` (0.5), `CALIB_OUTLIER_THRESHOLD` (0.20).
+
+### Added
+- **test_ocr_pipeline.py** : 6 tests (1-pass scale fourni, 2-pass auto-calibration, calibration sans surface, OCR partiel, regression bbox, non-regression preprocessed). Marker `@slow` enregistre dans pyproject.toml.
+- Couverture `comb_detection.py` : 77 % (cible 50 %).
+- Tests : 225 → 231, tous pass.
+
+### Smoke-test
+- 2-pass sur `test_floorplan_ocr.png` (1920x1080) : 28 rooms, scale 3.654 cm/px, 1 fenetre, 11 portes.
+- 1-pass avec scale 2.963 (1:350 @ 300 DPI) : 28 rooms, scale 3.654, 61 fenetres, 12 portes.
+- Contrat HTTP `/api/import/ocr` inchange.
+
 ## [v0.4.56] — 2026-05-14 — P1.3 tests circulation_analysis (82 %)
 
 ### Added
