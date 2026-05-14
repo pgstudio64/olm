@@ -79,18 +79,53 @@ if [ -n "$(git status --porcelain)" ]; then
   [[ "$ans" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
 fi
 
-LOCAL_TAGS_EARLY=$(git tag --points-at HEAD 2>/dev/null || true)
-VERSION_TAG=$(echo "$LOCAL_TAGS_EARLY" | grep -E '^v[0-9]+\.' | head -1 || true)
-if [ -n "$VERSION_TAG" ]; then
-  VERSION_NUM="${VERSION_TAG#v}"
-  CURRENT_VERSION=$(python3 -c "import olm; print(olm.__version__)")
-  if [ "$CURRENT_VERSION" != "$VERSION_NUM" ]; then
-    echo "[pre] Updating olm/__init__.py: $CURRENT_VERSION → $VERSION_NUM"
-    sed -i '' "s/^__version__ = .*/__version__ = \"$VERSION_NUM\"/" olm/__init__.py
-    git add olm/__init__.py
-    git commit -m "chore: bump version to $VERSION_NUM" --quiet
-    # Move tag to include this commit
+# --- Version detection and auto-tagging ---
+# Source of truth: version in HEAD commit message, pattern (vX.Y.Z)
+VERSION_FROM_COMMIT=$(git log -1 --pretty=%s | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+
+if [ -z "$VERSION_FROM_COMMIT" ]; then
+  echo "ERROR: No version found in HEAD commit message."
+  echo "  Expected pattern: (vX.Y.Z) in commit subject."
+  echo "  HEAD: $(git log -1 --oneline)"
+  exit 1
+fi
+
+VERSION_NUM="${VERSION_FROM_COMMIT#v}"
+echo "Version:        $VERSION_FROM_COMMIT (from commit message)"
+
+# Sync olm/__init__.py if needed
+INIT_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' olm/__init__.py | head -1)
+if [ "$INIT_VERSION" != "$VERSION_NUM" ]; then
+  echo "[pre] Syncing olm/__init__.py: $INIT_VERSION → $VERSION_NUM"
+  sed -i '' "s/^__version__ = .*/__version__ = \"$VERSION_NUM\"/" olm/__init__.py
+  git add olm/__init__.py
+fi
+
+# Sync pyproject.toml if needed
+PYPROJECT_VERSION=$(grep -E '^version = ' pyproject.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+if [ "$PYPROJECT_VERSION" != "$VERSION_NUM" ]; then
+  echo "[pre] Syncing pyproject.toml: $PYPROJECT_VERSION → $VERSION_NUM"
+  sed -i '' "s/^version = \".*\"/version = \"$VERSION_NUM\"/" pyproject.toml
+  git add pyproject.toml
+fi
+
+# Commit version sync if anything changed
+if [ -n "$(git diff --cached --name-only)" ]; then
+  git commit -m "chore: sync version to $VERSION_NUM" --quiet
+  echo "[pre] Version sync committed."
+fi
+
+# Create tag if it doesn't exist on HEAD
+VERSION_TAG="$VERSION_FROM_COMMIT"
+EXISTING_TAG=$(git tag --points-at HEAD 2>/dev/null | grep -E "^${VERSION_TAG}$" || true)
+if [ -z "$EXISTING_TAG" ]; then
+  # If tag exists on another commit, move it to HEAD
+  if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
+    echo "[pre] Moving tag $VERSION_TAG to HEAD"
     git tag -f "$VERSION_TAG" >/dev/null 2>&1
+  else
+    echo "[pre] Creating tag $VERSION_TAG on HEAD"
+    git tag "$VERSION_TAG"
   fi
 fi
 
@@ -186,22 +221,11 @@ echo "[5/8] Pushing branch to GitHub..."
 git remote add github "$GITHUB_REMOTE_URL"
 git push github "$GITHUB_BRANCH" --force 2>&1 | tail -5
 
-# --- Step 6: push tags ---
-echo "[6/8] Pushing tags..."
-cd "$REPO_ROOT"
-LOCAL_TAGS=$(git tag --points-at HEAD 2>/dev/null || true)
-if [ -n "$LOCAL_TAGS" ]; then
-  cd "$TEMP_CLONE"
-  FILTERED_HEAD=$(git rev-parse HEAD)
-  for t in $LOCAL_TAGS; do
-    git tag -f "$t" "$FILTERED_HEAD" >/dev/null 2>&1
-    echo "  Tag: $t"
-  done
-  git push github --tags --force 2>&1 | tail -5
-  cd "$REPO_ROOT"
-else
-  echo "  No tags on local HEAD — skipped."
-fi
+# --- Step 6: push tag ---
+echo "[6/8] Pushing tag $VERSION_TAG..."
+FILTERED_HEAD=$(git rev-parse HEAD)
+git tag -f "$VERSION_TAG" "$FILTERED_HEAD" >/dev/null 2>&1
+git push github "$VERSION_TAG" --force 2>&1 | tail -5
 
 # --- Step 7: cleanup ---
 echo "[7/8] Cleaning up temp clone..."
@@ -211,8 +235,5 @@ echo ""
 echo "=== Published successfully. ==="
 echo "  Local HEAD:   $LOCAL_HEAD (unchanged)"
 echo "  GitHub HEAD:  (filtered copy of $LOCAL_HEAD)"
-if [ -n "$LOCAL_TAGS" ]; then
-  for t in $LOCAL_TAGS; do
-    echo "  Download:     https://github.com/pgstudio64/olm/archive/refs/tags/${t}.zip"
-  done
-fi
+echo "  Version:      $VERSION_TAG"
+echo "  Download:     https://github.com/pgstudio64/olm/archive/refs/tags/${VERSION_TAG}.zip"
