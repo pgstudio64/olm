@@ -366,7 +366,11 @@ class TestPlanSave:
 
     def test_save_creates_file(self, client, tmp_plans_dir):
         """Save cree le fichier meme si le plan n'existait pas."""
-        resp = client.post("/api/plans/new_plan/save", json={"rooms": {}})
+        plan = {
+            "file": "new.png", "page_width_px": 100, "page_height_px": 100,
+            "rooms": {"A": {"surface": "10 m2", "seed_x": 5, "seed_y": 5}},
+        }
+        resp = client.post("/api/plans/new_plan/save", json=plan)
         assert resp.status_code == 200
         assert (tmp_plans_dir / "new_plan.json").exists()
 
@@ -381,6 +385,7 @@ class TestPlanMetadata:
     def test_v3_dict_rooms(self, client, tmp_plans_dir):
         """Metadata supporte JSON v3 (rooms = dict indexe par room_id)."""
         plan_json = {
+            "file": "plan_v3.png",
             "building_id": "B1",
             "floor_id": "R+1",
             "drawing_scale_text": "1:100",
@@ -388,10 +393,12 @@ class TestPlanMetadata:
             "page_height_px": 1500,
             "rooms": {
                 "101": {
+                    "surface": "14.00 m2",
                     "seed_x": 500, "seed_y": 400,
                     "bbox_px": [400, 300, 700, 600],
                 },
                 "102": {
+                    "surface": "14.00 m2",
                     "seed_x": 900, "seed_y": 400,
                     "bbox_px": [800, 300, 1100, 600],
                 },
@@ -419,8 +426,11 @@ class TestPlanMetadata:
     def test_rooms_without_bbox(self, client, tmp_plans_dir):
         """Rooms sans bbox_px sont ignores dans rooms_summary."""
         plan_json = {
+            "file": "no_bbox.png",
             "page_width_px": 1000, "page_height_px": 800,
-            "rooms": {"201": {"seed_x": 100, "seed_y": 100}},
+            "rooms": {"201": {
+                "surface": "10 m2", "seed_x": 100, "seed_y": 100,
+            }},
         }
         (tmp_plans_dir / "no_bbox.json").write_text(
             __import__("json").dumps(plan_json), encoding="utf-8")
@@ -868,8 +878,12 @@ class TestPlanSaveAtomic:
         self, client, tmp_plans_dir,
     ):
         """Save 2 fois : .bak contient la version precedente."""
-        client.post("/api/plans/bak2/save", json={"rooms": {}, "v": 1})
-        client.post("/api/plans/bak2/save", json={"rooms": {}, "v": 2})
+        _base = {
+            "file": "bak2.png", "page_width_px": 100, "page_height_px": 100,
+            "rooms": {"A": {"surface": "10 m2", "seed_x": 5, "seed_y": 5}},
+        }
+        client.post("/api/plans/bak2/save", json={**_base, "v": 1})
+        client.post("/api/plans/bak2/save", json={**_base, "v": 2})
         bak_path = tmp_plans_dir / "bak2.json.bak"
         with open(bak_path, encoding="utf-8") as f:
             backup = json.load(f)

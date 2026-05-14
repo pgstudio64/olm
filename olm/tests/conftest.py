@@ -47,7 +47,7 @@ def sample_plan_json() -> dict[str, Any]:
         "drawing_scale_text": "1:100",
         "rooms": {
             "101": {
-                "surface": 14.4,
+                "surface": "14.40 m2",
                 "seed_x": 500,
                 "seed_y": 400,
                 "bbox_px": [400, 300, 700, 600],

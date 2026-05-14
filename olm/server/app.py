@@ -584,6 +584,8 @@ def api_import_preprocessed():
                 json_data = json.loads(request.form["rooms_json"])
             else:
                 return jsonify({"error": "rooms_json manquant"}), 400
+            from olm.core.json_v3_validator import validate_plan
+            validate_plan(json_data)
             for field in ("enhanced_png", "overlay_png"):
                 if field not in request.files:
                     return jsonify({"error": f"{field} manquant"}), 400

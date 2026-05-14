@@ -122,6 +122,7 @@ def get_plan_metadata(plan_id: str) -> dict:
 
     Raises:
         FileNotFoundError: if JSON is absent.
+        ValueError: if JSON is malformed (schema validation failure).
     """
     plans_dir = get_plans_dir()
     json_path = os.path.join(plans_dir, plan_id + ".json")
@@ -129,6 +130,12 @@ def get_plan_metadata(plan_id: str) -> dict:
         raise FileNotFoundError("JSON not found")
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
+    try:
+        from olm.core.json_v3_validator import validate_plan
+        validate_plan(data)
+    except ValueError:
+        logger.warning("JSON corrompu : %s", json_path)
+        raise
     rooms_summary = []
     rooms = data.get("rooms", [])
     rooms_iter = (
@@ -164,10 +171,12 @@ def save_plan(plan_id: str, data: dict) -> dict:
     """Save a full plan JSON to disk.
 
     Raises:
-        ValueError: if payload is empty.
+        ValueError: if payload is empty or malformed.
     """
     if not data:
         raise ValueError("Empty payload")
+    from olm.core.json_v3_validator import validate_plan
+    validate_plan(data)
     plans_dir = get_plans_dir()
     json_path = os.path.join(plans_dir, plan_id + ".json")
     atomic_write_json(json_path, data)
@@ -374,6 +383,12 @@ def resolve_preprocessed_files(plan_id: str) -> tuple[dict, str, str]:
             f"Preprocessed mode: JSON file missing for plan '{plan_id}'")
     with open(json_path, encoding="utf-8") as f:
         json_data = json.load(f)
+    try:
+        from olm.core.json_v3_validator import validate_plan
+        validate_plan(json_data)
+    except ValueError:
+        logger.warning("JSON corrompu : %s", json_path)
+        raise
 
     overlay_path = ""
     for ext in (".png", ".PNG"):
