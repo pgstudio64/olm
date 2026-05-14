@@ -894,6 +894,40 @@ def api_coverage():
 
 
 # ===================================================================
+# E-bis — Export
+# ===================================================================
+
+
+@app.route("/api/floor-plan/export/<fmt>", methods=["POST"])
+def api_floor_plan_export(fmt: str):
+    """Export plan as PNG/PDF with workstation overlay + CSV."""
+    from olm.server.services.export_service import export_plan
+    if fmt not in ("png", "pdf"):
+        return jsonify({"error": f"Invalid format: {fmt}"}), 400
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    plan_id = (data.get("plan_id") or "").strip()
+    if not plan_id:
+        return jsonify({"error": "Missing plan_id"}), 400
+    rooms = data.get("rooms")
+    if not rooms or not isinstance(rooms, list):
+        return jsonify({"error": "Missing or empty rooms list"}), 400
+    scale = data.get("scale_cm_per_px")
+    if not scale or scale <= 0:
+        return jsonify({"error": "Invalid scale_cm_per_px"}), 400
+    sd_path = os.path.join(get_plans_dir(), f"{plan_id}-SD.png")
+    if not os.path.isfile(sd_path):
+        return jsonify({"error": f"{plan_id}-SD.png not found"}), 404
+    try:
+        result = export_plan(plan_id, rooms, scale, fmt)
+        return jsonify(result)
+    except Exception as e:
+        logger.exception("export failed")
+        return jsonify({"error": str(e)}), 500
+
+
+# ===================================================================
 # F — Configuration
 # ===================================================================
 

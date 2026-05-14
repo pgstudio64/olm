@@ -29,6 +29,7 @@ logs/
 
 # Project-specific (not published to open-source repo)
 project/
+project/exports/
 docs/
 solver_lab/
 CLAUDE.md

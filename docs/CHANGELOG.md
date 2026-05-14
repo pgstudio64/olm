@@ -3,6 +3,22 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.75] — 2026-05-14 — Export package PNG/PDF + CSV (D-196)
+
+### Added
+- Export dropdown button (Export ▾) with two entries: Export to PNG, Export to PDF.
+- Two endpoints `POST /api/floor-plan/export/png` and `POST /api/floor-plan/export/pdf`.
+- New backend service `olm/server/services/export_service.py`: image composition with detection colour neutralisation and N&B workstation overlay (desk rect, chair arc, clearance zone, label), CSV generation, PDF via pymupdf.
+- Frontend `exportPlan(fmt)` function: builds payload with candidate selection (amendment > best match), enriches desks with `chair_side` via `getDeskRects`/`transformDeskRects`.
+- 5 tests in `test_export.py` (PNG OK, PDF OK, CSV no-candidate, 404 missing SD, amendment desk recomputation).
+- `project/exports/` in `.gitignore`.
+
+### Changed
+- `devExportV3Json` preserved as dev tool (no longer wired to Export button).
+- Export button replaced by dropdown wrapper (`exportWrapper`).
+
+---
+
 ## [v0.4.74] — 2026-05-14 — Graceful jsonschema fallback + placeholder styling
 
 ### Fixed

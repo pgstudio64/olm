@@ -7,6 +7,18 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-196 · Export package PNG/PDF + CSV (2026-05-14, v0.4.75)
+
+**Décision** : le bouton Export est ré-affecté d'un outil dev (téléchargement JSON v3) à un export métier final : dropdown 2 entrées (PNG / PDF). Le backend compose l'image annotée (couleurs de détection neutralisées en blanc, overlay N&B des postes de travail avec desk, arc chaise, clearance, label `room_code.index`) et écrit un CSV point-virgule (15 colonnes, utf-8-sig BOM Excel). Source de vérité = payload frontend (exactement ce que voit l'utilisateur). Pour les amendments (desks absents), les positions sont recalculées côté backend via `compute_desk_positions`. Le `chair_side` est enrichi côté frontend via `getDeskRects`/`transformDeskRects` et décanonicalisé côté backend. Fichiers écrits dans `project/exports/<plan_id>/`, overwrite à chaque export.
+
+**Justification** : besoin métier EF-EX-02 (SRS § 3.9). L'export produit le livrable final de l'outil : plan annoté + données structurées. Le backend ne refait pas le matching — la source de vérité est le frontend.
+
+**Impact** : nouveau service `export_service.py`, 2 endpoints, dropdown HTML, `exportPlan()` JS, 5 tests. `devExportV3Json` préservé en outil dev. 273 tests attendus.
+
+**Référence** : D-188 (robustesse), EF-EX-02 (SRS), Q-EX-1 à Q-EX-5.
+
+---
+
 ## D-195 · Modal centrée + synchro toggles session + UX fixes (2026-05-14, v0.4.70)
 
 **Décision** : (1) Créer un composant modal centrée (`modal.js`) avec deux modes : wait (spinner, auto-dismiss) et confirm (OK/Cancel, Promise). Remplacer les `confirm()` natifs (Close, Reinit, Clear layout, Switch plan, OCR) et les messages "Importing..." par ce composant. (2) Centraliser la synchro des toggles Overlay (on/off, opacity) et Grid via `syncOverlayToggle`, `syncOverlayOpacity`, `syncGridToggle` — propriétés de session synchronisées entre Room, Office et Amend layout. (3) Ajouter contrôles Overlay dans la toolbar Pattern Editor (Amend layout). (4) Cacher la colonne gauche Import quand aucun plan n'est chargé. (5) Wording "floor plan" au lieu de "plan" dans les textes UI.

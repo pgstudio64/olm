@@ -23,8 +23,8 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 
 ### Phase 2 — Robustesse opérationnelle (~40 h)
 - [x] **P2.5** ~~Verrou mono-utilisateur~~ — v0.4.64. État mémoire Flask, cookie `olm_session`, HTTP 423 + page locked, takeover, idle timeout 30 min. 7 tests.
-- **Validation jsonschema** à l'import JSON v3 (~12 h).
-- **Écritures atomiques** temp+rename + `.bak` sur save (~5 h).
+- [x] **P2.7** ~~Validation jsonschema à l'import JSON v3~~ — v0.4.66. Schema draft-07 `olm/core/schemas/plan_v3.json`, helper `json_v3_validator.py`, validation à l'import/save/load, 14 tests. 266 total.
+- [x] **P2.6** ~~Écritures atomiques temp+rename + `.bak` sur save~~ — v0.4.65. `atomic_write_json` dans `config_service.py`, 7 endpoints migrés, 7 tests.
 - [x] **P2.1** ~~`MAX_CONTENT_LENGTH` Flask + whitelist MIME upload~~ — v0.4.59. 50 MB, whitelist MIME 4 types, handler 413, 3 tests.
 - [x] **P2.4** ~~Logger Python + `RotatingFileHandler`~~ — v0.4.62. Root logger `olm`, StreamHandler + RotatingFileHandler (`logs/olm.log`, 5 MB × 5), request_id UUID4 8 chars, `before/after_request` log HTTP, 2 tests. `logs/` dans `.gitignore`.
 - [x] **P2.2** ~~Endpoint `/health`~~ — v0.4.60. `GET /health` 200/503, 4 checks, 2 tests.
@@ -38,8 +38,8 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 
 ## Chantiers documentaires en suspens
 
-- Q-EX-1 à Q-EX-5 : préciser EF-EX-02 (export package PNG/PDF + CSV) — voir [SRS § 3.9](SRS.md).
-- EF-VW-03 : inventorier les champs affichés en vue Office (donne la structure du CSV d'export).
+- ~~Q-EX-1 à Q-EX-5 : préciser EF-EX-02 (export package PNG/PDF + CSV)~~ — **livré D-196, v0.4.75**.
+- ~~EF-VW-03 : inventorier les champs affichés en vue Office (structure CSV d'export)~~ — **livré D-196** (15 colonnes CSV figées).
 - SDS.md à réécrire **après** Phase 1 (chantier DOC-E à planifier).
 
 ## Observations P1.3 — circulation_analysis (à conserver pour tuning futur)
@@ -49,6 +49,10 @@ Issues du test pièce en L (16e test) livré en P1.3 (2026-05-14). Ne sont pas d
 1. **Fragilité door isolation** : si une cellule DOOR est adjacente à un bloc dont la `chair_clearance_zone` (ES-01 = 70 cm) réduit le corridor disponible à < 80 cm de bordure commune avec la porte, la porte est isolée dans le graphe de rectangles → Grade F immédiat. En prod, la `door_exclusion_depth` (ES-08 = 120-180 cm selon standard) empêche normalement de placer un bloc juste devant la porte, donc le cas est rare. **À garder en tête si un utilisateur signale un Grade F surprenant sur une pièce qui semble accessible.**
 
 2. **Sensibilité des grades à la présence de blocs** : un seul `BLOCK_1` dans une pièce 10×10 m suffit à pousser `worst_detour` de 1.47 (Grade B, pièce vide) à 2.27 (Grade D, avec bloc). Inhérent à la rectangulation greedy : les centres des rectangles autour du bloc créent des chemins en zigzag mathématiquement plus longs que le chemin physique réel. Conséquence : les seuils des grades (A < 1.30, B < 1.60, C < 2.00) sont potentiellement **trop stricts pour des pièces aménagées**. À reconsidérer le jour où on tune le scoring (post Phase 2 probablement, pas urgent).
+
+## Dette technique repérée (à traiter au fil de l'eau)
+
+- **Durcir le schema JSON v3** (post-P2.7, v0.4.66) : le schema actuel est descriptif (accepte les variations historiques) plutôt que normatif. 5 champs acceptent plus de cas que la spec idéale : `source_mode` optionnel, `corridor_face_abs` optionnel, `bbox_px` par room optionnel, sub-schémas `_px` ET `_cm`, `drawing_scale_measured` string ou number. Compromis pragmatique pour rétrocompat. Durcir quand tous les plans existants seront harmonisés (~2 h).
 
 ## Hors périmètre D-188 (réévaluables si besoin évolue)
 

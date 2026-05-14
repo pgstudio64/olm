@@ -46,7 +46,13 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     </div>
     <div id="planActions" style="display:flex;gap:8px;align-items:center;">
       <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
-      <button class="btn" id="btnExportPlan" title="Export floor plan data" style="display:none;flex-shrink:0;">Export</button>
+      <div id="exportWrapper" style="display:none;position:relative;flex-shrink:0;">
+        <button class="btn" id="btnExportPlan" title="Export plan and data">Export ▾</button>
+        <div id="exportMenu" style="display:none;position:absolute;top:100%;left:0;z-index:100;min-width:140px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
+          <button class="btn" id="btnExportPng" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to PNG</button>
+          <button class="btn" id="btnExportPdf" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to PDF</button>
+        </div>
+      </div>
       <button class="btn" id="btnClosePlan" title="Close current floor plan" style="display:none;flex-shrink:0;">Close</button>
       <div id="eraseWrapper" style="display:none;position:relative;flex-shrink:0;">
         <button class="btn" id="btnErasePlan" title="Reinit or clear data">Reinit ▾</button>
