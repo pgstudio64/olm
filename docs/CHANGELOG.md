@@ -3,6 +3,14 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.74] — 2026-05-14 — Graceful jsonschema fallback + placeholder styling
+
+### Fixed
+- `jsonschema` import gracieux : si le package n'est pas installé, validation skippée avec warning (pas de crash).
+- Placeholder sélecteur plan : italique, non-gras, gris. Nom du plan = gras jaune.
+
+---
+
 ## [v0.4.72] — 2026-05-14 — Fix plan selector on fresh install (Windows)
 
 ### Fixed
