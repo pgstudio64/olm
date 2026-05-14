@@ -2358,6 +2358,12 @@ function zoomIn(targetSvg) {
   const factor = ZOOM_IN_FACTOR;
   const newW = vb.w * factor;
   const newH = vb.h * factor;
+  // Room/Office views: minimum 5 m (500 cm) de largeur visible.
+  var isRoomView = targetSvg && (targetSvg.id === "rvCanvas" || targetSvg.id === "fpCanvas");
+  if (isRoomView) {
+    var minW = 500 * SCALE;  // 500 cm en unités SVG
+    if (newW < minW) return;
+  }
   vb.x += (vb.w - newW) / 2;
   vb.y += (vb.h - newH) / 2;
   vb.w = newW;
