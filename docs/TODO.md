@@ -13,11 +13,12 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 - Renforcer assertions tests `/api/floor-plan/match` (présence `all_candidates`, `desks`, scores numériques).
 - Investiguer les 7 tests pré-existants cassés (`test_pattern_generator.py`, `test_catalogue_matcher.py`).
 
-### Phase 1 — Solidification (~42 h)
+### Phase 1 — Solidification (~58 h, P1.6 ajouté)
 - [x] **P1.1** ~~Casser le cycle `extract.py ↔ test_comb.py`~~ — D-189, v0.4.53. Renommage `comb_detection.py`, extraction `wall_classify.py`, suppression `main()`/`draw_debug_*`.
 - [x] **P1.2** ~~Split `olm/server/app.py` en `olm/server/services/`~~ — D-190, v0.4.54. 2184 → 675 l. (-69 %). 5 modules : config_service (372), serialization (93), catalogue_service (269), matching_service (212), ingestion_service (968). 202 tests, 40 routes, 0 cycle.
-- **P1.3** Tests `olm/core/circulation_analysis.py` (grades A-F, détours, violations) — couverture 0 % → 80 % cible (~8 h).
-- **P1.4** Cleanup 77 `addEventListener` côté front sans `removeEventListener` (~7 h).
+- [x] **P1.3** ~~Tests `olm/core/circulation_analysis.py`~~ — v0.4.56, 20 tests ajoutés (225 total), couverture 82 % (cible 80 % dépassée). Observations notées plus bas (« Observations P1.3 »).
+- [x] **P1.6** ~~Pipeline OCR 2-pass avec calibration scale~~ — D-191, v0.4.57. Refactor en 3 phases, 6 tests `test_ocr_pipeline.py`, couverture comb_detection 77 %. **Limite connue** : 2-pass auto converge à scale=3.654 au lieu de 2.96 sur `test_floorplan_ocr.png` (1 fenêtre vs 61 attendues). 1-pass avec `drawing_scale` fourni : 61 fenêtres, 12 portes. Recommandation : toujours saisir `drawing_scale` à l'import OCR. À documenter dans USER_GUIDE.md (Phase 2). Voir D-191 « Limite connue ».
+- [x] **P1.4** ~~Cleanup addEventListener côté front sans removeEventListener~~ — v0.4.58. 16 re-bindings éliminés via event delegation (catalogue, editor, ingestion) + `_cfgTrack/_cfgDispose` (config). ~128 listeners session-life annotés. Smoke-test instrumenté OK.
 - [x] **P1.5** ~~Remplacer `traceback.print_exc()` par `logger.exception()`~~ — integre dans P1.2, v0.4.54. 0 restant dans `app.py`.
 
 ### Phase 2 — Robustesse opérationnelle (~40 h)
@@ -40,6 +41,14 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 - EF-VW-03 : inventorier les champs affichés en vue Office (donne la structure du CSV d'export).
 - SDS.md à réécrire **après** Phase 1 (chantier DOC-E à planifier).
 
+## Observations P1.3 — circulation_analysis (à conserver pour tuning futur)
+
+Issues du test pièce en L (16e test) livré en P1.3 (2026-05-14). Ne sont pas des bugs à corriger immédiatement, mais à connaître quand on touchera au scoring circulation.
+
+1. **Fragilité door isolation** : si une cellule DOOR est adjacente à un bloc dont la `chair_clearance_zone` (ES-01 = 70 cm) réduit le corridor disponible à < 80 cm de bordure commune avec la porte, la porte est isolée dans le graphe de rectangles → Grade F immédiat. En prod, la `door_exclusion_depth` (ES-08 = 120-180 cm selon standard) empêche normalement de placer un bloc juste devant la porte, donc le cas est rare. **À garder en tête si un utilisateur signale un Grade F surprenant sur une pièce qui semble accessible.**
+
+2. **Sensibilité des grades à la présence de blocs** : un seul `BLOCK_1` dans une pièce 10×10 m suffit à pousser `worst_detour` de 1.47 (Grade B, pièce vide) à 2.27 (Grade D, avec bloc). Inhérent à la rectangulation greedy : les centres des rectangles autour du bloc créent des chemins en zigzag mathématiquement plus longs que le chemin physique réel. Conséquence : les seuils des grades (A < 1.30, B < 1.60, C < 2.00) sont potentiellement **trop stricts pour des pièces aménagées**. À reconsidérer le jour où on tune le scoring (post Phase 2 probablement, pas urgent).
+
 ## Hors périmètre D-188 (réévaluables si besoin évolue)
 
 - Authentification multi-utilisateur (`flask-login`).
@@ -50,6 +59,7 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 - Internationalisation (Flask-Babel).
 - Accessibilité WCAG AA.
 - Logging structuré JSON / Prometheus metrics / ZIP diagnostic.
+- **OCR scale annoté** : auto-lecture de la mention « 1:N » sur le cartouche du plan via OCR, auto-fill du champ `drawing_scale` à l'import. Résoudrait définitivement la limite connue de D-191 (2-pass auto biaisé). Chantier ~6-8 h, déclencheur : si l'utilisateur trouve gênant de saisir manuellement l'échelle à chaque import.
 
 ---
 
