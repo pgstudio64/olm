@@ -17,8 +17,8 @@ document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
 document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 </script>
 
-<div class="tab-row" style="display:flex;border-bottom:1px solid var(--border);gap:8px;">
-  <div style="flex:1;min-width:0;padding-top:21px;display:flex;align-items:baseline;gap:8px;">
+<div class="tab-row" style="display:flex;border-bottom:2px solid var(--border);gap:8px;">
+  <div style="flex:1;min-width:0;padding-top:21px;display:flex;align-items:flex-end;gap:8px;">
     <div class="tab-bar">
       <div class="tab-group tab-group-floorplan">
         <span class="tab-group-label">FLOORPLAN</span>
@@ -36,7 +36,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:30px 8px 4px 0;white-space:nowrap;">
     <div id="hdrPlanSelector" style="position:relative;">
       <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan — click to switch">
-        <span id="hdrCurrentPlanText">— Select a floor plan —</span>
+        <span id="hdrCurrentPlanText" style="font-style:italic;font-weight:normal;color:var(--text-dim);">Select a floor plan...</span>
         <span style="color:var(--text-dim);font-size:9px;margin-left:6px;">&#9660;</span>
       </div>
       <div id="hdrPlanPopup" style="display:none;position:absolute;top:calc(100% + 2px);right:0;min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">

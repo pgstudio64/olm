@@ -218,7 +218,7 @@
   function _showPlanLoadedUI(planId) {
     if (planId) {
       var hdrEl = document.getElementById('hdrCurrentPlanText');
-      if (hdrEl) hdrEl.textContent = planId;
+      if (hdrEl) { hdrEl.textContent = planId; hdrEl.style.fontStyle = ''; hdrEl.style.fontWeight = ''; hdrEl.style.color = ''; }
     }
     [
       'btnSavePlan', 'btnExportPlan', 'btnClosePlan',
@@ -538,6 +538,8 @@
     if (sections) sections.style.display = hasRooms ? '' : 'none';
     var leftCol = document.getElementById('fpLeftInfoCol');
     if (leftCol) leftCol.style.display = hasRooms ? '' : 'none';
+    var leftResize = document.getElementById('fpLeftResize');
+    if (leftResize) leftResize.style.display = hasRooms ? '' : 'none';
     // Review and Design tabs: hidden when no plan loaded
     ['fpReview', 'lytDesign'].forEach(function(tab) {
       var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
@@ -593,7 +595,12 @@
   function _setSelectedPlan(id, mode) {
     ingState._selectedPlan = { id: id || '', mode: mode || '' };
     var disp = document.getElementById('hdrCurrentPlanText');
-    if (disp) disp.textContent = id || '— Select a floor plan —';
+    if (disp) {
+      disp.textContent = id || 'Select a floor plan...';
+      disp.style.fontStyle = id ? 'normal' : 'italic';
+      disp.style.fontWeight = id ? '' : 'normal';
+      disp.style.color = id ? '' : 'var(--text-dim)';
+    }
     _renderPlanList();
   }
   function _openPlanPopup() {
@@ -646,7 +653,7 @@
       _closePlanPopup();
       showModal('Importing floor plan...');
       var hdr = document.getElementById('hdrCurrentPlanText');
-      if (hdr) hdr.textContent = newPlanId;
+      if (hdr) { hdr.textContent = newPlanId; hdr.style.fontStyle = ''; hdr.style.fontWeight = ''; hdr.style.color = ''; }
       _showPlanLoadedUI(newPlanId);
 
     var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
@@ -737,7 +744,7 @@
       _doImport();
     } else {
       var curText = (document.getElementById('hdrCurrentPlanText') || {}).textContent || '';
-      if (curText && curText !== '— Select a floor plan —') {
+      if (curText && curText !== 'Select a floor plan...') {
         confirmModal('Switch floor plan? Unsaved changes will be lost.').then(function (ok) {
           if (ok) _doImport();
         });
@@ -1940,6 +1947,10 @@
           populateRoomsJson();
           updateIngRoomList();
           renderIngestion();
+          // Sync restored bbox back to fpData (Room/Office)
+          if (typeof window.fpLoadAndMatch === 'function') {
+            window.fpLoadAndMatch(ingState.rooms);
+          }
         }
         return;
       }
