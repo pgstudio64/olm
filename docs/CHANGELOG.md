@@ -3,6 +3,16 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.60] — 2026-05-14 — P2.2 Health endpoint
+
+### Added
+- **P2.2 — Endpoint `/health`** : diagnostic local rapide (`GET /health`).
+  Retourne `200` (status `ok`) ou `503` (status `degraded`) avec checks :
+  `config_readable`, `catalogue_loadable`, `plans_dir_exists`, `plans_dir_writable`.
+  Uptime tracke depuis le demarrage du process.
+- Helper `get_health_status()` dans `config_service.py`.
+- 2 tests dans `test_app_endpoints.py` (happy path + config missing 503).
+
 ## [v0.4.59] — 2026-05-14 — P2.1 Upload validation
 
 ### Added

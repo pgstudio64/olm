@@ -10,8 +10,10 @@ import json
 import logging
 import os
 import tempfile
+import time
 
 DEV_MODE: bool = False
+_START_TIME: float = time.monotonic()
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -32,6 +34,15 @@ app = Flask(
 )
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 PLANS_DIR = get_plans_dir()
+
+
+@app.route("/health")
+def health():
+    """Diagnostic endpoint — returns system health checks."""
+    from olm.server.services.config_service import get_health_status
+    uptime = time.monotonic() - _START_TIME
+    result, ok = get_health_status(uptime)
+    return jsonify(result), 200 if ok else 503
 
 
 @app.errorhandler(413)

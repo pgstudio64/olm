@@ -510,6 +510,49 @@ class TestConfig:
 # 6. Upload validation (P2.1)
 # ====================================================================
 
+# ====================================================================
+# 7. GET /health (P2.2)
+# ====================================================================
+
+class TestHealth:
+    """Tests pour GET /health."""
+
+    def test_happy_path(self, client):
+        """GET /health retourne 200 avec la structure attendue."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "ok"
+        assert "version" in data
+        assert isinstance(data["checks"], dict)
+        for key in ("config_readable", "catalogue_loadable",
+                     "plans_dir_exists", "plans_dir_writable"):
+            assert key in data["checks"]
+            assert isinstance(data["checks"][key], bool)
+        assert "uptime_seconds" in data
+        assert isinstance(data["uptime_seconds"], (int, float))
+        assert data["uptime_seconds"] >= 0
+
+    def test_config_missing_returns_503(self, client, monkeypatch):
+        """config.json absent provoque status=degraded et 503."""
+        monkeypatch.setattr(
+            "olm.server.services.config_service._CONFIG_PATH",
+            "/nonexistent/config.json",
+        )
+        monkeypatch.setattr(
+            "olm.server.services.config_service.load_project_config",
+            lambda: (_ for _ in ()).throw(
+                FileNotFoundError("/nonexistent/config.json")),
+        )
+        resp = client.get("/health")
+        assert resp.status_code == 503
+        data = resp.get_json()
+        assert data["status"] == "degraded"
+        assert data["checks"]["config_readable"] is False
+        assert "errors" in data
+        assert any("config" in e for e in data["errors"])
+
+
 class TestUploadValidation:
     """Tests pour la validation des uploads (P2.1)."""
 
