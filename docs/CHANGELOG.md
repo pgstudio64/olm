@@ -3,6 +3,20 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.62] — 2026-05-14 — P2.4 Structured logging
+
+### Added
+- **P2.4 — Logging structuré** : logger racine `olm` configure au boot avec
+  `StreamHandler` (stderr) + `RotatingFileHandler` (`logs/olm.log`, 5 MB,
+  5 backups = 30 MB max).
+- Format : `%(asctime)s [%(levelname)s] [req-XXXXXXXX] %(name)s: %(message)s`.
+- `request_id` (UUID4 8 chars) genere par `before_request`, propage via
+  `threading.local` + `logging.Filter` dans tous les logs de la requete.
+- `after_request` log chaque requete HTTP : `200 POST /api/match in 234 ms`.
+- Niveau INFO par defaut, DEBUG si `--dev`.
+- 2 tests : log file write + rotation.
+- `.gitignore` : ajout `logs/`.
+
 ## [v0.4.61] — 2026-05-14 — P2.3 CI GitHub Actions
 
 ### Added

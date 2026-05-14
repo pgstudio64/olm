@@ -9,6 +9,8 @@ import io
 import json
 from typing import Any
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Helpers de validation structurelle
 # ---------------------------------------------------------------------------
@@ -585,3 +587,64 @@ class TestUploadValidation:
             assert resp.status_code == 413
         finally:
             app.config['MAX_CONTENT_LENGTH'] = original
+
+
+# ====================================================================
+# 10. Logging (P2.4)
+# ====================================================================
+
+
+class TestLogging:
+    """Tests pour le logging structuré (P2.4)."""
+
+    def test_health_writes_to_log_file(self, client, tmp_path):
+        """GET /health ecrit une ligne dans le fichier de log."""
+        import logging
+        import logging.handlers
+
+        from olm.server.app import LOG_FORMAT, _RequestIdFilter
+
+        log_file = tmp_path / "olm_test.log"
+        olm_logger = logging.getLogger("olm")
+        handler = logging.FileHandler(str(log_file))
+        handler.setFormatter(logging.Formatter(LOG_FORMAT))
+        handler.addFilter(_RequestIdFilter())
+        olm_logger.addHandler(handler)
+        try:
+            client.get("/health")
+            handler.flush()
+            content = log_file.read_text()
+            assert "GET /health" in content
+            assert "[INFO]" in content
+            assert "req-" in content
+        finally:
+            olm_logger.removeHandler(handler)
+
+    @pytest.mark.slow
+    def test_log_rotation(self, tmp_path):
+        """Ecrire > 5 MB de logs declenche la rotation."""
+        import logging
+        import logging.handlers
+
+        from olm.server.app import LOG_BACKUP_COUNT, LOG_MAX_BYTES
+
+        log_file = tmp_path / "rotation_test.log"
+        handler = logging.handlers.RotatingFileHandler(
+            str(log_file),
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
+        )
+        test_logger = logging.getLogger("olm.test.rotation")
+        test_logger.addHandler(handler)
+        test_logger.setLevel(logging.DEBUG)
+        try:
+            # Ecrire ~6 MB de logs (> 5 MB maxBytes)
+            line = "X" * 1000
+            for _ in range(6200):
+                test_logger.info(line)
+            handler.flush()
+            rotated = tmp_path / "rotation_test.log.1"
+            assert rotated.exists(), "rotation_test.log.1 should exist"
+        finally:
+            test_logger.removeHandler(handler)
+            handler.close()

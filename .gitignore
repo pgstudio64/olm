@@ -24,6 +24,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Logs
+logs/
+
 # Project-specific (not published to open-source repo)
 project/
 docs/

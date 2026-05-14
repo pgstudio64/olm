@@ -8,14 +8,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import logging.handlers
 import os
 import tempfile
+import threading
 import time
+import uuid
 
 DEV_MODE: bool = False
 _START_TIME: float = time.monotonic()
 
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from olm.core.pattern_dsl import DSLError
@@ -28,6 +31,56 @@ from olm.server.services.config_service import (
     set_dev_mode,
 )
 
+LOG_FORMAT = '%(asctime)s [%(levelname)s] %(request_id)s%(name)s: %(message)s'
+LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+LOG_FILE = os.path.join(LOG_DIR, "olm.log")
+LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+LOG_BACKUP_COUNT = 5
+
+_request_local = threading.local()
+
+
+class _RequestIdFilter(logging.Filter):
+    """Inject request_id into every LogRecord."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        rid = getattr(_request_local, 'request_id', None)
+        record.request_id = f'[req-{rid}] ' if rid else ''  # type: ignore[attr-defined]
+        return True
+
+
+def configure_logging(*, dev: bool = False) -> None:
+    """Set up the 'olm' root logger with stderr + rotating file handlers."""
+    level = logging.DEBUG if dev else logging.INFO
+    olm_logger = logging.getLogger("olm")
+    olm_logger.setLevel(level)
+
+    # Avoid duplicate handlers on repeated calls (e.g. tests)
+    if olm_logger.handlers:
+        return
+
+    formatter = logging.Formatter(LOG_FORMAT)
+    req_filter = _RequestIdFilter()
+
+    # Handler 1: stderr
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    stream_handler.addFilter(req_filter)
+    olm_logger.addHandler(stream_handler)
+
+    # Handler 2: rotating file
+    os.makedirs(LOG_DIR, exist_ok=True)
+    file_handler = logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT,
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.addFilter(req_filter)
+    olm_logger.addHandler(file_handler)
+
+
+# Configure logging at import time (INFO by default, reconfigured in __main__)
+configure_logging(dev=False)
+
 logger = logging.getLogger(__name__)
 
 app = Flask(
@@ -37,6 +90,31 @@ app = Flask(
 )
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 PLANS_DIR = get_plans_dir()
+
+
+@app.before_request
+def _before_request() -> None:
+    """Attach request_id and start time to each request."""
+    g.request_id = uuid.uuid4().hex[:8]
+    g.start_time = time.monotonic()
+    _request_local.request_id = g.request_id
+
+
+@app.after_request
+def _after_request(response):
+    """Log every HTTP request with method, path, status, duration."""
+    duration_ms = (time.monotonic() - g.start_time) * 1000
+    logger.info(
+        "%d %s %s in %.0f ms",
+        response.status_code, request.method, request.path, duration_ms,
+    )
+    return response
+
+
+@app.teardown_request
+def _teardown_request(exc=None) -> None:
+    """Clean up thread-local request_id."""
+    _request_local.request_id = None
 
 
 @app.route("/health")
@@ -730,8 +808,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     DEV_MODE = args.dev
     set_dev_mode(args.dev)
+    if args.dev:
+        # Reconfigure to DEBUG level — clear handlers first
+        olm_root = logging.getLogger("olm")
+        olm_root.handlers.clear()
+        configure_logging(dev=True)
     mode_label = " [DEV]" if DEV_MODE else ""
     from olm.server.services.catalogue_service import CATALOGUE_PATH
-    print(f"Pattern editor{mode_label} — http://localhost:5051")
-    print(f"Catalogue: {CATALOGUE_PATH}")
+    logger.info("Pattern editor%s — http://localhost:5051", mode_label)
+    logger.info("Catalogue: %s", CATALOGUE_PATH)
     app.run(debug=True, port=5051)
