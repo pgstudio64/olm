@@ -126,7 +126,8 @@
         "x_cm": { "type": "integer", "minimum": 0 },
         "y_cm": { "type": "integer", "minimum": 0 },
         "width_cm": { "type": "integer", "minimum": 0 },
-        "depth_cm": { "type": "integer", "minimum": 0 }
+        "depth_cm": { "type": "integer", "minimum": 0 },
+        "origin": { "type": "string" }
       },
       "additionalProperties": false
     },

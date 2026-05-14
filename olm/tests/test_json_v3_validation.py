@@ -126,6 +126,22 @@ class TestValidPlan:
         plan["drawing_scale_measured"] = "2.9633 cm/px"
         validate_plan(plan)
 
+    def test_exclusion_zone_with_origin(self):
+        """exclusion_zone with origin='manual' must pass (D-192)."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["exclusion_zones"] = [
+            {"x_cm": 0, "y_cm": 0, "width_cm": 50, "depth_cm": 50, "origin": "manual"},
+        ]
+        validate_plan(plan)
+
+    def test_transparent_zone_with_origin(self):
+        """transparent_zone with origin='auto' must pass — reuses exclusion_zone schema (D-192)."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["transparent_zones"] = [
+            {"x_cm": 10, "y_cm": 10, "width_cm": 30, "depth_cm": 20, "origin": "auto"},
+        ]
+        validate_plan(plan)
+
 
 class TestInvalidPlan:
     """Plans that must fail validation with a clear message."""
