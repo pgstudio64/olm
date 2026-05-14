@@ -306,18 +306,18 @@
     function xformZone(e) {
       var ex = Object.assign({}, e);
       if (cf === "north") {
-        ex.x_cm = W - e.x_cm - e.width_cm;
-        ex.y_cm = D - e.y_cm - e.depth_cm;
+        ex.x_cm = Math.round(W - e.x_cm - e.width_cm);
+        ex.y_cm = Math.round(D - e.y_cm - e.depth_cm);
       } else if (cf === "east") {
-        ex.x_cm     = D - e.y_cm - e.depth_cm;
-        ex.y_cm     = e.x_cm;
-        ex.width_cm = e.depth_cm;
-        ex.depth_cm = e.width_cm;
+        ex.x_cm     = Math.round(D - e.y_cm - e.depth_cm);
+        ex.y_cm     = Math.round(e.x_cm);
+        ex.width_cm = Math.round(e.depth_cm);
+        ex.depth_cm = Math.round(e.width_cm);
       } else if (cf === "west") {
-        ex.x_cm     = e.y_cm;
-        ex.y_cm     = W - e.x_cm - e.width_cm;
-        ex.width_cm = e.depth_cm;
-        ex.depth_cm = e.width_cm;
+        ex.x_cm     = Math.round(e.y_cm);
+        ex.y_cm     = Math.round(W - e.x_cm - e.width_cm);
+        ex.width_cm = Math.round(e.depth_cm);
+        ex.depth_cm = Math.round(e.width_cm);
       }
       return ex;
     }
@@ -407,19 +407,18 @@
     function xformZoneBack(e) {
       var ex = Object.assign({}, e);
       if (ocf === "north") {
-        // canonical dims = absolu pour north (pas de swap)
-        ex.x_cm = Wc - e.x_cm - e.width_cm;
-        ex.y_cm = Dc - e.y_cm - e.depth_cm;
+        ex.x_cm = Math.round(Wc - e.x_cm - e.width_cm);
+        ex.y_cm = Math.round(Dc - e.y_cm - e.depth_cm);
       } else if (ocf === "east") {
-        ex.x_cm     = e.y_cm;
-        ex.y_cm     = Wc - e.x_cm - e.width_cm;
-        ex.width_cm = e.depth_cm;
-        ex.depth_cm = e.width_cm;
+        ex.x_cm     = Math.round(e.y_cm);
+        ex.y_cm     = Math.round(Wc - e.x_cm - e.width_cm);
+        ex.width_cm = Math.round(e.depth_cm);
+        ex.depth_cm = Math.round(e.width_cm);
       } else if (ocf === "west") {
-        ex.x_cm     = Dc - e.y_cm - e.depth_cm;
-        ex.y_cm     = e.x_cm;
-        ex.width_cm = e.depth_cm;
-        ex.depth_cm = e.width_cm;
+        ex.x_cm     = Math.round(Dc - e.y_cm - e.depth_cm);
+        ex.y_cm     = Math.round(e.x_cm);
+        ex.width_cm = Math.round(e.depth_cm);
+        ex.depth_cm = Math.round(e.width_cm);
       }
       return ex;
     }
