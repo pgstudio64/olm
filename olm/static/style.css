@@ -79,6 +79,7 @@
     font-size: 11px;
     color: var(--text-dim);
     margin-left: 4px; margin-right: 16px;
+    margin-bottom: 3px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0;
     letter-spacing: 0.02em;
     font-weight: 300;
@@ -323,7 +324,7 @@
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
     position: relative;
-    top: 1px;
+    margin-bottom: 2px;
   }
   .tab-group:has(.tab-btn.active) {
     background: rgba(200, 160, 80, 0.55);

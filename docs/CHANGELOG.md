@@ -3,6 +3,22 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.71] — 2026-05-14 — UX polish + bugfixes (D-195 suite)
+
+### Fixed
+- Slider overlay Office inopérant (handler faisait `render(fpCanvas)` au lieu de `fpRenderCurrent()`).
+- Bbox Escape dans Floor ne propageait pas la restauration vers Room/Office (`fpLoadAndMatch` manquant).
+- Resize handle colonne gauche Import restait visible quand la colonne était cachée.
+- Zone noire entre onglets et ligne horizontale (`.tab-group margin-bottom` + `align-items:flex-end`).
+
+### Changed
+- Placeholder sélecteur plan : "Select a floor plan..." en italique, non-gras, gris. Nom du plan = gras jaune.
+- Ligne horizontale sous les onglets accentuée (2px) avec 2px de gap.
+- Texte explicatif des onglets remonté de 3px.
+- Logs `room-dsl/parse` passés en DEBUG (fréquents, 0 ms).
+
+---
+
 ## [v0.4.70] — 2026-05-14 — Modal centrée + synchro toggles (D-195)
 
 ### Added

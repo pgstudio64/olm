@@ -715,7 +715,7 @@ async function init() {
     if (!ok) return;
     // Reset header
     var hdr = document.getElementById("hdrCurrentPlanText");
-    if (hdr) hdr.textContent = "— Select a floor plan —";
+    if (hdr) { hdr.textContent = "Select a floor plan..."; hdr.style.fontStyle = "italic"; hdr.style.fontWeight = "normal"; hdr.style.color = "var(--text-dim)"; }
     // Hide Save/Export/Close buttons + toolbar
     document.getElementById("btnSavePlan").style.display = "none";
     document.getElementById("btnExportPlan").style.display = "none";

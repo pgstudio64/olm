@@ -874,10 +874,7 @@
     });
     document.getElementById("fpOverlayOpacity").addEventListener("input", function() {
       syncOverlayOpacity(this.value);
-      if (this.checked !== false && state.overlay) {
-        state.overlay.opacity = parseInt(this.value);
-        render(document.getElementById('fpCanvas'));
-      }
+      fpRenderCurrent();
     });
     // Review refresh — exposed on window for inline handlers
     window._rvRefresh = function() {

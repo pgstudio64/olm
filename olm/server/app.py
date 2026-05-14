@@ -183,6 +183,7 @@ def _after_request(response):
             or path.startswith("/api/ingestion/plan/")
             or path.startswith("/api/image")
             or path.startswith("/api/blocks")
+            or path.startswith("/api/room-dsl/")
             or path == "/api/config"
             or path == "/api/spacing"
             or path == "/api/patterns"
