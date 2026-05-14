@@ -18,7 +18,7 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 from olm.core.pattern_dsl import DSLError
 from olm.core.room_dsl import RoomDSLError
 from olm.server.services.config_service import (
-    BASE_DIR, PROJECT_ROOT, get_plans_dir,
+    BASE_DIR, PROJECT_ROOT, get_plans_dir, set_dev_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -668,6 +668,7 @@ if __name__ == "__main__":
                         help="Enable developer mode (shows debug tools)")
     args = parser.parse_args()
     DEV_MODE = args.dev
+    set_dev_mode(args.dev)
     mode_label = " [DEV]" if DEV_MODE else ""
     from olm.server.services.catalogue_service import CATALOGUE_PATH
     print(f"Pattern editor{mode_label} — http://localhost:5051")

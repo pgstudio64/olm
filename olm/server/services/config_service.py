@@ -19,6 +19,16 @@ from olm.core.spacing_config import ALL_CONFIGS
 
 logger = logging.getLogger(__name__)
 
+# Runtime flag — set by app.py __main__ via set_dev_mode().
+# Stored here (not in app.py) to avoid the __main__ dual-import problem.
+_DEV_MODE: bool = False
+
+
+def set_dev_mode(enabled: bool) -> None:
+    """Set developer mode flag (called from app.py __main__)."""
+    global _DEV_MODE
+    _DEV_MODE = enabled
+
 # ---------------------------------------------------------------------------
 # Paths — resolved once at import time
 # ---------------------------------------------------------------------------
@@ -262,10 +272,9 @@ def get_config() -> dict:
     """Return full config dict augmented with olm_version and dev_mode."""
     from olm.core import app_config
     from olm import __version__
-    import olm.server.app as _app
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
-    cfg["dev_mode"] = _app.DEV_MODE
+    cfg["dev_mode"] = _DEV_MODE
     return cfg
 
 
