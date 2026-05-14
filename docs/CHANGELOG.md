@@ -3,6 +3,15 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.69] — 2026-05-14 — UX sélecteur plan top-right (D-194)
+
+### Changed
+- Sélecteur de plan déplacé en top-right comme entrée unique (popup filtre + liste déroulante).
+- Déclencheur Import (`ingPlanSelector`) retiré du panneau gauche.
+- Confirmation `confirm()` sur switch de plan avec modifications non sauvegardées (aligné sur Close).
+
+---
+
 ## [v0.4.68] — 2026-05-14 — UX overlay + nav-layout + logging cleanup (D-193)
 
 ### Changed

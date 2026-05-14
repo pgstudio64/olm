@@ -34,7 +34,16 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <span id="tabDescription" class="tab-description"></span>
   </div>
   <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:30px 8px 4px 0;white-space:nowrap;">
-    <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan"></div>
+    <div id="hdrPlanSelector" style="position:relative;">
+      <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan — click to switch">
+        <span id="hdrCurrentPlanText">— Select a plan —</span>
+        <span style="color:var(--text-dim);font-size:9px;margin-left:6px;">&#9660;</span>
+      </div>
+      <div id="hdrPlanPopup" style="display:none;position:absolute;top:calc(100% + 2px);right:0;min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
+        <input type="text" id="hdrPlanSearch" placeholder="Filter plans..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
+        <div id="hdrPlanList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+      </div>
+    </div>
     <div id="planActions" style="display:flex;gap:8px;align-items:center;">
       <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
       <button class="btn" id="btnExportPlan" title="Export floor plan data" style="display:none;flex-shrink:0;">Export</button>
@@ -223,17 +232,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="fp-container">
       <!-- Left panel: all plan info in one column -->
       <div class="fp-info-col" id="fpLeftInfoCol" style="border-left:none;border-right:1px solid var(--border);order:-2;">
-        <div class="section-title">Current floorplan</div>
-        <div id="ingPlanSelector" style="position:relative;margin-bottom:var(--sp-lg);">
-          <div id="ingPlanDisplay" style="width:100%;font-size:11px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-            <span id="ingPlanDisplayText">— Select a plan —</span>
-            <span style="color:var(--text-dim);font-size:9px;">&#9660;</span>
-          </div>
-          <div id="ingPlanPopup" style="display:none;background:var(--surface);border:1px solid var(--border);border-top:none;">
-            <input type="text" id="ingPlanSearch" placeholder="Filter plans..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
-            <div id="ingPlanList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
-          </div>
-        </div>
         <div id="ingFormOcr"></div>
 
         <div id="ingPlanSections" style="display:none;">

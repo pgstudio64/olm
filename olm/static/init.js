@@ -679,8 +679,8 @@ async function init() {
   document.getElementById("btnClosePlan").addEventListener("click", function() {
     if (!confirm("Close the current floor plan? Unsaved changes will be lost.")) return;
     // Reset header
-    var hdr = document.getElementById("hdrCurrentPlan");
-    if (hdr) hdr.textContent = "";
+    var hdr = document.getElementById("hdrCurrentPlanText");
+    if (hdr) hdr.textContent = "— Select a plan —";
     // Hide Save/Export/Close buttons + toolbar
     document.getElementById("btnSavePlan").style.display = "none";
     document.getElementById("btnExportPlan").style.display = "none";
@@ -715,7 +715,7 @@ async function init() {
     if (typeof window._ingSetSelectedPlan === "function") {
       window._ingSetSelectedPlan("", "");
     }
-    var searchEl = document.getElementById("ingPlanSearch");
+    var searchEl = document.getElementById("hdrPlanSearch");
     if (searchEl) searchEl.value = "";
     // Reset ingestion state rooms (keeps ingState identity; only rooms cleared)
     window.ingState.rooms = [];

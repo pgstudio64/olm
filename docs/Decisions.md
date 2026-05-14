@@ -7,6 +7,16 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-194 · Sélecteur de plan unifié en top-right (2026-05-14, v0.4.69)
+
+**Décision** : le sélecteur top-right `hdrCurrentPlan` devient l'unique point d'entrée pour ouvrir et changer de plan. Le déclencheur du panneau Import (`ingPlanSelector`) est retiré. La popup (filtre + liste déroulante) est déplacée sous le header top-right. Le switch de plan avec un plan déjà chargé passe par un `confirm()` aligné sur le bouton Close.
+
+**Justification** : cohérence UX — toutes les actions globales Floor (Save, Export, Close, Reinit, Settings) sont regroupées en top-right. Visibilité permanente du plan courant. Switch direct sans naviguer dans le panneau Import.
+
+**Impact** : markup popup déplacé en top-right, anciens IDs `ingPlanDisplay/Popup/Search/List` remplacés par `hdrPlanSelector/Popup/Search/List`. CSS `.hdr-current-plan:empty` supprimé (sélecteur toujours visible). Confirmation unsaved sur switch de plan. Aucun changement backend, aucun nouveau test.
+
+---
+
 ## D-193 · UX overlay Amend layout + nav-layout tables + logging cleanup (2026-05-14, v0.4.68)
 
 **Décision** : (1) Afficher l'overlay plan dans le mode Amend layout (Pattern Editor) pour référence visuelle. (2) Déplacer les contrôles overlay de l'onglet Office dans la canvas-toolbar (cohérence avec Room). (3) Refactorer les barres de navigation et canvas-toolbars Room/Office en tables HTML 3 colonnes (gauche/centre/droite) pour un alignement centré identique. (4) Supprimer `fpRoomSize` (indication de taille redondante dans Office). (5) Passer les logs verbeux backend (per-room detect, scale, Werkzeug doublons, endpoints init) en DEBUG ; seuls les résumés et les API métier restent en INFO. (6) Schema JSON v3 : `exclusion_zone._cm` fields de `integer` à `number` (le frontend produit des floats).

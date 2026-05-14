@@ -13,7 +13,7 @@
   // Two scopes, both session-life (bound once, dispatched by data-attributes):
   //   ingestionRender : merge checkboxes + bbox body/handle on #ingSvg
   //   roomRender      : room-list clicks on ingRoomList/rvRoomList/fpDesignRoomList
-  //                     + plan-list clicks on #ingPlanDisplay
+  //                     + plan-list clicks on #hdrPlanList
   var _ingDelegationWired = false;
 
   function _wireIngDelegation() {
@@ -148,7 +148,7 @@
     });
 
     // --- plan-list delegation ---
-    var planListEl = document.getElementById('ingPlanList');
+    var planListEl = document.getElementById('hdrPlanList');
     if (planListEl) {
       planListEl.addEventListener('click', function(e) {
         var planItem = e.target.closest('.plan-item');
@@ -217,7 +217,7 @@
   // safe for the upload-fallback path.
   function _showPlanLoadedUI(planId) {
     if (planId) {
-      var hdrEl = document.getElementById('hdrCurrentPlan');
+      var hdrEl = document.getElementById('hdrCurrentPlanText');
       if (hdrEl) hdrEl.textContent = planId;
     }
     [
@@ -534,14 +534,8 @@
    */
   function updatePlanDependentUI() {
     var hasRooms = ingState.rooms && ingState.rooms.length > 0;
-    // Import panel sections — skip while the plan popup is open (it owns
-    // the display state of these elements while active).
-    var popupOpen = (function () {
-      var pop = document.getElementById('ingPlanPopup');
-      return pop && pop.style.display !== 'none';
-    })();
     var sections = document.getElementById('ingPlanSections');
-    if (sections && !popupOpen) sections.style.display = hasRooms ? '' : 'none';
+    if (sections) sections.style.display = hasRooms ? '' : 'none';
     // Review and Design tabs: hidden when no plan loaded
     ['fpReview', 'lytDesign'].forEach(function(tab) {
       var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
@@ -596,40 +590,27 @@
   }
   function _setSelectedPlan(id, mode) {
     ingState._selectedPlan = { id: id || '', mode: mode || '' };
-    var disp = document.getElementById('ingPlanDisplayText');
+    var disp = document.getElementById('hdrCurrentPlanText');
     if (disp) disp.textContent = id || '— Select a plan —';
     _renderPlanList();
   }
-  var _HIDE_IDS = ['ingPlanSections'];
   function _openPlanPopup() {
-    var pop = document.getElementById('ingPlanPopup');
+    var pop = document.getElementById('hdrPlanPopup');
     if (!pop || pop.style.display !== 'none') return;
     pop.style.display = '';
-    _HIDE_IDS.forEach(function (id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      if (el._prevDisplay === undefined) el._prevDisplay = el.style.display;
-      el.style.display = 'none';
-    });
-    var searchEl = document.getElementById('ingPlanSearch');
+    var searchEl = document.getElementById('hdrPlanSearch');
     if (searchEl) { searchEl.value = ''; _renderPlanList(); searchEl.focus(); }
   }
   function _closePlanPopup() {
-    var pop = document.getElementById('ingPlanPopup');
+    var pop = document.getElementById('hdrPlanPopup');
     if (!pop || pop.style.display === 'none') return;
     pop.style.display = 'none';
-    _HIDE_IDS.forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el._prevDisplay = undefined;
-    });
-    // Reconsolider l'affichage selon l'état courant (rooms chargées ou non).
-    updatePlanDependentUI();
   }
 
   function _renderPlanList() {
-    var listEl = document.getElementById('ingPlanList');
+    var listEl = document.getElementById('hdrPlanList');
     if (!listEl) return;
-    var searchEl = document.getElementById('ingPlanSearch');
+    var searchEl = document.getElementById('hdrPlanSearch');
     var filter = (searchEl && searchEl.value || '').toLowerCase().trim();
     var selId = _getSelectedPlan().id;
 
@@ -657,10 +638,15 @@
 
   // Extracted from plan-item inline handler (P1.4).
   function _onPlanItemClick(newPlanId, newPlanMode) {
+    // Confirm if a plan is already loaded (aligned with Close button wording)
+    var curText = (document.getElementById('hdrCurrentPlanText') || {}).textContent || '';
+    if (curText && curText !== '— Select a plan —') {
+      if (!confirm('Switch floor plan? Unsaved changes will be lost.')) return;
+    }
     _setSelectedPlan(newPlanId, newPlanMode);
     ingState.rooms = [];
     _closePlanPopup();
-    var hdr = document.getElementById('hdrCurrentPlan');
+    var hdr = document.getElementById('hdrCurrentPlanText');
     if (hdr) hdr.textContent = newPlanId + ' — Importing...';
     _showPlanLoadedUI(newPlanId);
 
@@ -2099,19 +2085,25 @@
 
     // Peuplement de la liste + filtre de recherche + toggle popup.
     loadPlansDropdown();
-    var searchEl = document.getElementById('ingPlanSearch');
+    var searchEl = document.getElementById('hdrPlanSearch');
     if (searchEl) {
       searchEl.addEventListener('input', _renderPlanList);
     }
-    var displayEl = document.getElementById('ingPlanDisplay');
-    if (displayEl) {
-      displayEl.addEventListener('click', function (e) {
+    // Plan selector click (top-right header)
+    var hdrPlanEl = document.getElementById('hdrCurrentPlan');
+    if (hdrPlanEl) {
+      hdrPlanEl.addEventListener('click', function (e) {
         e.stopPropagation();
-        var pop = document.getElementById('ingPlanPopup');
+        var pop = document.getElementById('hdrPlanPopup');
         if (pop && pop.style.display === 'none') _openPlanPopup();
         else _closePlanPopup();
       });
     }
+    // Click outside closes popup
+    document.addEventListener('click', function (e) {
+      var sel = document.getElementById('hdrPlanSelector');
+      if (sel && !sel.contains(e.target)) _closePlanPopup();
+    });
     // Escape pour fermer la popup.
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') _closePlanPopup();
