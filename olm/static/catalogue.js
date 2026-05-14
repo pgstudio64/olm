@@ -3,6 +3,59 @@
 
 let catalogueData = [];
 
+// --- Event delegation (P1.4) ---
+// Single click handler on #catalogueGrid dispatches card-click and card-delete.
+// Single click handler on #matrixSvg dispatches matrix-pattern clicks.
+// Both are session-life: bound once, never re-bound.
+var _catDelegationWired = false;
+function _wireCatDelegation() {
+  if (_catDelegationWired) return;
+  _catDelegationWired = true;
+
+  var grid = document.getElementById("catalogueGrid");
+  if (grid) {
+    grid.addEventListener("click", function(e) {
+      // Delete button
+      var delBtn = e.target.closest(".card-delete");
+      if (delBtn) {
+        e.stopPropagation();
+        var name = delBtn.dataset.delName;
+        if (!name) return;
+        if (!confirm("Delete \"" + name + "\" from catalogue?")) return;
+        fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" })
+          .then(function(resp) {
+            if (!resp.ok) throw new Error("Delete failed");
+            loadCatalogue();
+          })
+          .catch(function(err) { setStatus("Delete error: " + err.message); });
+        return;
+      }
+      // Card click (load pattern)
+      var card = e.target.closest(".catalogue-card");
+      if (card) {
+        var name = card.dataset.patternName;
+        if (name) {
+          document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+          loadPattern(name);
+        }
+      }
+    });
+  }
+
+  var svg = document.getElementById("matrixSvg");
+  if (svg) {
+    svg.addEventListener("click", function(e) {
+      var el = e.target.closest("[data-matrix-pattern]");
+      if (!el) return;
+      e.stopPropagation();
+      var name = el.dataset.matrixPattern;
+      if (!name) return;
+      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+      loadPattern(name);
+    });
+  }
+}
+
 async function loadCatalogue() {
   try {
     var resp = await fetch("/api/patterns");
@@ -88,34 +141,8 @@ function renderCatalogue() {
   });
   grid.innerHTML = html;
 
-  // Click card = switch to editor sub-tab and load pattern
-  grid.querySelectorAll(".catalogue-card").forEach(function(card) {
-    card.addEventListener("click", function(e) {
-      if (e.target.classList.contains("card-delete")) return;
-      var name = card.dataset.patternName;
-      if (name) {
-        document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
-        loadPattern(name);
-      }
-    });
-  });
-
-  // Click delete button = remove with confirmation
-  grid.querySelectorAll(".card-delete").forEach(function(btn) {
-    btn.addEventListener("click", async function(e) {
-      e.stopPropagation();
-      var name = btn.dataset.delName;
-      if (!name) return;
-      if (!confirm("Delete \"" + name + "\" from catalogue?")) return;
-      try {
-        var resp = await fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" });
-        if (!resp.ok) throw new Error(await resp.text());
-        loadCatalogue();
-      } catch (err) {
-        setStatus("Delete error: " + err.message);
-      }
-    });
-  });
+  // Event delegation handles card-click and card-delete (P1.4)
+  _wireCatDelegation();
 }
 
 // ========== MATRIX VIEW ==========
@@ -685,16 +712,8 @@ function renderMatrixView() {
   svg.innerHTML = parts.join("\n");
   applyMatrixViewBox();
 
-  // Click on a room = open in editor
-  svg.querySelectorAll("[data-matrix-pattern]").forEach(function(el) {
-    el.addEventListener("click", function(e) {
-      e.stopPropagation();
-      var name = el.dataset.matrixPattern;
-      if (!name) return;
-      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
-      loadPattern(name);
-    });
-  });
+  // Event delegation handles matrix-pattern clicks (P1.4)
+  _wireCatDelegation();
 }
 
 function matrixZoom(e) {
@@ -733,7 +752,7 @@ function initMatrixPanZoom() {
   var container = document.getElementById("matrixContainer");
   var svg = document.getElementById("matrixSvg");
 
-  // Block pinch/wheel on catalogue grid
+  // Session-life: all pan/zoom listeners bound once at init
   container.addEventListener("wheel", function(e) { e.preventDefault(); }, { passive: false });
 
   svg.addEventListener("mousedown", function(e) {
