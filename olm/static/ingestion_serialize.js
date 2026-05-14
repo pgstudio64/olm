@@ -94,8 +94,9 @@
         openings: openings,
         exclusion_zones: (r.exclusion_zones || []).map(function (z) {
           return {
-            x_cm: z.x_cm, y_cm: z.y_cm,
-            width_cm: z.width_cm, depth_cm: z.depth_cm,
+            x_cm: Math.round(z.x_cm), y_cm: Math.round(z.y_cm),
+            width_cm: Math.round(z.width_cm), depth_cm: Math.round(z.depth_cm),
+            origin: z.origin,
           };
         }),
         exterior_faces: r.exterior_faces,
@@ -226,10 +227,10 @@
       if (Array.isArray(r.exclusion_zones) && r.exclusion_zones.length > 0) {
         roomObj.exclusion_zones = r.exclusion_zones.map(function (z) {
           var out = {
-            x_cm: z.x_cm,
-            y_cm: z.y_cm,
-            width_cm: z.width_cm,
-            depth_cm: z.depth_cm,
+            x_cm: Math.round(z.x_cm),
+            y_cm: Math.round(z.y_cm),
+            width_cm: Math.round(z.width_cm),
+            depth_cm: Math.round(z.depth_cm),
           };
           if (z.origin) out.origin = z.origin;
           return out;
