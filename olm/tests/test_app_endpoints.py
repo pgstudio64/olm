@@ -7,8 +7,49 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helpers de validation structurelle
+# ---------------------------------------------------------------------------
+
+VALID_FACES = {"north", "south", "east", "west"}
+VALID_GRADES = set("ABCDEF")
+
+
+def _assert_window(w: dict[str, Any]) -> None:
+    """Valide la structure d'une window."""
+    assert "face" in w and isinstance(w["face"], str)
+    assert w["face"] in VALID_FACES
+    assert "offset_cm" in w and isinstance(w["offset_cm"], int)
+    assert w["offset_cm"] >= 0
+    assert "width_cm" in w and isinstance(w["width_cm"], int)
+    assert w["width_cm"] > 0
+
+
+def _assert_door(d: dict[str, Any]) -> None:
+    """Valide la structure d'une door."""
+    assert "face" in d and isinstance(d["face"], str)
+    assert d["face"] in VALID_FACES
+    assert "offset_cm" in d and isinstance(d["offset_cm"], int)
+    assert d["offset_cm"] >= 0
+    assert "width_cm" in d and isinstance(d["width_cm"], int)
+    assert d["width_cm"] > 0
+    assert "hinge_side" in d and d["hinge_side"] in {"left", "right"}
+    assert "opens_inward" in d and isinstance(d["opens_inward"], bool)
+
+
+def _assert_opening(o: dict[str, Any]) -> None:
+    """Valide la structure d'une opening."""
+    assert "face" in o and isinstance(o["face"], str)
+    assert o["face"] in VALID_FACES
+    assert "offset_cm" in o and isinstance(o["offset_cm"], int)
+    assert o["offset_cm"] >= 0
+    assert "width_cm" in o and isinstance(o["width_cm"], int)
+    assert o["width_cm"] > 0
 
 
 # ====================================================================
@@ -33,6 +74,14 @@ class TestReanalyze:
         assert "openings" in data
         assert isinstance(data["windows"], list)
         assert isinstance(data["openings"], list)
+        for w in data["windows"]:
+            _assert_window(w)
+        for o in data["openings"]:
+            _assert_opening(o)
+        if "doors" in data:
+            assert isinstance(data["doors"], list)
+            for d in data["doors"]:
+                _assert_door(d)
 
     def test_other_seeds_d159(self, client, tiny_plan_png):
         """other_seeds_px (D-159, fix K2/K5/K12/K25) est transmis sans crash."""
@@ -48,6 +97,14 @@ class TestReanalyze:
         data = resp.get_json()
         assert "windows" in data
         assert "openings" in data
+        for w in data["windows"]:
+            _assert_window(w)
+        for o in data["openings"]:
+            _assert_opening(o)
+        if "doors" in data:
+            assert isinstance(data["doors"], list)
+            for d in data["doors"]:
+                _assert_door(d)
 
     def test_missing_plan_path(self, client):
         """plan_path absent retourne 400."""
@@ -165,6 +222,40 @@ class TestFloorPlanMatch:
         assert "windows" in room
         assert "openings" in room
         assert "exclusion_zones" in room
+
+        # all_candidates non vide sur le happy path
+        candidates = room["all_candidates"]
+        assert isinstance(candidates, list)
+        assert len(candidates) > 0
+
+        # Structure de chaque candidat
+        for c in candidates:
+            assert isinstance(c["pattern_name"], str)
+            assert isinstance(c["standard"], str)
+            assert isinstance(c["n_desks"], int)
+            assert isinstance(c["m2_per_desk"], (int, float))
+            assert isinstance(c["circulation_grade"], str)
+            assert c["circulation_grade"] in VALID_GRADES
+            assert isinstance(c["desks"], list)
+
+        # Au moins un candidat a des desks non vides
+        assert any(len(c["desks"]) > 0 for c in candidates)
+
+        # Structure de chaque desk
+        for c in candidates:
+            for d in c["desks"]:
+                assert isinstance(d["x_cm"], int)
+                assert isinstance(d["y_cm"], int)
+                assert isinstance(d["width_cm"], int)
+                assert isinstance(d["depth_cm"], int)
+
+        # by_standard[AFNOR_ADVICE] pointe vers un candidat existant
+        by_std = room["by_standard"]
+        assert "AFNOR_ADVICE" in by_std
+        best_name = by_std["AFNOR_ADVICE"]
+        assert best_name is not None
+        candidate_names = {c["pattern_name"] for c in candidates}
+        assert best_name in candidate_names
 
     def test_room_without_features(self, client, monkeypatch_catalogue):
         """Room sans windows ni openings retourne 200."""

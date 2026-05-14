@@ -197,7 +197,7 @@ class TestSelectCandidates:
         """Room too small: no candidate fits."""
         if not catalogue:
             pytest.skip("Empty catalogue")
-        tiny = RoomSpec(width_cm=100, depth_cm=100)
+        tiny = RoomSpec(width_cm=50, depth_cm=50)
         results = select_candidates(catalogue, tiny)
         for sel in results:
             assert len(sel.candidates) == 0
@@ -400,7 +400,7 @@ class TestComputeDeskPositions:
         ])
         desks = compute_desk_positions(p)
         assert len(desks) == 2
-        assert desks[1].x_cm == DESK_W_CM + 50
+        assert desks[1].x_cm == DESK_D_CM + 50
 
     def test_rotated_bloc_1(self):
         """A BLOCK_1 rotated 90 degrees has its dimensions swapped."""

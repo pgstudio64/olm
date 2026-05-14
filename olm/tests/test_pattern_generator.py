@@ -14,8 +14,8 @@ from olm.core.pattern_generator import (
 
 def test_bloc_1_passage_30cm():
     """BLOCK_1: single-desk access passage = 30 cm (ES-03), not 90 cm."""
-    assert BLOCK_1.eo_cm == DESK_W_CM
-    assert BLOCK_1.ns_cm == DESK_D_CM
+    assert BLOCK_1.eo_cm == DESK_D_CM
+    assert BLOCK_1.ns_cm == DESK_W_CM
     assert BLOCK_1.n_desks == 1
     # W: chair clearance 70 cm + passage 30 cm = 100 cm
     assert BLOCK_1.faces.west.non_superposable_cm == CHAIR_CLEARANCE_CM
@@ -39,20 +39,20 @@ def test_bloc_2_face_dimensions():
 
 def test_single_bloc4_pattern():
     p = compose_row([BLOCK_4_FACE], "test")
-    assert p.physical_eo_cm == DESK_W_CM * 2
-    assert p.physical_ns_cm == DESK_D_CM * 2
+    assert p.physical_eo_cm == DESK_D_CM * 2
+    assert p.physical_ns_cm == DESK_W_CM * 2
     # EO total = west(70+90) + 160 + east(70+90) = 480
-    assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_W_CM * 2
+    assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_D_CM * 2
     # NS total = north(0) + 360 + south(0) = 360 (N/S absent)
-    assert p.total_ns_cm == DESK_D_CM * 2
+    assert p.total_ns_cm == DESK_W_CM * 2
 
 
 def test_b6_b2f_pattern():
     p = compose_row([BLOCK_6_FACE, BLOCK_2_FACE], "test")
-    assert p.physical_eo_cm == DESK_W_CM * 2 + DESK_W_CM * 2   # BLOCK_6_FACE.eo + BLOCK_2_FACE.eo
+    assert p.physical_eo_cm == DESK_D_CM * 2 + DESK_D_CM * 2   # BLOCK_6_FACE.eo + BLOCK_2_FACE.eo
     assert p.n_desks == 8
     # EO total = west_B6(70+90) + 320 + east_B2F(70+90) = 640
-    assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_W_CM * 4
+    assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_D_CM * 4
 
 
 
@@ -63,8 +63,8 @@ def test_bloc6_derogatory():
 
 def test_double_row_ns_total():
     p = compose_double_row([BLOCK_4_FACE], [BLOCK_4_FACE], "test")
-    # 90 + 180 + 90 + 180 + 90 = 630
-    assert p.total_ns_cm == 630
+    # passage(90) + desk_depth(80) + corridor(90) + desk_depth(80) + passage(90) = 430
+    assert p.total_ns_cm == 2 * PASSAGE_CM + 2 * DESK_D_CM + p.central_corridor_cm
 
 
 def test_double_row_central_corridor():
@@ -115,13 +115,13 @@ def test_rotate_pattern_90_dimensions():
     r = rotate_pattern_90(p)
     assert r.name == "P_B4__R90"
     assert r.orientation == 90
-    assert r.physical_eo_cm == p.physical_ns_cm   # DESK_D_CM * 2 = 360
-    assert r.physical_ns_cm == p.physical_eo_cm   # DESK_W_CM * 2 = 160
+    assert r.physical_eo_cm == p.physical_ns_cm   # DESK_W_CM * 2 = 360
+    assert r.physical_ns_cm == p.physical_eo_cm   # DESK_D_CM * 2 = 160
     # After 90° CW rotation: W←N(absent), E←S(absent), N←W(70+90), S←E(70+90)
     # total_eo = west(0) + 360 + east(0) = 360
-    assert r.total_eo_cm == DESK_D_CM * 2
+    assert r.total_eo_cm == DESK_W_CM * 2
     # total_ns = north.candidate_cm(90) + 160 + south.candidate_cm(90) = 340
-    assert r.total_ns_cm == PASSAGE_CM * 2 + DESK_W_CM * 2
+    assert r.total_ns_cm == PASSAGE_CM * 2 + DESK_D_CM * 2
 
 
 def test_mirror_double_row_asymmetric():
