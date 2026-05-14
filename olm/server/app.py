@@ -23,9 +23,7 @@ from olm.server.services.config_service import (
     BASE_DIR, PROJECT_ROOT,
     get_plans_dir, get_detection_overrides, get_default_threshold,
     get_exterior_rgb, get_corridor_rgb,
-    get_block_defs, invalidate_block_cache,
 )
-from olm.server.services.catalogue_service import load_catalogue
 
 logger = logging.getLogger(__name__)
 
@@ -1480,198 +1478,45 @@ def api_room_reanalyze_batch():
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
-MOCK_ROOM = {
-    "eo_cm": 300,
-    "ns_cm": 480,
-    "doors": [{"wall": "south", "position_cm": 0, "width_cm": 90, "swing": "right"}],
-    "windows": [{"wall": "north", "position_cm": 0, "width_cm": 300}],
-    "obstacles": [],
-}
-
-
-def _pattern_emprise_eo(pattern: dict) -> float:
-    """Compute the EO footprint (width) of the first row of a pattern."""
-    block_defs = get_block_defs("SITE")
-    rows = pattern.get("rows", [])
-    if not rows:
-        return 0.0
-    total = 0.0
-    for block in rows[0].get("blocks", []):
-        total += block.get("gap_cm", 0)
-        btype = block.get("type", "")
-        orient = block.get("orientation", 0)
-        bdef = block_defs.get(btype, {})
-        eo = bdef.get("eo_cm", 0)
-        ns = bdef.get("ns_cm", 0)
-        if orient in (90, 270):
-            total += ns
-        else:
-            total += eo
-    return total
-
-
-def _pattern_total_desks(pattern: dict) -> int:
-    """Count the total number of desks in a pattern."""
-    block_defs = get_block_defs("SITE")
-    total = 0
-    for row in pattern.get("rows", []):
-        for block in row.get("blocks", []):
-            bdef = block_defs.get(block.get("type", ""), {})
-            total += bdef.get("n_desks", 0)
-    return total
-
-
 @app.route("/api/mock-candidates", methods=["GET"])
 def api_mock_candidates():
     """Generate mock candidate solutions for the reference room."""
-    patterns = load_catalogue()
-    candidates = []
-    cid = 1
-    room_eo = MOCK_ROOM["eo_cm"]
-
-    for pattern in patterns:
-        emprise = _pattern_emprise_eo(pattern)
-        desks = _pattern_total_desks(pattern)
-        rows_copy = pattern.get("rows", [])
-        gaps_copy = pattern.get("row_gaps_cm", [])
-
-        anchors = [
-            {"anchor_x_cm": 0, "anchor_y_cm": 0},
-            {"anchor_x_cm": max(0.0, (room_eo - emprise) / 2.0), "anchor_y_cm": 50},
-            {"anchor_x_cm": max(0.0, room_eo - emprise), "anchor_y_cm": 0},
-        ]
-        for anchor in anchors:
-            candidates.append({
-                "id": cid,
-                "label": "Sol. " + str(cid),
-                "pattern_name": pattern["name"],
-                "anchor_x_cm": round(anchor["anchor_x_cm"], 1),
-                "anchor_y_cm": anchor["anchor_y_cm"],
-                "rotation": 0,
-                "desks": desks,
-                "score": None,
-                "sqm_per_desk": None,
-                "circulation_grade": None,
-                "rows": rows_copy,
-                "row_gaps_cm": gaps_copy,
-            })
-            cid += 1
-
-    return jsonify({"room": MOCK_ROOM, "candidates": candidates, "pipelineStep": 0})
+    from olm.server.services.matching_service import get_mock_candidates
+    return jsonify(get_mock_candidates())
 
 
 @app.route("/api/match", methods=["GET"])
 def api_match():
-    """Deprecated matching endpoint. Redirects to /api/floor-plan/match."""
-    return jsonify({"error": "Deprecated. Use POST /api/floor-plan/match instead."}), 410
+    """Deprecated matching endpoint."""
+    return jsonify({
+        "error": "Deprecated. Use POST /api/floor-plan/match instead.",
+    }), 410
 
 
 @app.route("/api/floor-plan/match", methods=["POST"])
 def api_floor_plan_match():
-    """Run catalogue matching on a set of rooms for the floor plan viewer.
-
-    JSON body: {"rooms": [...]}.
-    Contract (D-122 P5) : les pièces sont envoyées en repère CANONIQUE
-    (corridor_face = "south"). width_cm / depth_cm / faces d'openings
-    sont déjà normalisés ; le champ `corridor_face_abs` (optionnel) indique
-    le repère absolu d'origine pour traçabilité. Le matcher et le catalogue
-    étant définis en canonique, aucune rotation n'est appliquée ici.
-
-    Returns matching results per room with all scored candidates.
-    """
+    """Run catalogue matching on rooms (canonical coordinates)."""
+    from olm.server.services.matching_service import floor_plan_match
     try:
-        from olm.core.catalogue_matcher import (
-            match_room, compute_desk_positions,
-        )
-        from olm.server.services.serialization import (
-            room_from_json, room_to_json,
-        )
-
-        data = request.json
-        if not data or "rooms" not in data:
-            return jsonify({"error": "Required field: rooms"}), 400
-
-        catalogue = load_catalogue()
-        results = []
-
-        for r in data["rooms"]:
-            room = room_from_json(r)
-            match_result = match_room(catalogue, room)
-
-            room_result = room_to_json(room)
-            room_result["by_standard"] = {}
-            room_result["all_candidates"] = []
-
-            for score in match_result.all_scores:
-                # Compute desk positions for rendering
-                desks = compute_desk_positions(score.adapted_pattern)
-                removed_set = set()
-                for rd in score.adapted_pattern.get("_removed_desks", []):
-                    removed_set.add((rd["row"], rd["block"], rd["desk"]))
-
-                desk_list = [
-                    {
-                        "x_cm": d.x_cm, "y_cm": d.y_cm,
-                        "width_cm": d.width_cm, "depth_cm": d.depth_cm,
-                        "removed": (d.row_idx, d.block_idx, d.desk_idx)
-                                   in removed_set,
-                    }
-                    for d in desks
-                ]
-
-                candidate = {
-                    "pattern_name": score.pattern_name,
-                    "standard": score.standard,
-                    "n_desks": score.n_desks,
-                    "m2_per_desk": score.m2_per_desk,
-                    "circulation_grade": score.circulation_grade,
-                    "connectivity_pct": score.connectivity_pct,
-                    "min_passage_cm": score.min_passage_cm,
-                    "worst_detour": score.worst_detour,
-                    "largest_free_rect_m2": score.largest_free_rect_m2,
-                    "desks": desk_list,
-                    "pattern": score.adapted_pattern,
-                }
-                room_result["all_candidates"].append(candidate)
-
-            for std, best in match_result.by_standard.items():
-                if best:
-                    room_result["by_standard"][std] = best.pattern_name
-                else:
-                    room_result["by_standard"][std] = None
-
-            results.append(room_result)
-
-        return jsonify({"rooms": results})
-
+        return jsonify(floor_plan_match(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("floor-plan match failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/coverage", methods=["POST"])
 def api_coverage():
-    """Catalogue coverage analysis on a set of rooms.
-
-    JSON body: {"rooms": [...]} in load_rooms_json format.
-    Returns the coverage report with backlog.
-    """
+    """Catalogue coverage analysis on a set of rooms."""
+    from olm.server.services.matching_service import coverage_report
     try:
-        from olm.core.coverage_analysis import (
-            analyse_coverage, load_rooms_json, report_to_dict,
-        )
-        from olm.server.services.serialization import room_from_json
-
-        data = request.json
-        if not data or "rooms" not in data:
-            return jsonify({"error": "Required field: rooms"}), 400
-
-        rooms = [room_from_json(r) for r in data["rooms"]]
-        catalogue = load_catalogue()
-        report = analyse_coverage(rooms, catalogue)
-        return jsonify(report_to_dict(report))
-
+        return jsonify(coverage_report(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("coverage analysis failed")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
