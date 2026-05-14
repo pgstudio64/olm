@@ -29,6 +29,9 @@ class DetectionConfigCm:
 
     # --- Classification / sizing des segments de mur ---
     wall_depth_cm: float = 24.0              # profondeur de probe dans mur
+    wall_thickness_max_cm: float = 15.0      # profondeur max de mesure
+                                             # d'épaisseur de mur (contiguous
+                                             # black pixels)
     min_opening_width_cm: float = 24.0       # largeur min pour qu'un "trou"
                                              # soit une opening
     min_opening_depth_cm: float = 60.0        # profondeur min derrière le mur ;
@@ -41,10 +44,16 @@ class DetectionConfigCm:
     max_pillar_size_cm: float = 50.0       # côté max d'un poteau (carré) ;
                                              # au-delà c'est un mur, pas un poteau
     max_absorb_cm: float = 30.0              # largeur max d'une "rupture"
-                                             # parasite absorbée dans un mur
+                                             # parasite absorbée dans un mur ;
+                                             # plus grand qu'une fente d'aération,
+                                             # plus petit qu'une porte (55 cm min)
+    pillar_group_gap_cm: float = 15.0        # gap max entre hits contigus d'un
+                                             # groupe de poteau (~3× comb_step)
 
     # --- Snap / tolérance géométrique ---
-    snap_search_cm: float = 18.0             # recherche ±N cm autour d'un bord
+    snap_search_cm: float = 18.0             # recherche ±N cm autour d'un bord ;
+                                             # compense imprécision seed/ray vs
+                                             # bord réel (~double épaisseur mur)
     mode_tolerance_cm: float = 15.0          # tolérance autour du mode de mur
     morph_dilate_cm: float = 3.0             # dilatation morphologique
 
@@ -56,13 +65,16 @@ class DetectionConfigCm:
 
     # --- Détection de portes ---
     door_probe_depth_cm: float = 12.0        # offset probe pour arc
-    door_group_gap_cm: float = 75.0          # gap max entre pixels d'un arc
-    door_wall_margin_cm: float = 9.0         # marge anti-mur perp
+    door_group_gap_cm: float = 75.0          # gap max entre pixels d'un arc ;
+                                             # ~0.83 × default_door_width_cm
+    door_wall_margin_cm: float = 9.0         # marge anti-mur perpendiculaire ;
+                                             # ~1/10 porte standard (90 cm)
     default_door_width_cm: float = 90.0
     # Largeur minimale d'arc de porte détectable (en cm). Sous ce seuil,
     # `_detect_doors_on_face` rejette le candidat. Les hits étant espacés
     # de `comb_step_cm`, le nombre minimal de hits = round(value /
     # comb_step_cm). Ex. : 45 cm / 5 cm = 9 hits.
+    # Valeur = 0.5 × default_door_width_cm.
     min_door_arc_width_cm: float = 45.0
     # Largeur minimale d'une vraie porte. Une porte sous ce seuil est
     # filtrée (côté OCR : reclassée wall ; côté preprocessed : rejetée
@@ -79,11 +91,24 @@ class DetectionConfigCm:
     # (artefact ray-cast traversant vers la pièce voisine).
     max_opening_face_ratio: float = 0.7
 
+    # --- Heuristiques de discrimination ---
+    # Seuil de monotonie pour distinguer un arc de porte (déplacement
+    # progressif, > ratio de diffs même signe) d'un poteau (déplacement
+    # constant, diffs proches de zéro ou de signe mixte).
+    arc_monotonicity_ratio: float = 0.7
+
     # --- Couleur faces (corridor / extérieur) ---
     corridor_width_cm: float = 60.0     # largeur min supposée d'un couloir ;
                                          # l'échantillonnage cible le milieu
     exterior_width_cm: float = 100.0    # largeur min supposée de l'extérieur ;
                                          # idem, échantillonnage au milieu
+
+    # --- OCR (mode scan) ---
+    ocr_min_surface_m2: float = 0.5      # surface min plausible (filtre OCR)
+    ocr_max_surface_m2: float = 2000.0   # surface max plausible (halls, open-
+                                          # spaces) ; au-delà = erreur OCR
+    text_search_dist_cm: float = 250.0   # distance max recherche texte voisin
+                                          # (label, surface) autour d'un seed
 
     # --- Divers ---
     cartouche_margin_cm: float = 3.0
@@ -99,6 +124,7 @@ class DetectionConfigCm:
             binarize_threshold=self.binarize_threshold,
             ortho_angle_tolerance_deg=self.ortho_angle_tolerance_deg,
             wall_depth_px=_px(self.wall_depth_cm),
+            wall_thickness_max_px=_px(self.wall_thickness_max_cm),
             min_opening_width_px=_px(self.min_opening_width_cm),
             min_opening_depth_px=_px(self.min_opening_depth_cm),
             min_window_width_px=_px(self.min_window_width_cm),
@@ -106,6 +132,7 @@ class DetectionConfigCm:
             min_pillar_size_px=_px(self.min_pillar_size_cm),
             max_pillar_size_px=_px(self.max_pillar_size_cm),
             max_absorb_px=_px(self.max_absorb_cm),
+            pillar_group_gap_px=_px(self.pillar_group_gap_cm),
             snap_search_px=_px(self.snap_search_cm),
             mode_tolerance_px=_px(self.mode_tolerance_cm),
             morph_dilate_px=_px(self.morph_dilate_cm),
@@ -123,8 +150,18 @@ class DetectionConfigCm:
             ))),
             min_door_width_px=_px(self.min_door_width_cm),
             max_door_width_px=_px(self.max_door_width_cm),
+            max_opening_face_ratio=self.max_opening_face_ratio,
+            arc_monotonicity_ratio=self.arc_monotonicity_ratio,
+            # Nombre min de hits pour qualifier un groupe de poteau.
+            # Dérivé : min_pillar_size_cm / comb_step_cm.
+            min_pillar_hits=max(1, int(round(
+                self.min_pillar_size_cm / self.comb_step_cm
+            ))),
             corridor_width_px=_px(self.corridor_width_cm),
             exterior_width_px=_px(self.exterior_width_cm),
+            ocr_min_surface_m2=self.ocr_min_surface_m2,
+            ocr_max_surface_m2=self.ocr_max_surface_m2,
+            text_search_dist_px=_px(self.text_search_dist_cm),
             cartouche_margin_px=_px(self.cartouche_margin_cm),
             text_skip_margin_px=_px(self.text_skip_margin_cm),
         )
@@ -150,6 +187,7 @@ class DetectionConfigPx:
     ortho_angle_tolerance_deg: float
 
     wall_depth_px: int
+    wall_thickness_max_px: int
     min_opening_width_px: int
     min_opening_depth_px: int
     min_window_width_px: int
@@ -157,6 +195,7 @@ class DetectionConfigPx:
     min_pillar_size_px: int
     max_pillar_size_px: int
     max_absorb_px: int
+    pillar_group_gap_px: int
 
     snap_search_px: int
     mode_tolerance_px: int
@@ -175,8 +214,16 @@ class DetectionConfigPx:
     min_door_width_px: int
     max_door_width_px: int
 
+    max_opening_face_ratio: float
+    arc_monotonicity_ratio: float
+    min_pillar_hits: int
+
     corridor_width_px: int
     exterior_width_px: int
+
+    ocr_min_surface_m2: float
+    ocr_max_surface_m2: float
+    text_search_dist_px: int
 
     cartouche_margin_px: int
     text_skip_margin_px: int
