@@ -70,6 +70,16 @@ MIN_CALIB_DIM_PX = 20
 # truncated bbox and should not be used for calibration.
 CALIB_EDGE_MARGIN_PX = 5
 
+# Seuil de détection d'outlier pour la calibration scale. Une pièce
+# dont le cm_per_px_estimate s'écarte de plus de CALIB_OUTLIER_THRESHOLD
+# de la médiane est loggée en warning — soit la bbox a échoué (mur
+# perdu), soit le surface_m² OCR est faux. Valeur empirique, ajustable.
+CALIB_OUTLIER_THRESHOLD = 0.20
+
+# Scale fallback utilisé quand aucun drawing_scale n'est fourni.
+# Phase 1 (discovery) du pipeline 2-pass utilise cette valeur.
+SCALE_FALLBACK = 0.5
+
 
 def _ensure_config_applied() -> None:
     """Verifie que _apply_detection_config a ete appelee.
@@ -2018,62 +2028,93 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
 # Exclusion zones are entered manually in the Review phase.
 
 
-def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
-                      detection_overrides=None):
-    """Run the full extraction pipeline on a floor plan image.
+def _calibrate_scale(
+    rooms: list[dict],
+    img_w: int,
+    img_h: int,
+) -> float | None:
+    """Calcule le scale cm/px par médiane des surfaces OCR vs bboxes.
+
+    Pour chaque pièce éligible (surface OCR >= MIN_CALIB_SURFACE_M2,
+    bbox assez grande, pas en bord d'image), on calcule :
+        cm_per_px = sqrt(surface_cm² / bbox_px²)
+    et on prend la médiane. Les outliers (> CALIB_OUTLIER_THRESHOLD
+    d'écart à la médiane) sont loggés en warning.
 
     Args:
-        image_path: path to the raster floor plan image
-        scale_cm_per_px: cm per pixel (estimated if not provided)
-        threshold: binarization threshold (default BINARIZE_THRESHOLD)
-        detection_overrides: dict of DetectionConfigCm overrides from user
-            settings (ex. ``{"cartouche_margin_cm": 5.0}``)
+        rooms: liste de room dicts avec surface_m2, bbox_px,
+            width_px, height_px.
+        img_w: largeur de l'image en pixels.
+        img_h: hauteur de l'image en pixels.
 
     Returns:
-        dict with:
-          'rooms': list of room dicts (name, bbox_px, width_cm, depth_cm,
-                   windows, openings, doors, exterior_faces, corridor_face)
-          'image_size': (width, height) in pixels
-          'scale_cm_per_px': used scale
-          'binary': binarized image as numpy array (for visualization)
+        Scale médian en cm/px, ou None si aucune pièce éligible.
+    """
+    scale_samples = []
+    for r in rooms:
+        x0, y0, x1, y1 = r['bbox_px']
+        at_edge = (x0 < CALIB_EDGE_MARGIN_PX
+                   or y0 < CALIB_EDGE_MARGIN_PX
+                   or x1 > img_w - CALIB_EDGE_MARGIN_PX
+                   or y1 > img_h - CALIB_EDGE_MARGIN_PX)
+        if (r['surface_m2'] >= MIN_CALIB_SURFACE_M2
+                and r['width_px'] > MIN_CALIB_DIM_PX
+                and r['height_px'] > MIN_CALIB_DIM_PX
+                and not at_edge):
+            area_cm2 = r['surface_m2'] * 10000
+            area_px2 = r['width_px'] * r['height_px']
+            scale_samples.append({
+                'name': r['name'],
+                'value': (area_cm2 / area_px2) ** 0.5,
+            })
+    if not scale_samples:
+        return None
+
+    values = sorted(s['value'] for s in scale_samples)
+    median = values[len(values) // 2]
+
+    # Log outliers
+    for s in scale_samples:
+        deviation = abs(s['value'] - median) / median
+        if deviation > CALIB_OUTLIER_THRESHOLD:
+            logger.warning(
+                "Scale calibration outlier: room '%s' "
+                "cm_per_px=%.4f (median=%.4f, deviation=%.1f%%)",
+                s['name'], s['value'], median, deviation * 100,
+            )
+
+    logger.info(
+        "Scale calibrated from %d room(s): %.4f cm/px",
+        len(scale_samples), median,
+    )
+    return median
+
+
+def _extract_rooms_one_pass(
+    binary: np.ndarray,
+    seeds: dict,
+    all_seed_positions: list[tuple[int, int]],
+    scale: float,
+    detection_overrides: dict | None,
+) -> list[dict]:
+    """Exécute un ray-cast complet sur toutes les seeds.
+
+    Produit les room dicts bruts (sans width_cm/depth_cm).
+
+    Args:
+        binary: image binarisée (True = mur).
+        seeds: dict {name: (cx, cy, surface_m2, ...)}.
+        all_seed_positions: liste de (cx, cy) de toutes les seeds.
+        scale: scale cm/px utilisé pour les seuils de détection.
+        detection_overrides: overrides detection_config (ou None).
+
+    Returns:
+        Liste de room dicts (sans width_cm/depth_cm).
     """
     from olm.ingestion.wall_classify import _classify_wall_direct
+    from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
 
-    # Scale fourni par le caller (drawing_scale ou scale_cm_per_px) ou
-    # auto-détecté plus bas. À l'étape de classification (avant l'auto-
-    # détection), on a besoin d'un scale réaliste pour que les seuils en
-    # cm de DEFAULT_DETECTION_CONFIG_CM se convertissent en px corrects.
-    # Sans scale fourni → fallback 0.5 (= comportement historique).
-    classify_scale = scale_cm_per_px if scale_cm_per_px is not None else 0.5
-    logger.info(f"Ingestion: loading {image_path}")
-    img_gray = load_image(image_path)
-    logger.debug(f"  image size: {img_gray.width} × {img_gray.height} px")
-
-    # Aligne les constantes pixels du module sur le scale réel AVANT
-    # find_seeds_by_ocr — sans ça, CARTOUCHE_MARGIN_PX reste à sa
-    # valeur d'import (1 px), ce qui produit des bboxes cartouche trop
-    # serrées et laisse du texte dans l'image binarisée.
-    _apply_detection_config(classify_scale, detection_overrides)
-    thr = threshold or BINARIZE_THRESHOLD
-
-    seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
-
-    if not seeds:
-        logger.error(f"ERROR: No seeds found! Check the room_code setting and cartouche text in the floor plan.")
-        return {
-            'rooms': [],
-            'image_size': (img_gray.size[0], img_gray.size[1]),
-            'scale_cm_per_px': scale_cm_per_px or 0.5,
-            'threshold': thr,
-        }
-
-    logger.info(f"Ingestion: processing {len(seeds)} room(s)")
-    gray_arr = np.array(img_gray)
-    cleaned = erase_cartouches(gray_arr, cart_bboxes)
-    binary = cleaned < thr
-    logger.debug(f"  binarization: {np.sum(binary)} wall pixels (threshold={thr})")
-
-    all_seed_positions = [(v[0], v[1]) for v in seeds.values()]
+    _cfg_px = DEFAULT_DETECTION_CONFIG_CM.to_px(scale)
 
     rooms = []
     for name, seed_data in sorted(seeds.items()):
@@ -2081,42 +2122,38 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
         surface_m2 = seed_data[2] if len(seed_data) > 2 else 0.0
         other = [(ox, oy) for ox, oy in all_seed_positions
                  if (ox, oy) != (cx, cy)]
-        # door_width_px doit être en px au scale courant : la valeur par
-        # défaut de detect_room (23 px) suppose scale=0.5 et est
-        # complètement fausse à un autre scale (ex. plan big 0.95 cm/px →
-        # 23 px = 21 cm, cherche des arcs trop courts → micro-portes).
-        from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
-        _cfg_px = DEFAULT_DETECTION_CONFIG_CM.to_px(classify_scale)
+
         cr = detect_room(binary, cx, cy, COMB_STEP_PX,
                          door_width_px=_cfg_px.default_door_width_px,
                          other_seeds=other,
-                         scale_cm_per_px=classify_scale)
+                         scale_cm_per_px=scale)
 
-        # Filtre largeur min/max porte (élimine micro-portes et faux positifs).
+        # Filtre largeur min/max porte.
         _min_door_w_px = _cfg_px.min_door_width_px
         _max_door_w_px = _cfg_px.max_door_width_px
         doors = [d for d in cr.doors
-                 if _min_door_w_px <= d.get('width_px', 0) <= _max_door_w_px]
+                 if _min_door_w_px <= d.get('width_px', 0)
+                 <= _max_door_w_px]
 
         x0, y0, x1, y1 = cr.bbox
         width_px = x1 - x0
         height_px = y1 - y0
 
-        # Debug: save intermediate image
-        save_debug_image(binary, cr.hits, cr.bbox, name, f"comb_{width_px}x{height_px}")
+        save_debug_image(binary, cr.hits, cr.bbox, name,
+                         f"comb_{width_px}x{height_px}")
 
         # Classify walls
         wall_segs = {}
         for face in ('north', 'south', 'east', 'west'):
-            segs, _ = _classify_wall_direct(binary, binary, cr.bbox, face, 5,
-                                            scale_cm_per_px=classify_scale)
+            segs, _ = _classify_wall_direct(
+                binary, binary, cr.bbox, face, 5,
+                scale_cm_per_px=scale)
             wall_segs[face] = segs
 
-        # Extract windows, openings, doors from wall segments
+        # Extract windows, openings from wall segments
         windows = []
         openings = []
         for face, segs in wall_segs.items():
-            face_len = width_px if face in ('north', 'south') else height_px
             for seg in segs:
                 if seg.kind == 'window':
                     windows.append({
@@ -2131,14 +2168,9 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
                         'width_px': seg.end_px - seg.start_px,
                     })
 
-        # Derive exterior faces (faces with windows)
         exterior_faces = list(set(w['face'] for w in windows))
-
-        # Corridor face (face with a door)
         corridor_face = doors[0]['face'] if doors else ''
 
-        # Scale
-        s = scale_cm_per_px or 0.5
         room = {
             'name': name,
             'seed_px': (cx, cy),
@@ -2151,64 +2183,159 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
             'doors': doors,
             'exterior_faces': exterior_faces,
             'corridor_face': corridor_face,
-            'hits': [[int(h[0]), int(h[1]), face[0]]
-                     for face, fhits in cr.dir_hits.items()
+            'hits': [[int(h[0]), int(h[1]), f[0]]
+                     for f, fhits in cr.dir_hits.items()
                      for h in fhits],
-            'coarse_hits': [[int(h[0]), int(h[1]), face[0]]
-                            for face, fhits in cr.coarse_hits.items()
+            'coarse_hits': [[int(h[0]), int(h[1]), f[0]]
+                            for f, fhits in cr.coarse_hits.items()
                             for h in fhits],
         }
-        logger.debug(f"  room '{name}': bbox=({x0},{y0},{x1},{y1}) {width_px}×{height_px}px, "
-                     f"win={len(windows)} open={len(openings)} door={len(doors)}")
+        logger.debug(
+            "  room '%s': bbox=(%d,%d,%d,%d) %d×%dpx, "
+            "win=%d open=%d door=%d",
+            name, x0, y0, x1, y1, width_px, height_px,
+            len(windows), len(openings), len(doors),
+        )
         rooms.append(room)
 
-    # Auto-calibrate scale from OCR-annotated surfaces (D-155).
-    # Always run regardless of scale_cm_per_px: the annotated surfaces on the
-    # plan are ground truth, while the provided scale may assume a wrong DPI.
+    return rooms
+
+
+def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
+                      detection_overrides=None):
+    """Run the full extraction pipeline on a floor plan image.
+
+    Pipeline 2-pass (D-191) quand scale_cm_per_px n'est pas fourni :
+      Phase 1 — Discovery : ray-cast avec SCALE_FALLBACK (0.5 cm/px)
+      Phase 2 — Calibration : médiane sqrt(surface_cm²/bbox_px²)
+      Phase 3 — Re-detection : ray-cast avec scale corrigé
+
+    Si scale_cm_per_px est fourni : 1-pass direct.
+
+    Args:
+        image_path: path to the raster floor plan image
+        scale_cm_per_px: cm per pixel (None → 2-pass auto-calibration)
+        threshold: binarization threshold (default BINARIZE_THRESHOLD)
+        detection_overrides: dict of DetectionConfigCm overrides from user
+            settings (ex. ``{"cartouche_margin_cm": 5.0}``)
+
+    Returns:
+        dict with:
+          'rooms': list of room dicts (name, bbox_px, width_cm, depth_cm,
+                   windows, openings, doors, exterior_faces, corridor_face)
+          'image_size': (width, height) in pixels
+          'scale_cm_per_px': used scale
+          'threshold': binarization threshold used
+          'cart_bboxes_px': cartouche bboxes in absolute pixels
+    """
+    logger.info("Ingestion: loading %s", image_path)
+    img_gray = load_image(image_path)
     img_w, img_h = img_gray.size
-    scale_samples = []
-    for r in rooms:
-        x0, y0, x1, y1 = r['bbox_px']
-        at_edge = (x0 < CALIB_EDGE_MARGIN_PX or y0 < CALIB_EDGE_MARGIN_PX
-                   or x1 > img_w - CALIB_EDGE_MARGIN_PX
-                   or y1 > img_h - CALIB_EDGE_MARGIN_PX)
-        if (r['surface_m2'] >= MIN_CALIB_SURFACE_M2
-                and r['width_px'] > MIN_CALIB_DIM_PX
-                and r['height_px'] > MIN_CALIB_DIM_PX
-                and not at_edge):
-            area_cm2 = r['surface_m2'] * 10000
-            area_px2 = r['width_px'] * r['height_px']
-            scale_samples.append((area_cm2 / area_px2) ** 0.5)
-    if scale_samples:
-        scale_samples.sort()
-        s = scale_samples[len(scale_samples) // 2]  # median
-        logger.info(
-            "Scale auto-calibrated from %d room surface(s): %.4f cm/px"
-            " (hint was %.4f)",
-            len(scale_samples), s, scale_cm_per_px or 0.0,
-        )
+    logger.debug("  image size: %d × %d px", img_w, img_h)
+
+    # -- OCR : seeds + cartouches (indépendant du scale) --
+    # On configure d'abord les constantes px pour que
+    # CARTOUCHE_MARGIN_PX soit calibré avant find_seeds_by_ocr.
+    initial_scale = (scale_cm_per_px if scale_cm_per_px is not None
+                     else SCALE_FALLBACK)
+    _apply_detection_config(initial_scale, detection_overrides)
+    thr = threshold or BINARIZE_THRESHOLD
+
+    seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
+
+    if not seeds:
+        logger.error(
+            "No seeds found! Check the room_code setting and "
+            "cartouche text in the floor plan.")
+        return {
+            'rooms': [],
+            'image_size': (img_w, img_h),
+            'scale_cm_per_px': scale_cm_per_px or SCALE_FALLBACK,
+            'threshold': thr,
+        }
+
+    logger.info("Ingestion: processing %d room(s)", len(seeds))
+    gray_arr = np.array(img_gray)
+    all_seed_positions = [(v[0], v[1]) for v in seeds.values()]
+
+    if scale_cm_per_px is not None:
+        # ── 1-PASS : scale fourni ────────────────────────────────
+        logger.info("1-pass mode: scale=%.4f cm/px (provided)",
+                    scale_cm_per_px)
+        # _apply_detection_config déjà appelé avec initial_scale
+        cleaned = erase_cartouches(gray_arr, cart_bboxes)
+        binary = cleaned < thr
+        rooms = _extract_rooms_one_pass(
+            binary, seeds, all_seed_positions,
+            scale_cm_per_px, detection_overrides)
+
+        # Affinage par auto-calibration D-155 (surfaces OCR)
+        s_calib = _calibrate_scale(rooms, img_w, img_h)
+        s = s_calib if s_calib is not None else scale_cm_per_px
     else:
-        s = scale_cm_per_px if scale_cm_per_px is not None else 0.5
-        logger.info("No rooms eligible for scale calibration — using %.4f cm/px",
-                     s)
+        # ── 2-PASS : auto-calibration (D-191) ───────────────────
+
+        # Phase 1 — Discovery (scale fallback)
+        logger.info(
+            "2-pass mode Phase 1: discovery with scale=%.4f cm/px",
+            SCALE_FALLBACK)
+        _apply_detection_config(SCALE_FALLBACK, detection_overrides)
+        thr = threshold or BINARIZE_THRESHOLD
+        cleaned_p1 = erase_cartouches(gray_arr, cart_bboxes)
+        binary_p1 = cleaned_p1 < thr
+        rooms_discovery = _extract_rooms_one_pass(
+            binary_p1, seeds, all_seed_positions,
+            SCALE_FALLBACK, detection_overrides)
+
+        # Phase 2 — Calibration
+        s_calib = _calibrate_scale(rooms_discovery, img_w, img_h)
+        if s_calib is None:
+            logger.warning(
+                "2-pass: no rooms eligible for calibration, "
+                "falling back to %.4f cm/px", SCALE_FALLBACK)
+            s = SCALE_FALLBACK
+            rooms = rooms_discovery
+        else:
+            scale_corrige = s_calib
+            logger.info(
+                "2-pass Phase 2: calibrated scale=%.4f cm/px "
+                "(fallback was %.4f)",
+                scale_corrige, SCALE_FALLBACK)
+
+            # Phase 3 — Re-detection avec scale corrigé
+            logger.info(
+                "2-pass Phase 3: re-detection with "
+                "scale=%.4f cm/px", scale_corrige)
+            _apply_detection_config(
+                scale_corrige, detection_overrides)
+            thr = threshold or BINARIZE_THRESHOLD
+            cleaned_p3 = erase_cartouches(gray_arr, cart_bboxes)
+            binary_p3 = cleaned_p3 < thr
+            rooms = _extract_rooms_one_pass(
+                binary_p3, seeds, all_seed_positions,
+                scale_corrige, detection_overrides)
+
+            # Affinage final D-155
+            s_final = _calibrate_scale(rooms, img_w, img_h)
+            s = s_final if s_final is not None else scale_corrige
 
     # Apply scale to all rooms
     for r in rooms:
         r['width_cm'] = round(r['width_px'] * s)
         r['depth_cm'] = round(r['height_px'] * s)
 
-    logger.info(f"Ingestion: SUCCESS — {len(rooms)} room(s), scale={s:.3f} cm/px")
+    logger.info(
+        "Ingestion: SUCCESS — %d room(s), scale=%.3f cm/px",
+        len(rooms), s)
     for r in rooms:
-        logger.debug(f"  {r['name']}: {r['width_cm']}×{r['depth_cm']}cm")
+        logger.debug("  %s: %d×%dcm", r['name'],
+                     r['width_cm'], r['depth_cm'])
 
     return {
         'rooms': rooms,
-        'image_size': (img_gray.size[0], img_gray.size[1]),
+        'image_size': (img_w, img_h),
         'scale_cm_per_px': round(s, 3),
         'threshold': thr,
-        # Cart_bboxes en absolu pixels image — exposés au front pour
-        # debug overlay (D-148 + viz). Ils servent aussi au erase au scan
-        # initial. Liste de (x0, y0, x1, y1) déjà avec CARTOUCHE_MARGIN_PX.
         'cart_bboxes_px': [list(map(int, cb)) for cb in cart_bboxes],
     }
 
