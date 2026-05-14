@@ -1796,6 +1796,183 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
     return wall, all_doors
 
 
+def _scan_wall_gaps(binary, rect: tuple, door_width_px: int,
+                    ) -> dict[str, list[tuple[int, int, float]]]:
+    """Scan walls for gaps (low fill ratio segments).
+
+    Divides each wall into overlapping windows of size door_width_px and
+    returns segments where the fill ratio is below 0.5.
+
+    Args:
+        binary: cleaned binary image (True = wall pixel).
+        rect: (x0, y0, x1, y1) room bbox.
+        door_width_px: scanning window size.
+
+    Returns:
+        Dict {face: [(along_start, along_end, fill_ratio), ...]}
+        where along_start/end are in absolute pixel coords along the face.
+    """
+    x0, y0, x1, y1 = rect
+    gaps: dict[str, list[tuple[int, int, float]]] = {
+        "north": [], "south": [], "east": [], "west": [],
+    }
+    h, w = binary.shape[:2]
+    half = max(1, door_width_px // 2)
+
+    def _fill(wall_coord: int, along_start: int, along_end: int,
+              horizontal: bool) -> float:
+        """Fill ratio of a wall segment."""
+        count = 0
+        total = 0
+        if horizontal:
+            if not (0 <= wall_coord < h):
+                return 1.0
+            for x in range(max(0, along_start), min(w, along_end + 1)):
+                total += 1
+                if binary[wall_coord, x]:
+                    count += 1
+        else:
+            if not (0 <= wall_coord < w):
+                return 1.0
+            for y in range(max(0, along_start), min(h, along_end + 1)):
+                total += 1
+                if binary[y, wall_coord]:
+                    count += 1
+        return count / max(1, total)
+
+    # Scan each wall with a sliding window of door_width_px.
+    for face, wall_coord, along_lo, along_hi, horiz in [
+        ("north", y0, x0, x1, True),
+        ("south", y1, x0, x1, True),
+        ("west",  x0, y0, y1, False),
+        ("east",  x1, y0, y1, False),
+    ]:
+        span = along_hi - along_lo
+        if span <= 0:
+            continue
+        step = max(1, half)
+        pos = along_lo
+        while pos <= along_hi - half:
+            seg_end = min(pos + door_width_px, along_hi)
+            fr = _fill(wall_coord, pos, seg_end, horiz)
+            if fr < 0.5:
+                gaps[face].append((pos, seg_end, fr))
+            pos += step
+
+    return gaps
+
+
+def _reassign_corner_doors(doors: list[dict], rect: tuple,
+                           wall_gaps: dict[str, list],
+                           door_width_px: int) -> list[dict]:
+    """Reassign doors near corners when the adjacent face has a wall gap.
+
+    When a door is detected at a corner on face A but the actual wall
+    opening is on adjacent face B, this function moves the door to face B.
+    Uses pre-scanned wall gaps to determine which wall has the real opening.
+
+    Args:
+        doors: list of door info dicts.
+        rect: (x0, y0, x1, y1) expanded bbox.
+        wall_gaps: output of _scan_wall_gaps.
+        door_width_px: proximity threshold.
+
+    Returns:
+        Updated list of doors (modified in place).
+    """
+    if not doors:
+        return doors
+
+    x0, y0, x1, y1 = rect
+
+    # Corner definitions: (h_face, v_face, corner_x, corner_y)
+    _CORNERS = [
+        ("north", "west", x0, y0),
+        ("north", "east", x1, y0),
+        ("south", "west", x0, y1),
+        ("south", "east", x1, y1),
+    ]
+
+    def _near_corner(door, cx_, cy_):
+        jmin = min(door["jamb_hinge_px"], door["jamb_free_px"])
+        jmax = max(door["jamb_hinge_px"], door["jamb_free_px"])
+        if door["face"] in ("north", "south"):
+            return abs(jmin - cx_) <= door_width_px \
+                or abs(jmax - cx_) <= door_width_px
+        else:
+            return abs(jmin - cy_) <= door_width_px \
+                or abs(jmax - cy_) <= door_width_px
+
+    def _has_gap_near(face, corner_along, door_w):
+        """Check if face has a wall gap near corner_along."""
+        for g_start, g_end, _fr in wall_gaps.get(face, []):
+            if abs(g_start - corner_along) <= door_w \
+               or abs(g_end - corner_along) <= door_w \
+               or (g_start <= corner_along <= g_end):
+                return True
+        return False
+
+    for door in doors:
+        d_face = door["face"]
+        for h_face, v_face, cx_, cy_ in _CORNERS:
+            if d_face not in (h_face, v_face):
+                continue
+            if not _near_corner(door, cx_, cy_):
+                continue
+
+            # Door is near this corner.  Determine the adjacent face.
+            adj_face = v_face if d_face == h_face else h_face
+            # Corner coordinate on the adjacent face's along-axis.
+            adj_corner = cy_ if adj_face in ("east", "west") else cx_
+
+            # Check: does the adjacent face have a gap at this corner?
+            adj_has_gap = _has_gap_near(adj_face, adj_corner, door_width_px)
+            if not adj_has_gap:
+                continue
+
+            # Check: does the current face also have a gap?
+            cur_corner = cx_ if d_face in ("north", "south") else cy_
+            cur_has_gap = _has_gap_near(d_face, cur_corner, door_width_px)
+            if cur_has_gap:
+                # Both faces have gaps — keep original (dedup handles this).
+                continue
+
+            # Adjacent face has gap, current doesn't → reassign.
+            logger.debug(
+                "corner_reassign: door on %s reassigned to %s "
+                "(gap on %s, no gap on %s)",
+                d_face, adj_face, adj_face, d_face)
+
+            # Recompute offset for the new face.
+            jmin = min(door["jamb_hinge_px"], door["jamb_free_px"])
+            jmax = max(door["jamb_hinge_px"], door["jamb_free_px"])
+            new_origin = (x0 if adj_face in ("north", "south")
+                          else y0)
+            # The door position on the new face: project the corner
+            # coordinate.  The door sits at the corner, so its along-axis
+            # position on the new face is near the corner end.
+            if adj_face in ("north", "south"):
+                # New along-axis = x.  Door near cx_.
+                new_jh = cx_
+                new_jf = cx_ - door["width_px"] if cx_ == x1 \
+                    else cx_ + door["width_px"]
+            else:
+                # New along-axis = y.  Door near cy_.
+                new_jh = cy_
+                new_jf = cy_ - door["width_px"] if cy_ == y1 \
+                    else cy_ + door["width_px"]
+
+            new_jmin = min(new_jh, new_jf)
+            new_jmax = max(new_jh, new_jf)
+            door["face"] = adj_face
+            door["jamb_hinge_px"] = new_jmin
+            door["jamb_free_px"] = new_jmax
+            door["offset_px"] = new_jmin - new_origin
+            break  # One reassignment per door
+
+    return doors
+
+
 def _dedup_corner_doors(doors: list[dict], rect: tuple,
                         door_width_px: int) -> list[dict]:
     """Remove duplicate doors detected at the same corner on adjacent faces.
@@ -1941,6 +2118,12 @@ def expand_door_arcs(binary, rect, dir_hits, cx, cy,
             elif face == "west": x0 = new_edge
             doors.extend(face_doors)
 
+    # Pre-scan wall gaps on all 4 faces, then use them to:
+    # 1. Reassign doors at corners to the face with the actual wall opening.
+    # 2. Dedup doors detected on both adjacent faces at the same corner.
+    wall_gaps = _scan_wall_gaps(binary, orig_rect, door_width_px)
+    doors = _reassign_corner_doors(
+        doors, (x0, y0, x1, y1), wall_gaps, door_width_px)
     doors = _dedup_corner_doors(doors, (x0, y0, x1, y1), door_width_px)
     return (x0, y0, x1, y1), doors
 
