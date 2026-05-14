@@ -700,13 +700,18 @@ async function init() {
     }
   });
 
-  // Export button — download current state as JSON file
+  // Export dropdown toggle
   document.getElementById("btnExportPlan").addEventListener("click", function() {
-    if (typeof window.devExportV3Json === "function") {
-      window.devExportV3Json();
-    } else {
-      alertModal("Export not available — load a floor plan first.");
-    }
+    var menu = document.getElementById("exportMenu");
+    menu.style.display = menu.style.display === "none" ? "" : "none";
+  });
+  document.getElementById("btnExportPng").addEventListener("click", function() {
+    document.getElementById("exportMenu").style.display = "none";
+    if (typeof window.exportPlan === "function") window.exportPlan("png");
+  });
+  document.getElementById("btnExportPdf").addEventListener("click", function() {
+    document.getElementById("exportMenu").style.display = "none";
+    if (typeof window.exportPlan === "function") window.exportPlan("pdf");
   });
 
   // Close button
@@ -718,7 +723,7 @@ async function init() {
     if (hdr) { hdr.textContent = "Select a floor plan..."; hdr.style.fontStyle = "italic"; hdr.style.fontWeight = "normal"; hdr.style.color = "var(--text-dim)"; }
     // Hide Save/Export/Close buttons + toolbar
     document.getElementById("btnSavePlan").style.display = "none";
-    document.getElementById("btnExportPlan").style.display = "none";
+    document.getElementById("exportWrapper").style.display = "none";
     document.getElementById("btnClosePlan").style.display = "none";
     var ingTbClose = document.getElementById("ingToolbar");
     if (ingTbClose) ingTbClose.style.display = "none";
@@ -773,11 +778,15 @@ async function init() {
     var menu = document.getElementById("eraseMenu");
     menu.style.display = menu.style.display === "none" ? "" : "none";
   });
-  // Close menu on click outside
+  // Close dropdown menus on click outside
   document.addEventListener("click", function(e) {
     var wrapper = document.getElementById("eraseWrapper");
     if (wrapper && !wrapper.contains(e.target)) {
       document.getElementById("eraseMenu").style.display = "none";
+    }
+    var expWrapper = document.getElementById("exportWrapper");
+    if (expWrapper && !expWrapper.contains(e.target)) {
+      document.getElementById("exportMenu").style.display = "none";
     }
   });
 

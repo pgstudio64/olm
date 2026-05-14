@@ -345,6 +345,109 @@
   }
 
   // ==========================================================================
+  // Destination 3 : Export plan (D-196)
+  // POST /api/floor-plan/export/<fmt> — backend writes image + CSV to disk.
+  // ==========================================================================
+
+  /**
+   * Enrich candidate.desks with chair_side by walking candidate.pattern.
+   * Desk order matches compute_desk_positions: rows → blocks → desks.
+   */
+  function _enrichDesksWithChairSide(candidate) {
+    if (!candidate || !candidate.desks || !candidate.pattern) return;
+    var idx = 0;
+    var rows = candidate.pattern.rows || [];
+    for (var ri = 0; ri < rows.length; ri++) {
+      var blocks = rows[ri].blocks || [];
+      for (var bi = 0; bi < blocks.length; bi++) {
+        var b = blocks[bi];
+        var rects = getDeskRects(b.type);
+        var orient = b.orientation || 0;
+        if (orient !== 0) {
+          var g0 = getBlockGeom(b.type);
+          rects = transformDeskRects(rects, g0.eo, g0.ns, orient);
+        }
+        for (var di = 0; di < rects.length; di++) {
+          if (idx < candidate.desks.length) {
+            candidate.desks[idx].chair_side = rects[di].chairSide;
+          }
+          idx++;
+        }
+      }
+    }
+  }
+
+  function exportPlan(fmt) {
+    var ingState = window.ingState;
+    var fpData = window.fpData;
+    if (!fpData || !fpData.rooms || !fpData.rooms.length) {
+      alertModal('No floor plan loaded.');
+      return;
+    }
+    var hdr = document.getElementById('hdrCurrentPlanText');
+    var planId = hdr ? hdr.textContent.trim() : '';
+    if (!planId) {
+      alertModal('Cannot determine plan name.');
+      return;
+    }
+    var scaleCmPerPx = (ingState && ingState.scale) || 0;
+    if (!scaleCmPerPx || scaleCmPerPx <= 0) {
+      alertModal('Scale not available.');
+      return;
+    }
+    var fpAmendments = window.fpAmendments || {};
+    var rooms = fpData.rooms.map(function (r) {
+      var raw = fpAmendments[r.name]
+        || (r.all_candidates && r.all_candidates[0])
+        || null;
+      var candidate = null;
+      if (raw) {
+        candidate = JSON.parse(JSON.stringify(raw));
+        if (candidate.desks && candidate.desks.length && candidate.pattern) {
+          _enrichDesksWithChairSide(candidate);
+        }
+      }
+      return {
+        name: r.name,
+        width_cm: r.width_cm,
+        depth_cm: r.depth_cm,
+        bbox_px: r.bbox_px,
+        corridor_face_abs: r.corridor_face_abs || '',
+        is_amended: !!fpAmendments[r.name],
+        candidate: candidate,
+      };
+    });
+
+    showModal('Exporting ' + fmt.toUpperCase() + '...');
+    fetch('/api/floor-plan/export/' + encodeURIComponent(fmt), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan_id: planId,
+        scale_cm_per_px: scaleCmPerPx,
+        rooms: rooms,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        hideModal();
+        if (data.error) {
+          alertModal('Export failed: ' + data.error);
+        } else {
+          alertModal(
+            'Exported successfully.\nPlan: ' + data.plan_path +
+            '\nCSV: ' + data.csv_path
+          );
+        }
+      })
+      .catch(function (e) {
+        hideModal();
+        console.error('Export error:', e);
+        alertModal('Export failed: ' + e);
+      });
+  }
+
+  // ==========================================================================
   // API publique
   // ==========================================================================
   window.olmSerialize = {
@@ -354,4 +457,5 @@
   window.populateRoomsJson = populateRoomsJson;
   window.savePlanToDisk    = savePlanToDisk;
   window.devExportV3Json   = devExportV3Json;
+  window.exportPlan        = exportPlan;
 })();

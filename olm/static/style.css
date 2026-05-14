@@ -639,7 +639,7 @@
   .nav-layout td label,
   .nav-layout td button,
   .nav-layout td .fp-room-label { display: inline-flex; align-items: center; }
-  .nav-layout .nav-right { text-align: right; width: 25%; white-space: nowrap; }
+  .nav-layout .nav-right { text-align: right; white-space: nowrap; }
   .fp-canvas-wrap {
     flex: 1; overflow: hidden; display: flex;
     flex-direction: column; position: relative;
