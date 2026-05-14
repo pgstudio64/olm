@@ -1,5 +1,86 @@
 "use strict";
 
+// --- Event delegation for re-rendered lists (P1.4) ---
+// Single click handler on #rowList, #modalList, #blockPalette.
+// Session-life: bound once, no dispose needed.
+var _edDelegationWired = false;
+function _wireEdDelegation() {
+  if (_edDelegationWired) return;
+  _edDelegationWired = true;
+
+  // Row list: row selection + row delete + gap minus/plus/change
+  var rowList = document.getElementById("rowList");
+  if (rowList) {
+    rowList.addEventListener("click", function(e) {
+      var delBtn = e.target.closest(".row-del");
+      if (delBtn) {
+        var idx = parseInt(delBtn.dataset.idx);
+        if (!isNaN(idx)) deleteRow(idx);
+        return;
+      }
+      var gapMinus = e.target.closest(".gap-minus");
+      if (gapMinus) {
+        var gi = parseInt(gapMinus.dataset.gapIdx);
+        if (!isNaN(gi)) {
+          state.row_gaps_cm[gi] = Math.max(0, (state.row_gaps_cm[gi] || 0) - 10);
+          render(); updateDSL(); updateRowList();
+        }
+        return;
+      }
+      var gapPlus = e.target.closest(".gap-plus");
+      if (gapPlus) {
+        var gi2 = parseInt(gapPlus.dataset.gapIdx);
+        if (!isNaN(gi2)) {
+          state.row_gaps_cm[gi2] = (state.row_gaps_cm[gi2] || 0) + 10;
+          render(); updateDSL(); updateRowList();
+        }
+        return;
+      }
+      var rowItem = e.target.closest(".row-item");
+      if (rowItem) {
+        var ri = parseInt(rowItem.dataset.rowIdx);
+        if (!isNaN(ri)) {
+          state.selectedRow = ri;
+          updateRowList();
+        }
+      }
+    });
+    rowList.addEventListener("change", function(e) {
+      var gapInput = e.target.closest(".gap-input");
+      if (gapInput) {
+        var gi3 = parseInt(gapInput.dataset.gapIdx);
+        if (!isNaN(gi3)) {
+          var val = parseInt(e.target.value) || 0;
+          state.row_gaps_cm[gi3] = Math.max(0, val);
+          render(); updateDSL(); updateRowList();
+        }
+      }
+    });
+  }
+
+  // Modal list: load pattern on click
+  var modalList = document.getElementById("modalList");
+  if (modalList) {
+    modalList.addEventListener("click", function(e) {
+      var li = e.target.closest("li");
+      if (li && li.dataset.patternName) {
+        loadPattern(li.dataset.patternName);
+      }
+    });
+  }
+
+  // Block palette: add block on click
+  var palette = document.getElementById("blockPalette");
+  if (palette) {
+    palette.addEventListener("click", function(e) {
+      var btn = e.target.closest(".block-btn");
+      if (btn && btn.dataset.blockType) {
+        addBlock(btn.dataset.blockType);
+      }
+    });
+  }
+}
+
 const SCALE = 0.5;
 var GRID_STEP_CM = 10;  // updated from APP_CONFIG.grid_cell_cm
 const DEFAULT_ROW_GAP_CM = 180;
@@ -1428,47 +1509,32 @@ function updateRowList() {
   const container = document.getElementById("rowList");
   container.innerHTML = "";
 
+  // Event delegation handles row/gap interactions (P1.4)
+  _wireEdDelegation();
+
   for (let i = 0; i < state.rows.length; i++) {
     const row = state.rows[i];
     const div = document.createElement("div");
     div.className = "row-item" + (i === state.selectedRow ? " active" : "");
+    div.dataset.rowIdx = i;
     const nb = row.blocks.length;
     const nd = row.blocks.reduce(function(s, b) { return s + countDesksInBlock(b.type); }, 0);
     div.innerHTML = "<span>Row " + (i + 1) + "</span>" +
       "<span class=\"row-sub\">" + nb + " block(s) - " + nd + " desk(s)</span>" +
       "<button class=\"row-del\" data-idx=\"" + i + "\" title=\"Delete\">x</button>";
-    div.addEventListener("click", function(e) {
-      if (e.target.classList.contains("row-del")) return;
-      state.selectedRow = i;
-      updateRowList();
-    });
-    div.querySelector(".row-del").addEventListener("click", function() { deleteRow(i); });
     container.appendChild(div);
 
     if (i < state.rows.length - 1 && i < state.row_gaps_cm.length) {
-      const gapIndex = i;
       const gapDiv = document.createElement("div");
       gapDiv.className = "row-gap-item";
       gapDiv.innerHTML =
         "<span class=\"row-gap-label\">&#8597;</span>" +
-        "<button class=\"btn-xs gap-minus\">&#8722;</button>" +
-        "<input type=\"number\" class=\"gap-input\" value=\"" + state.row_gaps_cm[gapIndex] +
+        "<button class=\"btn-xs gap-minus\" data-gap-idx=\"" + i + "\">&#8722;</button>" +
+        "<input type=\"number\" class=\"gap-input\" data-gap-idx=\"" + i +
+        "\" value=\"" + state.row_gaps_cm[i] +
         "\" min=\"0\" step=\"10\">" +
-        "<button class=\"btn-xs gap-plus\">+</button>" +
+        "<button class=\"btn-xs gap-plus\" data-gap-idx=\"" + i + "\">+</button>" +
         "<span class=\"row-gap-unit\">cm</span>";
-      gapDiv.querySelector(".gap-minus").addEventListener("click", function() {
-        state.row_gaps_cm[gapIndex] = Math.max(0, (state.row_gaps_cm[gapIndex] || 0) - 10);
-        render(); updateDSL(); updateRowList();
-      });
-      gapDiv.querySelector(".gap-plus").addEventListener("click", function() {
-        state.row_gaps_cm[gapIndex] = (state.row_gaps_cm[gapIndex] || 0) + 10;
-        render(); updateDSL(); updateRowList();
-      });
-      gapDiv.querySelector(".gap-input").addEventListener("change", function(e) {
-        const val = parseInt(e.target.value) || 0;
-        state.row_gaps_cm[gapIndex] = Math.max(0, val);
-        render(); updateDSL(); updateRowList();
-      });
       container.appendChild(gapDiv);
     }
   }
@@ -1899,10 +1965,12 @@ async function loadList() {
     if (list.length === 0) {
       ul.innerHTML = "<li style=\"color:var(--text-dim)\">No patterns saved.</li>";
     } else {
+      // Event delegation handles pattern click (P1.4)
+      _wireEdDelegation();
       list.forEach(function(name) {
         const li = document.createElement("li");
         li.textContent = name;
-        li.addEventListener("click", function() { loadPattern(name); });
+        li.dataset.patternName = name;
         ul.appendChild(li);
       });
     }
@@ -2342,13 +2410,15 @@ function buildPalette() {
   container.innerHTML = "";
   const types = ["BLOCK_1", "BLOCK_2_FACE", "BLOCK_2_SIDE", "BLOCK_3_SIDE", "BLOCK_4_FACE", "BLOCK_6_FACE",
                  "BLOCK_2_ORTHO_L", "BLOCK_2_ORTHO_R"];
+  // Event delegation handles block-type click (P1.4)
+  _wireEdDelegation();
   types.forEach(function(type) {
     const nd = countDesksInBlock(type) || BLOCK_DESKS_FALLBACK[type] || "?";
     const btn = document.createElement("button");
     btn.className = "block-btn";
+    btn.dataset.blockType = type;
     btn.innerHTML = type + " <span class=\"block-sub\">(" + nd +
       " desk" + (nd > 1 ? "s" : "") + ")</span>";
-    btn.addEventListener("click", function() { addBlock(type); });
     container.appendChild(btn);
   });
 }

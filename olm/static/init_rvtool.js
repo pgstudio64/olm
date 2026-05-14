@@ -10,6 +10,10 @@
 // ========================================================================
 
 (function () {
+  // P1.4: All 21 addEventListener calls in this IIFE are session-life
+  // (bound once at DOMContentLoaded, never re-bound). The inline-edit
+  // popup (L1464-1466) creates ephemeral elements cleaned up by
+  // popup.remove(). No _dispose() needed.
   document.addEventListener("DOMContentLoaded", function () {
     var rvTool = { mode: "idle", drawStart: null, selectedIndex: -1, dragOffset: null };
     // rvTool sub-fields populated on demand by the various handlers:

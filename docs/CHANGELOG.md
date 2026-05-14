@@ -3,6 +3,18 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.58] — 2026-05-14 — P1.4 Cleanup addEventListener re-binds
+
+### Changed
+- **P1.4 — Cleanup ~16 addEventListener re-binds sans removeEventListener** :
+  - `config.js` : 1 listener re-bindable (`renderSpacingSettings`) tracke via `_cfgTrack/_cfgDispose`. 4 session-life annotes.
+  - `catalogue.js` : 3 querySelectorAll+addEventListener (renderCatalogue + renderMatrixView) remplaces par event delegation sur `#catalogueGrid` et `#matrixSvg`. Session-life, zero re-binding.
+  - `editor.js` : 7 listeners re-bindes (updateRowList, loadList, buildPalette) remplaces par event delegation sur `#rowList`, `#modalList`, `#blockPalette` via data-attributes.
+  - `ingestion.js` : 6 listeners re-bindes (_wireRoomListEl, renderIngestion merge/bbox) remplaces par event delegation sur `#ingSvg`, 3 room-list containers, `#ingPlanList`. Logique plan-item extraite dans `_onPlanItemClick()`.
+  - `init_rvtool.js` : 21 listeners — tous session-life (IIFE DOMContentLoaded). Annotes.
+  - `init.js` : 70 listeners — tous session-life (init() au boot). Annotes.
+- Aucun changement comportemental.
+
 ## [v0.4.57] — 2026-05-14 — P1.6 Pipeline OCR 2-pass (D-191)
 
 ### Changed
