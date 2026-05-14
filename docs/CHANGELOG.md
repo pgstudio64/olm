@@ -3,6 +3,11 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.53] — 2026-05-14 — P1.1 Renommage test_comb + wall_classify
+
+### Changed
+- **D-189 — Cycle import casse** (P1.1) : renommage `test_comb.py` -> `comb_detection.py`, extraction `wall_classify.py` (WallSegment + _classify_wall_direct + helpers). 10 sites d'import mis a jour. Suppression `def main()` + `draw_debug_*` (redondants avec dev_viewer). Aucun changement fonctionnel.
+
 ## [v0.4.52] — 2026-05-14 — Tests + suppression defauts px
 
 ### Added

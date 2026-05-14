@@ -7,6 +7,47 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-189 · P1.1 Renommage test_comb + extraction wall_classify (2026-05-14)
+
+Decision : casser le cycle d'import bidirectionnel extract.py <-> test_comb.py. Trois actions :
+1. Extraction de `WallSegment`, `_classify_wall_direct` et ses helpers dans `olm/ingestion/wall_classify.py` (nouveau module sans dependance vers extract ni comb_detection).
+2. Renommage `test_comb.py` -> `comb_detection.py` (le nom test_comb pretait a confusion avec les vrais tests dans olm/tests/).
+3. Suppression de `def main()`, `draw_debug_all`, `draw_debug_single` (redondants avec dev_viewer.py, utilisaient print()).
+
+Justification : AUDIT_2026-05 / ARCHITECTURE_TARGET identifient ce cycle comme P1.1 (priorite haute). Le renommage clarifie le role du module (detection comb, pas test).
+
+Impact : 10 sites d'import mis a jour (extract.py, app.py x6, test_extract.py, dev_viewer.py). Aucune modification fonctionnelle.
+
+---
+
+## D-188 · Cible produit : interne mono-utilisateur, bonne robustesse (2026-05-14)
+
+Décision : OLM reste un produit interne mono-utilisateur, déployé sur le poste d'un utilisateur métier. Pas de multi-user, pas d'auth réseau, pas d'HTTPS, pas d'i18n, pas d'a11y, pas de bundling Windows autonome. Cible robustesse « bonne » (pas critique) : le cycle de modifications reste standard, les fixes se déploient comme aujourd'hui.
+
+Verrou mono-utilisateur ajouté : empêche deux sessions simultanées d'écrire en conflit sur les mêmes plans. Implémentation par état en mémoire Flask (donc reset automatique au redémarrage, pas de blocage post-crash), cookie session, page « OLM déjà en cours d'utilisation » avec bouton « prendre le contrôle », idle timeout auto-release.
+
+Justification : besoin métier identifié. Un outil interne sur poste utilisateur, pas un produit livrable.
+
+Périmètre robustesse retenu (Phase 2, ~40 h après P1) :
+- Verrou mono-utilisateur (~4 h).
+- Validation jsonschema à l'import JSON v3 (~12 h).
+- Écritures atomiques temp+rename + backup .bak sur save (~5 h).
+- MAX_CONTENT_LENGTH Flask + whitelist MIME upload (~2 h).
+- Logger Python standard avec RotatingFileHandler (~6 h).
+- Endpoint `/health` (~2 h).
+- GitHub Actions basique : ruff + pytest au push (~3 h).
+- USER_GUIDE.md workflow utilisateur (~6 h).
+
+Hors périmètre : flask-login, gunicorn, HTTPS, job queue, PyInstaller, i18n, a11y, ZIP diagnostic, JSON logs structurés. Réévaluables si le besoin métier évolue (ex. passage à 5+ utilisateurs).
+
+Cible couverture tests : 60 % sur olm/core et olm/server (vs 50 % actuel), pas 80 %.
+
+Impact : roadmap Phase 2 dans `AUDIT_2026-05-v2.md` § 5.3 (à mettre à jour) et `TODO.md`.
+
+Référence : `AUDIT_2026-05-v2.md` § 6 scénario A recalibré.
+
+---
+
 ## D-187 · Source unique binarize_threshold = 110 (2026-05-14)
 
 Valeur terrain (config.json ingestion.binarize_threshold) = 110, defauts modules = 140. Alignement : detection_config.py default 140 → 110 (avec docstring expliquant que le defaut sert uniquement aux tests et CLI — en prod le serveur charge l'override depuis config.json), app.py fallback _get_default_threshold 140 → 110, config.js fallback UI 140 → 110. extract.py lit _DCFG.binarize_threshold (suit le default, inchange). test_comb.py deja None (D-186). Source unique : config.json > detection_config.py default. Aucun changement comportemental en production (le chemin serveur lit toujours config.json via overrides).
