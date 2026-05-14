@@ -279,7 +279,7 @@ def remove_non_ortho(binary: np.ndarray,
             local_cleaned[local_mask] = False
             removed += area
 
-    logger.info("remove_non_ortho: %d components, removed %d non-ortho",
+    logger.debug("remove_non_ortho: %d components, removed %d non-ortho",
                 num - 1, removed)
     return cleaned
 
@@ -565,16 +565,16 @@ def extract_rooms(image: Image.Image,
     # Step 1: OCR
     if ground_truth:
         texts = detect_text_from_ground_truth(ground_truth)
-        logger.info("Using ground truth text positions (%d texts)", len(texts))
+        logger.debug("Using ground truth text positions (%d texts)", len(texts))
     else:
         texts = detect_text_ocr(image)
-        logger.info("OCR detected %d texts", len(texts))
+        logger.debug("OCR detected %d texts", len(texts))
 
     classified = classify_texts(texts)
-    logger.info("Codes: %d, Labels: %d, Surfaces: %d",
-                len(classified["codes"]),
-                len(classified["labels"]),
-                len(classified["surfaces"]))
+    logger.debug("Codes: %d, Labels: %d, Surfaces: %d",
+                 len(classified["codes"]),
+                 len(classified["labels"]),
+                 len(classified["surfaces"]))
 
     # Step 2: Clean image
     cleaned = clean_text_from_image(image, texts)
@@ -589,8 +589,8 @@ def extract_rooms(image: Image.Image,
         threshold=180,
         morph_dilate_px=_cfg.morph_dilate_px,
     )
-    logger.info("Binarized image: %s, wall pixels: %d (dilated), %d (raw)",
-                binary.shape, np.sum(binary), np.sum(binary_raw))
+    logger.debug("Binarized image: %s, wall pixels: %d (dilated), %d (raw)",
+                 binary.shape, np.sum(binary), np.sum(binary_raw))
 
     # Step 3b: Remove non-orthogonal elements (door arcs, annotations)
     # DISABLED — door detection needs arc hits in cleaned binary.
@@ -614,22 +614,22 @@ def extract_rooms(image: Image.Image,
     rooms = []
     for code_text in classified["codes"]:
         cx, cy = code_text.center_px
-        logger.info("Processing room at seed (%d, %d)", cx, cy)
+        logger.debug("Processing room at seed (%d, %d)", cx, cy)
 
         # All 3 phases in one call
         bbox, walls, profiles = detect_room_three_phase(
             binary, binary_raw, cx, cy, scale_cm_per_px,
             text_bboxes=text_bboxes)
         x0, y0, x1, y1 = bbox
-        logger.info("  bbox: (%d, %d, %d, %d) → %d x %d px",
+        logger.debug("  bbox: (%d, %d, %d, %d) → %d x %d px",
                      x0, y0, x1, y1, x1 - x0, y1 - y0)
         for direction, segs in walls.items():
             seg_summary = [(s.kind, s.end_px - s.start_px) for s in segs]
-            logger.info("  %s wall: %s", direction, seg_summary)
+            logger.debug("  %s wall: %s", direction, seg_summary)
 
         # Derive exterior faces from window detection
         exterior = _derive_exterior_faces(walls)
-        logger.info("  exterior faces: %s", exterior)
+        logger.debug("  exterior faces: %s", exterior)
 
         # Determine corridor face (face with a door opening)
         corridor_face = ""
@@ -1256,18 +1256,18 @@ def extract_rooms_from_preprocessed(
 
     if override_scale and float(override_scale) > 0:
         scale_cm_per_px = float(override_scale)
-        logger.info(
+        logger.debug(
             "Scale: cm_per_px=%.4f (override)", scale_cm_per_px,
         )
     elif notation_scale > 0:
         scale_cm_per_px = notation_scale
-        logger.info(
+        logger.debug(
             "Scale: cm_per_px=%.4f (notation: %s at %d DPI)",
             scale_cm_per_px, dst_raw, render_dpi,
         )
     elif ruler_scale > 0:
         scale_cm_per_px = ruler_scale
-        logger.info(
+        logger.debug(
             "Scale: cm_per_px=%.4f (ruler measured)", scale_cm_per_px,
         )
     elif scale_samples:
@@ -1323,7 +1323,7 @@ def extract_rooms_from_preprocessed(
             )
             p["bbox_px_opt"] = tuple(features["bbox_px"])
             _import_features[p["room_id"]] = features
-            logger.info(
+            logger.debug(
                 "Room %s : import detect → bbox %s, %d win, %d open, %d door",
                 p["room_id"], features["bbox_px"],
                 len(features.get("windows", [])),
@@ -1622,7 +1622,7 @@ def _filter_impossible_openings(
         # Majorité des sondes trouvent un mur → artefact.
         if probe_count > 0 and wall_count > probe_count // 2:
             faces_to_drop.add(face)
-            logger.info(
+            logger.debug(
                 "Impossible opening filter: face %s dropped "
                 "(%.0f%% coverage, %d/%d probes hit wall behind)",
                 face, total_open_cm / face_len_cm * 100,

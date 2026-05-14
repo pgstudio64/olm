@@ -2083,7 +2083,7 @@ def _calibrate_scale(
                 s['name'], s['value'], median, deviation * 100,
             )
 
-    logger.info(
+    logger.debug(
         "Scale calibrated from %d room(s): %.4f cm/px",
         len(scale_samples), median,
     )
@@ -2254,14 +2254,14 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
             'threshold': thr,
         }
 
-    logger.info("Ingestion: processing %d room(s)", len(seeds))
+    logger.debug("Ingestion: processing %d room(s)", len(seeds))
     gray_arr = np.array(img_gray)
     all_seed_positions = [(v[0], v[1]) for v in seeds.values()]
 
     if scale_cm_per_px is not None:
         # ── 1-PASS : scale fourni ────────────────────────────────
-        logger.info("1-pass mode: scale=%.4f cm/px (provided)",
-                    scale_cm_per_px)
+        logger.debug("1-pass mode: scale=%.4f cm/px (provided)",
+                     scale_cm_per_px)
         # _apply_detection_config déjà appelé avec initial_scale
         cleaned = erase_cartouches(gray_arr, cart_bboxes)
         binary = cleaned < thr
@@ -2276,7 +2276,7 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
         # ── 2-PASS : auto-calibration (D-191) ───────────────────
 
         # Phase 1 — Discovery (scale fallback)
-        logger.info(
+        logger.debug(
             "2-pass mode Phase 1: discovery with scale=%.4f cm/px",
             SCALE_FALLBACK)
         _apply_detection_config(SCALE_FALLBACK, detection_overrides)
@@ -2297,13 +2297,13 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
             rooms = rooms_discovery
         else:
             scale_corrige = s_calib
-            logger.info(
+            logger.debug(
                 "2-pass Phase 2: calibrated scale=%.4f cm/px "
                 "(fallback was %.4f)",
                 scale_corrige, SCALE_FALLBACK)
 
             # Phase 3 — Re-detection avec scale corrigé
-            logger.info(
+            logger.debug(
                 "2-pass Phase 3: re-detection with "
                 "scale=%.4f cm/px", scale_corrige)
             _apply_detection_config(

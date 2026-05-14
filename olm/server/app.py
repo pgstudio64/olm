@@ -87,6 +87,9 @@ def configure_logging(*, dev: bool = False) -> None:
     file_handler.addFilter(req_filter)
     olm_logger.addHandler(file_handler)
 
+    # Silence Werkzeug's duplicate request log (OLM after_request handles it)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
 
 # Configure logging at import time (INFO by default, reconfigured in __main__)
 configure_logging(dev=False)
@@ -173,9 +176,24 @@ def _after_request(response):
     start = getattr(g, 'start_time', None)
     if start is not None:
         duration_ms = (time.monotonic() - start) * 1000
-        logger.info(
+        # Static files, images, init endpoints, favicon → DEBUG
+        path = request.path
+        is_quiet = (
+            path.startswith("/static/")
+            or path.startswith("/api/ingestion/plan/")
+            or path.startswith("/api/image")
+            or path.startswith("/api/blocks")
+            or path == "/api/config"
+            or path == "/api/spacing"
+            or path == "/api/patterns"
+            or path == "/favicon.ico"
+            or path == "/test_rooms.json"
+            or path == "/test_floor_plan.png"
+        )
+        log_fn = logger.debug if is_quiet else logger.info
+        log_fn(
             "%d %s %s in %.0f ms",
-            response.status_code, request.method, request.path, duration_ms,
+            response.status_code, request.method, path, duration_ms,
         )
     return response
 
@@ -937,6 +955,8 @@ if __name__ == "__main__":
     configure_logging(dev=args.dev)
     mode_label = " [DEV]" if DEV_MODE else ""
     from olm.server.services.catalogue_service import CATALOGUE_PATH
-    logger.info("Pattern editor%s — http://localhost:5051", mode_label)
-    logger.info("Catalogue: %s", CATALOGUE_PATH)
+    # Only show startup banner in the reloader parent (avoid duplicate)
+    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        logger.info("Pattern editor%s — http://localhost:5051", mode_label)
+        logger.info("Catalogue: %s", CATALOGUE_PATH)
     app.run(debug=True, port=5051)

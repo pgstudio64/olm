@@ -273,7 +273,7 @@ def select_candidates(
             all_fitting=fitting,
         ))
 
-        logger.info(
+        logger.debug(
             "Selection %s: %d patterns fit, %d on Pareto front",
             std, len(fitting), len(front),
         )
@@ -918,7 +918,7 @@ def remove_conflicting_desks(
     result = copy.deepcopy(pattern)
     n_remaining = len(remaining_desks)
 
-    logger.info(
+    logger.debug(
         "Desk removal: %d removed, %d remaining",
         len(removed), n_remaining,
     )
