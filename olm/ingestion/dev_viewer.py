@@ -88,7 +88,8 @@ def img():
 
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont
-    from olm.ingestion.extract import binarize, remove_non_ortho, _classify_wall_direct
+    from olm.ingestion.extract import binarize, remove_non_ortho
+    from olm.ingestion.wall_classify import _classify_wall_direct
     from test_comb import (load_image, find_seeds_by_ocr, erase_cartouches,
                            binarize as comb_binarize, remove_non_ortho as comb_rno,
                            detect_room, comb_collect_hits, largest_rect_no_hits,

@@ -2038,7 +2038,7 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
           'scale_cm_per_px': used scale
           'binary': binarized image as numpy array (for visualization)
     """
-    from olm.ingestion.extract import _classify_wall_direct
+    from olm.ingestion.wall_classify import _classify_wall_direct
 
     # Scale fourni par le caller (drawing_scale ou scale_cm_per_px) ou
     # auto-détecté plus bas. À l'étape de classification (avant l'auto-
