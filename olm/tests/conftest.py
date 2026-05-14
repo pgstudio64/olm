@@ -24,15 +24,15 @@ def tmp_plans_dir(tmp_path, monkeypatch):
     plans = tmp_path / "plans"
     plans.mkdir()
     _plans_str = str(plans)
+    _plans_fn = lambda: _plans_str
     monkeypatch.setattr("olm.server.app.PLANS_DIR", _plans_str)
-    # Patch both the source function and the imported reference in app
+    # Patch source + all imported references
     monkeypatch.setattr(
-        "olm.server.services.config_service.get_plans_dir",
-        lambda: _plans_str,
-    )
+        "olm.server.services.config_service.get_plans_dir", _plans_fn)
     monkeypatch.setattr(
-        "olm.server.app.get_plans_dir", lambda: _plans_str,
-    )
+        "olm.server.app.get_plans_dir", _plans_fn)
+    monkeypatch.setattr(
+        "olm.server.services.ingestion_service.get_plans_dir", _plans_fn)
     return plans
 
 
