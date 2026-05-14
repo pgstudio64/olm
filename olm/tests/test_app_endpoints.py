@@ -5,6 +5,7 @@ Ref audit 6.2 item 3.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 from typing import Any
@@ -503,3 +504,45 @@ class TestConfig:
         assert "desk_depth_cm" in data
         assert "grid_cell_cm" in data
         assert isinstance(data["desk_width_cm"], (int, float))
+
+
+# ====================================================================
+# 6. Upload validation (P2.1)
+# ====================================================================
+
+class TestUploadValidation:
+    """Tests pour la validation des uploads (P2.1)."""
+
+    def test_txt_file_rejected(self, client):
+        """Upload d'un .txt retourne 415 Unsupported Media Type."""
+        data = io.BytesIO(b"hello world")
+        resp = client.post("/api/import/ocr", data={
+            "floorplan_image": (data, "test.txt", "text/plain"),
+        }, content_type="multipart/form-data")
+        assert resp.status_code == 415
+        assert "error" in resp.get_json()
+
+    def test_valid_png_accepted(self, client):
+        """Upload d'un PNG valide passe la validation MIME (pas de 415)."""
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("L", (10, 10), color=128).save(buf, format="PNG")
+        buf.seek(0)
+        resp = client.post("/api/import/ocr", data={
+            "floorplan_image": (buf, "plan.png", "image/png"),
+        }, content_type="multipart/form-data")
+        assert resp.status_code != 415
+
+    def test_upload_too_large(self, client):
+        """Upload depassant MAX_CONTENT_LENGTH retourne 413."""
+        from olm.server.app import app
+        original = app.config.get('MAX_CONTENT_LENGTH')
+        app.config['MAX_CONTENT_LENGTH'] = 100
+        try:
+            data = io.BytesIO(b'x' * 200)
+            resp = client.post("/api/import/ocr", data={
+                "floorplan_image": (data, "big.png", "image/png"),
+            }, content_type="multipart/form-data")
+            assert resp.status_code == 413
+        finally:
+            app.config['MAX_CONTENT_LENGTH'] = original

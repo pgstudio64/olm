@@ -348,6 +348,36 @@ def get_blocks(standard: str | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Upload validation (P2.1)
+# ---------------------------------------------------------------------------
+
+ALLOWED_UPLOAD_MIMES = frozenset({
+    "image/png",
+    "image/jpeg",
+    "image/tiff",
+    "application/pdf",
+})
+
+
+def _validate_upload(file) -> tuple[bool, str]:
+    """Validate an uploaded file's MIME type.
+
+    Args:
+        file: A Flask ``FileStorage`` object.
+
+    Returns:
+        ``(True, "")`` if the MIME type is allowed, or
+        ``(False, error_message)`` otherwise.
+    """
+    if file.mimetype not in ALLOWED_UPLOAD_MIMES:
+        return False, (
+            f"Type non accepté : {file.mimetype}. "
+            f"Types autorisés : {', '.join(sorted(ALLOWED_UPLOAD_MIMES))}"
+        )
+    return True, ""
+
+
 def get_spacing() -> dict:
     """Return all spacing configurations."""
     configs = {}
