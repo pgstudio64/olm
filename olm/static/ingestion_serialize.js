@@ -434,9 +434,12 @@
         if (data.error) {
           alertModal('Export failed: ' + data.error);
         } else {
+          var folder = data.exports_dir
+            ? 'exports/' + data.exports_dir.split(/[\\/]/).pop()
+            : 'exports/';
           alertModal(
-            'Exported successfully.\nPlan: ' + data.plan_path +
-            '\nCSV: ' + data.csv_path
+            'Exported successfully (' + (data.n_rooms || '?') +
+            ' rooms).\nFiles saved in ' + folder
           );
         }
       })
