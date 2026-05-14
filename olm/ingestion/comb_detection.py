@@ -2089,6 +2089,14 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
                                    snap_rect=snap_rect,
                                    scale_cm_per_px=scale_cm_per_px)
 
+    # Filter oversized doors early (before extract.py post-filter) to
+    # prevent giant door arcs from appearing in the overlay.
+    if scale_cm_per_px and scale_cm_per_px > 0:
+        from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM
+        _max_w_cm = DEFAULT_DETECTION_CONFIG_CM.max_door_width_cm
+        doors = [d for d in doors
+                 if d.get("width_px", 0) * scale_cm_per_px <= _max_w_cm]
+
     return CombResult(
         bbox=rect, hits=all_hits, doors=doors,
         pillars=pillars, pillar_hits=pillar_hit_coords,
