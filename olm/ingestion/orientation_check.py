@@ -213,22 +213,21 @@ def check_windows_exterior(
         w_cm = float(win.get("width_cm", 0) or 0)
 
         # Map offset canon → offset abs selon la rotation induite par ocf.
-        # Convention : offset_cm = distance depuis west end (N/S) ou north
-        # end (E/W) DANS LE REPÈRE DE LA FACE. La rotation abs ↔ canon peut
-        # inverser (cf. fromStorage canonical_io.js lignes north/west).
-        if ocf in ("north", "west"):
-            # Pour face canon "north"/"south" (→ abs "south"/"north"
-            # resp.) la rotation flip → offset_abs = face_len - off - w.
-            # Idem pour east/west abs suite à la rotation west.
+        # Même logique que _flipTo dans canonical_io.js / canonical.py :
+        # 180° (north) = flip all ; 90° CW (east) = flip canon h-faces
+        # (N/S) ; 90° CCW (west) = flip canon v-faces (E/W).
+        _is_h = face_canon in ("north", "south")
+        _needs_flip = (
+            ocf == "north"
+            or (ocf == "east" and _is_h)
+            or (ocf == "west" and not _is_h)
+        )
+        if _needs_flip:
             if face_abs in ("north", "south"):
                 face_len_cm = abs_w_cm
             else:
                 face_len_cm = abs_d_cm
             off_abs_cm = face_len_cm - off_canon_cm - w_cm
-        elif ocf == "east":
-            # east : north canon → east abs, offset inchangé (rotation 90° CW
-            # avec convention NW-origin, offset le long de la face).
-            off_abs_cm = off_canon_cm
         else:
             off_abs_cm = off_canon_cm
 

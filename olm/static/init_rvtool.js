@@ -735,13 +735,16 @@
             ? cio.INV_FACE_MAPS[cfAbsForZones] : null;
           if (invMap && invMap[d.face]) absFace = invMap[d.face];
           // Conversion complète canon → absolu (même logique que
-          // toStorage.xformBack) : miroir offset + flip hinge pour
-          // north/east, sinon l'offset alterne à chaque rescan.
+          // toStorage.xformBack via _flipTo).
           var _canonFaceLen = (d.face === 'north' || d.face === 'south')
             ? _Wc : _Dc;
           var offAbs = d.offset_cm || 0;
           var hingeAbs = d.hinge_side;
-          if (cfAbsForZones === 'north' || cfAbsForZones === 'east') {
+          var _ft = cio && cio._flipTo;
+          var _flip = _ft
+            ? _ft(cfAbsForZones, d.face)
+            : (cfAbsForZones === 'north');
+          if (_flip) {
             offAbs = _canonFaceLen - offAbs - (d.width_cm || 0);
             if (d.hinge_side) {
               hingeAbs = (d.hinge_side === 'left') ? 'right' : 'left';
