@@ -3,6 +3,40 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.52] — 2026-05-14 — Tests + suppression defauts px
+
+### Added
+- **olm/tests/conftest.py** : fixtures partagees (client Flask, tmp_plans_dir, sample_plan_json, sample_room_canonical, tiny_plan_png, monkeypatch_catalogue).
+- **olm/tests/test_app_endpoints.py** (P0.1) : 27 tests sur 5 endpoints critiques (reanalyze, match, save, room-dsl/parse, config). Couverture app.py 22%.
+- **olm/tests/test_extract.py** (P0.2) : 23 tests sur extract_room_features, _face_is_exterior (D-177), _filter_impossible_openings (D-180), extract_rooms_from_preprocessed (D-156/D-157). 5 cas K-* production. Couverture extract.py 50%.
+
+### Fixed
+- **D-186 — Defauts px test_comb.py** (P0.3) : 14 constantes px module → None + guard `_ensure_config_applied()` qui leve RuntimeError si `_apply_detection_config` n'a pas ete appelee. Finding 🔴 audit 2026-05-13 corrige. Aucun changement comportemental.
+
+## [v0.4.51] — 2026-05-14 — Documentation rétro-ingénierique
+
+### Added
+- **AUDIT_2026-05.md** : audit complet (5 axes : architecture back, qualité code Python, front-end, cohérence données back/front, tests et configurabilité). Roadmap P0→P3 priorisée, ~100 h cumulées. Note moyenne 6.3/10.
+- **SRS v2.0** : réécriture complète après renommage OLO → OLM (D-67) et passage CLI batch → app web. 10 modules d'EF (IN/CN/ED/CA/MA/CR/CV/VW/EX/API), annexe des 40 endpoints, EF-EX-02 capture la spec d'export package (PNG/PDF + CSV) à finaliser.
+- **GLOSSARY v3.0** : termes canonique vs absolu, JSON v3, modes OCR/preprocessed, vues Floor/Room/Office, poteaux, ouvertures impossibles, DetectionConfigCm, plan -SD, table « anciens termes » étendue.
+- **CONSTRAINTS v2.0** : mapping codes ES/PS ↔ champs Python ↔ clés config.json, lien vers EF-EX-02 et vue Office (valeurs métier inchangées).
+- **ROOM_SCHEMA.md** : nouveau SSOT du schéma de pièce (backend `RoomSpec` + frontend canonical state + JSON v3 disque), table maître consolidée, sous-schémas Window/Opening/Door/ExclusionZone/TransparentZone, cycle de vie complet, champs morts à supprimer.
+- **API_SPEC.md** : cartographie des 40 endpoints REST (URL, payload, réponse, codes d'erreur, dev-mode flag), mapping pour le split P1.2 en `olm/server/services/`.
+- **ARCHITECTURE_TARGET.md** : cible post-refactor P1 (split `app.py`, casse cycle `extract ↔ test_comb`, fusion `matching_config`), structure de fichiers cible, règles de dépendance, mapping migration, critères d'acceptance.
+
+### Changed
+- **PREPROCESSED_JSON_SPEC.md** : refs vers D-148, D-154, D-155, D-157, D-179, lien vers ROOM_SCHEMA.
+- **CANONICAL_STATE.md** : pointeur vers ROOM_SCHEMA.
+- **PATTERN_DSL_SPEC.md** : section Références ajoutée.
+- **ROOM_DSL_SPEC.md** v1.0 → v1.1 : retrait des champs morts `raster_nw_x_px` / `raster_nw_y_px`, ajout `transparent_zones`, section Références.
+- **RASTER_EXTRACTION_SPEC.md** : note de statut + évolutions postérieures (D-148→D-180).
+- **COMB_ALGORITHM.md** : note de statut + compléments postérieurs (D-145→D-180), pointeur vers ARCHITECTURE_TARGET pour le renommage P1.1.
+
+### Notes
+- Aucune modification de code dans cette session. Documentation seule.
+- Roadmap P0 prête sous forme de 4 prompts auto-contenus pour Opus 4.6 (cf. transcription de session).
+- **Note D-186** : P0.4 (binarize_threshold) doit utiliser **D-186** (D-184 et D-185 déjà pris par v0.4.50).
+
 ## [v0.4.50] — 2026-05-14
 
 ### Changed

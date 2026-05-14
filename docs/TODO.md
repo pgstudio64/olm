@@ -1,5 +1,32 @@
 # TODO — OLM (Office Layout Matching)
 
+## Audit 2026-05 + documentation rétro-ingénierique (2026-05-14)
+
+Audit complet livré dans [AUDIT_2026-05.md](AUDIT_2026-05.md) (5 axes, ~100 h
+de roadmap P0→P3 cumulée).
+
+Documentation rétro-ingénierique livrée :
+- **DOC-A** : [SRS.md v2.0](SRS.md) (réécrit), [GLOSSARY.md v3.0](specs/GLOSSARY.md) (enrichi), [CONSTRAINTS.md v2.0](specs/CONSTRAINTS.md) (mapping code↔Python).
+- **DOC-B** : [ROOM_SCHEMA.md](specs/ROOM_SCHEMA.md) nouveau SSOT, MAJ des 4 specs domaine (PREPROCESSED_JSON, CANONICAL_STATE, PATTERN_DSL, ROOM_DSL).
+- **DOC-C** : [API_SPEC.md](specs/API_SPEC.md) — 40 endpoints catalogués (préalable P1.2).
+- **DOC-D** : [ARCHITECTURE_TARGET.md](specs/ARCHITECTURE_TARGET.md), notes de statut sur RASTER_EXTRACTION_SPEC et COMB_ALGORITHM.
+
+**Prochains chantiers — P0 (préalable refactor structurel)** :
+- P0.1 — Tests d'intégration `app.py` sur 5-10 endpoints clés (8-12 h).
+- P0.2 — Tests `extract.py` couvrant K-* prod et D-156/D-157/D-177/D-180 (12-16 h).
+- P0.3 — Supprimer défauts px en dur `test_comb.py` L52-62 + assertion défensive (2 h).
+- P0.4 — Trancher source unique `binarize_threshold` (config.json 110 vs detection_config 140) — entrée **D-186** (D-184/D-185 déjà utilisés).
+
+**Chantiers documentaires en suspens** :
+- Q-EX-1 à Q-EX-5 : préciser EF-EX-02 (export package PNG/PDF + CSV) — voir SRS §3.9.
+- EF-VW-03 : inventorier les champs effectifs de la vue Office (donne la structure du CSV d'export).
+- SDS.md à réécrire **après** P1 (chantier DOC-E à planifier).
+
+Prompts P0 prêts à coller dans Opus 4.6 : produits dans la session du
+2026-05-14 (cf. mémoire `audit_2026_05_doc_session`).
+
+---
+
 ## Contexte replay v0.4.5 (2026-04-26 → 2026-04-29)
 
 Rollback sur v0.4.5 (`be08ec0`) après régressions D-143→D-147. Replay
@@ -675,9 +702,10 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
    additionnelles qui seront traitées dans un second temps).
    - [ ] **Triple binarize_threshold** : unifier les 3 sources (test_comb L52,
      extract.py L204, extract.py L1834) sur `detection_config.binarize_threshold`.
-   - [ ] **Défauts px module test_comb** (L52-59) : remplacer les `XX_PX = N`
+   - [x] **Défauts px module test_comb** (L52-59) : ~~remplacer les `XX_PX = N`
      par des valeurs dérivées de `DEFAULT_DETECTION_CONFIG_CM.to_px(scale)`
-     ou faire échouer si `_apply_detection_config` n'a pas été appelée.
+     ou faire échouer si `_apply_detection_config` n'a pas été appelée.~~
+     → P0.3 livré : 14 constantes → None + `_ensure_config_applied()` guard.
    - [ ] **Défauts px dans extract.py** : convertir en cm les signatures
      (`margin_px=8`, `tolerance=40`, `max_depth=30`, `min_component_px=5`,
      `max_absorb_px=120`, `max_dist=500`).

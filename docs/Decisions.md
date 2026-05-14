@@ -7,6 +7,14 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-186 · Suppression defauts px en dur test_comb.py (2026-05-14)
+
+14 constantes px module (`BINARIZE_THRESHOLD`, `COMB_STEP_PX`, `MAX_RAY_PX`, `CARTOUCHE_MARGIN_PX`, `MIN_DOOR_ARC_HITS`, `MIN_OBSTACLE_WIDTH_PX`, `MIN_PILLAR_SIZE_PX`, `MAX_PILLAR_SIZE_PX`, `DOOR_PROBE_PX`, `DOOR_GROUP_GAP_PX`, `WALL_MARGIN_PX`, `COARSE_STEP_PX`, `RAY_MARGIN_PX`, `SNAP_SEARCH_PX`) remplacees par `None`. Nouveau guard `_ensure_config_applied()` leve `RuntimeError` si `_apply_detection_config` n'a pas ete appelee. Guard injecte dans `detect_room`, `find_seeds_by_ocr`, `comb_collect_hits`, `expand_door_arcs`, `binarize`. Default args `binarize(threshold=)`, `ray_single(max_dist=)`, `snap_rect_to_walls(search_px=)` passes a `None` avec resolution lazy. `extract_all_rooms`: lecture `BINARIZE_THRESHOLD` deplacee apres `_apply_detection_config`. Aucun changement comportemental — uniquement durcissement du chemin de configuration. Finding 🔴 audit constantes-rustines 2026-05-13.
+
+Impact : `olm/ingestion/test_comb.py` uniquement.
+
+---
+
 ## D-185 · UX fixes : grille, overlay -SD, zoom clamp Room (2026-05-14)
 
 5 corrections UX. (1) Grille dots 10cm : bornes alignees sur step1m pour couvrir le meme espace que les lignes 1m ; rayon minimum proportionnel au viewport (`vb.w/1000`) pour garantir ~1.2px a l'ecran (etait invisible en Room et Floor a zoom out). (2) Overlay Room : utilise `planPathEnhanced` (PNG -SD) au lieu du PNG brut pour fpOverlay. (3) Toggle "Hide detection colors" aligne a gauche dans Settings. (4) `hideDetectionColors` default `false` (suppression lecture localStorage au demarrage). (5) Zoom in Room/Office clampe a 500 cm (5m) de largeur visible minimum.

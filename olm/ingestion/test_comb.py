@@ -49,17 +49,17 @@ else:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "project", "plans", "test_floorplan3.png"
     )
-BINARIZE_THRESHOLD = 140
-COMB_STEP_PX = 5   # comb step in pixels
-MAX_RAY_PX = 1500
-CARTOUCHE_MARGIN_PX = 1
-MIN_DOOR_ARC_HITS = 3   # min hits per direction to validate a door arc
-MIN_OBSTACLE_WIDTH_PX = 15  # default ~30cm at 0.5 cm/px; updated by _apply
-MIN_PILLAR_SIZE_PX = 8    # default ~15cm at 0.5 cm/px; updated by _apply
-MAX_PILLAR_SIZE_PX = 60   # default ~30cm at 0.5 cm/px; updated by _apply
-DOOR_PROBE_PX = 24        # default 12cm at 0.5 cm/px; updated by _apply
-DOOR_GROUP_GAP_PX = 150   # default 75cm at 0.5 cm/px; updated by _apply
-WALL_MARGIN_PX = 18       # default 9cm at 0.5 cm/px; updated by _apply
+BINARIZE_THRESHOLD: int | None = None  # set by _apply_detection_config
+COMB_STEP_PX: int | None = None       # set by _apply_detection_config
+MAX_RAY_PX: int | None = None         # set by _apply_detection_config
+CARTOUCHE_MARGIN_PX: int | None = None  # set by _apply_detection_config
+MIN_DOOR_ARC_HITS: int | None = None  # set by _apply_detection_config
+MIN_OBSTACLE_WIDTH_PX: int | None = None  # set by _apply_detection_config
+MIN_PILLAR_SIZE_PX: int | None = None  # set by _apply_detection_config
+MAX_PILLAR_SIZE_PX: int | None = None  # set by _apply_detection_config
+DOOR_PROBE_PX: int | None = None      # set by _apply_detection_config
+DOOR_GROUP_GAP_PX: int | None = None  # set by _apply_detection_config
+WALL_MARGIN_PX: int | None = None     # set by _apply_detection_config
 
 # --- Scale auto-calibration from OCR surfaces ---
 # Minimum annotated surface (m²) for a room to be used in scale calibration.
@@ -70,6 +70,18 @@ MIN_CALIB_DIM_PX = 20
 # Margin from image edge (px) — rooms touching the edge likely have a
 # truncated bbox and should not be used for calibration.
 CALIB_EDGE_MARGIN_PX = 5
+
+
+def _ensure_config_applied() -> None:
+    """Verifie que _apply_detection_config a ete appelee.
+
+    Leve RuntimeError si les constantes px du module sont encore None.
+    """
+    if BINARIZE_THRESHOLD is None:
+        raise RuntimeError(
+            "_apply_detection_config must be called before using "
+            "test_comb functions"
+        )
 
 
 def _apply_detection_config(scale_cm_per_px: float,
@@ -152,6 +164,7 @@ def load_image(path):
 
 
 def find_seeds_by_ocr(image):
+    _ensure_config_applied()
     import subprocess
     import json as json_lib
 
@@ -461,7 +474,10 @@ def erase_cartouches(gray_arr, cartouche_bboxes):
     return cleaned
 
 
-def binarize(gray_arr, threshold=BINARIZE_THRESHOLD):
+def binarize(gray_arr, threshold=None):
+    _ensure_config_applied()
+    if threshold is None:
+        threshold = BINARIZE_THRESHOLD
     return gray_arr < threshold
 
 
@@ -521,8 +537,10 @@ def remove_non_ortho(binary):
     return binary
 
 
-def ray_single(binary, x, y, dx, dy, max_dist=MAX_RAY_PX,
+def ray_single(binary, x, y, dx, dy, max_dist=None,
                stop_mask=None):
+    if max_dist is None:
+        max_dist = MAX_RAY_PX
     """Return the distance to the last white pixel before the wall.
 
     Args:
@@ -599,8 +617,8 @@ def ray_single_through(binary, x, y, dx, dy, max_dist, min_wall_px):
     return max_dist, obstacles
 
 
-COARSE_STEP_PX = 30  # phase 1: coarse scan to find room walls
-RAY_MARGIN_PX = 10   # margin beyond coarse distance for fine rays
+COARSE_STEP_PX: int | None = None  # set by _apply_detection_config
+RAY_MARGIN_PX: int | None = None   # set by _apply_detection_config
 
 
 def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
@@ -622,6 +640,7 @@ def comb_collect_hits(binary, cx, cy, step_px, other_seeds=None,
       all_hits = flat list [(px, py), ...]
       dir_hits = {'north': [...], 'south': [...], 'east': [...], 'west': [...]}
     """
+    _ensure_config_applied()
     # === Phase 1: coarse distances by direction (mode, not max) ===
     coarse_dists = {'north': [], 'south': [], 'west': [], 'east': []}
     coarse_hits: dict[str, list[tuple[int, int]]] = {
@@ -1213,10 +1232,12 @@ def largest_rect_no_hits(hits, cx, cy, return_all=False):
     return best_rect
 
 
-SNAP_SEARCH_PX = 6  # search ±6px around current edge for wall snap
+SNAP_SEARCH_PX: int | None = None  # set by _apply_detection_config
 
 
-def snap_rect_to_walls(binary, rect, search_px=SNAP_SEARCH_PX):
+def snap_rect_to_walls(binary, rect, search_px=None):
+    if search_px is None:
+        search_px = SNAP_SEARCH_PX
     """Snap rectangle edges to the modal wall position on each face.
 
     After largest_rect_no_hits, edges may be off by ±2-3px because the
@@ -1785,6 +1806,7 @@ def expand_door_arcs(binary, rect, dir_hits, cx, cy,
     Returns:
         (expanded_rect, doors) where doors = list of door_info dicts.
     """
+    _ensure_config_applied()
     x0, y0, x1, y1 = rect
     orig_rect = (x0, y0, x1, y1)
     doors = []
@@ -1877,6 +1899,7 @@ def detect_room(binary, cx, cy, step_px, door_width_px=23, other_seeds=None,
     """
     if scale_cm_per_px is not None:
         _apply_detection_config(scale_cm_per_px, detection_overrides)
+    _ensure_config_applied()
     all_hits, dir_hits, coarse_hits = comb_collect_hits(
         binary, cx, cy, step_px,
         other_seeds=other_seeds,
@@ -2017,7 +2040,6 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
     """
     from olm.ingestion.extract import _classify_wall_direct
 
-    thr = threshold or BINARIZE_THRESHOLD
     # Scale fourni par le caller (drawing_scale ou scale_cm_per_px) ou
     # auto-détecté plus bas. À l'étape de classification (avant l'auto-
     # détection), on a besoin d'un scale réaliste pour que les seuils en
@@ -2033,6 +2055,7 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
     # valeur d'import (1 px), ce qui produit des bboxes cartouche trop
     # serrées et laisse du texte dans l'image binarisée.
     _apply_detection_config(classify_scale, detection_overrides)
+    thr = threshold or BINARIZE_THRESHOLD
 
     seeds, cart_bboxes = find_seeds_by_ocr(img_gray)
 
