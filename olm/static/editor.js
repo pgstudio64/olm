@@ -1247,7 +1247,10 @@ function _renderImpl(targetSvg) {
   // Overlay raster background (only for Review/Design canvases, not the Pattern Editor
   // — except in amend mode where the overlay helps align the layout to the plan)
   var isEditor = svg && svg.id === "canvas";
-  if (state.overlay && (!isEditor || state.amendMode)) {
+  var edOvChecked = isEditor && state.amendMode
+    ? (document.getElementById("edOverlayToggle") || {}).checked
+    : true;
+  if (state.overlay && (!isEditor || state.amendMode) && edOvChecked) {
     var ov = state.overlay;
     var ovScale = SCALE / ov.pxPerCm;  // convert image px to SVG units
     var ovW = ov.imgW * ovScale;

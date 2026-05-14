@@ -536,6 +536,8 @@
     var hasRooms = ingState.rooms && ingState.rooms.length > 0;
     var sections = document.getElementById('ingPlanSections');
     if (sections) sections.style.display = hasRooms ? '' : 'none';
+    var leftCol = document.getElementById('fpLeftInfoCol');
+    if (leftCol) leftCol.style.display = hasRooms ? '' : 'none';
     // Review and Design tabs: hidden when no plan loaded
     ['fpReview', 'lytDesign'].forEach(function(tab) {
       var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
@@ -591,7 +593,7 @@
   function _setSelectedPlan(id, mode) {
     ingState._selectedPlan = { id: id || '', mode: mode || '' };
     var disp = document.getElementById('hdrCurrentPlanText');
-    if (disp) disp.textContent = id || '— Select a plan —';
+    if (disp) disp.textContent = id || '— Select a floor plan —';
     _renderPlanList();
   }
   function _openPlanPopup() {
@@ -638,17 +640,14 @@
 
   // Extracted from plan-item inline handler (P1.4).
   function _onPlanItemClick(newPlanId, newPlanMode) {
-    // Confirm if a plan is already loaded (aligned with Close button wording)
-    var curText = (document.getElementById('hdrCurrentPlanText') || {}).textContent || '';
-    if (curText && curText !== '— Select a plan —') {
-      if (!confirm('Switch floor plan? Unsaved changes will be lost.')) return;
-    }
-    _setSelectedPlan(newPlanId, newPlanMode);
-    ingState.rooms = [];
-    _closePlanPopup();
-    var hdr = document.getElementById('hdrCurrentPlanText');
-    if (hdr) hdr.textContent = newPlanId + ' — Importing...';
-    _showPlanLoadedUI(newPlanId);
+    function _doImport() {
+      _setSelectedPlan(newPlanId, newPlanMode);
+      ingState.rooms = [];
+      _closePlanPopup();
+      showModal('Importing floor plan...');
+      var hdr = document.getElementById('hdrCurrentPlanText');
+      if (hdr) hdr.textContent = newPlanId;
+      _showPlanLoadedUI(newPlanId);
 
     var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
     var pngReady = false, metaReady = false;
@@ -730,6 +729,22 @@
       _tryRenderAndImport();
     };
     img.src = url;
+    }  // end _doImport
+
+    // Confirm if a plan is already loaded (skip programmatic reloads)
+    if (ingState._skipSwitchConfirm) {
+      ingState._skipSwitchConfirm = false;
+      _doImport();
+    } else {
+      var curText = (document.getElementById('hdrCurrentPlanText') || {}).textContent || '';
+      if (curText && curText !== '— Select a floor plan —') {
+        confirmModal('Switch floor plan? Unsaved changes will be lost.').then(function (ok) {
+          if (ok) _doImport();
+        });
+      } else {
+        _doImport();
+      }
+    }
   }
 
   function populateDropdown(plans) {
@@ -768,16 +783,20 @@
     }
 
     // Confirm before OCR (can be slow; no JSON available for this plan)
-    var ok = confirm(
-      'No JSON file found for this plan. Processing the input with Optical Character ' +
+    confirmModal(
+      'No JSON file found for this plan. Processing with Optical Character ' +
       'Recognition \u2014 this may take a few seconds. Continue?'
-    );
-    if (!ok) {
-      _setSelectedPlan('', '');
-      return;
-    }
-
+    ).then(function (ok) {
+      if (!ok) { _setSelectedPlan('', ''); hideModal(); return; }
+      _extractRoomsOcr();
+    });
+    return;
+  }
+  function _extractRoomsOcr() {
+    var sel = _getSelectedPlan();
+    var planId = sel.id;
     var status = document.getElementById('ingStatus');
+    showModal('Extracting rooms (OCR)...');
     if (status) status.textContent = 'Extracting...';
 
     var formData = new FormData();
@@ -864,10 +883,11 @@
           imgW: ingState.planW,
           imgH: ingState.planH,
         };
-        document.getElementById("fpOverlayToggle").checked = true;
-        document.getElementById("rvOverlayToggle").checked = true;
+        if (window.syncOverlayToggle) window.syncOverlayToggle(true);
+        hideModal();
       })
       .catch(function (e) {
+        hideModal();
         status.textContent = 'Error: ' + e;
         var debugLog = document.getElementById('ingDebugLog');
         if (debugLog) debugLog.textContent = '[ERROR] ' + e;
@@ -2526,12 +2546,11 @@
           imgW: ingState.planW,
           imgH: ingState.planH,
         };
-        var fpTog = document.getElementById('fpOverlayToggle');
-        if (fpTog) fpTog.checked = true;
-        var rvTog = document.getElementById('rvOverlayToggle');
-        if (rvTog) rvTog.checked = true;
+        if (window.syncOverlayToggle) window.syncOverlayToggle(true);
+        hideModal();
       })
       .catch(function (e) {
+        hideModal();
         if (status) status.textContent = 'Error: ' + e;
       });
   }

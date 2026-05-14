@@ -3,6 +3,21 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.70] — 2026-05-14 — Modal centrée + synchro toggles (D-195)
+
+### Added
+- Composant modal centrée (`modal.js`) : mode wait (spinner) et confirm (OK/Cancel avec Promise).
+
+### Changed
+- `confirm()` natifs remplacés par `confirmModal()` pour Close, Reinit, Clear layout, Switch plan, OCR.
+- Messages "Importing..." affichés en modal centrée au lieu du header top-right.
+- Synchro toggles Overlay (on/off + opacity) et Grid centralisée via `syncOverlayToggle`/`syncOverlayOpacity`/`syncGridToggle` — propriétés de session, pas d'écran.
+- Contrôles Overlay ajoutés dans la toolbar Pattern Editor (Amend layout).
+- Colonne gauche Import cachée quand aucun plan n'est chargé.
+- Wording "floor plan" au lieu de "plan" dans les textes UI visibles.
+
+---
+
 ## [v0.4.69] — 2026-05-14 — UX sélecteur plan top-right (D-194)
 
 ### Changed

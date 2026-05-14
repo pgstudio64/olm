@@ -36,7 +36,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:30px 8px 4px 0;white-space:nowrap;">
     <div id="hdrPlanSelector" style="position:relative;">
       <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan — click to switch">
-        <span id="hdrCurrentPlanText">— Select a plan —</span>
+        <span id="hdrCurrentPlanText">— Select a floor plan —</span>
         <span style="color:var(--text-dim);font-size:9px;margin-left:6px;">&#9660;</span>
       </div>
       <div id="hdrPlanPopup" style="display:none;position:absolute;top:calc(100% + 2px);right:0;min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
@@ -59,6 +59,17 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <button class="settings-btn" id="btnOpenSettings" title="Settings">&#9881;</button>
   </div>
 </div>
+<!-- Centered modal overlay -->
+<div class="olm-modal-backdrop" id="olmModalBackdrop" style="display:none;"></div>
+<div class="olm-modal-box" id="olmModalBox" style="display:none;">
+  <div id="olmModalMsg" class="olm-modal-msg"></div>
+  <div id="olmModalSpinner" class="olm-modal-spinner"></div>
+  <div id="olmModalBtns" class="olm-modal-btns" style="display:none;">
+    <button class="btn" id="olmModalOk">OK</button>
+    <button class="btn btn-cancel" id="olmModalCancel">Cancel</button>
+  </div>
+</div>
+
 <!-- Settings drawer overlay -->
 <div class="settings-overlay-backdrop" id="settingsBackdrop"></div>
 <div class="settings-overlay" id="settingsDrawer">
@@ -454,10 +465,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div class="fp-canvas-wrap" id="fpCanvasWrap">
           <div class="canvas-toolbar">
             <table class="nav-layout"><tr>
-              <td class="nav-left">
-                <label><input type="checkbox" id="fpCircToggle"> Circulation</label>
-              </td>
+              <td class="nav-left"></td>
               <td class="nav-center">
+                <label><input type="checkbox" id="fpCircToggle"> Circulation</label>
                 <label><input type="checkbox" id="fpOverlayToggle"> Overlay</label>
                 <input type="range" id="fpOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
                 <span id="fpOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
@@ -602,20 +612,30 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <span id="deskCount">0 desk(s)</span>
     </div>
     <div class="canvas-toolbar">
-      <label><input type="checkbox" id="circToggle"> Circulation</label>
-      <label><input type="checkbox" id="gridToggle" checked> Grid</label>
-      <button id="btnZoomOut" class="btn btn-toolbar" title="Zoom out">&#8722;</button>
-      <button id="btnZoomFit" class="btn btn-toolbar" title="Fit all">&#8861;</button>
-      <button id="btnZoomIn" class="btn btn-toolbar" title="Zoom in">+</button>
-      <span class="editor-only" id="editorOnlyToolbar">
-      <span style="color:var(--border);margin:0 4px;">|</span>
-      <button id="btnRotate" class="btn btn-toolbar" title="Rotate 90° CW (R)">&#x21BB; Rot</button>
-      <button id="btnOffsetN" class="btn btn-toolbar" title="North -10cm (&#8593;)">&#x25B2; N</button>
-      <button id="btnOffsetS" class="btn btn-toolbar" title="South +10cm (&#8595;)">&#x25BC; S</button>
-      <button id="btnOffsetW" class="btn btn-toolbar" title="West -10cm (&#8592;)">&#x25C0; W</button>
-      <button id="btnOffsetE" class="btn btn-toolbar" title="East +10cm (&#8594;)">&#x25B6; E</button>
-      <span id="canvasDims" style="display:none;"></span>
-      </span>
+      <table class="nav-layout"><tr>
+        <td class="nav-left"></td>
+        <td class="nav-center">
+          <label><input type="checkbox" id="circToggle"> Circulation</label>
+          <label><input type="checkbox" id="edOverlayToggle"> Overlay</label>
+          <input type="range" id="edOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
+          <span id="edOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
+          <label><input type="checkbox" id="gridToggle" checked> Grid</label>
+        </td>
+        <td class="nav-right">
+          <button id="btnZoomOut" class="btn btn-toolbar" title="Zoom out">&#8722;</button>
+          <button id="btnZoomFit" class="btn btn-toolbar" title="Fit all">&#8861;</button>
+          <button id="btnZoomIn" class="btn btn-toolbar" title="Zoom in">+</button>
+          <span class="editor-only" id="editorOnlyToolbar">
+          <span style="color:var(--border);margin:0 4px;">|</span>
+          <button id="btnRotate" class="btn btn-toolbar" title="Rotate 90° CW (R)">&#x21BB; Rot</button>
+          <button id="btnOffsetN" class="btn btn-toolbar" title="North -10cm (&#8593;)">&#x25B2; N</button>
+          <button id="btnOffsetS" class="btn btn-toolbar" title="South +10cm (&#8595;)">&#x25BC; S</button>
+          <button id="btnOffsetW" class="btn btn-toolbar" title="West -10cm (&#8592;)">&#x25C0; W</button>
+          <button id="btnOffsetE" class="btn btn-toolbar" title="East +10cm (&#8594;)">&#x25B6; E</button>
+          <span id="canvasDims" style="display:none;"></span>
+          </span>
+        </td>
+      </tr></table>
     </div>
     <div class="canvas-wrap">
       <svg id="canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
@@ -762,6 +782,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <script src="/static/ingestion_scale.js?v={{ v }}"></script>
 <script src="/static/ingestion_serialize.js?v={{ v }}"></script>
 <script src="/static/ingestion.js?v={{ v }}"></script>
+<script src="/static/modal.js?v={{ v }}"></script>
 <script src="/static/init.js?v={{ v }}"></script>
 <script src="/static/init_rvtool.js?v={{ v }}"></script>
 <script src="/static/minimap.js?v={{ v }}"></script>

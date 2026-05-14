@@ -7,6 +7,16 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-195 · Modal centrée + synchro toggles session + UX fixes (2026-05-14, v0.4.70)
+
+**Décision** : (1) Créer un composant modal centrée (`modal.js`) avec deux modes : wait (spinner, auto-dismiss) et confirm (OK/Cancel, Promise). Remplacer les `confirm()` natifs (Close, Reinit, Clear layout, Switch plan, OCR) et les messages "Importing..." par ce composant. (2) Centraliser la synchro des toggles Overlay (on/off, opacity) et Grid via `syncOverlayToggle`, `syncOverlayOpacity`, `syncGridToggle` — propriétés de session synchronisées entre Room, Office et Amend layout. (3) Ajouter contrôles Overlay dans la toolbar Pattern Editor (Amend layout). (4) Cacher la colonne gauche Import quand aucun plan n'est chargé. (5) Wording "floor plan" au lieu de "plan" dans les textes UI.
+
+**Justification** : les `confirm()` natifs sont moches et non stylisables ; les messages "..." dans le header sont peu visibles ; les toggles se désynchronisaient entre vues (mauvaise image de robustesse).
+
+**Impact** : nouveau fichier `modal.js`, modifications CSS/HTML/JS, 268 tests verts, aucun changement backend.
+
+---
+
 ## D-194 · Sélecteur de plan unifié en top-right (2026-05-14, v0.4.69)
 
 **Décision** : le sélecteur top-right `hdrCurrentPlan` devient l'unique point d'entrée pour ouvrir et changer de plan. Le déclencheur du panneau Import (`ingPlanSelector`) est retiré. La popup (filtre + liste déroulante) est déplacée sous le header top-right. Le switch de plan avec un plan déjà chargé passe par un `confirm()` aligné sur le bouton Close.
