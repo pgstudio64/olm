@@ -1,4 +1,18 @@
 "use strict";
+
+// --- Listener tracking (P1.4) ---
+var _cfgListeners = [];
+function _cfgTrack(el, event, handler, options) {
+  el.addEventListener(event, handler, options);
+  _cfgListeners.push({ el: el, event: event, handler: handler, options: options });
+}
+function _cfgDispose() {
+  _cfgListeners.forEach(function(l) {
+    l.el.removeEventListener(l.event, l.handler, l.options);
+  });
+  _cfgListeners = [];
+}
+
 async function loadSpacingConfigs() {
   try {
     var resp = await fetch("/api/spacing");
@@ -103,11 +117,13 @@ function renderSpacingSettings() {
   });
   grid.innerHTML = html;
 
-  // Wire change events
+  // Wire change events — dispose previous before re-binding
+  _cfgDispose();
   grid.querySelectorAll("input[data-std]").forEach(function(inp) {
-    inp.addEventListener("change", function() {
+    var handler = function() {
       saveSpacingField(inp.dataset.std, inp.dataset.field, parseInt(inp.value) || 0);
-    });
+    };
+    _cfgTrack(inp, "change", handler);
   });
 }
 
@@ -121,7 +137,7 @@ function renderEditorStandardRadios() {
     html += '<label><input type="radio" name="standard" value="' + s + '"' + checked + '> ' + getStdLabel(s) + '</label>';
   });
   container.innerHTML = html;
-  // Re-wire change listeners
+  // Session-life: bound once at init, no dispose needed
   container.querySelectorAll('input[name="standard"]').forEach(function(r) {
     r.addEventListener("change", function() {
       state.standard = this.value;
@@ -227,7 +243,7 @@ function renderGeneralSettings() {
       html += '</div>';
     });
     labelsDiv.innerHTML = html;
-    // Label change
+    // Session-life: bound once at init, no dispose needed
     labelsDiv.querySelectorAll("input[data-std-label]").forEach(function(inp) {
       inp.addEventListener("change", function() {
         var labels = APP_CONFIG.standard_labels || {};
@@ -236,7 +252,7 @@ function renderGeneralSettings() {
         renderFpStandardFilter();
       });
     });
-    // Default standard radio
+    // Session-life: bound once at init, no dispose needed
     labelsDiv.querySelectorAll('input[name="cfgDefaultStd"]').forEach(function(radio) {
       radio.addEventListener("change", function() {
         APP_CONFIG.default_standard = this.value;
@@ -248,6 +264,7 @@ function renderGeneralSettings() {
 }
 
 function initSettingsTabs() {
+  // Session-life: tab buttons are persistent, bound once at init
   document.querySelectorAll(".settings-tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       document.querySelectorAll(".settings-tab-btn").forEach(function(b) { b.classList.remove("active"); });
