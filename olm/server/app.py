@@ -17,15 +17,15 @@ DEV_MODE: bool = False
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from olm.core.catalogue_matcher import generate_auto_name, compact_catalogue_names
-from olm.core.pattern_dsl import parse_dsl, to_dsl, DSLError
-from olm.core.room_dsl import parse_room_dsl, to_room_dsl, RoomDSLError
+from olm.core.pattern_dsl import DSLError
+from olm.core.room_dsl import RoomDSLError
 from olm.server.services.config_service import (
     BASE_DIR, PROJECT_ROOT,
     get_plans_dir, get_detection_overrides, get_default_threshold,
     get_exterior_rgb, get_corridor_rgb,
     get_block_defs, invalidate_block_cache,
 )
+from olm.server.services.catalogue_service import load_catalogue
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,6 @@ app = Flask(
     static_folder=None,
     template_folder=os.path.join(BASE_DIR, "templates"),
 )
-CATALOGUE_DIR = os.path.join(PROJECT_ROOT, "project", "catalogue")
-CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
-
 PLANS_DIR = get_plans_dir()
 
 
@@ -55,30 +52,6 @@ def _drawing_scale_to_cm_per_px(text: str, render_dpi: int) -> float | None:
 def serve_static(filename: str):
     """Serve static files from the static/ folder."""
     return send_from_directory(os.path.join(BASE_DIR, "static"), filename)
-
-
-def _load_catalogue() -> list[dict]:
-    """Load the catalogue from the JSON file."""
-    if not os.path.exists(CATALOGUE_PATH):
-        return []
-    with open(CATALOGUE_PATH, encoding="utf-8") as f:
-        data = json.load(f)
-    return data.get("patterns", [])
-
-
-def _save_catalogue(patterns: list[dict]) -> None:
-    """Save the catalogue to the JSON file."""
-    os.makedirs(CATALOGUE_DIR, exist_ok=True)
-    with open(CATALOGUE_PATH, "w", encoding="utf-8") as f:
-        json.dump({"patterns": patterns}, f, indent=2, ensure_ascii=False)
-
-
-def _find_pattern(patterns: list[dict], name: str) -> int:
-    """Return the pattern index by name, or -1 if not found."""
-    for i, p in enumerate(patterns):
-        if p["name"] == name:
-            return i
-    return -1
 
 
 @app.route("/")
@@ -876,230 +849,126 @@ def api_config_post():
 @app.route("/api/patterns", methods=["GET"])
 def api_patterns_list():
     """List all patterns in the catalogue."""
-    patterns = _load_catalogue()
-    return jsonify({"patterns": patterns, "count": len(patterns)})
+    from olm.server.services.catalogue_service import list_patterns
+    return jsonify(list_patterns())
 
 
 @app.route("/api/catalogue/export", methods=["GET"])
 def api_catalogue_export():
     """Export the full catalogue as JSON (download)."""
-    patterns = _load_catalogue()
-    response = jsonify({"patterns": patterns})
-    response.headers["Content-Disposition"] = "attachment; filename=patterns.json"
+    from olm.server.services.catalogue_service import export_catalogue
+    response = jsonify(export_catalogue())
+    response.headers["Content-Disposition"] = (
+        "attachment; filename=patterns.json")
     response.headers["Content-Type"] = "application/json"
     return response
 
 
 @app.route("/api/catalogue/import", methods=["POST"])
 def api_catalogue_import():
-    """Import patterns into the catalogue (merge).
-
-    JSON body: {"patterns": [...]} in catalogue format.
-    Imported patterns are appended. Name conflicts are resolved by
-    automatic renumbering (compact names).
-    """
+    """Import patterns into the catalogue (merge)."""
+    from olm.server.services.catalogue_service import import_catalogue
     try:
-        data = request.json
-        if not data or "patterns" not in data:
-            return jsonify({"error": "Required field: patterns"}), 400
-
-        imported = data["patterns"]
-        if not isinstance(imported, list):
-            return jsonify({"error": "patterns must be a list"}), 400
-
-        # Minimal schema validation
-        required_fields = {"rows", "room_width_cm", "room_depth_cm", "standard"}
-        for i, p in enumerate(imported):
-            missing = required_fields - set(p.keys())
-            if missing:
-                return jsonify({
-                    "error": f"Pattern #{i}: missing fields: {missing}",
-                }), 400
-
-        catalogue = _load_catalogue()
-        n_before = len(catalogue)
-
-        # Merge: append imported patterns
-        for p in imported:
-            catalogue.append(p)
-
-        # Compact names (renumber) — resolves name conflicts
-        compact_catalogue_names(catalogue)
-        _save_catalogue(catalogue)
-
-        n_added = len(catalogue) - n_before
-        return jsonify({
-            "ok": True,
-            "imported": n_added,
-            "total": len(catalogue),
-        })
+        return jsonify(import_catalogue(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("catalogue import failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/patterns", methods=["POST"])
 def api_patterns_create():
-    """Create or update a pattern.
-
-    JSON body: a pattern in PATTERN_DSL_SPEC.md format.
-    If a pattern with the same name exists, it is replaced.
-    If auto_name=true in the body, the name is auto-generated.
-    After each save, name increments are compacted by group.
-    """
+    """Create or update a pattern."""
+    from olm.server.services.catalogue_service import create_pattern
     try:
-        data = request.json
-        if not data or "rows" not in data:
-            return jsonify({"error": "Required field: rows"}), 400
-
-        patterns = _load_catalogue()
-
-        # Auto-name if requested or if no name provided
-        auto_name = data.pop("auto_name", False)
-        if auto_name or "name" not in data:
-            data["name"] = generate_auto_name(data, patterns)
-
-        idx = _find_pattern(patterns, data["name"])
-        if idx >= 0:
-            patterns[idx] = data
-        else:
-            patterns.append(data)
-
-        # Compact name increments by group
-        compact_catalogue_names(patterns)
-
-        _save_catalogue(patterns)
-        return jsonify({"ok": True, "name": data["name"], "count": len(patterns)})
+        return jsonify(create_pattern(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("pattern create failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/patterns/<name>", methods=["GET"])
 def api_pattern_get(name: str):
     """Return a pattern by name."""
-    patterns = _load_catalogue()
-    idx = _find_pattern(patterns, name)
-    if idx < 0:
+    from olm.server.services.catalogue_service import get_pattern
+    result = get_pattern(name)
+    if result is None:
         return jsonify({"error": f"Pattern not found: {name}"}), 404
-    return jsonify(patterns[idx])
+    return jsonify(result)
 
 
 @app.route("/api/patterns/<name>", methods=["DELETE"])
 def api_pattern_delete(name: str):
-    """Delete a pattern by name and compact name increments."""
-    patterns = _load_catalogue()
-    idx = _find_pattern(patterns, name)
-    if idx < 0:
+    """Delete a pattern by name."""
+    from olm.server.services.catalogue_service import delete_pattern
+    result = delete_pattern(name)
+    if result is None:
         return jsonify({"error": f"Pattern not found: {name}"}), 404
-    patterns.pop(idx)
-    compact_catalogue_names(patterns)
-    _save_catalogue(patterns)
-    return jsonify({"ok": True, "name": name, "count": len(patterns)})
+    return jsonify(result)
 
 
 @app.route("/api/patterns/<name>/duplicate", methods=["POST"])
 def api_pattern_duplicate(name: str):
-    """Duplicate a pattern with a new name.
-
-    Optional JSON body: {"new_name": "P_COPY"}.
-    If absent, _copy suffix is added.
-    """
+    """Duplicate a pattern with a new name."""
+    from olm.server.services.catalogue_service import duplicate_pattern
+    data = request.json or {}
     try:
-        patterns = _load_catalogue()
-        idx = _find_pattern(patterns, name)
-        if idx < 0:
-            return jsonify({"error": f"Pattern not found: {name}"}), 404
-
-        data = request.json or {}
-        new_name = data.get("new_name", name + "_copy")
-        if _find_pattern(patterns, new_name) >= 0:
-            return jsonify({"error": f"Name already in use: {new_name}"}), 409
-
-        import copy
-        new_pattern = copy.deepcopy(patterns[idx])
-        new_pattern["name"] = new_name
-        patterns.append(new_pattern)
-        _save_catalogue(patterns)
-        return jsonify({"ok": True, "name": new_name, "count": len(patterns)})
+        return jsonify(duplicate_pattern(name, data.get("new_name")))
+    except KeyError as e:
+        return jsonify({"error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("pattern duplicate failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/dsl/parse", methods=["POST"])
 def api_dsl_parse():
-    """Parse DSL text to JSON.
-
-    JSON body: {"dsl": "P_B4: BLOCK_4_FACE, 180, BLOCK_2_FACE"}
-    """
+    """Parse DSL text to JSON."""
+    from olm.server.services.catalogue_service import dsl_parse
+    data = request.json
+    if not data or "dsl" not in data:
+        return jsonify({"error": "Required field: dsl"}), 400
     try:
-        data = request.json
-        if not data or "dsl" not in data:
-            return jsonify({"error": "Required field: dsl"}), 400
-        result = parse_dsl(data["dsl"])
-        return jsonify(result)
+        return jsonify(dsl_parse(data["dsl"]))
     except DSLError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("DSL parse failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/dsl/export", methods=["POST"])
 def api_dsl_export():
-    """Export a JSON pattern to DSL text.
-
-    JSON body: a pattern in PATTERN_DSL_SPEC.md format.
-    """
+    """Export a JSON pattern to DSL text."""
+    from olm.server.services.catalogue_service import dsl_export
     try:
-        data = request.json
-        if not data or "name" not in data:
-            return jsonify({"error": "Required field: name"}), 400
-        dsl_text = to_dsl(data)
-        return jsonify({"dsl": dsl_text})
+        return jsonify(dsl_export(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("DSL export failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/room-dsl/parse", methods=["POST"])
 def api_room_dsl_parse():
-    """Parse room DSL text to JSON.
-
-    JSON body: {"dsl": "ROOM 300x480\\nWINDOW N 0 300\\nDOOR S 0 90 INT L"}
-    Returns parsed fields for updating the editor.
-    """
+    """Parse room DSL text to JSON."""
+    from olm.server.services.catalogue_service import room_dsl_parse
+    data = request.json
+    if not data or "dsl" not in data:
+        return jsonify({"error": "Required field: dsl"}), 400
     try:
-        data = request.json
-        if not data or "dsl" not in data:
-            return jsonify({"error": "Required field: dsl"}), 400
-        room = parse_room_dsl(data["dsl"])
-        return jsonify({
-            "width_cm": room.width_cm,
-            "depth_cm": room.depth_cm,
-            "windows": [
-                {"face": w.face.value, "offset_cm": w.offset_cm,
-                 "width_cm": w.width_cm}
-                for w in room.windows
-            ],
-            "openings": [
-                {"face": o.face.value, "offset_cm": o.offset_cm,
-                 "width_cm": o.width_cm, "has_door": o.has_door,
-                 "opens_inward": o.opens_inward,
-                 "hinge_side": o.hinge_side.value}
-                for o in room.openings
-            ],
-            "exclusion_zones": [
-                {"x_cm": z.x_cm, "y_cm": z.y_cm,
-                 "width_cm": z.width_cm, "depth_cm": z.depth_cm}
-                for z in room.exclusion_zones
-            ],
-            "transparent_zones": [
-                {"x_cm": z.x_cm, "y_cm": z.y_cm,
-                 "width_cm": z.width_cm, "depth_cm": z.depth_cm}
-                for z in (room.transparent_zones or [])
-            ],
-        })
+        return jsonify(room_dsl_parse(data["dsl"]))
     except RoomDSLError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        logger.exception("Room DSL parse failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/room/reanalyze", methods=["POST"])
@@ -1655,7 +1524,7 @@ def _pattern_total_desks(pattern: dict) -> int:
 @app.route("/api/mock-candidates", methods=["GET"])
 def api_mock_candidates():
     """Generate mock candidate solutions for the reference room."""
-    patterns = _load_catalogue()
+    patterns = load_catalogue()
     candidates = []
     cid = 1
     room_eo = MOCK_ROOM["eo_cm"]
@@ -1722,7 +1591,7 @@ def api_floor_plan_match():
         if not data or "rooms" not in data:
             return jsonify({"error": "Required field: rooms"}), 400
 
-        catalogue = _load_catalogue()
+        catalogue = load_catalogue()
         results = []
 
         for r in data["rooms"]:
@@ -1797,7 +1666,7 @@ def api_coverage():
             return jsonify({"error": "Required field: rooms"}), 400
 
         rooms = [room_from_json(r) for r in data["rooms"]]
-        catalogue = _load_catalogue()
+        catalogue = load_catalogue()
         report = analyse_coverage(rooms, catalogue)
         return jsonify(report_to_dict(report))
 
@@ -1813,5 +1682,6 @@ if __name__ == "__main__":
     DEV_MODE = args.dev
     mode_label = " [DEV]" if DEV_MODE else ""
     print(f"Pattern editor{mode_label} — http://localhost:5051")
+    from olm.server.services.catalogue_service import CATALOGUE_PATH
     print(f"Catalogue: {CATALOGUE_PATH}")
     app.run(debug=True, port=5051)
