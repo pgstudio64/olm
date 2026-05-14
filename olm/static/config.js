@@ -280,6 +280,7 @@ function renderFloorplanSettings() {
         try { localStorage.setItem("olm_hideDetectionColors", this.checked ? "1" : ""); }
         catch (e) { /* ignore */ }
         if (typeof window.renderIngestion === "function") window.renderIngestion();
+        if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
       }
     };
   }

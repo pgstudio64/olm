@@ -10,12 +10,23 @@
  * Click to toggle full / reduced size.  Starts collapsed.
  */
 (function () {
-  var MAX_DIM = 286;
+  var MAX_DIM = 343;
   var COLLAPSED_RATIO = 1.67;
   var MARGIN_RATIO = 0.12;
   var _processedCanvas = null;
   var _processedUrl = "";
   var _collapsed = true;
+
+  // 3 sizes derived from MAX_DIM and COLLAPSED_RATIO.
+  var SIZE_L = MAX_DIM;
+  var SIZE_M = Math.round(MAX_DIM / COLLAPSED_RATIO);
+  var SIZE_S = Math.round(MAX_DIM / (COLLAPSED_RATIO * COLLAPSED_RATIO));
+  var VIEWPORT_THRESHOLD = 2 * MAX_DIM;
+
+  function _sizePair() {
+    var tall = window.innerHeight > VIEWPORT_THRESHOLD;
+    return tall ? [SIZE_M, SIZE_L] : [SIZE_S, SIZE_M];
+  }
 
   var COL_BORDER = "rgba(255,255,255,0.5)";
   var COL_WALL   = "rgba(255,255,255,0.6)";
@@ -140,7 +151,8 @@
     var envH = env.y1 - env.y0;
     if (envW <= 0 || envH <= 0) { container.style.display = "none"; return; }
 
-    var maxDim = _collapsed ? Math.round(MAX_DIM / COLLAPSED_RATIO) : MAX_DIM;
+    var pair = _sizePair();
+    var maxDim = _collapsed ? pair[0] : pair[1];
     var ratio = Math.min(maxDim / envW, maxDim / envH);
     var cw = Math.max(40, Math.round(envW * ratio));
     var ch = Math.max(30, Math.round(envH * ratio));
