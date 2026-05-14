@@ -15,10 +15,10 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 
 ### Phase 1 — Solidification (~42 h)
 - [x] **P1.1** ~~Casser le cycle `extract.py ↔ test_comb.py`~~ — D-189, v0.4.53. Renommage `comb_detection.py`, extraction `wall_classify.py`, suppression `main()`/`draw_debug_*`.
-- **P1.2** Split `olm/server/app.py` (2184 l.) en `olm/server/services/` (5 modules) — cf. [ARCHITECTURE_TARGET.md § 6.1](specs/ARCHITECTURE_TARGET.md) (~18 h).
+- [x] **P1.2** ~~Split `olm/server/app.py` en `olm/server/services/`~~ — D-190, v0.4.54. 2184 → 675 l. (-69 %). 5 modules : config_service (372), serialization (93), catalogue_service (269), matching_service (212), ingestion_service (968). 202 tests, 40 routes, 0 cycle.
 - **P1.3** Tests `olm/core/circulation_analysis.py` (grades A-F, détours, violations) — couverture 0 % → 80 % cible (~8 h).
 - **P1.4** Cleanup 77 `addEventListener` côté front sans `removeEventListener` (~7 h).
-- **P1.5** Remplacer 12 `traceback.print_exc()` par `logger.exception()` dans `app.py` (~2 h).
+- [x] **P1.5** ~~Remplacer `traceback.print_exc()` par `logger.exception()`~~ — integre dans P1.2, v0.4.54. 0 restant dans `app.py`.
 
 ### Phase 2 — Robustesse opérationnelle (~40 h)
 - **Verrou mono-utilisateur** : état en mémoire Flask (pas de lock file → reset au redémarrage = pas de blocage post-crash). Cookie session, page « OLM déjà en cours d'utilisation » + bouton « Prendre le contrôle », idle timeout 30 min (~4 h).
