@@ -50,14 +50,20 @@ class _RequestIdFilter(logging.Filter):
 
 
 def configure_logging(*, dev: bool = False) -> None:
-    """Set up the 'olm' root logger with stderr + rotating file handlers."""
+    """Set up the 'olm' root logger with stderr + rotating file handlers.
+
+    Idempotent: clears existing handlers then rebuilds. Safe to call
+    multiple times (import-time + __main__ reconfigure for --dev,
+    Flask reloader child process, etc.).
+    """
     level = logging.DEBUG if dev else logging.INFO
     olm_logger = logging.getLogger("olm")
     olm_logger.setLevel(level)
 
-    # Avoid duplicate handlers on repeated calls (e.g. tests)
-    if olm_logger.handlers:
-        return
+    # Close existing handlers before clearing (avoids leaked file descriptors)
+    for h in olm_logger.handlers:
+        h.close()
+    olm_logger.handlers.clear()
 
     formatter = logging.Formatter(LOG_FORMAT)
     req_filter = _RequestIdFilter()
@@ -81,7 +87,9 @@ def configure_logging(*, dev: bool = False) -> None:
 # Configure logging at import time (INFO by default, reconfigured in __main__)
 configure_logging(dev=False)
 
-logger = logging.getLogger(__name__)
+# Hardcoded name: when run via `python -m olm.server.app`, __name__ is
+# "__main__" which is NOT a child of the "olm" logger hierarchy.
+logger = logging.getLogger("olm.server.app")
 
 app = Flask(
     __name__,
@@ -103,11 +111,13 @@ def _before_request() -> None:
 @app.after_request
 def _after_request(response):
     """Log every HTTP request with method, path, status, duration."""
-    duration_ms = (time.monotonic() - g.start_time) * 1000
-    logger.info(
-        "%d %s %s in %.0f ms",
-        response.status_code, request.method, request.path, duration_ms,
-    )
+    start = getattr(g, 'start_time', None)
+    if start is not None:
+        duration_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "%d %s %s in %.0f ms",
+            response.status_code, request.method, request.path, duration_ms,
+        )
     return response
 
 
@@ -808,11 +818,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     DEV_MODE = args.dev
     set_dev_mode(args.dev)
-    if args.dev:
-        # Reconfigure to DEBUG level — clear handlers first
-        olm_root = logging.getLogger("olm")
-        olm_root.handlers.clear()
-        configure_logging(dev=True)
+    # Reconfigure logging (idempotent — rebuilds handlers with correct level)
+    configure_logging(dev=args.dev)
     mode_label = " [DEV]" if DEV_MODE else ""
     from olm.server.services.catalogue_service import CATALOGUE_PATH
     logger.info("Pattern editor%s — http://localhost:5051", mode_label)

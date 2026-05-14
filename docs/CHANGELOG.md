@@ -3,6 +3,17 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.63] — 2026-05-14 — P2.4 Structured logging (hotfix)
+
+### Fixed
+- **Hotfix logging** : `logger = logging.getLogger(__name__)` dans `app.py`
+  resolvait en `"__main__"` au lieu de `"olm.server.app"` quand lance via
+  `python -m olm.server.app` → logger hors hierarchie `"olm"`, handlers muets.
+  Corrige par nom explicite `logging.getLogger("olm.server.app")`.
+- `configure_logging()` rendu idempotent (clear + rebuild au lieu d'un guard
+  early-return qui empechait la reconfiguration dans le child reloader Flask).
+- `_after_request` securise avec `getattr(g, 'start_time', None)`.
+
 ## [v0.4.62] — 2026-05-14 — P2.4 Structured logging
 
 ### Added
