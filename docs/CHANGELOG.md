@@ -3,6 +3,14 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.84] — 2026-05-14 — Bbox shift fix + exclusion zones int at load/save
+
+### Fixed
+- Bbox recalculation after Adjust Room resize uses `rotatePointInv` to convert canonical corners to abs. Previously the shift was applied to the abs NW corner regardless of rotation, causing rooms to drift on west resize for non-south corridors.
+- Exclusion zone coords rounded to `int` at load and save (fixes existing float values from older pillar detection).
+
+---
+
 ## [v0.4.83] — 2026-05-14 — Exclusion zones int + Floor re-render after Amend
 
 ### Fixed

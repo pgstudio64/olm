@@ -7,6 +7,16 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-200 · Bbox shift fix + exclusion zones int at load/save (2026-05-14, v0.4.84)
+
+**Décision** : (1) Le recalcul du bbox après resize dans Adjust Room utilise `rotatePointInv` pour convertir les coins canoniques NW/SE en coordonnées abs, puis min/max. L'ancienne formule appliquait le shift au coin NW abs quel que soit le corridor_face, causant un décalage de la pièce pour les rotations non-south. (2) Les coordonnées des zones d'exclusion sont arrondies à `int` au load et au save JS (en plus de la source Python déjà corrigée en D-199), assurant la compatibilité avec les plans existants contenant des floats.
+
+**Justification** : bug prod — extension de la face ouest décalait la pièce vers la droite de 20 cm au lieu de l'étendre. Zones float cassaient la création de nouvelles zones manuelles.
+
+**Impact** : editor.js (bbox calc), ingestion_serialize.js (zones int load/save). 284 tests.
+
+---
+
 ## D-199 · Exclusion zones int + Floor re-render après Amend (2026-05-14, v0.4.83)
 
 **Décision** : (1) Les zones d'exclusion auto (poteaux) utilisent `int(round())` au lieu de `round(x, 1)` — le pipeline de rendu attend des entiers. (2) `renderIngestion()` est appelé après chaque Amend, pas seulement quand le bbox change — les modifications de zones/fenêtres/portes s'affichent immédiatement sur le Floor overlay.
