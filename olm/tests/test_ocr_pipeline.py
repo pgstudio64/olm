@@ -93,11 +93,9 @@ def test_ocr_with_drawing_scale():
 def test_ocr_without_drawing_scale():
     """Import OCR sans scale → 2-pass auto-calibration.
 
-    Seuils provisoires (phase 1 du test) :
-    - scale dans [2.5, 4.5] (fourchette large)
-    - >= 1 fenêtre, >= 1 porte
-
-    Les seuils seront figés après smoke-test sur valeurs mesurées.
+    Mesuré 1 fen / 11 portes / scale 3.654 sur test_floorplan_ocr.png
+    le 2026-05-14. Seuils figés à ~70 % du mesuré pour absorber la
+    variabilité future (OCR, binarisation, tesseract version).
     """
     from olm.ingestion.comb_detection import extract_all_rooms
 
@@ -110,7 +108,7 @@ def test_ocr_without_drawing_scale():
     total_win = sum(len(r['windows']) for r in result['rooms'])
     total_doors = sum(len(r['doors']) for r in result['rooms'])
     assert total_win >= 1, f"total windows {total_win} < 1"
-    assert total_doors >= 1, f"total doors {total_doors} < 1"
+    assert total_doors >= 7, f"total doors {total_doors} < 7"
 
 
 # ── Test 3 : calibration exclut pièces sans surface ──────────────────
