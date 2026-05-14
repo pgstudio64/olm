@@ -3,6 +3,16 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.59] — 2026-05-14 — P2.1 Upload validation
+
+### Added
+- **P2.1 — Upload validation** : limite taille (`MAX_CONTENT_LENGTH` = 50 MB),
+  whitelist MIME (image/png, image/jpeg, image/tiff, application/pdf) sur les
+  5 endpoints d'upload, handler 413.
+- Helper `_validate_upload()` + constante `ALLOWED_UPLOAD_MIMES` dans
+  `config_service.py`.
+- 3 tests upload validation dans `test_app_endpoints.py`.
+
 ## [v0.4.58] — 2026-05-14 — P1.4 Cleanup addEventListener re-binds
 
 ### Changed

@@ -14,11 +14,13 @@ import tempfile
 DEV_MODE: bool = False
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from olm.core.pattern_dsl import DSLError
 from olm.core.room_dsl import RoomDSLError
 from olm.server.services.config_service import (
     BASE_DIR, PROJECT_ROOT, get_plans_dir, set_dev_mode,
+    _validate_upload,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,14 @@ app = Flask(
     static_folder=None,
     template_folder=os.path.join(BASE_DIR, "templates"),
 )
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 PLANS_DIR = get_plans_dir()
+
+
+@app.errorhandler(413)
+def handle_request_too_large(e):
+    """Return JSON error when upload exceeds size limit."""
+    return jsonify({"error": "Fichier trop volumineux (limite : 50 MB)"}), 413
 
 
 # ===================================================================
@@ -192,6 +201,10 @@ def api_ingestion_extract():
     """Extract rooms from a raster floor plan image."""
     from olm.server.services.ingestion_service import extract_rooms
     from olm.server.services.config_service import get_default_threshold
+    if 'image' in request.files:
+        ok, err = _validate_upload(request.files['image'])
+        if not ok:
+            return jsonify({"error": err}), 415
     try:
         plan_path, is_temp = _resolve_plan_upload()
         scale_str = request.form.get('scale', '')
@@ -206,6 +219,8 @@ def api_ingestion_extract():
         return jsonify({"error": str(e)}), 404
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except RequestEntityTooLarge:
+        raise
     except Exception as e:
         logger.exception("ingestion extract failed")
         return jsonify({"error": str(e)}), 500
@@ -216,6 +231,10 @@ def api_ingestion_debug():
     """Extract rooms with detailed debug logs."""
     from olm.server.services.ingestion_service import extract_rooms_debug
     from olm.server.services.config_service import get_default_threshold
+    if 'image' in request.files:
+        ok, err = _validate_upload(request.files['image'])
+        if not ok:
+            return jsonify({"error": err}), 415
     try:
         plan_path, is_temp = _resolve_plan_upload()
         scale_str = request.form.get('scale', '')
@@ -230,6 +249,8 @@ def api_ingestion_debug():
         return jsonify({"error": str(e)}), 404
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except RequestEntityTooLarge:
+        raise
     except Exception as e:
         logger.exception("ingestion debug failed")
         return jsonify({"error": str(e)}), 500
@@ -240,6 +261,10 @@ def api_ingestion_binarize():
     """Return the binarized version of a plan image."""
     from olm.server.services.ingestion_service import binarize_image
     from olm.server.services.config_service import get_default_threshold
+    if 'image' in request.files:
+        ok, err = _validate_upload(request.files['image'])
+        if not ok:
+            return jsonify({"error": err}), 415
     try:
         plan_path, is_temp = _resolve_plan_upload()
         threshold = int(
@@ -250,6 +275,8 @@ def api_ingestion_binarize():
         return send_file(buf, mimetype='image/png')
     except (FileNotFoundError, ValueError) as e:
         return jsonify({"error": str(e)}), 400
+    except RequestEntityTooLarge:
+        raise
     except Exception as e:
         logger.exception("binarize failed")
         return jsonify({"error": str(e)}), 500
@@ -286,6 +313,9 @@ def api_import_ocr():
             plan_path = resolve_plan_id_image(plan_id)
         elif "floorplan_image" in request.files:
             f = request.files["floorplan_image"]
+            ok, err = _validate_upload(f)
+            if not ok:
+                return jsonify({"error": err}), 415
             fn = (f.filename or "").lower()
             is_pdf = fn.endswith(".pdf") or f.mimetype == "application/pdf"
             use_temp = True
@@ -305,6 +335,8 @@ def api_import_ocr():
         return jsonify(import_ocr(plan_path, scale, threshold, use_temp))
     except FileNotFoundError as e:
         return jsonify({"error": str(e)}), 400
+    except RequestEntityTooLarge:
+        raise
     except Exception as e:
         logger.exception("import OCR failed")
         return jsonify({"error": str(e)}), 500
@@ -334,6 +366,9 @@ def api_import_preprocessed():
             for field in ("enhanced_png", "overlay_png"):
                 if field not in request.files:
                     return jsonify({"error": f"{field} manquant"}), 400
+                ok, err = _validate_upload(request.files[field])
+                if not ok:
+                    return jsonify({"error": err}), 415
             fd, enhanced_path = tempfile.mkstemp(suffix="_enhanced.png")
             os.close(fd)
             request.files["enhanced_png"].save(enhanced_path)
@@ -357,6 +392,11 @@ def api_import_preprocessed():
             if p and os.path.exists(p):
                 os.unlink(p)
         return jsonify({"error": str(e)}), 400
+    except RequestEntityTooLarge:
+        for p in _temp_paths:
+            if p and os.path.exists(p):
+                os.unlink(p)
+        raise
     except Exception as e:
         logger.exception("import preprocessed failed")
         for p in _temp_paths:
