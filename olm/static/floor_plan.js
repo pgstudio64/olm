@@ -768,6 +768,30 @@
         if (el) el.checked = checked;
       });
     }
+
+    window.syncGridToggle = syncGridToggle;
+
+    // Overlay toggle sync across all tabs
+    function syncOverlayToggle(checked) {
+      ['fpOverlayToggle', 'rvOverlayToggle', 'edOverlayToggle'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.checked = checked;
+      });
+    }
+    window.syncOverlayToggle = syncOverlayToggle;
+
+    // Overlay opacity sync across all tabs
+    function syncOverlayOpacity(value) {
+      ['fpOverlayOpacity', 'rvOverlayOpacity', 'edOverlayOpacity'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = value;
+      });
+      ['fpOverlayOpacityVal', 'rvOverlayOpacityVal', 'edOverlayOpacityVal'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = value + '%';
+      });
+    }
+    window.syncOverlayOpacity = syncOverlayOpacity;
     document.getElementById("fpGridToggle").addEventListener("change", function(e) {
       syncGridToggle(e.target.checked);
       var room = fpCurrent();
@@ -845,33 +869,25 @@
       });
     }
     document.getElementById("fpOverlayToggle").addEventListener("change", function() {
-      document.getElementById("rvOverlayToggle").checked = this.checked;
+      syncOverlayToggle(this.checked);
       fpRenderCurrent();
     });
     document.getElementById("fpOverlayOpacity").addEventListener("input", function() {
-      document.getElementById("fpOverlayOpacityVal").textContent = this.value + "%";
-      document.getElementById("rvOverlayOpacity").value = this.value;
-      document.getElementById("rvOverlayOpacityVal").textContent = this.value + "%";
-      if (document.getElementById("fpOverlayToggle").checked && state.overlay) {
+      syncOverlayOpacity(this.value);
+      if (this.checked !== false && state.overlay) {
         state.overlay.opacity = parseInt(this.value);
         render(document.getElementById('fpCanvas'));
       }
     });
     // Review refresh — exposed on window for inline handlers
     window._rvRefresh = function() {
-      // Sync toggles
+      // Sync toggles across all tabs
       var rvGrid = document.getElementById("rvGridToggle");
       if (rvGrid) syncGridToggle(rvGrid.checked);
       var rvOv = document.getElementById("rvOverlayToggle");
-      var fpOv = document.getElementById("fpOverlayToggle");
-      if (rvOv && fpOv) fpOv.checked = rvOv.checked;
-      // Sync opacity
+      if (rvOv) syncOverlayToggle(rvOv.checked);
       var rvOp = document.getElementById("rvOverlayOpacity");
-      var fpOp = document.getElementById("fpOverlayOpacity");
-      if (rvOp && fpOp) {
-        fpOp.value = rvOp.value;
-        document.getElementById("fpOverlayOpacityVal").textContent = rvOp.value + "%";
-      }
+      if (rvOp) syncOverlayOpacity(rvOp.value);
       // Re-render
       var room = fpCurrent();
       if (!room) return;
@@ -1012,10 +1028,7 @@
             };
             var ovStatus = document.getElementById("fpOverlayStatus");
             if (ovStatus) ovStatus.textContent = img.width + "x" + img.height + " px loaded";
-            var fpTog = document.getElementById("fpOverlayToggle");
-            if (fpTog) fpTog.checked = true;
-            var rvTog = document.getElementById("rvOverlayToggle");
-            if (rvTog) rvTog.checked = true;
+            syncOverlayToggle(true);
           };
           img.src = ev.target.result;
         };

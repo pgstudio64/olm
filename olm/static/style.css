@@ -423,6 +423,30 @@
   }
   .hdr-current-plan:hover { border-color: var(--accent-hover, var(--accent)); opacity: 0.85; }
 
+  /* Centered modal overlay */
+  .olm-modal-backdrop {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.35); z-index: 9000;
+  }
+  .olm-modal-box {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    z-index: 9001; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px 32px; min-width: 280px; max-width: 460px;
+    text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  }
+  .olm-modal-msg {
+    font-size: var(--fs-lg, 15px); color: var(--text); margin-bottom: 16px;
+    line-height: 1.4;
+  }
+  .olm-modal-spinner {
+    width: 24px; height: 24px; margin: 0 auto 12px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: olm-spin 0.8s linear infinite;
+  }
+  @keyframes olm-spin { to { transform: rotate(360deg); } }
+  .olm-modal-btns { display: flex; justify-content: center; gap: 12px; margin-top: 8px; }
+  .olm-modal-btns .btn { min-width: 80px; }
+
   .settings-overlay {
     position: fixed; top: 0; right: 0; bottom: 0;
     width: 650px; max-width: 90vw;

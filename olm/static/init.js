@@ -201,8 +201,8 @@ async function init() {
     document.getElementById("loadModal").classList.remove("active");
   });
   document.getElementById("gridToggle").addEventListener("change", function(e) {
-    state.gridVisible = e.target.checked;
-    document.getElementById("fpGridToggle").checked = e.target.checked;
+    if (window.syncGridToggle) window.syncGridToggle(e.target.checked);
+    else { state.gridVisible = e.target.checked; }
     render();
   });
   document.getElementById("circToggle").addEventListener("change", function(e) {
@@ -210,6 +210,19 @@ async function init() {
     document.getElementById("fpCircToggle").checked = e.target.checked;
     render();
   });
+  // Editor overlay toggle + opacity — sync across all tabs
+  document.getElementById("edOverlayToggle").addEventListener("change", function(e) {
+    if (window.syncOverlayToggle) window.syncOverlayToggle(e.target.checked);
+    render();
+  });
+  document.getElementById("edOverlayOpacity").addEventListener("input", function() {
+    if (window.syncOverlayOpacity) window.syncOverlayOpacity(this.value);
+    if (state.overlay) {
+      state.overlay.opacity = parseInt(this.value);
+      render();
+    }
+  });
+
   // fpGridToggle and fpCircToggle are wired in floor_plan.js
   // (they need access to fpCurrent/fpCurrentCandidate to re-render correctly)
 
@@ -677,10 +690,11 @@ async function init() {
 
   // Close button
   document.getElementById("btnClosePlan").addEventListener("click", function() {
-    if (!confirm("Close the current floor plan? Unsaved changes will be lost.")) return;
+    confirmModal("Close the current floor plan? Unsaved changes will be lost.").then(function(ok) {
+    if (!ok) return;
     // Reset header
     var hdr = document.getElementById("hdrCurrentPlanText");
-    if (hdr) hdr.textContent = "— Select a plan —";
+    if (hdr) hdr.textContent = "— Select a floor plan —";
     // Hide Save/Export/Close buttons + toolbar
     document.getElementById("btnSavePlan").style.display = "none";
     document.getElementById("btnExportPlan").style.display = "none";
@@ -707,10 +721,7 @@ async function init() {
     var rvCanvas = document.getElementById("rvCanvas");
     if (rvCanvas) rvCanvas.innerHTML = "";
     // Reset overlay toggles
-    var fpTog = document.getElementById("fpOverlayToggle");
-    if (fpTog) fpTog.checked = false;
-    var rvTog = document.getElementById("rvOverlayToggle");
-    if (rvTog) rvTog.checked = false;
+    if (window.syncOverlayToggle) window.syncOverlayToggle(false);
     // Reset plan selection (new list-based selector)
     if (typeof window._ingSetSelectedPlan === "function") {
       window._ingSetSelectedPlan("", "");
@@ -733,6 +744,7 @@ async function init() {
     // Switch to Import tab
     var importBtn = document.querySelector('.tab-btn[data-tab="fpImport"]');
     if (importBtn) importBtn.click();
+    }); // end confirmModal.then
   });
 
   // Erase dropdown toggle
@@ -754,8 +766,10 @@ async function init() {
     var sel = window.ingState && window.ingState._selectedPlan;
     var planId = sel && sel.id;
     if (!planId) { alert("No plan loaded."); return; }
-    if (!confirm("Reinit: strip all detection and manual data from '" +
-        planId + "' and re-import from scratch?")) return;
+    confirmModal("Reinit: strip all detection and manual data from '" +
+        planId + "' and re-import from scratch?").then(function(ok) {
+    if (!ok) return;
+    showModal("Reinitializing floor plan...");
     var statusEl = document.getElementById("ingStatus");
     if (statusEl) statusEl.textContent = "Reinit...";
     fetch("/api/plans/" + encodeURIComponent(planId) + "/reinit", {
@@ -768,7 +782,8 @@ async function init() {
           if (statusEl) statusEl.textContent = "Reinit failed";
           return;
         }
-        // Re-trigger import of the cleaned plan
+        // Re-trigger import of the cleaned plan (skip switch confirm)
+        window.ingState._skipSwitchConfirm = true;
         var planItem = document.querySelector(
           '.plan-item[data-plan-id="' + planId + '"]');
         if (planItem) {
@@ -781,15 +796,18 @@ async function init() {
         }
       })
       .catch(function (e) {
+        hideModal();
         alert("Reinit error: " + e);
         if (statusEl) statusEl.textContent = "Reinit failed";
       });
+    }); // end confirmModal.then
   });
 
   // Erase Layout only — remove layout data, keep floorplan amendments
   document.getElementById("btnEraseLayout").addEventListener("click", function() {
     document.getElementById("eraseMenu").style.display = "none";
-    if (!confirm("Erase layout data only? Floor plan amendments will be kept.")) return;
+    confirmModal("Erase layout data only? Floor plan amendments will be kept.").then(function(ok) {
+    if (!ok) return;
     // Clear layout-specific data (D-94: reset in place)
     window.olmStore.reset("amendments.layout");
     window.fpData.rooms.forEach(function(r) {
@@ -802,6 +820,7 @@ async function init() {
     if (fpCanvas) fpCanvas.innerHTML = "";
     // Re-render if on Design tab
     if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
+    }); // end confirmModal.then
   });
 }
 
