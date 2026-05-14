@@ -41,6 +41,11 @@ dev = [
 [project.urls]
 Repository = "https://github.com/pgstudio64/olm"
 
+[tool.pytest.ini_options]
+markers = [
+    "slow: tests longs (OCR, ray-cast sur image réelle)",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["olm*"]
