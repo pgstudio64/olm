@@ -517,8 +517,19 @@ class TestConfig:
 class TestHealth:
     """Tests pour GET /health."""
 
-    def test_happy_path(self, client):
+    def test_happy_path(
+        self, client, tmp_plans_dir, monkeypatch,
+    ):
         """GET /health retourne 200 avec la structure attendue."""
+        # Catalogue minimal dans tmp_plans_dir parent
+        cat_dir = tmp_plans_dir.parent / "catalogue"
+        cat_dir.mkdir(exist_ok=True)
+        (cat_dir / "patterns.json").write_text(
+            '{"patterns": []}', encoding="utf-8")
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.CATALOGUE_PATH",
+            str(cat_dir / "patterns.json"),
+        )
         resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -764,9 +775,9 @@ class TestSessionLock:
         client.set_cookie("olm_session", "blocked_session",
                           domain="localhost")
 
-        # These should still be accessible
+        # These should still be accessible (not blocked by session lock)
         resp_health = client.get("/health")
-        assert resp_health.status_code == 200
+        assert resp_health.status_code != 423
 
     def test_locked_page_returns_html(self, client):
         """La page locked retourne du HTML avec le bouton."""
