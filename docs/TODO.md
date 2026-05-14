@@ -22,7 +22,7 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 - [x] **P1.5** ~~Remplacer `traceback.print_exc()` par `logger.exception()`~~ — integre dans P1.2, v0.4.54. 0 restant dans `app.py`.
 
 ### Phase 2 — Robustesse opérationnelle (~40 h)
-- **Verrou mono-utilisateur** : état en mémoire Flask (pas de lock file → reset au redémarrage = pas de blocage post-crash). Cookie session, page « OLM déjà en cours d'utilisation » + bouton « Prendre le contrôle », idle timeout 30 min (~4 h).
+- [x] **P2.5** ~~Verrou mono-utilisateur~~ — v0.4.64. État mémoire Flask, cookie `olm_session`, HTTP 423 + page locked, takeover, idle timeout 30 min. 7 tests.
 - **Validation jsonschema** à l'import JSON v3 (~12 h).
 - **Écritures atomiques** temp+rename + `.bak` sur save (~5 h).
 - [x] **P2.1** ~~`MAX_CONTENT_LENGTH` Flask + whitelist MIME upload~~ — v0.4.59. 50 MB, whitelist MIME 4 types, handler 413, 3 tests.

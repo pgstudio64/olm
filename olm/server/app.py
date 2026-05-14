@@ -18,7 +18,11 @@ import uuid
 DEV_MODE: bool = False
 _START_TIME: float = time.monotonic()
 
-from flask import Flask, g, jsonify, request, send_file, send_from_directory
+# -- P2.5: mono-user session lock (D-188) --
+IDLE_TIMEOUT_SECONDS: int = 30 * 60  # 30 min
+_active_session: dict[str, str | float] | None = None
+
+from flask import Flask, g, jsonify, make_response, request, send_file, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from olm.core.pattern_dsl import DSLError
@@ -100,17 +104,72 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 PLANS_DIR = get_plans_dir()
 
 
+# Paths excluded from the mono-user session lock (P2.5).
+_SESSION_LOCK_EXEMPT_PREFIXES = (
+    "/health",
+    "/static/",
+    "/specs/",
+    "/api/session/takeover",
+)
+
+
 @app.before_request
-def _before_request() -> None:
-    """Attach request_id and start time to each request."""
+def _before_request():
+    """Attach request_id, enforce mono-user lock (P2.5)."""
+    global _active_session  # noqa: PLW0603
     g.request_id = uuid.uuid4().hex[:8]
     g.start_time = time.monotonic()
     _request_local.request_id = g.request_id
 
+    # Skip lock check for exempt paths
+    path = request.path
+    if any(path == p or path.startswith(p) for p in _SESSION_LOCK_EXEMPT_PREFIXES):
+        return None
+
+    session_id = request.cookies.get("olm_session")
+    now = time.time()
+
+    if _active_session is None:
+        # No active session — claim it
+        if not session_id:
+            session_id = uuid.uuid4().hex
+        _active_session = {"id": session_id, "last_activity": now}
+        g.set_session_cookie = session_id
+        return None
+
+    if session_id and session_id == _active_session["id"]:
+        # Same session — refresh activity
+        _active_session["last_activity"] = now
+        return None
+
+    # Different session — check idle timeout
+    elapsed = now - float(_active_session["last_activity"])
+    if elapsed >= IDLE_TIMEOUT_SECONDS:
+        # Timeout expired — new session takes over
+        if not session_id:
+            session_id = uuid.uuid4().hex
+        _active_session = {"id": session_id, "last_activity": now}
+        g.set_session_cookie = session_id
+        return None
+
+    # Locked — refuse with 423
+    return make_response(
+        jsonify({"error": "OLM est deja utilise par une autre session.",
+                 "locked_page": "/api/session/locked-page"}),
+        423,
+    )
+
 
 @app.after_request
 def _after_request(response):
-    """Log every HTTP request with method, path, status, duration."""
+    """Log HTTP request + set session cookie if needed (P2.5)."""
+    # Set session cookie when a new session is claimed
+    cookie_id = getattr(g, 'set_session_cookie', None)
+    if cookie_id:
+        response.set_cookie(
+            "olm_session", cookie_id,
+            httponly=True, samesite="Lax",
+        )
     start = getattr(g, 'start_time', None)
     if start is not None:
         duration_ms = (time.monotonic() - start) * 1000
@@ -140,6 +199,60 @@ def health():
 def handle_request_too_large(e):
     """Return JSON error when upload exceeds size limit."""
     return jsonify({"error": "Fichier trop volumineux (limite : 50 MB)"}), 413
+
+
+# ===================================================================
+# Session lock (P2.5)
+# ===================================================================
+
+
+@app.route("/api/session/takeover", methods=["POST"])
+def api_session_takeover():
+    """Force-claim the active session for the current client."""
+    global _active_session  # noqa: PLW0603
+    new_id = uuid.uuid4().hex
+    _active_session = {"id": new_id, "last_activity": time.time()}
+    resp = make_response(jsonify({"ok": True}), 200)
+    resp.set_cookie("olm_session", new_id, httponly=True, samesite="Lax")
+    return resp
+
+
+@app.route("/api/session/locked-page")
+def api_session_locked_page():
+    """HTML page shown when another session holds the lock."""
+    html = """<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>OLM — Session verrouill\u00e9e</title>
+<style>
+body{font-family:system-ui,sans-serif;display:flex;justify-content:center;
+align-items:center;height:100vh;margin:0;background:#f5f5f5}
+.card{background:#fff;border-radius:8px;padding:2rem 3rem;
+box-shadow:0 2px 8px rgba(0,0,0,.12);text-align:center;max-width:480px}
+h1{font-size:1.4rem;margin-bottom:1rem}
+p{color:#555;margin-bottom:1.5rem}
+button{background:#2563eb;color:#fff;border:none;padding:.75rem 1.5rem;
+border-radius:6px;font-size:1rem;cursor:pointer}
+button:hover{background:#1d4ed8}
+.ok{color:#16a34a;font-weight:bold}
+</style></head>
+<body><div class="card">
+<h1>OLM est d\u00e9j\u00e0 en cours d\u2019utilisation</h1>
+<p>Une autre session est active. Si vous \u00eates s\u00fbr de vouloir
+prendre le contr\u00f4le, cliquez ci-dessous.</p>
+<button id="btn">Prendre le contr\u00f4le</button>
+<p id="msg"></p>
+</div>
+<script>
+document.getElementById("btn").addEventListener("click",function(){
+fetch("/api/session/takeover",{method:"POST",credentials:"same-origin"})
+.then(function(r){if(r.ok){
+document.getElementById("msg").className="ok";
+document.getElementById("msg").textContent="Session prise. Rechargement...";
+setTimeout(function(){window.location.href="/";},500);
+}else{document.getElementById("msg").textContent="Erreur: "+r.status;}});
+});
+</script></body></html>"""
+    return make_response(html, 200)
 
 
 # ===================================================================

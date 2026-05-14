@@ -3,6 +3,22 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.64] — 2026-05-14 — P2.5 Mono-user session lock
+
+### Added
+- **P2.5 — Verrou mono-utilisateur** (D-188) : etat en memoire Flask (pas de
+  lock file → reset au redemarrage = pas de blocage post-crash).
+- Cookie `olm_session` (UUID4) genere a la premiere requete.
+- Middleware `before_request` : session active + cookie different → HTTP 423.
+- Idle timeout 30 min : session inactive liberee automatiquement.
+- `POST /api/session/takeover` : force le changement de session.
+- `GET /api/session/locked-page` : page HTML FR avec bouton "Prendre le
+  controle".
+- Chemins exemptes du verrou : `/health`, `/static/*`, `/specs/*`,
+  `/api/session/takeover`.
+- 7 tests dans `test_app_endpoints.py::TestSessionLock`.
+- Constante `IDLE_TIMEOUT_SECONDS` dans `app.py`.
+
 ## [v0.4.63] — 2026-05-14 — P2.4 Structured logging (hotfix)
 
 ### Fixed
