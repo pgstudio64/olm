@@ -415,13 +415,13 @@
   }
   .settings-btn:hover { color: var(--accent); }
   .hdr-current-plan {
-    margin-right: 4px;
+    margin-right: 4px; cursor: pointer;
     padding: 6px 14px; font-size: var(--fs-lg, 15px); font-weight: 600;
     color: var(--accent); border: 1px solid var(--accent); border-radius: 4px;
     letter-spacing: 0.3px; max-width: 380px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
   }
-  .hdr-current-plan:empty { display: none; }
+  .hdr-current-plan:hover { border-color: var(--accent-hover, var(--accent)); opacity: 0.85; }
 
   .settings-overlay {
     position: fixed; top: 0; right: 0; bottom: 0;

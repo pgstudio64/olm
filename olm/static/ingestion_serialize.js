@@ -125,7 +125,7 @@
     var ingState = window.ingState;
     if (!ingState || !ingState.rooms) return null;
 
-    var hdr = document.getElementById('hdrCurrentPlan');
+    var hdr = document.getElementById('hdrCurrentPlanText');
     var planName = hdr ? hdr.textContent.trim() : '';
     var fileHint = planName ? (planName + '.png') : 'plan.png';
 
