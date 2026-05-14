@@ -378,6 +378,64 @@ def _validate_upload(file) -> tuple[bool, str]:
     return True, ""
 
 
+def get_health_status(uptime_seconds: float) -> tuple[dict, bool]:
+    """Run health checks and return a status dict.
+
+    Args:
+        uptime_seconds: elapsed seconds since process start.
+
+    Returns:
+        ``(result_dict, all_ok)`` — ``all_ok`` is ``False`` if any check
+        failed.
+    """
+    from olm import __version__
+    checks: dict[str, bool] = {}
+    errors: list[str] = []
+
+    # config_readable
+    try:
+        load_project_config.cache_clear()
+        cfg = load_project_config()
+        checks["config_readable"] = isinstance(cfg, dict)
+    except Exception as exc:
+        checks["config_readable"] = False
+        errors.append(f"config read error: {exc}")
+
+    # catalogue_loadable
+    try:
+        from olm.server.services.catalogue_service import load_catalogue
+        cat = load_catalogue()
+        checks["catalogue_loadable"] = isinstance(cat, list)
+    except Exception as exc:
+        checks["catalogue_loadable"] = False
+        errors.append(f"catalogue parse error: {exc}")
+
+    # plans_dir_exists / plans_dir_writable
+    try:
+        plans = get_plans_dir()
+        checks["plans_dir_exists"] = os.path.isdir(plans)
+        if checks["plans_dir_exists"]:
+            checks["plans_dir_writable"] = os.access(plans, os.W_OK)
+        else:
+            checks["plans_dir_writable"] = False
+            errors.append(f"plans dir missing: {plans}")
+    except Exception as exc:
+        checks["plans_dir_exists"] = False
+        checks["plans_dir_writable"] = False
+        errors.append(f"plans dir error: {exc}")
+
+    all_ok = all(checks.values())
+    result: dict = {
+        "status": "ok" if all_ok else "degraded",
+        "version": __version__,
+        "checks": checks,
+        "uptime_seconds": round(uptime_seconds, 1),
+    }
+    if errors:
+        result["errors"] = errors
+    return result, all_ok
+
+
 def get_spacing() -> dict:
     """Return all spacing configurations."""
     configs = {}
