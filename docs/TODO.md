@@ -25,7 +25,7 @@ Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/1
 - **Verrou mono-utilisateur** : état en mémoire Flask (pas de lock file → reset au redémarrage = pas de blocage post-crash). Cookie session, page « OLM déjà en cours d'utilisation » + bouton « Prendre le contrôle », idle timeout 30 min (~4 h).
 - **Validation jsonschema** à l'import JSON v3 (~12 h).
 - **Écritures atomiques** temp+rename + `.bak` sur save (~5 h).
-- **`MAX_CONTENT_LENGTH` Flask + whitelist MIME upload** (PNG/JPEG/PDF) (~2 h).
+- [x] **P2.1** ~~`MAX_CONTENT_LENGTH` Flask + whitelist MIME upload~~ — v0.4.59. 50 MB, whitelist MIME 4 types, handler 413, 3 tests.
 - **Logger Python + `RotatingFileHandler`** (pas JSON, format standard) (~6 h).
 - **Endpoint `/health`** (config lisible, catalogue valide) (~2 h).
 - **GitHub Actions basique** : `ruff check` + `pytest` au push (~3 h).
