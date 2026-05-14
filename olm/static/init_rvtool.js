@@ -287,7 +287,7 @@
         var orig = state.roomAmendMode.originalRoom || {};
         var bbox = orig.bbox_px;
         if (!bbox || !ingst.planPathEnhanced) {
-          alert("Orientation check: missing bbox or plan path.");
+          alertModal("Orientation check: missing bbox or plan path.");
           return;
         }
         badge.style.display = "";
@@ -337,7 +337,7 @@
     var diagClose = document.getElementById("diagClose");
     var diagCopy = document.getElementById("diagCopy");
     function showDiag(title, text) {
-      if (!diagModal || !diagText) { alert(text); return; }
+      if (!diagModal || !diagText) { alertModal(text); return; }
       diagTitle.textContent = title;
       diagText.value = text;
       diagModal.style.display = "flex";
@@ -364,7 +364,7 @@
           (orig.seed_x != null && orig.seed_y != null
             ? [orig.seed_x, orig.seed_y] : null);
         if (!seedPx || !ingst.planPathEnhanced || !ingst.scale) {
-          alert("Diag unavailable: missing seed, plan path, or scale.");
+          alertModal("Diag unavailable: missing seed, plan path, or scale.");
           return;
         }
         var roomName = orig.name || "";
@@ -664,7 +664,7 @@
           (origRoom.seed_x != null && origRoom.seed_y != null
             ? [origRoom.seed_x, origRoom.seed_y] : null);
         if (!seedPx || !ingst.planPathEnhanced || !ingst.scale) {
-          alert("Rescan unavailable: missing plan path, seed, or scale.");
+          alertModal("Rescan unavailable: missing plan path, seed, or scale.");
           return;
         }
         // D-127 : si l'utilisateur a redimensionné la pièce en amend mode
@@ -928,7 +928,7 @@
           _rvCommitFromState();
           if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
         } catch (err) {
-          alert("Rescan failed: " + err.message);
+          alertModal("Rescan failed: " + err.message);
         } finally {
           reanalyzeBtn.disabled = false;
           reanalyzeBtn.textContent = "Rescan";

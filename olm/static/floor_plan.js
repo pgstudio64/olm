@@ -33,7 +33,7 @@
     if (typeof arg === "string") {
       var parsed;
       try { parsed = JSON.parse(arg); } catch(e) {
-        alert("Invalid JSON: " + e.message); return;
+        alertModal("Invalid JSON: " + e.message); return;
       }
       // parsed.rooms accepté en array (format matching) ou en dict
       // indexé par room_id (format storage v3). Dict converti au vol.
@@ -48,7 +48,7 @@
         roomsInput = [];
       }
       if (!roomsInput.length) {
-        alert("No rooms found in JSON"); return;
+        alertModal("No rooms found in JSON"); return;
       }
       rooms = roomsInput.map(function (r) {
         return (r.corridor_face_abs !== undefined)
@@ -56,7 +56,7 @@
           : window.canonicalIO.fromStorage(r, _fpScale);
       });
     } else if (Array.isArray(arg)) {
-      if (!arg.length) { alert("No rooms to match"); return; }
+      if (!arg.length) { alertModal("No rooms to match"); return; }
       rooms = arg.map(function (r) {
         return (r.corridor_face_abs !== undefined)
           ? r
@@ -124,7 +124,7 @@
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data.error) { alert("Error: " + data.error); return; }
+      if (data.error) { alertModal("Error: " + data.error); return; }
       // Sort results by name
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
       // Re-attach canonical fields not returned by matching API.
@@ -174,7 +174,7 @@
       rvRenderCurrent();
       document.activeElement.blur();
     })
-    .catch(function(e) { alert("Network error: " + e); });
+    .catch(function(e) { alertModal("Network error: " + e); });
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────
@@ -654,7 +654,7 @@
   };
 
   function fpExport() {
-    if (!fpRooms().length) { alert("No results to export"); return; }
+    if (!fpRooms().length) { alertModal("No results to export"); return; }
 
     var gradeOrd = { A: 0, B: 1, C: 2, D: 3, F: 4 };
     var exportData = {

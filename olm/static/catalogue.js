@@ -21,13 +21,15 @@ function _wireCatDelegation() {
         e.stopPropagation();
         var name = delBtn.dataset.delName;
         if (!name) return;
-        if (!confirm("Delete \"" + name + "\" from catalogue?")) return;
-        fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" })
-          .then(function(resp) {
-            if (!resp.ok) throw new Error("Delete failed");
-            loadCatalogue();
-          })
-          .catch(function(err) { setStatus("Delete error: " + err.message); });
+        confirmModal("Delete \"" + name + "\" from catalogue?").then(function(ok) {
+          if (!ok) return;
+          fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" })
+            .then(function(resp) {
+              if (!resp.ok) throw new Error("Delete failed");
+              loadCatalogue();
+            })
+            .catch(function(err) { setStatus("Delete error: " + err.message); });
+        });
         return;
       }
       // Card click (load pattern)

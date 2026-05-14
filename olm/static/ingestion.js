@@ -1108,7 +1108,8 @@
   window.addIngRoom = addIngRoom;
 
   function deleteIngRoom(name) {
-    if (!confirm('Delete room "' + name + '"?')) return;
+    confirmModal('Delete room "' + name + '"?').then(function(ok) {
+    if (!ok) return;
     var idx = ingState.rooms.findIndex(function (r) { return r.name === name; });
     if (idx < 0) return;
     ingState.rooms.splice(idx, 1);
@@ -1121,6 +1122,7 @@
     if (typeof window.fpLoadAndMatch === 'function') {
       window.fpLoadAndMatch(ingState.rooms);
     }
+    }); // end confirmModal.then
   }
   window.deleteIngRoom = deleteIngRoom;
 
@@ -1685,9 +1687,11 @@
       renderIngestion();
     }, { passive: false });
 
-    // Mouse drag pan
+    // Mouse drag pan (skip if mousedown is on a bbox handle or body)
     svg.addEventListener('mousedown', function (e) {
       if (e.button !== 0) return;
+      if (e.target.closest('[data-bbox-handle]') ||
+          e.target.closest('[data-bbox-body]')) return;
       ingState.pan = {
         startX: e.clientX, startY: e.clientY,
         startVb: { x: ingState.vb.x, y: ingState.vb.y,
@@ -2150,17 +2154,18 @@
       btnReanAll.addEventListener('click', async function () {
         if (!ingState.rooms || !ingState.rooms.length) return;
         if (!ingState.planPathEnhanced || !ingState.scale) {
-          alert('Rescan unavailable: missing plan path or scale.');
+          alertModal('Rescan unavailable: missing plan path or scale.');
           return;
         }
-        if (!confirm('Rescan ' + ingState.rooms.length +
+        var ok = await confirmModal('Rescan ' + ingState.rooms.length +
           ' room(s)? Auto windows/openings will be replaced; manual edits ' +
-          'and deleted-auto signatures are preserved.')) return;
+          'and deleted-auto signatures are preserved.');
+        if (!ok) return;
         var statusEl = document.getElementById('ingStatus');
         btnReanAll.disabled = true;
         var origLabel = btnReanAll.textContent;
         var amendments = (window.fpRoomAmendments = window.fpRoomAmendments || {});
-        var ok = 0, fail = 0;
+        var okCount = 0, fail = 0;
         function _opSignature(kind, op) {
           return kind + '|' + op.face + '|' +
             (op.offset_cm || 0) + '|' + (op.width_cm || 0);
@@ -2384,7 +2389,7 @@
               updates.walls_user_edited = false;
             }
             window.syncRoomToAllStores(r.name, updates);
-            ok++;
+            okCount++;
           });
           if (ok > 0) {
             ingState.firstScanDone = true;
@@ -2397,7 +2402,7 @@
             window.fpLoadAndMatch(ingState.rooms);
           }
           if (statusEl) statusEl.textContent =
-            'Rescan done: ' + ok + ' OK, ' + fail + ' failed.';
+            'Rescan done: ' + okCount + ' OK, ' + fail + ' failed.';
         } catch (err) {
           console.error(err);
           if (statusEl) statusEl.textContent = 'Error: ' + err.message;
