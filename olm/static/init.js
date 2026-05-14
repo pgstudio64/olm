@@ -53,6 +53,7 @@ async function init() {
       document.querySelector('.tab-btn[data-tab="fpReview"]').click();
     } else if (state.amendMode) {
       state.amendMode = null;
+      state.overlay = null;
       exitAmendUI();
       document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
       fpRenderCurrent();

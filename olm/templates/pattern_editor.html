@@ -343,56 +343,66 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <!-- Main area: room SVG -->
       <div class="fp-main">
         <div id="ingRoomView" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-          <div class="fp-nav" style="position:relative;">
-            <button class="btn" id="rvBtnBack" title="Back to floor plan">&larr; Floor plan</button>
-            <span style="flex:1;"></span>
-            <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
-            <div class="fp-room-label" id="rvRoomLabel">-</div>
-            <button class="btn" id="rvBtnNext" title="Next room">Next &rarr;</button>
-            <span class="fp-nav-info" id="rvNavInfo">0 / 0</span>
-            <span style="flex:1;"></span>
-            <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;gap:4px;">
-              <button class="btn" id="rvBtnAdjustRoom" title="Edit room geometry">Adjust room</button>
-              <button class="btn" id="rvBtnSaveRoom" style="display:none;">Save room</button>
-              <button class="btn btn-cancel" id="rvBtnCancelRoom" style="display:none;">Cancel</button>
-            </div>
+          <div class="fp-nav">
+            <table class="nav-layout"><tr>
+              <td class="nav-left">
+                <button class="btn" id="rvBtnBack" title="Back to floor plan">&larr; Floor plan</button>
+              </td>
+              <td class="nav-center">
+                <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
+                <div class="fp-room-label" id="rvRoomLabel">-</div>
+                <button class="btn" id="rvBtnNext" title="Next room">Next &rarr;</button>
+                <span class="fp-nav-info" id="rvNavInfo">0 / 0</span>
+              </td>
+              <td class="nav-right">
+                <button class="btn" id="rvBtnAdjustRoom" title="Edit room geometry">Adjust room</button>
+                <button class="btn" id="rvBtnSaveRoom" style="display:none;">Save room</button>
+                <button class="btn btn-cancel" id="rvBtnCancelRoom" style="display:none;">Cancel</button>
+              </td>
+            </tr></table>
           </div>
           <div class="fp-canvas-wrap" id="rvCanvasWrap">
             <div class="canvas-toolbar">
-              <label class="dev-only dev-ctrl"><input type="checkbox" id="rvSeedsToggle"> Seeds</label>
-              <label class="dev-only dev-ctrl"><input type="checkbox" id="rvVraysToggle"> V-Rays</label>
-              <label class="dev-only dev-ctrl"><input type="checkbox" id="rvHraysToggle"> H-Rays</label>
-              <span style="flex:1;"></span>
-              <label><input type="checkbox" id="rvOverlayToggle" onchange="window._rvRefresh && window._rvRefresh()"> Overlay</label>
-              <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
-              <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
-              <label><input type="checkbox" id="rvGridToggle" checked onchange="window._rvRefresh && window._rvRefresh()"> Grid</label>
-              <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
-              <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
-              <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
-              <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Rescan windows & openings (keeps manual edits)">Rescan</button>
-              <label id="rvLockWallsWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock walls: re-scan openings &amp; windows but keep the walls detected earlier (auto-checked when you resized the bbox).">
-                <input type="checkbox" id="rvLockWalls"> Lock walls
-              </label>
-              <button class="btn btn-toolbar dev-ctrl" id="rvBtnCheckOrient" style="display:none;background:var(--surface);opacity:0.7;" title="Check canonical orientation: corridor south, exterior north (D-119). Outil de dev.">Check orient.</button>
-              <span id="rvOrientBadge" style="display:none;font-size:11px;padding:2px 6px;border-radius:3px;"></span>
-              <button class="btn btn-toolbar dev-ctrl" id="rvBtnDiag" style="display:none;background:var(--surface);opacity:0.7;" title="Run detection diagnostic (D-160)">Diag</button>
-              <div id="rvAddMenuWrap" style="display:none;position:relative;">
-                <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add items &#9662;</button>
-                <div id="rvAddMenu" style="display:none;position:absolute;top:100%;right:0;z-index:20;background:var(--surface);border:1px solid var(--border);font-size:11px;min-width:160px;">
-                  <div class="rv-add-item" data-add="window" style="padding:6px 10px;cursor:pointer;">Window</div>
-                  <div class="rv-add-item" data-add="door" style="padding:6px 10px;cursor:pointer;">Door</div>
-                  <div class="rv-add-item" data-add="opening" style="padding:6px 10px;cursor:pointer;">Opening</div>
-                  <div class="rv-add-item" data-add="exclusion" style="padding:6px 10px;cursor:pointer;border-top:1px solid var(--border);">Exclusion zone</div>
-                  <div class="rv-add-item" data-add="transparent" style="padding:6px 10px;cursor:pointer;">Transparent zone</div>
-                </div>
-              </div>
-              <!-- Legacy individual buttons kept hidden for backward compat with existing handlers -->
-              <button class="btn btn-toolbar" id="rvBtnAddWindow" style="display:none;">+ Window</button>
-              <button class="btn btn-toolbar" id="rvBtnAddDoor" style="display:none;">+ Door</button>
-              <button class="btn btn-toolbar" id="rvBtnAddOpening" style="display:none;">+ Opening</button>
-              <button class="btn btn-toolbar" id="rvBtnAddExcl" style="display:none;">+ Exclusion</button>
-              <span style="flex:1;"></span>
+              <table class="nav-layout"><tr>
+                <td class="nav-left">
+                  <label class="dev-only dev-ctrl"><input type="checkbox" id="rvSeedsToggle"> Seeds</label>
+                  <label class="dev-only dev-ctrl"><input type="checkbox" id="rvVraysToggle"> V-Rays</label>
+                  <label class="dev-only dev-ctrl"><input type="checkbox" id="rvHraysToggle"> H-Rays</label>
+                </td>
+                <td class="nav-center">
+                  <label><input type="checkbox" id="rvOverlayToggle" onchange="window._rvRefresh && window._rvRefresh()"> Overlay</label>
+                  <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
+                  <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
+                  <label><input type="checkbox" id="rvGridToggle" checked onchange="window._rvRefresh && window._rvRefresh()"> Grid</label>
+                </td>
+                <td class="nav-right">
+                  <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
+                  <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
+                  <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
+                  <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Rescan windows & openings (keeps manual edits)">Rescan</button>
+                  <label id="rvLockWallsWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock walls: re-scan openings &amp; windows but keep the walls detected earlier (auto-checked when you resized the bbox).">
+                    <input type="checkbox" id="rvLockWalls"> Lock walls
+                  </label>
+                  <button class="btn btn-toolbar dev-ctrl" id="rvBtnCheckOrient" style="display:none;background:var(--surface);opacity:0.7;" title="Check canonical orientation: corridor south, exterior north (D-119). Outil de dev.">Check orient.</button>
+                  <span id="rvOrientBadge" style="display:none;font-size:11px;padding:2px 6px;border-radius:3px;"></span>
+                  <button class="btn btn-toolbar dev-ctrl" id="rvBtnDiag" style="display:none;background:var(--surface);opacity:0.7;" title="Run detection diagnostic (D-160)">Diag</button>
+                  <div id="rvAddMenuWrap" style="display:none;position:relative;">
+                    <button class="btn btn-toolbar" id="rvAddMenuBtn" title="Add items to the room">Add items &#9662;</button>
+                    <div id="rvAddMenu" style="display:none;position:absolute;top:100%;right:0;z-index:20;background:var(--surface);border:1px solid var(--border);font-size:11px;min-width:160px;">
+                      <div class="rv-add-item" data-add="window" style="padding:6px 10px;cursor:pointer;">Window</div>
+                      <div class="rv-add-item" data-add="door" style="padding:6px 10px;cursor:pointer;">Door</div>
+                      <div class="rv-add-item" data-add="opening" style="padding:6px 10px;cursor:pointer;">Opening</div>
+                      <div class="rv-add-item" data-add="exclusion" style="padding:6px 10px;cursor:pointer;border-top:1px solid var(--border);">Exclusion zone</div>
+                      <div class="rv-add-item" data-add="transparent" style="padding:6px 10px;cursor:pointer;">Transparent zone</div>
+                    </div>
+                  </div>
+                  <!-- Legacy individual buttons kept hidden for backward compat with existing handlers -->
+                  <button class="btn btn-toolbar" id="rvBtnAddWindow" style="display:none;">+ Window</button>
+                  <button class="btn btn-toolbar" id="rvBtnAddDoor" style="display:none;">+ Door</button>
+                  <button class="btn btn-toolbar" id="rvBtnAddOpening" style="display:none;">+ Opening</button>
+                  <button class="btn btn-toolbar" id="rvBtnAddExcl" style="display:none;">+ Exclusion</button>
+                </td>
+              </tr></table>
             </div>
             <svg id="rvCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
             <div class="minimap" id="rvMinimap" title="Click to toggle">
@@ -428,29 +438,39 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="fp-container">
       <div class="fp-main">
         <div class="fp-nav">
-          <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:3px;">
-            <input type="checkbox" id="fpOverlayToggle"> Overlay
-          </label>
-          <input type="range" id="fpOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
-          <span id="fpOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
-          <span class="fp-nav-info" id="fpRoomSize">-</span>
-          <span style="flex:1;"></span>
-          <button class="btn" id="fpBtnPrev" title="Previous room">&larr; Prev</button>
-          <div class="fp-room-label" id="fpRoomLabel">-</div>
-          <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
-          <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
-          <span style="flex:1;"></span>
-          <button class="btn" id="fpBtnEditPattern" title="Open this pattern in the editor to add a variant to the catalogue" disabled>Add pattern</button>
-          <button class="btn" id="fpBtnAdjustLayout" title="Amend layout in room" disabled>Amend layout</button>
-          <button class="btn btn-cancel" id="fpBtnDiscard" style="display:none;" title="Discard amendment">Discard amendment</button>
+          <table class="nav-layout"><tr>
+            <td class="nav-left"></td>
+            <td class="nav-center">
+              <button class="btn" id="fpBtnPrev" title="Previous room">&larr; Prev</button>
+              <div class="fp-room-label" id="fpRoomLabel">-</div>
+              <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
+              <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
+            </td>
+            <td class="nav-right">
+              <button class="btn" id="fpBtnEditPattern" title="Open this pattern in the editor to add a variant to the catalogue" disabled>Add pattern</button>
+              <button class="btn" id="fpBtnAdjustLayout" title="Amend layout in room" disabled>Amend layout</button>
+              <button class="btn btn-cancel" id="fpBtnDiscard" style="display:none;" title="Discard amendment">Discard amendment</button>
+            </td>
+          </tr></table>
         </div>
         <div class="fp-canvas-wrap" id="fpCanvasWrap">
-          <div class="canvas-toolbar" style="justify-content:center;">
-            <label><input type="checkbox" id="fpCircToggle"> Circulation</label>
-            <label><input type="checkbox" id="fpGridToggle" checked> Grid</label>
-            <button class="btn btn-toolbar" id="fpZoomOut" title="Zoom out">&#8722;</button>
-            <button class="btn btn-toolbar" id="fpZoomFit" title="Fit all">&#8861;</button>
-            <button class="btn btn-toolbar" id="fpZoomIn" title="Zoom in">+</button>
+          <div class="canvas-toolbar">
+            <table class="nav-layout"><tr>
+              <td class="nav-left">
+                <label><input type="checkbox" id="fpCircToggle"> Circulation</label>
+              </td>
+              <td class="nav-center">
+                <label><input type="checkbox" id="fpOverlayToggle"> Overlay</label>
+                <input type="range" id="fpOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
+                <span id="fpOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
+                <label><input type="checkbox" id="fpGridToggle" checked> Grid</label>
+              </td>
+              <td class="nav-right">
+                <button class="btn btn-toolbar" id="fpZoomOut" title="Zoom out">&#8722;</button>
+                <button class="btn btn-toolbar" id="fpZoomFit" title="Fit all">&#8861;</button>
+                <button class="btn btn-toolbar" id="fpZoomIn" title="Zoom in">+</button>
+              </td>
+            </tr></table>
           </div>
           <svg id="fpCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>
           <div class="minimap" id="fpMinimap" title="Click to toggle">

@@ -310,7 +310,6 @@
     if (!room) {
       document.getElementById("fpRoomLabel").textContent = "-";
       document.getElementById("fpNavInfo").textContent = "0 / 0";
-      document.getElementById("fpRoomSize").textContent = "-";
       document.getElementById("fpCandidatesList").innerHTML =
         '<div class="fp-no-match">Load a room JSON file from the Input tab</div>';
       document.getElementById("fpCanvas").innerHTML = "";
@@ -340,9 +339,6 @@
     document.getElementById("fpRoomLabel").textContent = roomLabel;
     document.getElementById("fpNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
-    document.getElementById("fpRoomSize").textContent =
-      room.width_cm + " x " + room.depth_cm + " cm";
-
     // Candidates (sorted best first)
     fpRenderCandidates(room);
 

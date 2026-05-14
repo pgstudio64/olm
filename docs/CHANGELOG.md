@@ -3,6 +3,21 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.68] — 2026-05-14 — UX overlay + nav-layout + logging cleanup (D-193)
+
+### Changed
+- Overlay plan visible en mode Amend layout (Pattern Editor) pour référence visuelle.
+- Contrôles overlay Office déplacés dans la canvas-toolbar (cohérent avec Room).
+- Barres de navigation et canvas-toolbars Room/Office refactorées en tables HTML 3 colonnes — centrage identique garanti.
+- Suppression de l'indication de taille `fpRoomSize` (redondante dans Office).
+
+### Fixed
+- Schema JSON v3 — `exclusion_zone._cm` fields de `integer` à `number` (le frontend produit des floats).
+- Logs backend : per-room detect, scale, doublons Werkzeug, endpoints init passés en DEBUG. Console propre en mode normal.
+- Startup banner Flask : plus de doublon (conditionné au parent reloader).
+
+---
+
 ## [v0.4.67] — 2026-05-14 — Fix schema JSON v3 (origin sur exclusion_zone)
 
 ### Fixed

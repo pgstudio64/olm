@@ -1244,9 +1244,10 @@ function _renderImpl(targetSvg) {
   // Grid SVG is rendered via pattern cache into its own layer — see below.
   // Meter labels rendered by updateRulers() around the SVG (rulers HTML).
 
-  // Overlay raster background (only for Review/Design canvases, not the Pattern Editor)
+  // Overlay raster background (only for Review/Design canvases, not the Pattern Editor
+  // — except in amend mode where the overlay helps align the layout to the plan)
   var isEditor = svg && svg.id === "canvas";
-  if (state.overlay && !isEditor) {
+  if (state.overlay && (!isEditor || state.amendMode)) {
     var ov = state.overlay;
     var ovScale = SCALE / ov.pxPerCm;  // convert image px to SVG units
     var ovW = ov.imgW * ovScale;
@@ -1876,6 +1877,7 @@ async function save() {
     if (!state.dirty) {
       // No changes — exit without creating an amendment
       state.amendMode = null;
+      state.overlay = null;
       exitAmendUI();
       clearDirty();
       document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
@@ -1904,6 +1906,7 @@ async function save() {
       amended: true,
     };
     state.amendMode = null;
+    state.overlay = null;
     exitAmendUI();
     setStatus("Amendment saved for room \"" + amend.roomName + "\".");
     // Switch back to Design
@@ -2061,6 +2064,7 @@ function loadPatternFromData(data) {
 function switchToEditorWithPattern(data) {
   // Switch to Office Layout > Editor (triggers canvas move)
   state.amendMode = null;
+  state.overlay = null;
   state.roomAmendMode = null;
   state.roomRenderOffset = null;
   exitAmendUI();
@@ -2097,6 +2101,26 @@ function enterAmendMode(room, candidate) {
   // Hide sub-tab bar (Card view / Grid view / Pattern editor)
   document.querySelector("#tabLytCatalogue > .sub-tab-bar").style.display = "none";
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));
+
+  // Restore overlay (cleared by loadPatternFromData) aligned to room bbox
+  if (window.fpOverlay) {
+    var ov = window.fpOverlay;
+    var ovOffX = 0, ovOffY = 0;
+    if (room.bbox_px) {
+      ovOffX = room.bbox_px[0] / ov.pxPerCm;
+      ovOffY = room.bbox_px[1] / ov.pxPerCm;
+    }
+    var ist = window.ingState;
+    var ovUrl = (ist && ist.hideDetectionColors && ist.planUrlClean)
+      ? ist.planUrlClean : ov.dataUrl;
+    var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
+    state.overlay = {
+      dataUrl: ovUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
+      offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,
+    };
+    state.corridor_face_abs = room.corridor_face_abs || "";
+    render();
+  }
 
   // Disable room controls + irrelevant actions
   AMEND_DISABLE_IDS.forEach(function(id) {

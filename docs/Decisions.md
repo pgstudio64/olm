@@ -7,6 +7,16 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-193 · UX overlay Amend layout + nav-layout tables + logging cleanup (2026-05-14, v0.4.68)
+
+**Décision** : (1) Afficher l'overlay plan dans le mode Amend layout (Pattern Editor) pour référence visuelle. (2) Déplacer les contrôles overlay de l'onglet Office dans la canvas-toolbar (cohérence avec Room). (3) Refactorer les barres de navigation et canvas-toolbars Room/Office en tables HTML 3 colonnes (gauche/centre/droite) pour un alignement centré identique. (4) Supprimer `fpRoomSize` (indication de taille redondante dans Office). (5) Passer les logs verbeux backend (per-room detect, scale, Werkzeug doublons, endpoints init) en DEBUG ; seuls les résumés et les API métier restent en INFO. (6) Schema JSON v3 : `exclusion_zone._cm` fields de `integer` à `number` (le frontend produit des floats).
+
+**Justification** : l'overlay disparaissait en Amend layout à cause d'un guard `!isEditor` dans `render()` ; les contrôles overlay étaient incohérents entre Room (canvas-toolbar) et Office (nav-bar) ; les barres flex avec spacers ne garantissaient pas un centrage stable ; les logs INFO polluaient la console en usage normal (31 lignes par pièce × par import).
+
+**Impact** : 4 fichiers JS modifiés, 2 fichiers HTML/CSS, 3 fichiers Python backend. Aucun changement de comportement runtime. 268 tests verts.
+
+---
+
 ## D-192 · Fix schema JSON v3 — origin autorisé sur exclusion_zone (2026-05-14, v0.4.67)
 
 **Décision** : autoriser `origin` (type string, optionnel) sur le sub-schema `exclusion_zone` dans `olm/core/schemas/plan_v3.json`. Le sub-schema étant réutilisé pour `transparent_zones`, le fix corrige les deux d'un coup.

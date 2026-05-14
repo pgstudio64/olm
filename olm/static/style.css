@@ -603,6 +603,18 @@
     padding: 4px 16px; min-width: 80px; text-align: center;
   }
   .fp-nav-info { color: var(--text-dim); font-size: var(--fs-base); }
+
+  /* 3-column layout table for nav bars and canvas toolbars */
+  .nav-layout { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .nav-layout td { padding: 0; vertical-align: middle; }
+  .nav-layout .nav-left { text-align: left; width: 25%; white-space: nowrap; }
+  .nav-layout .nav-center { text-align: center; white-space: nowrap; }
+  .nav-layout td > * { vertical-align: middle; }
+  .nav-layout td > *:not(:last-child) { margin-right: var(--sp-md); }
+  .nav-layout td label,
+  .nav-layout td button,
+  .nav-layout td .fp-room-label { display: inline-flex; align-items: center; }
+  .nav-layout .nav-right { text-align: right; width: 25%; white-space: nowrap; }
   .fp-canvas-wrap {
     flex: 1; overflow: hidden; display: flex;
     flex-direction: column; position: relative;
