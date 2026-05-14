@@ -130,6 +130,10 @@ def monkeypatch_catalogue(monkeypatch):
         },
     ]
     monkeypatch.setattr(
-        "olm.server.app._load_catalogue", lambda: fake_catalogue,
+        "olm.server.services.catalogue_service.load_catalogue",
+        lambda: fake_catalogue,
+    )
+    monkeypatch.setattr(
+        "olm.server.app.load_catalogue", lambda: fake_catalogue,
     )
     return fake_catalogue
