@@ -3,6 +3,25 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.66] — 2026-05-14 — P2.7 JSON v3 schema validation
+
+### Added
+- **P2.7 — Validation jsonschema** (D-188) : schema JSON Schema draft-07
+  dans `olm/core/schemas/plan_v3.json` couvrant la structure complete d'un
+  plan v3 (racine + room + window/opening/door/exclusion_zone).
+- Helper `olm/core/json_v3_validator.py` : `load_schema()` + `validate_plan()`.
+- Validation integree dans 4 points : `save_plan` (400 si invalide),
+  `get_plan_metadata` (500 + warning si JSON corrompu),
+  `resolve_preprocessed_files` (500 + warning), `POST /api/import/preprocessed`
+  (400 si rooms_json malformed).
+- 14 tests dans `test_json_v3_validation.py` (schema load, plans valides,
+  plans invalides avec messages clairs).
+- Dependance `jsonschema>=4.20` ajoutee dans requirements.txt et pyproject.toml.
+
+### Fixed
+- 7 fixtures de tests existants mises a jour pour respecter le schema v3
+  (surface string au lieu de float, champs racine `file` manquant, etc.).
+
 ## [v0.4.65] — 2026-05-14 — P2.6 Atomic JSON writes + .bak
 
 ### Added

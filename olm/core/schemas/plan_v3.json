@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OLM Plan v3",
+  "description": "JSON Schema for OLM floor plan v3 disk format (PREPROCESSED_JSON_SPEC).",
+  "type": "object",
+  "required": ["file", "page_width_px", "page_height_px", "rooms"],
+  "properties": {
+    "file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Source raster image filename (PNG/JPEG)."
+    },
+    "page_width_px": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Raster width in pixels."
+    },
+    "page_height_px": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Raster height in pixels."
+    },
+    "rooms": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Dict of rooms keyed by room_id (D-84).",
+      "patternProperties": {
+        "^.+$": { "$ref": "#/$defs/room" }
+      },
+      "additionalProperties": false
+    },
+    "source_mode": {
+      "type": "string",
+      "enum": ["ocr", "preprocessed"],
+      "description": "Ingestion mode (D-154). Optional for backwards compatibility."
+    },
+    "mode": {
+      "type": "string",
+      "description": "Legacy alias for source_mode."
+    },
+    "building_id": { "type": "string" },
+    "floor_id": { "type": "string" },
+    "north_angle_deg": { "type": "number" },
+    "first_scan_done": { "type": "boolean" },
+    "drawing_scale_text": { "type": "string" },
+    "drawing_scale_measured": {
+      "description": "Calibrated scale (cm/px). String '2.96 cm/px' or number.",
+      "oneOf": [
+        { "type": "number", "exclusiveMinimum": 0 },
+        { "type": "string" }
+      ]
+    },
+    "render_dpi": { "type": "integer", "minimum": 1 },
+    "olm_state": {
+      "type": "object",
+      "description": "UI persistence state (R-11). Free-form object."
+    },
+    "walls_user_edited": { "type": "boolean" }
+  },
+  "additionalProperties": true,
+
+  "$defs": {
+    "face": {
+      "type": "string",
+      "enum": ["north", "south", "east", "west"]
+    },
+
+    "window": {
+      "type": "object",
+      "required": ["face"],
+      "properties": {
+        "face": { "$ref": "#/$defs/face" },
+        "offset_px": { "type": "integer" },
+        "width_px": { "type": "integer", "minimum": 0 },
+        "offset_cm": { "type": "integer", "minimum": 0 },
+        "width_cm": { "type": "integer", "minimum": 0 },
+        "origin": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "opening": {
+      "type": "object",
+      "required": ["face"],
+      "properties": {
+        "face": { "$ref": "#/$defs/face" },
+        "offset_px": { "type": "integer" },
+        "width_px": { "type": "integer", "minimum": 0 },
+        "offset_cm": { "type": "integer", "minimum": 0 },
+        "width_cm": { "type": "integer", "minimum": 0 },
+        "has_door": { "type": "boolean" },
+        "origin": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "door": {
+      "type": "object",
+      "anyOf": [
+        { "required": ["seed_x", "seed_y"] },
+        { "required": ["face"] }
+      ],
+      "properties": {
+        "face": { "$ref": "#/$defs/face" },
+        "offset_px": { "type": "integer" },
+        "width_px": { "type": "integer", "minimum": 0 },
+        "offset_cm": { "type": "integer", "minimum": 0 },
+        "width_cm": { "type": "integer", "minimum": 0 },
+        "hinge_side": {
+          "type": "string",
+          "enum": ["left", "right"]
+        },
+        "opens_inward": { "type": "boolean" },
+        "seed_x": { "type": "integer" },
+        "seed_y": { "type": "integer" },
+        "origin": { "type": "string" },
+        "has_door": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+
+    "exclusion_zone": {
+      "type": "object",
+      "required": ["x_cm", "y_cm", "width_cm", "depth_cm"],
+      "properties": {
+        "x_cm": { "type": "integer", "minimum": 0 },
+        "y_cm": { "type": "integer", "minimum": 0 },
+        "width_cm": { "type": "integer", "minimum": 0 },
+        "depth_cm": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "room": {
+      "type": "object",
+      "required": ["surface", "seed_x", "seed_y"],
+      "properties": {
+        "surface": {
+          "type": "string",
+          "pattern": "^\\d+([.,]\\d+)?\\s*m[²2]$",
+          "description": "Annotated surface, e.g. '14.28 m2'."
+        },
+        "seed_x": {
+          "type": "integer",
+          "description": "Seed X position in pixels."
+        },
+        "seed_y": {
+          "type": "integer",
+          "description": "Seed Y position in pixels."
+        },
+        "bbox_px": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "Bounding box [x0, y0, x1, y1] in pixels."
+        },
+        "canonical_top_face": { "$ref": "#/$defs/face" },
+        "corridor_face_abs": { "$ref": "#/$defs/face" },
+        "doors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/door" }
+        },
+        "openings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/opening" }
+        },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/window" }
+        },
+        "exclusion_zones": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exclusion_zone" }
+        },
+        "transparent_zones": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exclusion_zone" }
+        },
+        "walls_user_edited": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
