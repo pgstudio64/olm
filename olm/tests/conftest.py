@@ -23,10 +23,16 @@ def tmp_plans_dir(tmp_path, monkeypatch):
     """Redirige le repertoire plans vers un dossier temporaire."""
     plans = tmp_path / "plans"
     plans.mkdir()
-    monkeypatch.setattr("olm.server.app.PLANS_DIR", str(plans))
+    _plans_str = str(plans)
+    _plans_fn = lambda: _plans_str
+    monkeypatch.setattr("olm.server.app.PLANS_DIR", _plans_str)
+    # Patch source + all imported references
     monkeypatch.setattr(
-        "olm.server.app._get_plans_dir", lambda: str(plans),
-    )
+        "olm.server.services.config_service.get_plans_dir", _plans_fn)
+    monkeypatch.setattr(
+        "olm.server.app.get_plans_dir", _plans_fn)
+    monkeypatch.setattr(
+        "olm.server.services.ingestion_service.get_plans_dir", _plans_fn)
     return plans
 
 
@@ -124,6 +130,12 @@ def monkeypatch_catalogue(monkeypatch):
         },
     ]
     monkeypatch.setattr(
-        "olm.server.app._load_catalogue", lambda: fake_catalogue,
+        "olm.server.services.catalogue_service.load_catalogue",
+        lambda: fake_catalogue,
+    )
+    # matching_service imports load_catalogue — patch its local ref too
+    monkeypatch.setattr(
+        "olm.server.services.matching_service.load_catalogue",
+        lambda: fake_catalogue,
     )
     return fake_catalogue
