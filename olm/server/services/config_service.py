@@ -9,6 +9,7 @@ import functools
 import json
 import logging
 import os
+import shutil
 
 from olm.core.pattern_generator import (
     BLOCK_1,
@@ -29,6 +30,26 @@ logger = logging.getLogger(__name__)
 # Runtime flag — set by app.py __main__ via set_dev_mode().
 # Stored here (not in app.py) to avoid the __main__ dual-import problem.
 _DEV_MODE: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Atomic JSON write helper (P2.6 / D-188)
+# ---------------------------------------------------------------------------
+
+
+def atomic_write_json(path: str, data: dict) -> None:
+    """Write JSON atomically with .bak of the previous version.
+
+    1. If ``path`` exists, copy it to ``path + '.bak'``.
+    2. Write to ``path + '.tmp'``.
+    3. ``os.replace`` the tmp onto the target (atomic on POSIX & Windows).
+    """
+    if os.path.exists(path):
+        shutil.copy2(path, path + '.bak')
+    tmp_path = path + '.tmp'
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, path)
 
 
 def set_dev_mode(enabled: bool) -> None:

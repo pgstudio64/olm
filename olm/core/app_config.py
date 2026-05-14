@@ -13,6 +13,7 @@ avoid circular imports. Only stdlib imports (json, os, pathlib, logging).
 import json
 import logging
 import os
+import shutil
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -56,12 +57,15 @@ _cfg: dict = _load()
 
 
 def _save() -> None:
-    """Persist config to disk atomically."""
-    tmp = str(_CONFIG_PATH) + ".tmp"
+    """Persist config to disk atomically with .bak."""
+    path = str(_CONFIG_PATH)
+    if _CONFIG_PATH.exists():
+        shutil.copy2(path, path + '.bak')
+    tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(_cfg, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    os.replace(tmp, _CONFIG_PATH)
+    os.replace(tmp, path)
 
 
 # ── Getters ────────────────────────────────────────────────────────────────

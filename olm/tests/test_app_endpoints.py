@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import time
 from typing import Any
 
@@ -774,3 +775,99 @@ class TestSessionLock:
         html = resp.data.decode("utf-8")
         assert "Prendre le contr" in html
         assert "/api/session/takeover" in html
+
+
+# ====================================================================
+# 9. P2.6 — Atomic JSON writes
+# ====================================================================
+
+class TestAtomicWriteJson:
+    """Tests unitaires pour atomic_write_json (P2.6 / D-188)."""
+
+    def test_creates_file_and_no_bak_on_first_write(self, tmp_path):
+        """Premier write cree le fichier, pas de .bak."""
+        from olm.server.services.config_service import atomic_write_json
+        path = str(tmp_path / "test.json")
+        atomic_write_json(path, {"v": 1})
+        assert os.path.exists(path)
+        assert not os.path.exists(path + ".bak")
+        with open(path, encoding="utf-8") as f:
+            assert json.load(f) == {"v": 1}
+
+    def test_second_write_creates_bak(self, tmp_path):
+        """Deuxieme write cree un .bak avec le contenu precedent."""
+        from olm.server.services.config_service import atomic_write_json
+        path = str(tmp_path / "test.json")
+        atomic_write_json(path, {"v": 1})
+        atomic_write_json(path, {"v": 2})
+        with open(path, encoding="utf-8") as f:
+            assert json.load(f) == {"v": 2}
+        with open(path + ".bak", encoding="utf-8") as f:
+            assert json.load(f) == {"v": 1}
+
+    def test_no_orphan_tmp_after_write(self, tmp_path):
+        """Pas de fichier .tmp orphelin apres ecriture normale."""
+        from olm.server.services.config_service import atomic_write_json
+        path = str(tmp_path / "test.json")
+        atomic_write_json(path, {"v": 1})
+        assert not os.path.exists(path + ".tmp")
+
+    def test_crash_during_write_preserves_original(self, tmp_path):
+        """Crash simule (raise dans json.dump) laisse le fichier intact."""
+        from unittest.mock import patch
+        from olm.server.services.config_service import atomic_write_json
+        path = str(tmp_path / "test.json")
+        atomic_write_json(path, {"v": 1})
+
+        with patch("olm.server.services.config_service.json.dump",
+                    side_effect=OSError("simulated crash")):
+            try:
+                atomic_write_json(path, {"v": 2})
+            except OSError:
+                pass
+
+        with open(path, encoding="utf-8") as f:
+            assert json.load(f) == {"v": 1}
+
+
+class TestPlanSaveAtomic:
+    """Tests endpoint save/reinit avec verif .bak (P2.6)."""
+
+    def test_save_creates_bak(
+        self, client, tmp_plans_dir, sample_plan_json,
+    ):
+        """Save d'un plan existant cree un .bak."""
+        client.post("/api/plans/bak_test/save", json=sample_plan_json)
+        modified = dict(sample_plan_json)
+        modified["floor_id"] = "R+2"
+        client.post("/api/plans/bak_test/save", json=modified)
+
+        json_path = tmp_plans_dir / "bak_test.json"
+        bak_path = tmp_plans_dir / "bak_test.json.bak"
+        assert json_path.exists()
+        assert bak_path.exists()
+        with open(json_path, encoding="utf-8") as f:
+            current = json.load(f)
+        with open(bak_path, encoding="utf-8") as f:
+            backup = json.load(f)
+        assert current.get("floor_id") == "R+2"
+        assert backup.get("floor_id") != "R+2"
+
+    def test_save_twice_bak_contains_previous(
+        self, client, tmp_plans_dir,
+    ):
+        """Save 2 fois : .bak contient la version precedente."""
+        client.post("/api/plans/bak2/save", json={"rooms": {}, "v": 1})
+        client.post("/api/plans/bak2/save", json={"rooms": {}, "v": 2})
+        bak_path = tmp_plans_dir / "bak2.json.bak"
+        with open(bak_path, encoding="utf-8") as f:
+            backup = json.load(f)
+        assert backup["v"] == 1
+
+    def test_no_tmp_orphan_after_save(
+        self, client, tmp_plans_dir, sample_plan_json,
+    ):
+        """Pas de .tmp orphelin apres save."""
+        client.post("/api/plans/notmp/save", json=sample_plan_json)
+        tmp_file = tmp_plans_dir / "notmp.json.tmp"
+        assert not tmp_file.exists()
