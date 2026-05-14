@@ -2119,6 +2119,7 @@
     });
 
     // Peuplement de la liste + filtre de recherche + toggle popup.
+    _wireIngDelegation();
     loadPlansDropdown();
     var searchEl = document.getElementById('hdrPlanSearch');
     if (searchEl) {
