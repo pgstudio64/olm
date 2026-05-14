@@ -126,7 +126,7 @@ def _make_binary(w: int, h: int, walls: list[tuple]) -> np.ndarray:
 @pytest.fixture(autouse=True)
 def _setup_detection_config():
     """Applique detection_config au scale de test avant chaque test."""
-    from olm.ingestion.test_comb import _apply_detection_config
+    from olm.ingestion.comb_detection import _apply_detection_config
     _apply_detection_config(SCALE_CM_PER_PX)
 
 

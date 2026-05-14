@@ -1430,7 +1430,7 @@ def api_room_reanalyze():
             color_img = _PILImage.open(plan_path)
 
         # D-156 : appliquer la config de détection quel que soit le mode.
-        from olm.ingestion.test_comb import _apply_detection_config
+        from olm.ingestion.comb_detection import _apply_detection_config
         _apply_detection_config(scale, _get_detection_overrides())
 
         # Mode OCR : reproduire l'erase cartouches du scan initial
@@ -1438,7 +1438,7 @@ def api_room_reanalyze():
         # texte solide et les rays butent immédiatement.
         cart_bboxes_px: list = []
         if mode == "ocr":
-            from olm.ingestion.test_comb import find_seeds_by_ocr
+            from olm.ingestion.comb_detection import find_seeds_by_ocr
             _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
 
         result = extract_room_features(
@@ -1512,12 +1512,12 @@ def api_debug_room_diagnostic():
         if mode != "ocr" and plan_path and os.path.exists(plan_path):
             color_img = _PILImage.open(plan_path)
 
-        from olm.ingestion.test_comb import _apply_detection_config
+        from olm.ingestion.comb_detection import _apply_detection_config
         _apply_detection_config(scale, _get_detection_overrides())
 
         cart_bboxes_px: list = []
         if mode == "ocr":
-            from olm.ingestion.test_comb import find_seeds_by_ocr
+            from olm.ingestion.comb_detection import find_seeds_by_ocr
             _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
 
         diag: dict = {}
@@ -1802,7 +1802,7 @@ def api_room_reanalyze_batch():
         # D-156 : appliquer la config de détection quel que soit le mode.
         # Les constantes (ray margins, seuils portes…) doivent être
         # ajustées au scale du plan avant tout ray-cast.
-        from olm.ingestion.test_comb import _apply_detection_config
+        from olm.ingestion.comb_detection import _apply_detection_config
         _apply_detection_config(scale, _get_detection_overrides())
 
         # Mode OCR : reproduire l'erase cartouches du scan initial
@@ -1810,7 +1810,7 @@ def api_room_reanalyze_batch():
         # Sans ça, les cartouches survivent comme paquets de pixels solides
         # et les seeds tombent dessus → bbox réduite à des bandes étroites.
         if mode == "ocr":
-            from olm.ingestion.test_comb import (
+            from olm.ingestion.comb_detection import (
                 find_seeds_by_ocr, erase_cartouches,
             )
             _seeds, _cart_bboxes_px = find_seeds_by_ocr(img)
