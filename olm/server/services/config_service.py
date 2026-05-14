@@ -262,10 +262,10 @@ def get_config() -> dict:
     """Return full config dict augmented with olm_version and dev_mode."""
     from olm.core import app_config
     from olm import __version__
-    from olm.server.app import DEV_MODE
+    import olm.server.app as _app
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
-    cfg["dev_mode"] = DEV_MODE
+    cfg["dev_mode"] = _app.DEV_MODE
     return cfg
 
 
