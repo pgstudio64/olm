@@ -415,5 +415,6 @@ def export_plan(
     return {
         "plan_path": os.path.abspath(plan_path),
         "csv_path": os.path.abspath(csv_path),
+        "exports_dir": os.path.abspath(output_dir),
         "n_rooms": len(rooms_payload),
     }
