@@ -111,6 +111,90 @@ def test_east_door_south_maps_to_west() -> None:
     assert door["face"] == "west"
 
 
+# ── Valeurs canoniques intermédiaires (pas que round-trip) ──────────────
+# Vérifie que l'offset dans le repère canonique correspond à la
+# position physique attendue après rotation.
+# Pièce 600 (W) × 400 (D) ; ouvertures : see _make_room.
+
+class TestCanonicalOffsetEast:
+    """corridor_face = east (90° CW)."""
+
+    def _canon(self):
+        return canonicalize_room(_make_room("east"))
+
+    def test_window_north_offset_preserved(self) -> None:
+        """Fenêtre north abs → east canon. Offset préservé (h→v, CW)."""
+        # north abs, offset=50, width=200.
+        # 90° CW : début north (NW) → début east (NE). Pas de flip.
+        c = self._canon()
+        win = c["windows"][0]
+        assert win["face"] == "east"
+        assert win["offset_cm"] == 50
+
+    def test_opening_south_offset_preserved(self) -> None:
+        """Ouverture south abs → west canon. Offset préservé (h→v, CW)."""
+        c = self._canon()
+        op = [o for o in c["openings"] if not o.get("has_door")][0]
+        # south abs face="east", offset=30 → canon face="west"
+        # Hmm, east abs offset=30 → south canon.
+        # Let me re-check _make_room openings.
+        # opening[1] = face="east", offset=30, width=120
+        assert op["face"] == "south"
+        # east abs (vertical) → south canon. CW flip vertical: YES.
+        # _absLen("east", 600, 400) = 400. offset = 400 - 30 - 120 = 250.
+        assert op["offset_cm"] == 250
+
+    def test_door_south_offset_preserved(self) -> None:
+        """Porte south abs → west canon. Offset préservé."""
+        c = self._canon()
+        door = [o for o in c["openings"] if o.get("has_door")][0]
+        # south abs, offset=100, width=90 → west canon.
+        # south is horizontal, CW: no flip.
+        assert door["face"] == "west"
+        assert door["offset_cm"] == 100
+        assert door["hinge_side"] == "left"  # pas de flip
+
+
+class TestCanonicalOffsetWest:
+    """corridor_face = west (90° CCW)."""
+
+    def _canon(self):
+        return canonicalize_room(_make_room("west"))
+
+    def test_window_north_offset_flipped(self) -> None:
+        """Fenêtre north abs → west canon. Offset flippé (h→v, CCW)."""
+        c = self._canon()
+        win = c["windows"][0]
+        assert win["face"] == "west"
+        # north abs (horizontal), CCW flip: YES.
+        # _face_len("north") = W = 600. offset = 600 - 50 - 200 = 350.
+        assert win["offset_cm"] == 350
+
+    def test_opening_east_offset_preserved(self) -> None:
+        """Ouverture east abs → north canon. Offset préservé (v→h, CCW)."""
+        c = self._canon()
+        op = [o for o in c["openings"] if not o.get("has_door")][0]
+        assert op["face"] == "north"
+        # east abs (vertical), CCW: no flip.
+        assert op["offset_cm"] == 30
+
+
+class TestCanonicalOffsetNorth:
+    """corridor_face = north (180°)."""
+
+    def _canon(self):
+        return canonicalize_room(_make_room("north"))
+
+    def test_window_north_offset_flipped(self) -> None:
+        """Fenêtre north abs → south canon. Offset flippé (180°)."""
+        c = self._canon()
+        win = c["windows"][0]
+        assert win["face"] == "south"
+        # 180° : toujours flip. _face_len("north") = 600.
+        # offset = 600 - 50 - 200 = 350.
+        assert win["offset_cm"] == 350
+
+
 # ── Exclusion zones round-trip détaillé ──────────────────────────────────
 
 @pytest.mark.parametrize("corridor_face", ["north", "east", "west"])

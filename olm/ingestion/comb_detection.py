@@ -1776,6 +1776,7 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
             "jamb_hinge_px": jamb_hinge,
             "jamb_free_px": jamb_free,
             "wall_px": wall,
+            "wall_fill_ratio": wall_fill_ratio,
         })
 
     if not all_doors:
@@ -1793,6 +1794,75 @@ def _detect_doors_on_face(binary, rect, face_hits, face,
         diag.setdefault('door_faces', []).append(fd)
 
     return wall, all_doors
+
+
+def _dedup_corner_doors(doors: list[dict], rect: tuple,
+                        door_width_px: int) -> list[dict]:
+    """Remove duplicate doors detected at the same corner on adjacent faces.
+
+    When a door arc sits at a corner, both adjacent faces may detect it.
+    For each pair of doors sharing a corner, keep the one with the lower
+    wall_fill_ratio (= the wall with the real opening).
+
+    Args:
+        doors: list of door info dicts (must contain face, jamb_hinge_px,
+            jamb_free_px, wall_fill_ratio).
+        rect: (x0, y0, x1, y1) expanded bbox.
+        door_width_px: proximity threshold for corner sharing.
+
+    Returns:
+        Filtered list of doors.
+    """
+    if len(doors) < 2:
+        return doors
+
+    x0, y0, x1, y1 = rect
+
+    # Adjacent face pairs and their shared corner coordinates.
+    # For each pair, define which end of each face is "near the corner".
+    _CORNERS = [
+        ("north", "west", x0, y0),   # NW corner
+        ("north", "east", x1, y0),   # NE corner
+        ("south", "west", x0, y1),   # SW corner
+        ("south", "east", x1, y1),   # SE corner
+    ]
+
+    def _near_corner(door, corner_along, corner_perp, h_face):
+        """Check if a door's arc zone is close to a corner."""
+        jmin = min(door["jamb_hinge_px"], door["jamb_free_px"])
+        jmax = max(door["jamb_hinge_px"], door["jamb_free_px"])
+        is_h = door["face"] in ("north", "south")
+        if is_h:
+            # Along-axis = x.  Near corner if arc overlaps corner_along.
+            return abs(jmin - corner_along) <= door_width_px \
+                or abs(jmax - corner_along) <= door_width_px
+        else:
+            # Along-axis = y.  Near corner if arc overlaps corner_perp.
+            return abs(jmin - corner_perp) <= door_width_px \
+                or abs(jmax - corner_perp) <= door_width_px
+
+    remove = set()
+    for h_face, v_face, cx_, cy_ in _CORNERS:
+        h_doors = [i for i, d in enumerate(doors)
+                   if d["face"] == h_face and i not in remove]
+        v_doors = [i for i, d in enumerate(doors)
+                   if d["face"] == v_face and i not in remove]
+        for hi in h_doors:
+            if not _near_corner(doors[hi], cx_, cy_, True):
+                continue
+            for vi in v_doors:
+                if not _near_corner(doors[vi], cx_, cy_, False):
+                    continue
+                # Both near the same corner — keep lower wall_fill_ratio.
+                h_wfr = doors[hi].get("wall_fill_ratio", 1.0)
+                v_wfr = doors[vi].get("wall_fill_ratio", 1.0)
+                loser = hi if h_wfr > v_wfr else vi
+                remove.add(loser)
+
+    if remove:
+        logger.debug("corner_dedup: removed %d duplicate door(s) at corners",
+                     len(remove))
+    return [d for i, d in enumerate(doors) if i not in remove]
 
 
 def expand_door_arcs(binary, rect, dir_hits, cx, cy,
@@ -1871,6 +1941,7 @@ def expand_door_arcs(binary, rect, dir_hits, cx, cy,
             elif face == "west": x0 = new_edge
             doors.extend(face_doors)
 
+    doors = _dedup_corner_doors(doors, (x0, y0, x1, y1), door_width_px)
     return (x0, y0, x1, y1), doors
 
 

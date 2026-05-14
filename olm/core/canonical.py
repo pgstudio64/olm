@@ -24,6 +24,40 @@ _INV_FACE_MAPS: dict[str, dict[str, str]] = {
 }
 
 
+def _flip_from(cf: str, abs_face: str) -> bool:
+    """True si l'offset doit être retourné en abs→canon.
+
+    90° CW (east) : flip faces verticales abs (east, west) uniquement.
+    90° CCW (west) : flip faces horizontales abs (north, south) uniquement.
+    180° (north) : flip toutes les faces.
+    """
+    if cf == "north":
+        return True
+    is_v = abs_face in ("east", "west")
+    if cf == "east":
+        return is_v
+    if cf == "west":
+        return not is_v
+    return False
+
+
+def _flip_to(ocf: str, canon_face: str) -> bool:
+    """True si l'offset doit être retourné en canon→abs.
+
+    90° CW (east) : flip faces horizontales canon (north, south).
+    90° CCW (west) : flip faces verticales canon (east, west).
+    180° (north) : flip toutes les faces.
+    """
+    if ocf == "north":
+        return True
+    is_h = canon_face in ("north", "south")
+    if ocf == "east":
+        return is_h
+    if ocf == "west":
+        return not is_h
+    return False
+
+
 def canonicalize_room(room: dict[str, Any]) -> dict[str, Any]:
     """Convertit les coordonnées absolues d'une pièce en coordonnées locales
     avec le corridor au sud.
@@ -58,10 +92,16 @@ def canonicalize_room(room: dict[str, Any]) -> dict[str, Any]:
     def _xform_opening(o: dict[str, Any]) -> dict[str, Any]:
         r = dict(o)
         r["face"] = face_map.get(o["face"], o["face"])
-        if cf in ("north", "west"):
-            r["offset_cm"] = _face_len(o["face"]) - o.get("offset_cm", 0) - o.get("width_cm", 0)
-        if cf in ("north", "west") and o.get("hinge_side"):
-            r["hinge_side"] = "right" if o["hinge_side"] == "left" else "left"
+        if _flip_from(cf, o["face"]):
+            r["offset_cm"] = (
+                _face_len(o["face"])
+                - o.get("offset_cm", 0)
+                - o.get("width_cm", 0)
+            )
+            if o.get("hinge_side"):
+                r["hinge_side"] = (
+                    "right" if o["hinge_side"] == "left" else "left"
+                )
         return r
 
     out["windows"] = [_xform_opening(w_) for w_ in room.get("windows", [])]
@@ -125,12 +165,16 @@ def decanonicalize_room(
     def _xform_back(o: dict[str, Any]) -> dict[str, Any]:
         r = dict(o)
         r["face"] = inv_map.get(o["face"], o["face"])
-        if original_corridor_face in ("north", "west"):
+        if _flip_to(original_corridor_face, o["face"]):
             r["offset_cm"] = (
-                _local_face_len(o["face"]) - o.get("offset_cm", 0) - o.get("width_cm", 0)
+                _local_face_len(o["face"])
+                - o.get("offset_cm", 0)
+                - o.get("width_cm", 0)
             )
             if o.get("hinge_side"):
-                r["hinge_side"] = "right" if o["hinge_side"] == "left" else "left"
+                r["hinge_side"] = (
+                    "right" if o["hinge_side"] == "left" else "left"
+                )
         return r
 
     out["windows"] = [_xform_back(w_) for w_ in room.get("windows", [])]

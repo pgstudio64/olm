@@ -586,3 +586,78 @@ class TestProductionCasesK:
         assert abs(h_cm - expected_h_cm) <= 5, (
             f"K77: depth {h_cm} cm vs expected {expected_h_cm} cm"
         )
+
+
+# ====================================================================
+# 4. _dedup_corner_doors — corner dedup unit tests
+# ====================================================================
+
+class TestDedupCornerDoors:
+    """Tests pour _dedup_corner_doors (post-filtrage coins)."""
+
+    def _make_door(self, face, jh, jf, wfr=0.1):
+        return {
+            "face": face,
+            "offset_px": min(jh, jf),
+            "width_px": abs(jf - jh),
+            "hinge_side": "left",
+            "opens_inward": True,
+            "seed_confirmed": False,
+            "jamb_hinge_px": jh,
+            "jamb_free_px": jf,
+            "wall_px": 0,
+            "wall_fill_ratio": wfr,
+        }
+
+    def test_no_doors(self):
+        from olm.ingestion.comb_detection import _dedup_corner_doors
+        assert _dedup_corner_doors([], (0, 0, 200, 200), 20) == []
+
+    def test_single_door_kept(self):
+        from olm.ingestion.comb_detection import _dedup_corner_doors
+        d = self._make_door("north", 10, 40, 0.2)
+        result = _dedup_corner_doors([d], (0, 0, 200, 200), 20)
+        assert len(result) == 1
+
+    def test_non_adjacent_doors_kept(self):
+        """Portes sur faces opposees (north+south) ne sont pas dedup."""
+        from olm.ingestion.comb_detection import _dedup_corner_doors
+        d1 = self._make_door("north", 10, 40, 0.2)
+        d2 = self._make_door("south", 10, 40, 0.3)
+        result = _dedup_corner_doors([d1, d2], (0, 0, 200, 200), 20)
+        assert len(result) == 2
+
+    def test_corner_dedup_keeps_lower_fill(self):
+        """Deux portes au coin NW : garde celle avec le vrai trou."""
+        from olm.ingestion.comb_detection import _dedup_corner_doors
+        # Porte north pres de x0=0 (coin NW), mur plein
+        d_north = self._make_door("north", 2, 30, wfr=0.45)
+        # Porte west pres de y0=0 (coin NW), vrai trou
+        d_west = self._make_door("west", 2, 30, wfr=0.10)
+        rect = (0, 0, 200, 200)
+        result = _dedup_corner_doors([d_north, d_west], rect, 20)
+        assert len(result) == 1
+        assert result[0]["face"] == "west"
+
+    def test_corner_dedup_SE(self):
+        """Deux portes au coin SE : garde celle avec le vrai trou."""
+        from olm.ingestion.comb_detection import _dedup_corner_doors
+        # Porte south pres de x1=200
+        d_south = self._make_door("south", 185, 200, wfr=0.40)
+        # Porte east pres de y1=200
+        d_east = self._make_door("east", 185, 200, wfr=0.05)
+        rect = (0, 0, 200, 200)
+        result = _dedup_corner_doors([d_south, d_east], rect, 20)
+        assert len(result) == 1
+        assert result[0]["face"] == "east"
+
+    def test_far_doors_not_deduped(self):
+        """Portes adjacentes mais pas au meme coin : pas de dedup."""
+        from olm.ingestion.comb_detection import _dedup_corner_doors
+        # Porte north pres de x0=0 (coin NW)
+        d_north = self._make_door("north", 2, 30, wfr=0.3)
+        # Porte west pres de y1=200 (coin SW, pas NW)
+        d_west = self._make_door("west", 180, 200, wfr=0.1)
+        rect = (0, 0, 200, 200)
+        result = _dedup_corner_doors([d_north, d_west], rect, 20)
+        assert len(result) == 2

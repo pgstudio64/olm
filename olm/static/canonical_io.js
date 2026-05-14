@@ -60,6 +60,44 @@
   }
 
   /**
+   * Détermine si l'offset d'une ouverture doit être retourné (flipped)
+   * lors de la conversion abs → canon (fromStorage).
+   *
+   * Pour une rotation 90° CW (cf="east"), seules les faces verticales abs
+   * (east, west) voient leur direction d'offset inversée.  Les faces
+   * horizontales (north, south) conservent l'offset.
+   * Pour 90° CCW (cf="west"), c'est l'inverse : seules les horizontales.
+   * Pour 180° (cf="north"), toutes les faces sont inversées.
+   *
+   * @param {string} cf       - corridor_face absolu
+   * @param {string} absFace  - face dans le repère absolu
+   * @returns {boolean}
+   */
+  function _flipFrom(cf, absFace) {
+    if (cf === "north") return true;
+    var isV = (absFace === "east" || absFace === "west");
+    if (cf === "east") return isV;
+    if (cf === "west") return !isV;
+    return false;
+  }
+
+  /**
+   * Inverse de _flipFrom : détermine si l'offset doit être retourné lors
+   * de la conversion canon → abs (toStorage).
+   *
+   * @param {string} ocf        - corridor_face absolu d'origine
+   * @param {string} canonFace  - face dans le repère canonique
+   * @returns {boolean}
+   */
+  function _flipTo(ocf, canonFace) {
+    if (ocf === "north") return true;
+    var isH = (canonFace === "north" || canonFace === "south");
+    if (ocf === "east") return isH;
+    if (ocf === "west") return !isH;
+    return false;
+  }
+
+  /**
    * Recalcule offset_px / width_px depuis offset_cm × pxPerCm.
    * Si pxPerCm <= 0 ou offset_cm absent, laisse la valeur en l'état.
    * D-122 P1 : toStorage/fromStorage deviennent la source unique des px.
@@ -250,7 +288,7 @@
     function xformOpening(o) {
       var r = Object.assign({}, o);
       r.face = faceMap[o.face] || o.face;
-      if (cf === "north" || cf === "east") {
+      if (_flipFrom(cf, o.face)) {
         r.offset_cm = _absLen(o.face, W, D) - (o.offset_cm || 0) - (o.width_cm || 0);
         if (o.hinge_side) {
           r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
@@ -351,7 +389,7 @@
     function xformBack(o) {
       var r = Object.assign({}, o);
       r.face = invMap[o.face] || o.face;
-      if (ocf === "north" || ocf === "east") {
+      if (_flipTo(ocf, o.face)) {
         r.offset_cm = _canonLen(o.face, Wc, Dc) - (o.offset_cm || 0) - (o.width_cm || 0);
         if (o.hinge_side) {
           r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
@@ -571,6 +609,53 @@
       }
     });
 
+    // Canonical offset intermediate values — T3-east door on north abs face.
+    // cf_abs="east", door face="north" offset=20 width=80 hinge=left.
+    // 90° CW: north(h) → east(v), offset preserved (no flip).
+    var t3c = fromStorage(SAMPLES[2].room, SCALE);
+    var t3d = t3c.doors[0];
+    if (t3d.face === "east" && t3d.offset_cm === 20 && t3d.hinge_side === "left") {
+      console.log("[canonical_io] OK — T3-east door canon offset preserved");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — T3-east door canon offset",
+        "face=" + t3d.face, "offset=" + t3d.offset_cm, "hinge=" + t3d.hinge_side,
+        "expected face=east offset=20 hinge=left");
+    }
+    // T3-east window on east abs face: east(v) → south, offset FLIPPED.
+    var t3w = t3c.windows[0];
+    var t3wExpOff = 700 - 60 - 110;  // D - offset - width = 530
+    if (t3w.face === "south" && t3w.offset_cm === t3wExpOff) {
+      console.log("[canonical_io] OK — T3-east window canon offset flipped");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — T3-east window canon offset",
+        "face=" + t3w.face, "offset=" + t3w.offset_cm,
+        "expected face=south offset=" + t3wExpOff);
+    }
+    // T4-west window on west abs face: west(v), CCW → no flip.
+    var t4c = fromStorage(SAMPLES[3].room, SCALE);
+    var t4w = t4c.windows[0];
+    if (t4w.face === "south" && t4w.offset_cm === 70) {
+      console.log("[canonical_io] OK — T4-west window canon offset preserved");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — T4-west window canon offset",
+        "face=" + t4w.face, "offset=" + t4w.offset_cm,
+        "expected face=south offset=70");
+    }
+    // T4-west opening on north abs face: north(h), CCW → FLIP.
+    var t4o = t4c.openings[0];
+    var t4oExpOff = 350 - 30 - 95;  // W - offset - width = 225
+    if (t4o.face === "west" && t4o.offset_cm === t4oExpOff) {
+      console.log("[canonical_io] OK — T4-west opening canon offset flipped");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — T4-west opening canon offset",
+        "face=" + t4o.face, "offset=" + t4o.offset_cm,
+        "expected face=west offset=" + t4oExpOff);
+    }
+
     if (allOk) {
       console.log("[canonical_io] ALL TESTS PASSED");
     } else {
@@ -627,6 +712,8 @@
     canonAngle:     canonAngle,
     FACE_MAPS:      FACE_MAPS,
     INV_FACE_MAPS:  INV_FACE_MAPS,
+    _flipFrom:      _flipFrom,
+    _flipTo:        _flipTo,
   };
 
   if (window.RUN_CANONICAL_IO_TESTS) {

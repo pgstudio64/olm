@@ -2229,11 +2229,15 @@
               ? cio.INV_FACE_MAPS[rCfAbs] : null;
             var _rWc = r.width_cm || 0;
             var _rDc = r.depth_cm || 0;
+            var _cioFlipTo = window.canonicalIO && window.canonicalIO._flipTo;
             var absDoors = rDoors.map(function (d) {
               var af = (invMap && invMap[d.face]) || d.face;
               var offAbs = d.offset_cm || 0;
               var hingeAbs = d.hinge_side;
-              if (rCfAbs === 'north' || rCfAbs === 'east') {
+              var _needsFlip = _cioFlipTo
+                ? _cioFlipTo(rCfAbs, d.face)
+                : (rCfAbs === 'north' || rCfAbs === 'east');
+              if (_needsFlip) {
                 var faceLen = (d.face === 'north' || d.face === 'south')
                   ? _rWc : _rDc;
                 offAbs = faceLen - offAbs - (d.width_cm || 0);
