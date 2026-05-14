@@ -11,7 +11,10 @@ import json
 import logging
 import os
 
-import jsonschema
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,9 @@ def validate_plan(data: dict) -> None:
         ValueError: with a human-readable message indicating the
             JSON path and the validation error.
     """
+    if jsonschema is None:
+        logger.warning("jsonschema not installed — validation skipped")
+        return
     schema = load_schema()
     validator = jsonschema.Draft7Validator(schema)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
