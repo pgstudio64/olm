@@ -3,9 +3,13 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
-## [v0.4.66] — 2026-05-14 — P2.7 JSON v3 schema validation
+## [v0.4.66] — 2026-05-14 — P2.7 JSON v3 schema validation + USER_GUIDE
 
 ### Added
+- **P2.8 — Guide utilisateur** : `docs/USER_GUIDE.md` (~370 lignes).
+  Couvre installation, concepts, workflow complet (import, edition,
+  matching, export), reglages Settings, depannage et limitations connues.
+  5 captures integrees. Lien ajoute dans README.md.
 - **P2.7 — Validation jsonschema** (D-188) : schema JSON Schema draft-07
   dans `olm/core/schemas/plan_v3.json` couvrant la structure complete d'un
   plan v3 (racine + room + window/opening/door/exclusion_zone).
