@@ -11,9 +11,12 @@ from olm.server.app import app
 @pytest.fixture()
 def client():
     """Client Flask pour tester les endpoints API."""
+    import olm.server.app as _app_mod
+    _app_mod._active_session = None  # Reset session lock (P2.5)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
+    _app_mod._active_session = None
 
 
 @pytest.fixture()

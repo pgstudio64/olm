@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 from typing import Any
 
 import pytest
@@ -648,3 +649,128 @@ class TestLogging:
         finally:
             test_logger.removeHandler(handler)
             handler.close()
+
+
+# ====================================================================
+# 11. Session lock (P2.5)
+# ====================================================================
+
+
+class TestSessionLock:
+    """Tests pour le verrou mono-utilisateur (P2.5, D-188)."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_session(self):
+        """Reset _active_session before each test."""
+        import olm.server.app as _app
+        _app._active_session = None
+        yield
+        _app._active_session = None
+
+    @staticmethod
+    def _get_cookie(resp, name: str) -> str | None:
+        """Extract cookie value from Set-Cookie header."""
+        for header_val in resp.headers.getlist("Set-Cookie"):
+            if header_val.startswith(f"{name}="):
+                return header_val.split("=", 1)[1].split(";")[0]
+        return None
+
+    def test_first_request_gets_cookie(self, client):
+        """1ere requete sans cookie retourne 200 + cookie defini."""
+        resp = client.get("/api/config")
+        assert resp.status_code == 200
+        cookie = self._get_cookie(resp, "olm_session")
+        assert cookie is not None
+        assert len(cookie) == 32  # uuid4 hex
+
+    def test_same_cookie_passes(self, client):
+        """2eme requete meme cookie retourne 200."""
+        resp1 = client.get("/api/config")
+        assert resp1.status_code == 200
+        resp2 = client.get("/api/config")
+        assert resp2.status_code == 200
+
+    def test_different_cookie_blocked(self, client):
+        """2eme requete cookie different retourne 423."""
+        # First client claims session
+        resp1 = client.get("/api/config")
+        assert resp1.status_code == 200
+
+        # Second client with different cookie
+        client.set_cookie("olm_session", "other_session_id",
+                          domain="localhost")
+        resp2 = client.get("/api/config")
+        assert resp2.status_code == 423
+        data = resp2.get_json()
+        assert "locked_page" in data
+
+    def test_takeover_succeeds(self, client):
+        """Takeover retourne 200 et l'ancien cookie devient inactif."""
+        # First client claims session
+        resp1 = client.get("/api/config")
+        assert resp1.status_code == 200
+        old_cookie = self._get_cookie(resp1, "olm_session")
+        assert old_cookie is not None
+
+        # Second client takes over
+        client.set_cookie("olm_session", "intruder",
+                          domain="localhost")
+        resp_takeover = client.post("/api/session/takeover")
+        assert resp_takeover.status_code == 200
+        assert resp_takeover.get_json()["ok"] is True
+
+        # New cookie is set
+        new_cookie = self._get_cookie(resp_takeover, "olm_session")
+        assert new_cookie is not None
+        assert new_cookie != old_cookie
+
+        # New session can access (cookie auto-set by test client)
+        resp3 = client.get("/api/config")
+        assert resp3.status_code == 200
+
+        # Old session is now locked out
+        client.set_cookie("olm_session", old_cookie,
+                          domain="localhost")
+        resp4 = client.get("/api/config")
+        assert resp4.status_code == 423
+
+    def test_idle_timeout_releases_lock(self, client, monkeypatch):
+        """Idle timeout depasse libere la session pour un nouveau client."""
+        import olm.server.app as _app
+
+        # First client claims session
+        resp1 = client.get("/api/config")
+        assert resp1.status_code == 200
+
+        # Simulate idle timeout expiry
+        _app._active_session["last_activity"] = (
+            time.time() - _app.IDLE_TIMEOUT_SECONDS - 1
+        )
+
+        # New client with different cookie passes
+        client.set_cookie("olm_session", "new_after_timeout",
+                          domain="localhost")
+        resp2 = client.get("/api/config")
+        assert resp2.status_code == 200
+
+    def test_exempt_paths_always_allowed(self, client):
+        """Les chemins exemptes passent meme avec un cookie different."""
+        # First client claims session
+        resp1 = client.get("/api/config")
+        assert resp1.status_code == 200
+
+        # Different cookie
+        client.set_cookie("olm_session", "blocked_session",
+                          domain="localhost")
+
+        # These should still be accessible
+        resp_health = client.get("/health")
+        assert resp_health.status_code == 200
+
+    def test_locked_page_returns_html(self, client):
+        """La page locked retourne du HTML avec le bouton."""
+        resp = client.get("/api/session/locked-page")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "Prendre le contr" in html
+        assert "/api/session/takeover" in html
