@@ -288,12 +288,12 @@
   function savePlanToDisk() {
     var ingState = window.ingState;
     if (!ingState || !ingState.rooms || ingState.rooms.length === 0) {
-      alert('No rooms to save. Load a floor plan first.');
+      alertModal('No rooms to save. Load a floor plan first.');
       return;
     }
     var res = serializeForStorage();
     if (!res || !res.planName) {
-      alert('Cannot determine plan name.');
+      alertModal('Cannot determine plan name.');
       return;
     }
     var planId = res.planName;
@@ -307,7 +307,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) {
-          alert('Save error: ' + data.error);
+          alertModal('Save error: ' + data.error);
           if (statusEl) statusEl.textContent = 'Save failed';
           _flashSaveBtn('Save failed', 'var(--bad)');
         } else {
@@ -316,7 +316,7 @@
         }
       })
       .catch(function (e) {
-        alert('Save error: ' + e);
+        alertModal('Save error: ' + e);
         if (statusEl) statusEl.textContent = 'Save failed';
         _flashSaveBtn('Save failed', 'var(--bad)');
       });
@@ -326,7 +326,7 @@
   function devExportV3Json() {
     var ingState = window.ingState;
     if (!ingState || !ingState.rooms || ingState.rooms.length === 0) {
-      alert('No rooms to export. Load a floor plan first.');
+      alertModal('No rooms to export. Load a floor plan first.');
       return;
     }
     var res = serializeForStorage();

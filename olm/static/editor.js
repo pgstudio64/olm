@@ -2391,7 +2391,7 @@ async function deletePattern() {
     setStatus("No pattern to delete.");
     return;
   }
-  if (!confirm("Delete pattern \"" + name + "\" from catalogue?")) return;
+  if (!(await confirmModal("Delete pattern \"" + name + "\" from catalogue?"))) return;
   try {
     const resp = await fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" });
     if (!resp.ok) throw new Error(await resp.text());

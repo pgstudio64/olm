@@ -80,7 +80,7 @@ async function init() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dsl: text })
       });
-      if (!resp.ok) { var err = await resp.json(); alert("Error: " + (err.error || "?")); return; }
+      if (!resp.ok) { var err = await resp.json(); alertModal("Error: " + (err.error || "?")); return; }
       var data = await resp.json();
       // D-83: DSL is in local coordinates — state is also in local, no conversion needed
       state.room_width_cm = data.width_cm;
@@ -92,7 +92,7 @@ async function init() {
       render(document.getElementById("rvCanvas"));
       zoomFit(document.getElementById("rvCanvas"));
       rvUpdateRoomInfo();
-    } catch (err) { alert("Error: " + err.message); }
+    } catch (err) { alertModal("Error: " + err.message); }
   });
   document.getElementById("rvBtnSaveRoom").addEventListener("click", function() {
     if (state.roomAmendMode) save();
@@ -311,20 +311,34 @@ async function init() {
     }
   }
 
-  // Cancel any active amend mode when navigating away from editor
+  // Cancel any active amend mode when navigating away from editor.
+  // Returns a Promise<boolean> (true = proceed, false = cancelled).
   function _cancelAmendIfActive() {
+    if (state.amendMode && state.dirty) {
+      return confirmModal("Unsaved layout changes will be lost. Continue?").then(function(ok) {
+        if (!ok) return false;
+        state.amendMode = null; state.overlay = null;
+        exitAmendUI(); _restoreEditorState();
+        return !state.roomAmendMode ? true :
+          confirmModal("Unsaved room changes will be lost. Continue?").then(function(ok2) {
+            if (!ok2) return false;
+            state.roomAmendMode = null; state.roomRenderOffset = null;
+            exitRoomAmendUI(); return true;
+          });
+      });
+    }
     if (state.amendMode) {
-      if (state.dirty && !confirm("Unsaved layout changes will be lost. Continue?")) return false;
-      state.amendMode = null;
-      exitAmendUI();
-      _restoreEditorState();
+      state.amendMode = null; state.overlay = null;
+      exitAmendUI(); _restoreEditorState();
     }
     if (state.roomAmendMode) {
-      if (!confirm("Unsaved room changes will be lost. Continue?")) return false;
-      state.roomAmendMode = null; state.roomRenderOffset = null;
-      exitRoomAmendUI();
+      return confirmModal("Unsaved room changes will be lost. Continue?").then(function(ok) {
+        if (!ok) return false;
+        state.roomAmendMode = null; state.roomRenderOffset = null;
+        exitRoomAmendUI(); return true;
+      });
     }
-    return true;
+    return Promise.resolve(true);
   }
 
   // Tab descriptions (flat nav — 4 tabs)
@@ -341,41 +355,48 @@ async function init() {
       var isLayoutTab = btn.dataset.tab === "lytDesign" || btn.dataset.tab === "lytCatalogue";
       // Block tab switch while room amend mode is active (must Save or Cancel first)
       if (state.roomAmendMode && btn.dataset.tab !== "fpReview") {
-        alert("Save or cancel room changes before switching tabs.");
+        alertModal("Save or cancel room changes before switching tabs.");
         return;
       }
-      // Cancel amend mode when leaving Layout tabs
+      function _doSwitch() {
+        document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
+        document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
+        btn.classList.add("active");
+        var tabId = "tab" + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1);
+        var tab = document.getElementById(tabId);
+        if (tab) tab.classList.add("active");
+        var descEl = document.getElementById("tabDescription");
+        if (descEl) descEl.textContent = TAB_DESCRIPTIONS[btn.dataset.tab] || "";
+        if (isLayoutTab) {
+          _restoreEditorState();
+          loadCatalogue();
+        }
+        if (btn.dataset.tab === "fpReview") {
+          rvRenderCurrent();
+        }
+        if (btn.dataset.tab === "lytDesign" &&
+            typeof window.fpRenderCurrent === "function") {
+          window.fpRenderCurrent();
+        }
+        // Rafraîchir les rulers HTML quand l'onglet devient visible
+        if (btn.dataset.tab === "fpReview" || btn.dataset.tab === "lytDesign") {
+          var svgId = btn.dataset.tab === "fpReview" ? "rvCanvas" : "fpCanvas";
+          requestAnimationFrame(function () {
+            var s = document.getElementById(svgId);
+            if (s && typeof window.updateRulers === "function") window.updateRulers(s);
+          });
+        }
+      } // end _doSwitch
+
+      // Cancel amend mode when leaving Layout tabs (async)
       if (!isLayoutTab) {
-        if (_cancelAmendIfActive() === false) return;
-        _saveEditorState();
-      }
-      document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
-      document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
-      btn.classList.add("active");
-      var tabId = "tab" + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1);
-      var tab = document.getElementById(tabId);
-      if (tab) tab.classList.add("active");
-      var descEl = document.getElementById("tabDescription");
-      if (descEl) descEl.textContent = TAB_DESCRIPTIONS[btn.dataset.tab] || "";
-      if (isLayoutTab) {
-        _restoreEditorState();
-        loadCatalogue();
-      }
-      if (btn.dataset.tab === "fpReview") {
-        rvRenderCurrent();
-      }
-      if (btn.dataset.tab === "lytDesign" &&
-          typeof window.fpRenderCurrent === "function") {
-        window.fpRenderCurrent();
-      }
-      // Rafraîchir les rulers HTML quand l'onglet devient visible (sinon
-      // wrapRect.width = 0 au 1er render, les labels sont tous filtrés).
-      if (btn.dataset.tab === "fpReview" || btn.dataset.tab === "lytDesign") {
-        var svgId = btn.dataset.tab === "fpReview" ? "rvCanvas" : "fpCanvas";
-        requestAnimationFrame(function () {
-          var s = document.getElementById(svgId);
-          if (s && typeof window.updateRulers === "function") window.updateRulers(s);
+        _cancelAmendIfActive().then(function(ok) {
+          if (!ok) return;
+          _saveEditorState();
+          _doSwitch();
         });
+      } else {
+        _doSwitch();
       }
     });
   });
@@ -442,10 +463,10 @@ async function init() {
     reader.onload = function(ev) {
       var data;
       try { data = JSON.parse(ev.target.result); } catch(err) {
-        alert("Invalid JSON: " + err.message); return;
+        alertModal("Invalid JSON: " + err.message); return;
       }
       if (!data.patterns || !Array.isArray(data.patterns)) {
-        alert("Invalid format: 'patterns' key expected"); return;
+        alertModal("Invalid format: 'patterns' key expected"); return;
       }
       fetch("/api/catalogue/import", {
         method: "POST",
@@ -454,8 +475,8 @@ async function init() {
       })
       .then(function(r) { return r.json(); })
       .then(function(resp) {
-        if (resp.error) { alert("Import error: " + resp.error); return; }
-        alert(resp.imported + " pattern(s) imported. Total: " + resp.total);
+        if (resp.error) { alertModal("Import error: " + resp.error); return; }
+        alertModal(resp.imported + " pattern(s) imported. Total: " + resp.total);
         loadCatalogue();
       });
     };
@@ -675,7 +696,7 @@ async function init() {
     if (typeof window.savePlanToDisk === "function") {
       window.savePlanToDisk();
     } else {
-      alert("Save not available — load a floor plan first.");
+      alertModal("Save not available — load a floor plan first.");
     }
   });
 
@@ -684,7 +705,7 @@ async function init() {
     if (typeof window.devExportV3Json === "function") {
       window.devExportV3Json();
     } else {
-      alert("Export not available — load a floor plan first.");
+      alertModal("Export not available — load a floor plan first.");
     }
   });
 
@@ -765,7 +786,7 @@ async function init() {
     document.getElementById("eraseMenu").style.display = "none";
     var sel = window.ingState && window.ingState._selectedPlan;
     var planId = sel && sel.id;
-    if (!planId) { alert("No plan loaded."); return; }
+    if (!planId) { alertModal("No plan loaded."); return; }
     confirmModal("Reinit: strip all detection and manual data from '" +
         planId + "' and re-import from scratch?").then(function(ok) {
     if (!ok) return;
@@ -778,7 +799,7 @@ async function init() {
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) {
-          alert("Reinit error: " + data.error);
+          alertModal("Reinit error: " + data.error);
           if (statusEl) statusEl.textContent = "Reinit failed";
           return;
         }
@@ -797,7 +818,7 @@ async function init() {
       })
       .catch(function (e) {
         hideModal();
-        alert("Reinit error: " + e);
+        alertModal("Reinit error: " + e);
         if (statusEl) statusEl.textContent = "Reinit failed";
       });
     }); // end confirmModal.then

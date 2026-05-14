@@ -1,8 +1,9 @@
 /**
  * modal.js — Centered modal overlay for OLM.
  *
- * Two modes:
- *   showModal(msg)   → wait mode (spinner, no buttons, call hideModal() to close)
+ * Three modes:
+ *   showModal(msg)    → wait mode (spinner, no buttons, call hideModal() to close)
+ *   alertModal(msg)   → alert mode (OK button only, returns Promise resolved on OK)
  *   confirmModal(msg) → confirm mode (OK / Cancel, returns Promise<boolean>)
  */
 (function () {
@@ -21,10 +22,11 @@
   function _show(msg, mode) {
     msgEl.textContent = msg;
     spinner.style.display = mode === 'wait' ? '' : 'none';
-    btnBar.style.display = mode === 'confirm' ? '' : 'none';
+    btnBar.style.display = (mode === 'confirm' || mode === 'alert') ? '' : 'none';
+    btnCancel.style.display = mode === 'confirm' ? '' : 'none';
     backdrop.style.display = '';
     box.style.display = '';
-    if (mode === 'confirm') btnOk.focus();
+    if (mode === 'confirm' || mode === 'alert') btnOk.focus();
   }
 
   function _hide() {
@@ -45,6 +47,14 @@
   window.hideModal = function () {
     _confirmResolve = null;
     _hide();
+  };
+
+  /** Show an alert modal (OK only). Returns a Promise resolved on OK. */
+  window.alertModal = function (msg) {
+    return new Promise(function (resolve) {
+      _confirmResolve = function () { resolve(); };
+      _show(msg, 'alert');
+    });
   };
 
   /**
@@ -72,11 +82,13 @@
     if (r) r(false);
   });
 
-  // Escape = Cancel in confirm mode, ignored in wait mode
+  // Escape = Cancel in confirm mode, OK in alert mode, ignored in wait mode
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && backdrop.style.display !== 'none' && _confirmResolve) {
       e.preventDefault();
-      btnCancel.click();
+      // In alert mode (Cancel hidden), Escape acts as OK
+      if (btnCancel.style.display === 'none') btnOk.click();
+      else btnCancel.click();
     }
   });
 
