@@ -1850,11 +1850,11 @@ async function save() {
 
       if (newBbox) {
         amendedRoom.bbox_px = newBbox.slice();
-        // Re-render Floor SVG + room list so the new size shows up
-        // without needing a click to trigger a redraw.
-        if (typeof window.renderIngestion === "function") window.renderIngestion();
-        if (typeof window.updateIngRoomList === "function") window.updateIngRoomList();
       }
+      // Re-render Floor SVG + room list so changes (bbox, zones, etc.)
+      // show up without needing a click to trigger a redraw.
+      if (typeof window.renderIngestion === "function") window.renderIngestion();
+      if (typeof window.updateIngRoomList === "function") window.updateIngRoomList();
     } else {
       // scaleCmPerPx == 0 : pas de calcul de bbox possible, mais
       // fpRoomAmendments doit quand même être écrit (canonRoom seul).
