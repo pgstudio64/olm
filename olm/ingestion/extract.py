@@ -2136,10 +2136,10 @@ def extract_room_features(
         if cx1 <= cx0 or cy1 <= cy0:
             continue
         auto_exclusions.append({
-            "x_cm": round(cx0 * scale_cm_per_px, 1),
-            "y_cm": round(cy0 * scale_cm_per_px, 1),
-            "width_cm": max(1, round((cx1 - cx0) * scale_cm_per_px, 1)),
-            "depth_cm": max(1, round((cy1 - cy0) * scale_cm_per_px, 1)),
+            "x_cm": int(round(cx0 * scale_cm_per_px)),
+            "y_cm": int(round(cy0 * scale_cm_per_px)),
+            "width_cm": max(1, int(round((cx1 - cx0) * scale_cm_per_px))),
+            "depth_cm": max(1, int(round((cy1 - cy0) * scale_cm_per_px))),
             "origin": "auto",
         })
 
