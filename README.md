@@ -48,6 +48,8 @@ python -m olm.server.app
 
 On Windows, double-click `launch.bat`.
 
+For detailed usage instructions, see the [User Guide](docs/USER_GUIDE.md).
+
 ### Configure
 
 OLM expects a `project/` directory next to the `olm/` package:
