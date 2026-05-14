@@ -1804,17 +1804,31 @@ async function save() {
           opens_inward: d.opens_inward !== false,
         });
       });
-      // Calcul du newBbox post-resize : base = ramend.originalRoom.bbox_px
-      // (à jour si Rescan intercalé) sinon ingRooms[ir].bbox_px courant.
+      // Calcul du newBbox post-resize : convertir les coins canoniques
+      // (NW et SE) en coordonnées abs via rotatePointInv, puis min/max.
+      // Corrige le décalage pour corridor_face != south.
+      var _rpInv = window.canonicalIO && window.canonicalIO.rotatePointInv;
       for (var ir = 0; ir < ingRooms.length; ir++) {
         if (ingRooms[ir].name !== ramend.roomName) continue;
         var orig = (ramend.originalRoom && ramend.originalRoom.bbox_px)
           || ingRooms[ir].bbox_px;
         if (!orig || orig.length !== 4) break;
-        var nx0 = orig[0] + absShiftX / scaleCmPerPx;
-        var ny0 = orig[1] + absShiftY / scaleCmPerPx;
-        var nx1 = nx0 + absW / scaleCmPerPx;
-        var ny1 = ny0 + absD / scaleCmPerPx;
+        var origAbsW = (orig[2] - orig[0]) * scaleCmPerPx;
+        var origAbsD = (orig[3] - orig[1]) * scaleCmPerPx;
+        // Canonical NW = (cShiftX, cShiftY), SE = (cShiftX+cW, cShiftY+cD)
+        var cnw = { x: cShiftX, y: cShiftY };
+        var cse = { x: cShiftX + cW, y: cShiftY + cD };
+        var anw, ase;
+        if (_rpInv) {
+          anw = _rpInv(cnw, origCf, origAbsW, origAbsD);
+          ase = _rpInv(cse, origCf, origAbsW, origAbsD);
+        } else {
+          anw = cnw; ase = cse;
+        }
+        var nx0 = orig[0] + Math.min(anw.x, ase.x) / scaleCmPerPx;
+        var ny0 = orig[1] + Math.min(anw.y, ase.y) / scaleCmPerPx;
+        var nx1 = orig[0] + Math.max(anw.x, ase.x) / scaleCmPerPx;
+        var ny1 = orig[1] + Math.max(anw.y, ase.y) / scaleCmPerPx;
         newBbox = [nx0, ny0, nx1, ny1];
         break;
       }
