@@ -50,6 +50,19 @@ Issues du test pièce en L (16e test) livré en P1.3 (2026-05-14). Ne sont pas d
 
 2. **Sensibilité des grades à la présence de blocs** : un seul `BLOCK_1` dans une pièce 10×10 m suffit à pousser `worst_detour` de 1.47 (Grade B, pièce vide) à 2.27 (Grade D, avec bloc). Inhérent à la rectangulation greedy : les centres des rectangles autour du bloc créent des chemins en zigzag mathématiquement plus longs que le chemin physique réel. Conséquence : les seuils des grades (A < 1.30, B < 1.60, C < 2.00) sont potentiellement **trop stricts pour des pièces aménagées**. À reconsidérer le jour où on tune le scoring (post Phase 2 probablement, pas urgent).
 
+## Problème ouvert — Porte de coin attribuée à la mauvaise face
+
+**Contexte** : session 2026-05-14, D-197 à D-198c.
+
+Cas concret : pièce preprocessed, corridor_face=south, rect [740,1126,939,1299]. Une porte physiquement dans le mur SUD (coin SE) est détectée sur EAST (les rays horizontaux captent l'arc, pas les verticaux → no_arc_hits sur south). Le corner dedup (D-197b) ne peut pas aider : une seule face détecte.
+
+**3 tentatives, 3 reverts** :
+- D-198 : wall gap scan au bbox edge → scan non fiable (bbox ≠ mur réel)
+- D-198b : retrait du check face courante → trop agressif, régressions
+- D-198c : croisement porte/ouverture dans extract.py → consomme l'ouverture sans réattribuer la porte (écart dimensions entre call sites)
+
+**Piste recommandée** : convertir l'ouverture en porte plutôt que réattribuer. Si porte au coin face A + ouverture au même coin face B : supprimer la porte A, promouvoir l'ouverture B en porte (ajouter hinge_side, opens_inward). Travailler dans un seul endroit du pipeline. Prompt de reprise détaillé dans `docs/RESUME_CORNER_DOOR.md`.
+
 ## Dette technique repérée (à traiter au fil de l'eau)
 
 - **Durcir le schema JSON v3** (post-P2.7, v0.4.66) : le schema actuel est descriptif (accepte les variations historiques) plutôt que normatif. 5 champs acceptent plus de cas que la spec idéale : `source_mode` optionnel, `corridor_face_abs` optionnel, `bbox_px` par room optionnel, sub-schémas `_px` ET `_cm`, `drawing_scale_measured` string ou number. Compromis pragmatique pour rétrocompat. Durcir quand tous les plans existants seront harmonisés (~2 h).

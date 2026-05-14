@@ -7,6 +7,39 @@ Chaque entrée indique la date, la décision, la justification et l'impact.
 
 ---
 
+## D-199 · Exclusion zones int + Floor re-render après Amend (2026-05-14, v0.4.83)
+
+**Décision** : (1) Les zones d'exclusion auto (poteaux) utilisent `int(round())` au lieu de `round(x, 1)` — le pipeline de rendu attend des entiers. (2) `renderIngestion()` est appelé après chaque Amend, pas seulement quand le bbox change — les modifications de zones/fenêtres/portes s'affichent immédiatement sur le Floor overlay.
+
+**Justification** : bug prod — zones manuelles créées dans Adjust Room n'apparaissaient pas sur le plan (les floats dans les coordonnées cassaient le rendu). Le re-render conditionnel au bbox empêchait l'affichage des zones ajoutées sans resize.
+
+**Impact** : 2 fichiers modifiés (extract.py, editor.js). 284 tests.
+
+---
+
+## D-198 · Corner door reassign — 3 tentatives, 3 reverts (2026-05-14, v0.4.77→v0.4.81)
+
+**Décision** : le problème de porte de coin attribuée à la mauvaise face (une seule face détecte l'arc) reste **ouvert**. Trois approches ont été tentées et retirées :
+- D-198 : wall gap scan au bbox edge (scan non fiable car bbox ≠ mur réel)
+- D-198b : retrait du check face courante (trop agressif, régressions)
+- D-198c : croisement porte/ouverture dans extract.py (consomme l'ouverture sans réattribuer la porte)
+
+**Justification** : chaque tentative causait des régressions ou des effets de bord. Prompt de reprise détaillé dans `docs/RESUME_CORNER_DOOR.md`. Piste recommandée : convertir l'ouverture en porte plutôt que réattribuer.
+
+**Impact** : état final = D-197b (corner dedup + max door width) sans reassign. TODO.md mis à jour.
+
+---
+
+## D-197 · Offset canonique per-face flip + corner door dedup (2026-05-14, v0.4.76)
+
+**Décision** : (1) Le flip d'offset dans fromStorage/toStorage ne s'applique plus uniformément à toutes les faces quand `cf_abs` est "east" ou "west". Nouvelle règle : 180° (north) = flip all ; 90° CW (east) = flip faces verticales abs uniquement ; 90° CCW (west) = flip faces horizontales abs uniquement. (2) Corner dedup : quand un arc de porte est détecté au même coin par deux faces adjacentes, seule la porte avec le `wall_fill_ratio` le plus bas est gardée. (3) Max door width filter précoce dans `detect_room` : portes >120 cm éliminées avant l'overlay.
+
+**Justification** : (1) Bug : les portes/fenêtres/ouvertures apparaissaient au mauvais bout du mur dans la vue Room pour les pièces avec corridor_face east ou west. Le bug existait dans 7 sites (canonical_io.js fromStorage/toStorage, canonical.py canonicalize/decanonicalize, ingestion.js rescan, init_rvtool.js rescan, orientation_check.py). Le round-trip fromStorage→toStorage masquait le bug (les deux erreurs se compensaient), mais la représentation canonique intermédiaire était fausse. (2) Bug : arcs de porte détectés sur 2 faces au même coin. (3) Bug : arcs de porte géants (4m+) visibles dans l'overlay.
+
+**Impact** : 7 fichiers corrigés, 2 helpers `_flipFrom`/`_flipTo` (JS + Python), 17 nouveaux tests. 284 tests total. La vue Floor n'est pas affectée (round-trip compensait). La vue Room est corrigée.
+
+---
+
 ## D-196 · Export package PNG/PDF + CSV (2026-05-14, v0.4.75)
 
 **Décision** : le bouton Export est ré-affecté d'un outil dev (téléchargement JSON v3) à un export métier final : dropdown 2 entrées (PNG / PDF). Le backend compose l'image annotée (couleurs de détection neutralisées en blanc, overlay N&B des postes de travail avec desk, arc chaise, clearance, label `room_code.index`) et écrit un CSV point-virgule (15 colonnes, utf-8-sig BOM Excel). Source de vérité = payload frontend (exactement ce que voit l'utilisateur). Pour les amendments (desks absents), les positions sont recalculées côté backend via `compute_desk_positions`. Le `chair_side` est enrichi côté frontend via `getDeskRects`/`transformDeskRects` et décanonicalisé côté backend. Fichiers écrits dans `project/exports/<plan_id>/`, overwrite à chaque export.

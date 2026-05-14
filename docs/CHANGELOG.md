@@ -3,6 +3,44 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.83] — 2026-05-14 — Exclusion zones int + Floor re-render after Amend
+
+### Fixed
+- Auto exclusion zones from pillars used `round(x, 1)` producing floats — rendering pipeline expects integers. Changed to `int(round(x))`.
+- `renderIngestion()` was only called after Amend when bbox changed. Now always called so zones/windows/doors edits show on the Floor overlay immediately.
+
+---
+
+## [v0.4.82] — 2026-05-14 — Close button resets Review state
+
+### Fixed
+- Close button now resets Review tab state: `rvRoomList`, room labels, `focusedRoom`, `bboxEditor`. Previously left the UI in an Adjust Room ghost state.
+
+---
+
+## [v0.4.81] — 2026-05-14 — Revert D-198c + export labels
+
+### Reverted
+- D-198c corner door/opening cross-reference removed — consumed openings without reliably reassigning the door.
+
+### Changed
+- Export buttons: "Export to PNG + CSV" / "Export to PDF + CSV".
+- Export success message: short relative path (`exports/<plan_id>`) instead of full absolute paths.
+
+---
+
+## [v0.4.76] — 2026-05-14 — D-197 offset canonique + D-197b corner dedup (v0.4.76→v0.4.79)
+
+### Fixed
+- **D-197**: Offset canonique per-face flip — 7 sites (canonical_io.js, canonical.py, orientation_check.py, ingestion.js, init_rvtool.js). Le flip ne s'applique plus uniformément à toutes les faces mais seulement aux faces dont la direction d'offset est inversée par la rotation (90° CW = faces verticales, 90° CCW = horizontales, 180° = toutes). Corrige le placement des portes/fenêtres/ouvertures au mauvais bout du mur dans la vue Room pour corridor_face east/west.
+
+### Added
+- **D-197b**: Corner door dedup — quand un arc de porte est détecté au même coin par deux faces adjacentes, seule la porte avec le `wall_fill_ratio` le plus bas est gardée.
+- **D-197b**: Max door width early filter — portes >120 cm supprimées dès `detect_room` (empêche les arcs géants de 4m+ dans l'overlay).
+- 17 nouveaux tests (6 canonical offset, 6 corner dedup, 5 extraction).
+
+---
+
 ## [v0.4.75] — 2026-05-14 — Export package PNG/PDF + CSV (D-196)
 
 ### Added
