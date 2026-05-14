@@ -3,6 +3,13 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.72] — 2026-05-14 — Fix plan selector on fresh install (Windows)
+
+### Fixed
+- Plan selector click delegation wired at init, not just after first import. Fixes non-functional dropdown on machines without auto-load test plan (Windows).
+
+---
+
 ## [v0.4.71] — 2026-05-14 — UX polish + bugfixes (D-195 suite)
 
 ### Fixed
