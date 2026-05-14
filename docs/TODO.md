@@ -1,29 +1,55 @@
 # TODO — OLM (Office Layout Matching)
 
-## Audit 2026-05 + documentation rétro-ingénierique (2026-05-14)
+## Cible produit (D-188, 2026-05-14)
 
-Audit complet livré dans [AUDIT_2026-05.md](AUDIT_2026-05.md) (5 axes, ~100 h
-de roadmap P0→P3 cumulée).
+OLM = **outil interne mono-utilisateur, robustesse « bonne, pas critique »**. Cycle de modifications standard. Pas de multi-user, pas d'auth, pas d'HTTPS, pas d'i18n / a11y, pas de bundling Windows autonome. Détails dans [Decisions.md § D-188](Decisions.md).
 
-Documentation rétro-ingénierique livrée :
-- **DOC-A** : [SRS.md v2.0](SRS.md) (réécrit), [GLOSSARY.md v3.0](specs/GLOSSARY.md) (enrichi), [CONSTRAINTS.md v2.0](specs/CONSTRAINTS.md) (mapping code↔Python).
-- **DOC-B** : [ROOM_SCHEMA.md](specs/ROOM_SCHEMA.md) nouveau SSOT, MAJ des 4 specs domaine (PREPROCESSED_JSON, CANONICAL_STATE, PATTERN_DSL, ROOM_DSL).
-- **DOC-C** : [API_SPEC.md](specs/API_SPEC.md) — 40 endpoints catalogués (préalable P1.2).
-- **DOC-D** : [ARCHITECTURE_TARGET.md](specs/ARCHITECTURE_TARGET.md), notes de statut sur RASTER_EXTRACTION_SPEC et COMB_ALGORITHM.
+## Roadmap consolidée (post-P0, post-audit v2)
 
-**Prochains chantiers — P0 (préalable refactor structurel)** :
-- P0.1 — Tests d'intégration `app.py` sur 5-10 endpoints clés (8-12 h).
-- P0.2 — Tests `extract.py` couvrant K-* prod et D-156/D-157/D-177/D-180 (12-16 h).
-- P0.3 — Supprimer défauts px en dur `test_comb.py` L52-62 + assertion défensive (2 h).
-- P0.4 — Trancher source unique `binarize_threshold` (config.json 110 vs detection_config 140) — entrée **D-186** (D-184/D-185 déjà utilisés).
+Audit v2 dans [AUDIT_2026-05-v2.md](AUDIT_2026-05-v2.md). P0 livré (D-184/185/186/187 + tests P0.1/P0.2). Trois phases restantes :
 
-**Chantiers documentaires en suspens** :
-- Q-EX-1 à Q-EX-5 : préciser EF-EX-02 (export package PNG/PDF + CSV) — voir SRS §3.9.
-- EF-VW-03 : inventorier les champs effectifs de la vue Office (donne la structure du CSV d'export).
-- SDS.md à réécrire **après** P1 (chantier DOC-E à planifier).
+### Phase 0 — Filet anti-régression (~5 h, préalable Phase 1)
+- Renforcer assertions tests `/api/room/reanalyze` (structure complète des `windows[]`, `doors[]`, `openings[]`).
+- Renforcer assertions tests `/api/floor-plan/match` (présence `all_candidates`, `desks`, scores numériques).
+- Investiguer les 7 tests pré-existants cassés (`test_pattern_generator.py`, `test_catalogue_matcher.py`).
 
-Prompts P0 prêts à coller dans Opus 4.6 : produits dans la session du
-2026-05-14 (cf. mémoire `audit_2026_05_doc_session`).
+### Phase 1 — Solidification (~42 h)
+- [x] **P1.1** ~~Casser le cycle `extract.py ↔ test_comb.py`~~ — D-189, v0.4.53. Renommage `comb_detection.py`, extraction `wall_classify.py`, suppression `main()`/`draw_debug_*`.
+- **P1.2** Split `olm/server/app.py` (2184 l.) en `olm/server/services/` (5 modules) — cf. [ARCHITECTURE_TARGET.md § 6.1](specs/ARCHITECTURE_TARGET.md) (~18 h).
+- **P1.3** Tests `olm/core/circulation_analysis.py` (grades A-F, détours, violations) — couverture 0 % → 80 % cible (~8 h).
+- **P1.4** Cleanup 77 `addEventListener` côté front sans `removeEventListener` (~7 h).
+- **P1.5** Remplacer 12 `traceback.print_exc()` par `logger.exception()` dans `app.py` (~2 h).
+
+### Phase 2 — Robustesse opérationnelle (~40 h)
+- **Verrou mono-utilisateur** : état en mémoire Flask (pas de lock file → reset au redémarrage = pas de blocage post-crash). Cookie session, page « OLM déjà en cours d'utilisation » + bouton « Prendre le contrôle », idle timeout 30 min (~4 h).
+- **Validation jsonschema** à l'import JSON v3 (~12 h).
+- **Écritures atomiques** temp+rename + `.bak` sur save (~5 h).
+- **`MAX_CONTENT_LENGTH` Flask + whitelist MIME upload** (PNG/JPEG/PDF) (~2 h).
+- **Logger Python + `RotatingFileHandler`** (pas JSON, format standard) (~6 h).
+- **Endpoint `/health`** (config lisible, catalogue valide) (~2 h).
+- **GitHub Actions basique** : `ruff check` + `pytest` au push (~3 h).
+- **`USER_GUIDE.md`** : workflow import → review → export, captures intégrées (~6 h).
+
+**Total restant : ~87 h sur 2-3 mois.**
+
+**Cible couverture tests** : 60 % sur `olm/core` et `olm/server`.
+
+## Chantiers documentaires en suspens
+
+- Q-EX-1 à Q-EX-5 : préciser EF-EX-02 (export package PNG/PDF + CSV) — voir [SRS § 3.9](SRS.md).
+- EF-VW-03 : inventorier les champs affichés en vue Office (donne la structure du CSV d'export).
+- SDS.md à réécrire **après** Phase 1 (chantier DOC-E à planifier).
+
+## Hors périmètre D-188 (réévaluables si besoin évolue)
+
+- Authentification multi-utilisateur (`flask-login`).
+- WSGI prod (gunicorn / waitress).
+- HTTPS / TLS.
+- File de travaux (`dramatiq`, `rq`) pour OCR longues.
+- PyInstaller bundling Windows autonome.
+- Internationalisation (Flask-Babel).
+- Accessibilité WCAG AA.
+- Logging structuré JSON / Prometheus metrics / ZIP diagnostic.
 
 ---
 
@@ -380,7 +406,7 @@ Objectif : amender les pièces importées avant matching. Remplace l'ancien "Adj
     re-analyze antérieur ; le placement suivant héritait de coordonnées
     canoniques pointant sur un feature décalé. Validé par l'utilisateur
     après D-124.
-- [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `test_comb.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
+- [x] **Relance analyse pièce (Room)** (D-104 puis D-107) : bouton "Re-analyze" en Room amend mode fait un ray-cast depuis seed via `comb_detection.detect_room`, masque auto portes + zones transparentes, recalcule bbox + windows + openings. V/H-rays visualisables. Masques debug affichés.
 - [x] **Préserver les modifications manuelles** (D-104) : chaque élément porte `origin: "auto"|"manual"` ; la ré-analyse remplace uniquement les auto et respecte `deleted_auto_signatures` pour éviter la réapparition d'éléments auto supprimés.
 - [x] **Persistance `origin` dans le JSON v3** ✅ 2026-04-21 (D-131).
   `WindowSpec` / `OpeningSpec` portent `origin: str | None = None`.
@@ -700,10 +726,10 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
    audit complet de ~30 valeurs numériques en dur (9 critiques, 14 modérées).
    Priorité : **mode preprocessed** (le mode OCR dépend de constantes
    additionnelles qui seront traitées dans un second temps).
-   - [x] **Triple binarize_threshold** : ~~unifier les 3 sources (test_comb L52,
+   - [x] **Triple binarize_threshold** : ~~unifier les 3 sources (comb_detection L52,
      extract.py L204, extract.py L1834) sur `detection_config.binarize_threshold`.~~
      → D-187 : defaut 140 → 110 aligne config.json. Source unique resolue.
-   - [x] **Défauts px module test_comb** (L52-59) : ~~remplacer les `XX_PX = N`
+   - [x] **Défauts px module comb_detection** (L52-59) : ~~remplacer les `XX_PX = N`
      par des valeurs dérivées de `DEFAULT_DETECTION_CONFIG_CM.to_px(scale)`
      ou faire échouer si `_apply_detection_config` n'a pas été appelée.~~
      → P0.3 livré : 14 constantes → None + `_ensure_config_applied()` guard.
@@ -720,8 +746,7 @@ Consolidation post-D-135. Liste non exhaustive, à arbitrer par l'utilisateur.
      `(palier, connectivité_pct, worst_detour)` dans `matching_config`.
    - [ ] **Calibration scale** : exposer `MIN_CALIB_SURFACE_M2` dans
      `project/config.json`.
-   - [ ] Assertion défensive : vérifier que `_apply_detection_config` a été
-     appelée avant toute utilisation des constantes module de `test_comb.py`.
+   - [x] Assertion défensive : `_ensure_config_applied()` dans `comb_detection.py` (ex-`test_comb.py`, renommé D-189).
 5. **Audit ingestion.js — actions faciles** (rapport
    [`docs/AUDIT_ingestion_2026-04-21.md`](AUDIT_ingestion_2026-04-21.md)) :
    - Bloc CONSTANTS en tête de fichier (magic numbers identifiés :
