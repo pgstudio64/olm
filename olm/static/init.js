@@ -14,6 +14,9 @@ async function init() {
   renderCatStandardFilter();
   renderFpStandardFilter();
 
+  // P1.4: All addEventListener calls in init() are session-life
+  // (bound once at DOMContentLoaded, never re-bound). No dispose needed.
+
   // Settings drawer open/close
   document.getElementById("btnOpenSettings").addEventListener("click", function() {
     document.getElementById("settingsDrawer").classList.add("open");

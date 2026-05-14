@@ -8,6 +8,156 @@
 (function () {
   'use strict';
 
+  // --- Event delegation (P1.4) ---
+  // Eliminates re-binding on renderIngestion / _wireRoomListEl / _renderPlanList.
+  // Two scopes, both session-life (bound once, dispatched by data-attributes):
+  //   ingestionRender : merge checkboxes + bbox body/handle on #ingSvg
+  //   roomRender      : room-list clicks on ingRoomList/rvRoomList/fpDesignRoomList
+  //                     + plan-list clicks on #ingPlanDisplay
+  var _ingDelegationWired = false;
+
+  function _wireIngDelegation() {
+    if (_ingDelegationWired) return;
+    _ingDelegationWired = true;
+
+    // --- ingestionRender: merge + bbox interactions on #ingSvg ---
+    var svg = document.getElementById('ingSvg');
+    if (svg) {
+      svg.addEventListener('click', function(e) {
+        var mergeEl = e.target.closest('[data-merge]');
+        if (mergeEl) {
+          e.stopPropagation();
+          var key = mergeEl.dataset.merge;
+          ingState.merges[key] = !ingState.merges[key];
+          renderIngestion();
+        }
+      });
+      svg.addEventListener('mousedown', function(e) {
+        // bbox handle: start resize
+        var handleEl = e.target.closest('[data-bbox-handle]');
+        if (handleEl) {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          var handle = handleEl.dataset.bboxHandle;
+          var roomName = handleEl.dataset.bboxRoom;
+          var room = ingState.rooms.find(function(r) { return r.name === roomName; });
+          if (!room) return;
+          var p = screenToIngSvg(e);
+          var be = ingState.bboxEditor;
+          be.preDragBbox = room.bbox_px.slice();
+          be.mode = 'resizing';
+          be.handle = handle;
+          be.dragStart = { mouseX: p.x, mouseY: p.y, bbox: room.bbox_px.slice() };
+          return;
+        }
+        // bbox body: select or start move
+        var bodyEl = e.target.closest('[data-bbox-body]');
+        if (bodyEl) {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          var name = bodyEl.dataset.bboxBody;
+          var be2 = ingState.bboxEditor;
+          if (be2.selectedName === name) {
+            var now = Date.now();
+            if (be2._lastSelectTime && (now - be2._lastSelectTime) < DOUBLE_CLICK_DELAY_MS) {
+              be2._lastSelectTime = 0;
+              be2.selectedName = null;
+              be2.sessionStartBbox = null;
+              be2.mode = 'idle';
+              be2.handle = null;
+              be2.dragStart = null;
+              be2.preDragBbox = null;
+              populateRoomsJson();
+              updateIngRoomList();
+              if (window.fpData) {
+                var fpRooms = window.fpData.rooms || [];
+                for (var fi = 0; fi < fpRooms.length; fi++) {
+                  if (fpRooms[fi].name === name) { window.fpData.currentIdx = fi; break; }
+                }
+              }
+              if (window.ingShowRoomView) window.ingShowRoomView();
+              return;
+            }
+            be2._lastSelectTime = now;
+            var room2 = ingState.rooms.find(function(r) { return r.name === name; });
+            if (!room2) return;
+            var p2 = screenToIngSvg(e);
+            be2.preDragBbox = room2.bbox_px.slice();
+            be2.mode = 'moving';
+            be2.dragStart = { mouseX: p2.x, mouseY: p2.y, bbox: room2.bbox_px.slice() };
+          } else {
+            var clickSelRoom = ingState.rooms.find(function(r) { return r.name === name; });
+            be2.selectedName = name;
+            be2.sessionStartBbox = clickSelRoom ? clickSelRoom.bbox_px.slice() : null;
+            be2.mode = 'idle';
+            be2.handle = null;
+            be2.dragStart = null;
+            be2._lastSelectTime = Date.now();
+            renderIngestion();
+          }
+        }
+      });
+    }
+
+    // --- roomRender: room-list delegation (3 containers) ---
+    ['ingRoomList', 'rvRoomList', 'fpDesignRoomList'].forEach(function(listId) {
+      var listEl = document.getElementById(listId);
+      if (!listEl) return;
+      var context = listId === 'rvRoomList' ? 'review'
+                  : listId === 'fpDesignRoomList' ? 'design' : 'import';
+      listEl.addEventListener('click', function(e) {
+        // Delete button
+        var delEl = e.target.closest('[data-ing-del]');
+        if (delEl) {
+          e.stopPropagation();
+          var delName = delEl.dataset.ingDel;
+          deleteIngRoom(delName);
+          return;
+        }
+        // Room selection
+        var roomEl = e.target.closest('[data-ing-room]');
+        if (!roomEl) return;
+        var rname = roomEl.dataset.ingRoom;
+        if (rname) {
+          if (window.fpData) {
+            var rooms = window.fpData.rooms || [];
+            for (var i = 0; i < rooms.length; i++) {
+              if (rooms[i].name === rname) {
+                window.fpData.currentIdx = i;
+                break;
+              }
+            }
+          }
+          if (context === 'design') {
+            if (window.fpRenderCurrent) window.fpRenderCurrent();
+            if (window.rvRenderCurrent) window.rvRenderCurrent();
+            updateIngRoomList();
+          } else if (context === 'import') {
+            if (window.ingShowRoomView) window.ingShowRoomView();
+          } else {
+            if (window.ingShowRoomView) window.ingShowRoomView();
+          }
+        } else {
+          // "All" — back to plan view
+          ingState.zoomRoom = '';
+          if (window.ingShowPlanView) window.ingShowPlanView();
+          zoomFit();
+          updateIngRoomList();
+        }
+      });
+    });
+
+    // --- plan-list delegation ---
+    var planListEl = document.getElementById('ingPlanList');
+    if (planListEl) {
+      planListEl.addEventListener('click', function(e) {
+        var planItem = e.target.closest('.plan-item');
+        if (!planItem) return;
+        _onPlanItemClick(planItem.dataset.planId, planItem.dataset.planMode);
+      });
+    }
+  }
+
   // --- Constants ------------------------------------------------------------
   // Defaults for rooms added manually via "+ Add room" (addIngRoom).
   var STUB_ROOM_DEFAULT_W_CM = 400;
@@ -502,106 +652,98 @@
       html = '<div style="padding:6px;color:var(--text-dim);">No match</div>';
     }
     listEl.innerHTML = html;
-    listEl.querySelectorAll('.plan-item').forEach(function (el) {
-      el.addEventListener('click', function () {
-        var newPlanId = this.dataset.planId;
-        var newPlanMode = this.dataset.planMode;
-        _setSelectedPlan(newPlanId, newPlanMode);
-        ingState.rooms = [];
-        _closePlanPopup();
-        // Show status immediately in the always-visible header
-        var hdr = document.getElementById('hdrCurrentPlan');
-        if (hdr) hdr.textContent = newPlanId + ' — Importing...';
-        // Make toolbar visible so ingStatus updates are seen
-        _showPlanLoadedUI(newPlanId);
+    // Event delegation handles plan-item clicks (P1.4)
+  }
 
-        // Load PNG + metadata in parallel
-        var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
-        var pngReady = false, metaReady = false;
-        var metaData = null;
+  // Extracted from plan-item inline handler (P1.4).
+  function _onPlanItemClick(newPlanId, newPlanMode) {
+    _setSelectedPlan(newPlanId, newPlanMode);
+    ingState.rooms = [];
+    _closePlanPopup();
+    var hdr = document.getElementById('hdrCurrentPlan');
+    if (hdr) hdr.textContent = newPlanId + ' — Importing...';
+    _showPlanLoadedUI(newPlanId);
 
-        function _tryRenderAndImport() {
-          if (!pngReady) return;
-          // Zoom to rooms envelope from metadata if available
-          if (metaData && metaData.rooms_summary && metaData.rooms_summary.length) {
-            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            metaData.rooms_summary.forEach(function (r) {
-              var b = r.bbox_px;
-              if (!b) return;
-              if (b[0] < minX) minX = b[0];
-              if (b[1] < minY) minY = b[1];
-              if (b[2] > maxX) maxX = b[2];
-              if (b[3] > maxY) maxY = b[3];
-            });
-            if (minX < Infinity) {
-              var pad = Math.max(maxX - minX, maxY - minY) * BBOX_AUTOFOCUS_PADDING_RATIO;
-              ingState.vb = { x: minX - pad, y: minY - pad,
-                w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
+    var url = '/api/ingestion/plan/' + encodeURIComponent(newPlanId) + '.png';
+    var pngReady = false, metaReady = false;
+    var metaData = null;
+
+    function _tryRenderAndImport() {
+      if (!pngReady) return;
+      if (metaData && metaData.rooms_summary && metaData.rooms_summary.length) {
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        metaData.rooms_summary.forEach(function (r) {
+          var b = r.bbox_px;
+          if (!b) return;
+          if (b[0] < minX) minX = b[0];
+          if (b[1] < minY) minY = b[1];
+          if (b[2] > maxX) maxX = b[2];
+          if (b[3] > maxY) maxY = b[3];
+        });
+        if (minX < Infinity) {
+          var pad = Math.max(maxX - minX, maxY - minY) * BBOX_AUTOFOCUS_PADDING_RATIO;
+          ingState.vb = { x: minX - pad, y: minY - pad,
+            w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
+        }
+      }
+      renderIngestion();
+      extractRooms();
+    }
+
+    if (newPlanMode === 'preprocessed') {
+      fetch('/api/plans/' + encodeURIComponent(newPlanId) + '/metadata')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.error) {
+            metaData = data;
+            ingState.buildingId = data.building_id || '';
+            ingState.floorId = data.floor_id || '';
+            ingState.northAngleDeg = data.north_angle_deg || 0;
+            if (typeof window.updateFloorMetadataUI === 'function') {
+              window.updateFloorMetadataUI();
+            }
+            if (data.image_size && data.image_size[0] > 0) {
+              ingState.planW = data.image_size[0];
+              ingState.planH = data.image_size[1];
+            }
+            if (data.rooms_summary && data.rooms_summary.length) {
+              ingState.rooms = data.rooms_summary.map(function (r) {
+                return { name: r.name || '', bbox_px: r.bbox_px,
+                         width_cm: 0, depth_cm: 0 };
+              });
+              updateIngRoomList();
+              updatePlanDependentUI();
+              var rc = document.getElementById('rvFloorRooms');
+              if (rc) rc.textContent = ingState.rooms.length;
             }
           }
-          renderIngestion();
-          extractRooms();
-        }
-
-        // Metadata fetch (preprocessed only)
-        if (newPlanMode === 'preprocessed') {
-          fetch('/api/plans/' + encodeURIComponent(newPlanId) + '/metadata')
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-              if (!data.error) {
-                metaData = data;
-                ingState.buildingId = data.building_id || '';
-                ingState.floorId = data.floor_id || '';
-                ingState.northAngleDeg = data.north_angle_deg || 0;
-                if (typeof window.updateFloorMetadataUI === 'function') {
-                  window.updateFloorMetadataUI();
-                }
-                if (data.image_size && data.image_size[0] > 0) {
-                  ingState.planW = data.image_size[0];
-                  ingState.planH = data.image_size[1];
-                }
-                // Pre-fill left column from metadata (before full import)
-                if (data.rooms_summary && data.rooms_summary.length) {
-                  ingState.rooms = data.rooms_summary.map(function (r) {
-                    return { name: r.name || '', bbox_px: r.bbox_px,
-                             width_cm: 0, depth_cm: 0 };
-                  });
-                  updateIngRoomList();
-                  updatePlanDependentUI();
-                  var rc = document.getElementById('rvFloorRooms');
-                  if (rc) rc.textContent = ingState.rooms.length;
-                }
-              }
-              metaReady = true;
-              _tryRenderAndImport();
-            })
-            .catch(function () { metaReady = true; _tryRenderAndImport(); });
-        } else {
           metaReady = true;
-        }
+          _tryRenderAndImport();
+        })
+        .catch(function () { metaReady = true; _tryRenderAndImport(); });
+    } else {
+      metaReady = true;
+    }
 
-        // PNG load
-        var img = new Image();
-        img.onload = function () {
-          ingState.planUrl = url;
-          ingState.planW = img.naturalWidth;
-          ingState.planH = img.naturalHeight;
-          if (!metaData) {
-            ingState.vb = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
-          }
-          pngReady = true;
-          _tryRenderAndImport();
-        };
-        img.onerror = function () {
-          ingState.planUrl = '';
-          ingState.planW = 0;
-          ingState.planH = 0;
-          pngReady = true;
-          _tryRenderAndImport();
-        };
-        img.src = url;
-      });
-    });
+    var img = new Image();
+    img.onload = function () {
+      ingState.planUrl = url;
+      ingState.planW = img.naturalWidth;
+      ingState.planH = img.naturalHeight;
+      if (!metaData) {
+        ingState.vb = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+      }
+      pngReady = true;
+      _tryRenderAndImport();
+    };
+    img.onerror = function () {
+      ingState.planUrl = '';
+      ingState.planW = 0;
+      ingState.planH = 0;
+      pngReady = true;
+      _tryRenderAndImport();
+    };
+    img.src = url;
   }
 
   function populateDropdown(plans) {
@@ -826,53 +968,13 @@
     listEl.innerHTML = html;
     if (context === 'review' || context === 'design') {
       listEl.querySelectorAll('.room-del').forEach(function(el) { el.remove(); });
-      // "All" entry (back to plan view) only makes sense in Import.
       var allEntry = listEl.querySelector('[data-ing-room=""]');
       if (allEntry) allEntry.remove();
     }
-    // Auto-scroll to selected room
     var selected = listEl.querySelector('[style*="font-weight:bold"]');
     if (selected) selected.scrollIntoView({ block: 'nearest' });
-    listEl.querySelectorAll('[data-ing-room]').forEach(function(el) {
-      el.addEventListener('click', function() {
-        var name = this.dataset.ingRoom;
-        if (name) {
-          if (window.fpData) {
-            var rooms = window.fpData.rooms || [];
-            for (var i = 0; i < rooms.length; i++) {
-              if (rooms[i].name === name) {
-                window.fpData.currentIdx = i;
-                break;
-              }
-            }
-          }
-          if (context === 'design') {
-            // Stay on Design, re-render current room
-            if (window.fpRenderCurrent) window.fpRenderCurrent();
-            if (window.rvRenderCurrent) window.rvRenderCurrent();
-            updateIngRoomList();
-          } else if (context === 'import') {
-            // "All" entry handled below; named room → go to Review
-            if (window.ingShowRoomView) window.ingShowRoomView();
-          } else {
-            if (window.ingShowRoomView) window.ingShowRoomView();
-          }
-        } else {
-          // "All" — back to plan view
-          ingState.zoomRoom = '';
-          if (window.ingShowPlanView) window.ingShowPlanView();
-          zoomFit();
-          updateIngRoomList();
-        }
-      });
-    });
-    listEl.querySelectorAll('[data-ing-del]').forEach(function(el) {
-      el.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var name = this.dataset.ingDel;
-        deleteIngRoom(name);
-      });
-    });
+    // Event delegation handles room-list clicks (P1.4)
+    _wireIngDelegation();
   }
 
   // --- Manual add / delete a room ---
@@ -1502,88 +1604,8 @@
 
     document.getElementById('ing-overlay').innerHTML = els.join('\n');
 
-    // Click handler: merge checkboxes
-    svg.querySelectorAll('[data-merge]').forEach(function(el) {
-      el.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var key = this.dataset.merge;
-        ingState.merges[key] = !ingState.merges[key];
-        renderIngestion();
-      });
-    });
-
-    // Mousedown on bbox body: select or start move
-    svg.querySelectorAll('[data-bbox-body]').forEach(function(el) {
-      el.addEventListener('mousedown', function(e) {
-        if (e.button !== 0) return;
-        e.stopPropagation();  // prevent pan from starting
-        var name = this.dataset.bboxBody;
-        var be = ingState.bboxEditor;
-        if (be.selectedName === name) {
-          // Double-click detection: 2nd mousedown on same room → open in Review.
-          var now = Date.now();
-          if (be._lastSelectTime && (now - be._lastSelectTime) < DOUBLE_CLICK_DELAY_MS) {
-            be._lastSelectTime = 0;
-            // Commit any pending bbox modification before leaving
-            be.selectedName = null;
-            be.sessionStartBbox = null;
-            be.mode = 'idle';
-            be.handle = null;
-            be.dragStart = null;
-            be.preDragBbox = null;
-            populateRoomsJson();
-            updateIngRoomList();
-            // Navigate to this room in Review
-            if (window.fpData) {
-              var fpRooms = window.fpData.rooms || [];
-              for (var fi = 0; fi < fpRooms.length; fi++) {
-                if (fpRooms[fi].name === name) { window.fpData.currentIdx = fi; break; }
-              }
-            }
-            if (window.ingShowRoomView) window.ingShowRoomView();
-            return;
-          }
-          // Not a double-click — record time for next attempt, then start moving
-          be._lastSelectTime = now;
-          var room = ingState.rooms.find(function(r) { return r.name === name; });
-          if (!room) return;
-          var p = screenToIngSvg(e);
-          be.preDragBbox = room.bbox_px.slice();
-          be.mode = 'moving';
-          be.dragStart = { mouseX: p.x, mouseY: p.y, bbox: room.bbox_px.slice() };
-        } else {
-          // Select this room for bbox editing
-          var clickSelRoom = ingState.rooms.find(function(r) { return r.name === name; });
-          be.selectedName = name;
-          be.sessionStartBbox = clickSelRoom ? clickSelRoom.bbox_px.slice() : null;
-          be.mode = 'idle';
-          be.handle = null;
-          be.dragStart = null;
-          be._lastSelectTime = Date.now();
-          renderIngestion();
-        }
-      });
-      // dblclick is handled via delegated listener on ingSvg (setupZoomPan)
-    });
-
-    // Mousedown on corner handle: start resize
-    svg.querySelectorAll('[data-bbox-handle]').forEach(function(el) {
-      el.addEventListener('mousedown', function(e) {
-        if (e.button !== 0) return;
-        e.stopPropagation();
-        var handle = this.dataset.bboxHandle;
-        var roomName = this.dataset.bboxRoom;
-        var room = ingState.rooms.find(function(r) { return r.name === roomName; });
-        if (!room) return;
-        var p = screenToIngSvg(e);
-        var be = ingState.bboxEditor;
-        be.preDragBbox = room.bbox_px.slice();
-        be.mode = 'resizing';
-        be.handle = handle;
-        be.dragStart = { mouseX: p.x, mouseY: p.y, bbox: room.bbox_px.slice() };
-      });
-    });
-
+    // Event delegation handles merge + bbox interactions (P1.4)
+    _wireIngDelegation();
   }
 
   // --- Zoom/Pan ---
@@ -1838,6 +1860,8 @@
   }
 
   // --- Init ---
+  // P1.4: All remaining addEventListener calls below are session-life
+  // (bound once at DOMContentLoaded, never re-bound). No dispose needed.
   document.addEventListener('DOMContentLoaded', function () {
     setupToggles();
     setupZoomPan();
