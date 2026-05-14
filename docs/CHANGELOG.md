@@ -3,6 +3,14 @@
 Toutes les modifications notables de ce projet sont documentées ici.
 Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [v0.4.55] — 2026-05-14 — fix api_plan_metadata JSON v3
+
+### Fixed
+- **api_plan_metadata** : supporte JSON v3 (rooms = dict indexe par room_id, D-84). Bug pre-existant (depuis 421f2de) — iterer un dict donnait les cles (str) au lieu des valeurs, crash `'str' object has no attribute 'get'`. Detecte lors du smoke-test P1.2.
+
+### Added
+- **test_app_endpoints.py** : 3 tests `TestPlanMetadata` (v3 dict rooms, JSON absent, rooms sans bbox). 202 → 205 tests.
+
 ## [v0.4.54] — 2026-05-14 — P1.2 Split app.py en services + P1.5
 
 ### Changed

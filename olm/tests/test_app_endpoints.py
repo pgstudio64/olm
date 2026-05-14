@@ -371,6 +371,64 @@ class TestPlanSave:
 
 
 # ====================================================================
+# 3b. GET /api/plans/<plan_id>/metadata
+# ====================================================================
+
+class TestPlanMetadata:
+    """Tests pour GET /api/plans/<plan_id>/metadata."""
+
+    def test_v3_dict_rooms(self, client, tmp_plans_dir):
+        """Metadata supporte JSON v3 (rooms = dict indexe par room_id)."""
+        plan_json = {
+            "building_id": "B1",
+            "floor_id": "R+1",
+            "drawing_scale_text": "1:100",
+            "page_width_px": 2000,
+            "page_height_px": 1500,
+            "rooms": {
+                "101": {
+                    "seed_x": 500, "seed_y": 400,
+                    "bbox_px": [400, 300, 700, 600],
+                },
+                "102": {
+                    "seed_x": 900, "seed_y": 400,
+                    "bbox_px": [800, 300, 1100, 600],
+                },
+            },
+        }
+        (tmp_plans_dir / "plan_v3.json").write_text(
+            __import__("json").dumps(plan_json), encoding="utf-8")
+        resp = client.get("/api/plans/plan_v3/metadata")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["building_id"] == "B1"
+        assert data["floor_id"] == "R+1"
+        assert data["image_size"] == [2000, 1500]
+        assert len(data["rooms_summary"]) == 2
+        names = {r["name"] for r in data["rooms_summary"]}
+        assert names == {"101", "102"}
+        for r in data["rooms_summary"]:
+            assert len(r["bbox_px"]) == 4
+
+    def test_missing_json(self, client, tmp_plans_dir):
+        """Metadata retourne 404 si le JSON du plan est absent."""
+        resp = client.get("/api/plans/inexistant/metadata")
+        assert resp.status_code == 404
+
+    def test_rooms_without_bbox(self, client, tmp_plans_dir):
+        """Rooms sans bbox_px sont ignores dans rooms_summary."""
+        plan_json = {
+            "page_width_px": 1000, "page_height_px": 800,
+            "rooms": {"201": {"seed_x": 100, "seed_y": 100}},
+        }
+        (tmp_plans_dir / "no_bbox.json").write_text(
+            __import__("json").dumps(plan_json), encoding="utf-8")
+        resp = client.get("/api/plans/no_bbox/metadata")
+        assert resp.status_code == 200
+        assert resp.get_json()["rooms_summary"] == []
+
+
+# ====================================================================
 # 4. POST /api/room-dsl/parse
 # ====================================================================
 

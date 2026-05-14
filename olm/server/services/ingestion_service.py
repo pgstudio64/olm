@@ -126,11 +126,16 @@ def get_plan_metadata(plan_id: str) -> dict:
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
     rooms_summary = []
-    for r in data.get("rooms", []):
+    rooms = data.get("rooms", [])
+    rooms_iter = (
+        rooms.items() if isinstance(rooms, dict)
+        else (("", r) for r in rooms)
+    )
+    for room_id, r in rooms_iter:
         bbox = r.get("bbox_px")
         if bbox and len(bbox) == 4:
             rooms_summary.append({
-                "name": r.get("room_id", ""),
+                "name": room_id or r.get("room_id", ""),
                 "bbox_px": [int(v) for v in bbox],
             })
     page_w = int(data.get("page_width_px") or 0)
