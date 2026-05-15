@@ -19,8 +19,8 @@
 
   var _confirmResolve = null;
 
-  function _show(msg, mode) {
-    msgEl.textContent = msg;
+  function _show(msg, mode, html) {
+    if (html) { msgEl.innerHTML = msg; } else { msgEl.textContent = msg; }
     spinner.style.display = mode === 'wait' ? '' : 'none';
     btnBar.style.display = (mode === 'confirm' || mode === 'alert') ? '' : 'none';
     btnCancel.style.display = mode === 'confirm' ? '' : 'none';
@@ -49,11 +49,12 @@
     _hide();
   };
 
-  /** Show an alert modal (OK only). Returns a Promise resolved on OK. */
-  window.alertModal = function (msg) {
+  /** Show an alert modal (OK only). Returns a Promise resolved on OK.
+   *  If msg contains HTML tags, set useHtml=true. */
+  window.alertModal = function (msg, useHtml) {
     return new Promise(function (resolve) {
       _confirmResolve = function () { resolve(); };
-      _show(msg, 'alert');
+      _show(msg, 'alert', !!useHtml);
     });
   };
 

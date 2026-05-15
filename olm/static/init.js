@@ -484,6 +484,98 @@ async function init() {
     e.target.value = "";
   });
 
+  // --- Fit to pattern (editor) ---
+  document.getElementById("btnFit").addEventListener("click", function() {
+    if (!state._savedName) {
+      setStatus("Save the pattern first before fitting.");
+      return;
+    }
+    var name = state._savedName;
+    fetch("/api/patterns/" + encodeURIComponent(name) + "/fit", { method: "POST" })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) {
+          setStatus("Fit error: " + (res.data.error || "unknown"));
+          return;
+        }
+        var d = res.data;
+        // Update editor state with new dims
+        state.room_width_cm = d.new_width;
+        state.room_depth_cm = d.new_depth;
+        document.getElementById("roomWidth").value = d.new_width;
+        document.getElementById("roomDepth").value = d.new_depth;
+        render();
+        zoomFit();
+        updateDSL();
+        // Reload the full pattern to pick up any feature changes
+        loadPattern(name);
+        // Toast
+        if (d.direction === "shrink") {
+          setStatus("Room shrunk: " + d.old_width + "x" + d.old_depth + " -> " + d.new_width + "x" + d.new_depth + " cm");
+        } else if (d.direction === "expand") {
+          setStatus("Room expanded: " + d.old_width + "x" + d.old_depth + " -> " + d.new_width + "x" + d.new_depth + " cm");
+        } else {
+          setStatus("Room already at minimum (" + d.new_width + "x" + d.new_depth + " cm)");
+        }
+        // Warnings
+        var warnEl = document.getElementById("editorWarnings");
+        if (d.warnings && d.warnings.length > 0) {
+          warnEl.textContent = d.warnings.join(" | ");
+          warnEl.style.display = "block";
+        } else {
+          warnEl.style.display = "none";
+        }
+      })
+      .catch(function(err) { setStatus("Fit error: " + err.message); });
+  });
+
+  // --- Fit all to pattern (catalogue) ---
+  document.getElementById("btnFitAll").addEventListener("click", function() {
+    fetch("/api/patterns/fit-all", { method: "POST" })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { alertModal("Fit-all error: " + data.error); return; }
+        var s = data.summary;
+        var fitted = data.fitted || [];
+        var skipped = data.skipped || [];
+        // Build detail HTML
+        var html = "<div style='font-size:12px;margin-bottom:8px;'>"
+          + "Fitted " + s.fitted + " / " + s.total + " patterns ("
+          + s.noop + " already minimal, " + s.skipped + " skipped).</div>";
+        if (fitted.length > 0) {
+          html += "<details><summary style='cursor:pointer;font-size:11px;'>Fitted details</summary>"
+            + "<table style='font-size:10px;border-collapse:collapse;width:100%;margin-top:4px;'>"
+            + "<tr style='border-bottom:1px solid var(--border);'><th style='text-align:left;padding:2px 6px;'>Name</th>"
+            + "<th>Direction</th><th>Old</th><th>New</th><th>Warnings</th></tr>";
+          fitted.forEach(function(f) {
+            var r = f.result;
+            var warns = (r.warnings && r.warnings.length > 0) ? r.warnings.join("; ") : "";
+            html += "<tr style='border-bottom:1px solid var(--border);'>"
+              + "<td style='padding:2px 6px;'>" + f.name + "</td>"
+              + "<td style='text-align:center;'>" + r.direction + "</td>"
+              + "<td style='text-align:center;'>" + r.old_width + "x" + r.old_depth + "</td>"
+              + "<td style='text-align:center;'>" + r.new_width + "x" + r.new_depth + "</td>"
+              + "<td style='font-size:9px;color:#c09050;'>" + warns + "</td></tr>";
+          });
+          html += "</table></details>";
+        }
+        if (skipped.length > 0) {
+          html += "<details><summary style='cursor:pointer;font-size:11px;color:#c05858;'>Skipped (" + skipped.length + ")</summary>"
+            + "<table style='font-size:10px;border-collapse:collapse;width:100%;margin-top:4px;'>"
+            + "<tr style='border-bottom:1px solid var(--border);'><th style='text-align:left;padding:2px 6px;'>Name</th><th>Reason</th></tr>";
+          skipped.forEach(function(sk) {
+            html += "<tr style='border-bottom:1px solid var(--border);'>"
+              + "<td style='padding:2px 6px;'>" + sk.name + "</td>"
+              + "<td style='font-size:9px;'>" + sk.reason + "</td></tr>";
+          });
+          html += "</table></details>";
+        }
+        alertModal(html, true);
+        loadCatalogue();
+      })
+      .catch(function(err) { alertModal("Fit-all error: " + err.message); });
+  });
+
   // Catalogue filters — update both views
   function onCatalogueFilterChange() {
     renderCatalogue();

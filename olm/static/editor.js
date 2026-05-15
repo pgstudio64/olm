@@ -2095,7 +2095,7 @@ function switchToEditorWithPattern(data) {
 var AMEND_DISABLE_IDS = [
   "roomWidth", "roomDepth", "btnWidthPlus", "btnWidthMinus",
   "btnDepthPlus", "btnDepthMinus", "dslRoom", "btnApplyRoomDSL",
-  "btnNew", "btnLoad", "btnDuplicate", "btnDelete",
+  "btnNew", "btnLoad", "btnDuplicate", "btnDelete", "btnFit",
 ];
 
 function enterAmendMode(room, candidate) {

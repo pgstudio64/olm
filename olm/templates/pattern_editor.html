@@ -614,6 +614,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <button class="btn" id="btnSave">Save</button>
       <button class="btn" id="btnDuplicate">Duplicate</button>
       <button class="btn" id="btnDelete">Delete</button>
+      <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions">Fit to pattern</button>
       <button class="btn btn-cancel" id="btnAmendCancel" style="display:none;">Cancel</button>
       <span id="deskCount">0 desk(s)</span>
     </div>
@@ -649,6 +650,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               font-family="monospace">Add blocks to get started</text>
       </svg>
     </div>
+    <div id="editorWarnings" style="display:none;padding:4px 8px;font-size:10px;color:#c09050;background:#2a2520;border-top:1px solid #4a4030;max-height:60px;overflow-y:auto;"></div>
     <div class="status-bar" id="statusBar">Ready.</div>
   </div>
 
@@ -732,6 +734,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <button class="view-toggle" id="btnCatExport" title="Export catalogue">&#x2B07; Export</button>
       <button class="view-toggle" id="btnCatImport" title="Import patterns">&#x2B06; Import</button>
       <input type="file" id="catImportFile" accept=".json" style="display:none;">
+      <button class="view-toggle" id="btnFitAll" title="Fit all patterns to their minimum room">Fit all to pattern</button>
       <span id="catCount" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
     </div>
     <div class="catalogue-grid" id="catalogueGrid">
