@@ -257,18 +257,12 @@
     function slim(o) {
       return { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
     }
+    // D-204: doors[] is exclusively typed (has face) since D-204.
     function slimDoor(d) {
-      // Seed-only Input doors: pass through unchanged.
-      if (typeof d.seed_x === 'number' && !d.face) {
-        return { seed_x: d.seed_x, seed_y: d.seed_y };
-      }
-      var s = {
+      return {
         face: d.face, offset_cm: d.offset_cm, width_cm: d.width_cm,
         hinge_side: d.hinge_side, opens_inward: d.opens_inward !== false,
       };
-      if (typeof d.seed_x === 'number') s.seed_x = d.seed_x;
-      if (typeof d.seed_y === 'number') s.seed_y = d.seed_y;
-      return s;
     }
     var roomAbs = {
       corridor_face: corridor,
@@ -298,18 +292,12 @@
     var openingsCanon = (canon.openings || []).map(function (o) {
       return feat(o);
     });
+    // D-204: doors[] is exclusively typed since D-204.
     var doorsCanon = (canon.doors || []).map(function (d) {
-      // Seed-only Input doors: pass through unchanged.
-      if (typeof d.seed_x === 'number' && !d.face) {
-        return { seed_x: d.seed_x, seed_y: d.seed_y };
-      }
-      var extra = {
+      return feat(d, {
         hinge_side: d.hinge_side,
         opens_inward: d.opens_inward !== false,
-      };
-      if (typeof d.seed_x === 'number') extra.seed_x = d.seed_x;
-      if (typeof d.seed_y === 'number') extra.seed_y = d.seed_y;
-      return feat(d, extra);
+      });
     });
 
     // --- 2) Post-traitement points / rectangles relatifs au bbox ---
@@ -2222,15 +2210,17 @@
               ? window.canonicalZonesToAbs(
                   rawTransparents, rCfAbs, rAbsW, rAbsD)
               : rawTransparents;
-            // Convert door faces + offset canon → abs.
+            // D-204: typed doors canon → abs, door_seeds passed as-is.
             var rDoors = (amend && amend.doors) || r.doors || [];
+            // Filter to typed-only (has face) for conversion.
+            var typedDoors = rDoors.filter(function (d) { return !!d.face; });
             var cio = window.canonicalIO;
             var invMap = (cio && cio.INV_FACE_MAPS)
               ? cio.INV_FACE_MAPS[rCfAbs] : null;
             var _rWc = r.width_cm || 0;
             var _rDc = r.depth_cm || 0;
             var _cioFlipTo = window.canonicalIO && window.canonicalIO._flipTo;
-            var absDoors = rDoors.map(function (d) {
+            var absDoors = typedDoors.map(function (d) {
               var af = (invMap && invMap[d.face]) || d.face;
               var offAbs = d.offset_cm || 0;
               var hingeAbs = d.hinge_side;
@@ -2249,18 +2239,22 @@
                         width_cm: d.width_cm || 0 };
               if (hingeAbs) e.hinge_side = hingeAbs;
               if (d.opens_inward != null) e.opens_inward = d.opens_inward;
-              if (d.seed_x != null) e.seed_x = d.seed_x;
-              if (d.seed_y != null) e.seed_y = d.seed_y;
               return e;
             });
-            payload.rooms.push({
+            // D-204: door_seeds are image-absolute, no rotation needed.
+            var roomDoorSeeds = r.door_seeds || [];
+            var roomPayload = {
               name: r.name,
               bbox_px: r.bbox_px,
               seed_px: seedPx,
               transparent_zones: absTransparents,
               doors: absDoors,
               corridor_face: r.corridor_face_abs || "",
-            });
+            };
+            if (roomDoorSeeds.length) {
+              roomPayload.door_seeds = roomDoorSeeds;
+            }
+            payload.rooms.push(roomPayload);
             validRooms.push(r);
           });
           if (statusEl) statusEl.textContent =
@@ -2307,20 +2301,20 @@
             var newO = canon.openings.filter(function (o) {
               return !deleted.has(_opSignature('opening', o));
             });
-            // Portes auto redétectées seulement si aucune manuelle n'existe.
-            // Mode preprocessed : `extract_room_features` ne re-détecte pas
-            // les portes (payload `doors_px=[]`), donc `canon.doors` est
-            // vide. Sans précaution, le merge effacerait les portes auto
-            // chargées depuis le JSON. → Si le backend ne renvoie aucune
-            // porte ET qu'il n'y a pas de portes manuelles à préserver,
-            // garder les anciennes portes auto telles quelles.
+            // D-204: doors[] is exclusively typed. door_seeds[] is
+            // preserved intact (never touched by merge).
+            // Portes auto redétectées seulement si aucune manuelle.
+            // Si backend renvoie 0 porte et pas de manuelles, garder
+            // les anciennes portes auto typed.
             var newDoors;
             if (preservedDoors.length) {
               newDoors = [];
             } else if (canon.doors && canon.doors.length) {
               newDoors = canon.doors;
             } else {
-              newDoors = prevDr.filter(function (d) { return d.origin !== 'manual'; });
+              newDoors = prevDr.filter(function (d) {
+                return d.origin !== 'manual' && d.face;
+              });
             }
 
             // D-152 : clamp identique au single-room Rescan (init_rvtool)

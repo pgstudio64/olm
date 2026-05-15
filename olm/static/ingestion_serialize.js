@@ -181,16 +181,16 @@
         roomObj.canonical_top_face = OPPOSITE[r.doors[0].face] || 'north';
       }
 
-      // D-131 : persiste origin ("auto"|"manual") si présent. Sans ça, la
-      // distinction auto vs manual se perd entre sessions → chaque Re-analyze
-      // écrase les ouvertures que l'utilisateur avait personnalisées.
+      // D-204: door_seeds[] is immutable preprocessing input.
+      if (Array.isArray(r.door_seeds) && r.door_seeds.length > 0) {
+        roomObj.door_seeds = r.door_seeds.map(function (ds) {
+          return { seed_x: Math.round(ds.seed_x), seed_y: Math.round(ds.seed_y) };
+        });
+      }
+      // D-204: doors[] contains only typed doors (with face).
       if (Array.isArray(r.doors) && r.doors.length > 0) {
-        roomObj.doors = r.doors.map(function (d) {
-          // Seed-only Input doors: preserve as-is, no detection fields.
-          var isSeedOnly = (typeof d.seed_x === 'number' && !d.face);
-          if (isSeedOnly) {
-            return { seed_x: _px(d.seed_x), seed_y: _px(d.seed_y) };
-          }
+        roomObj.doors = r.doors.filter(function (d) { return !!d.face; })
+          .map(function (d) {
           var o = {
             face: d.face,
             offset_px: _px(d.offset_px),
@@ -201,6 +201,7 @@
           if (d.origin) o.origin = d.origin;
           return o;
         });
+        if (roomObj.doors.length === 0) delete roomObj.doors;
       }
       if (Array.isArray(r.openings) && r.openings.length > 0) {
         roomObj.openings = r.openings.map(function (o) {

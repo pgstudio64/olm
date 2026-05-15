@@ -190,3 +190,66 @@ class TestInvalidPlan:
         ]
         with pytest.raises(ValueError):
             validate_plan(plan)
+
+
+# -- D-204 door_seeds tests -------------------------------------------------
+
+
+class TestDoorSeedsSchema:
+    """D-204: door_seeds[] as separate immutable input."""
+
+    def test_door_seeds_valid(self):
+        """door_seeds with seed_x/seed_y passes validation."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["door_seeds"] = [
+            {"seed_x": 100, "seed_y": 200},
+            {"seed_x": 300, "seed_y": 400},
+        ]
+        validate_plan(plan)
+
+    def test_door_seeds_with_typed_doors(self):
+        """door_seeds + typed doors coexist."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["door_seeds"] = [
+            {"seed_x": 100, "seed_y": 200},
+        ]
+        plan["rooms"]["101"]["doors"] = [
+            {"face": "south", "offset_px": 10, "width_px": 27},
+        ]
+        validate_plan(plan)
+
+    def test_door_seeds_missing_seed_y(self):
+        """door_seed without seed_y fails."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["door_seeds"] = [
+            {"seed_x": 100},
+        ]
+        with pytest.raises(ValueError, match="seed_y"):
+            validate_plan(plan)
+
+    def test_door_seeds_extra_field(self):
+        """door_seed with extra field fails (additionalProperties=false)."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["door_seeds"] = [
+            {"seed_x": 100, "seed_y": 200, "face": "south"},
+        ]
+        with pytest.raises(ValueError):
+            validate_plan(plan)
+
+    def test_typed_door_no_face_fails(self):
+        """D-204: a door without face is invalid in new schema."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["doors"] = [
+            {"offset_px": 10, "width_px": 50},
+        ]
+        with pytest.raises(ValueError):
+            validate_plan(plan)
+
+    def test_legacy_mixed_doors_still_valid(self):
+        """Legacy mixed doors (seed-only + typed) still pass schema."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["doors"] = [
+            {"seed_x": 100, "seed_y": 200},
+            {"face": "south", "offset_px": 10, "width_px": 27},
+        ]
+        validate_plan(plan)

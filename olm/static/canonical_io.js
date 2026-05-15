@@ -260,6 +260,27 @@
     // D-122 P2 : bbox_px / seed_px en coords image absolues (jamais rotés).
     // Plus de duplication bbox_abs_px / seed_abs_px — fusion acquise.
 
+    // D-204: door_seeds are image-absolute coords, never rotated.
+    if (roomStorage.door_seeds && roomStorage.door_seeds.length) {
+      copy.door_seeds = roomStorage.door_seeds.slice();
+    }
+    // D-204: split legacy mixed doors[] at load (migration).
+    if (!copy.door_seeds && copy.doors && copy.doors.length) {
+      var _legacySeeds = [];
+      var _typedOnly = [];
+      copy.doors.forEach(function (d) {
+        if (typeof d.seed_x === "number" && !d.face) {
+          _legacySeeds.push({ seed_x: d.seed_x, seed_y: d.seed_y });
+        } else {
+          _typedOnly.push(d);
+        }
+      });
+      if (_legacySeeds.length) {
+        copy.door_seeds = _legacySeeds;
+        copy.doors = _typedOnly;
+      }
+    }
+
     if (!cf || cf === "south") {
       // Rotation identité — assurer les champs canoniques + sync px
       copy.corridor_face = "south";
@@ -366,6 +387,9 @@
     delete copy.corridor_face_abs;
     delete copy.bbox_canon_cm;
     delete copy.surface_m2_bbox;
+
+    // D-204: door_seeds passthrough via deep clone (no rotation —
+    // image-absolute coords, not room-local).
 
     copy.corridor_face = ocf;
 

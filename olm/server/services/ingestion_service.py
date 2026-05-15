@@ -578,7 +578,12 @@ def reanalyze_room(data: dict) -> dict:
     bbox_px = data.get("bbox_px")
     scale = float(data.get("scale_cm_per_px", 0.5))
     transparents = data.get("transparent_zones", []) or []
-    doors = data.get("doors", []) or []
+    # D-204: door_seeds[] is primary source for seed hints.
+    door_seeds_raw = data.get("door_seeds")
+    if door_seeds_raw:
+        doors = list(door_seeds_raw)
+    else:
+        doors = data.get("doors", []) or []
     door_width_cm = int(data.get("door_width_cm", 90))
     threshold = int(data.get("threshold", get_default_threshold()))
     clip_to_bbox = bool(data.get("clip_to_bbox", False))
@@ -966,6 +971,13 @@ def reanalyze_batch(data: dict) -> dict:
             continue
         cur_seed = (int(seed_px[0]), int(seed_px[1]))
         other_seeds = [s for s in all_seeds_px if s != cur_seed]
+        # D-204: door_seeds[] is the primary source for seed hints.
+        # Legacy fallback: extract seed-only entries from mixed doors[].
+        door_seeds_raw = r.get("door_seeds")
+        if door_seeds_raw:
+            doors_for_backend = list(door_seeds_raw)
+        else:
+            doors_for_backend = r.get("doors") or []
         try:
             features = extract_room_features(
                 img,
@@ -973,7 +985,7 @@ def reanalyze_batch(data: dict) -> dict:
                 tuple(int(v) for v in bbox_px),
                 scale,
                 transparent_zones_cm=r.get("transparent_zones") or [],
-                doors_px=r.get("doors") or [],
+                doors_px=doors_for_backend,
                 door_width_cm=door_width_cm,
                 threshold=threshold,
                 binary_precomputed=binary_global,

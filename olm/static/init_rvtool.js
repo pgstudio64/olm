@@ -724,18 +724,16 @@
                 width_cm: z.width_cm, depth_cm: z.depth_cm,
               };
             });
-        // Re-analyze does not re-detect doors, but existing door seeds
-        // are sent so the backend can exclude arc fragments from pillar
-        // detection (_filter_pillar_hits). Face is converted canon → abs.
+        // D-204: typed doors canon → abs. door_seeds sent separately.
         var _Wc = state.room_width_cm || 0;
         var _Dc = state.room_depth_cm || 0;
-        var doorsPx = (state.room_doors || []).map(function (d) {
+        var typedRoomDoors = (state.room_doors || []).filter(
+          function (d) { return !!d.face; });
+        var doorsPx = typedRoomDoors.map(function (d) {
           var absFace = d.face;
           var invMap = cio && cio.INV_FACE_MAPS
             ? cio.INV_FACE_MAPS[cfAbsForZones] : null;
           if (invMap && invMap[d.face]) absFace = invMap[d.face];
-          // Conversion complète canon → absolu (même logique que
-          // toStorage.xformBack via _flipTo).
           var _canonFaceLen = (d.face === 'north' || d.face === 'south')
             ? _Wc : _Dc;
           var offAbs = d.offset_cm || 0;
@@ -757,10 +755,13 @@
           };
           if (hingeAbs) entry.hinge_side = hingeAbs;
           if (d.opens_inward != null) entry.opens_inward = d.opens_inward;
-          if (d.seed_x != null) entry.seed_x = d.seed_x;
-          if (d.seed_y != null) entry.seed_y = d.seed_y;
           return entry;
         });
+        // D-204: door_seeds from ingState room (image-absolute coords).
+        var _ingRoom = (ingst.rooms || []).find(function (ir) {
+          return ir.name === amend.roomName;
+        });
+        var _doorSeeds = (_ingRoom && _ingRoom.door_seeds) || [];
         var doorWidthCm = ((window.APP_CONFIG || {}).default_door_width_cm) || 90;
         reanalyzeBtn.disabled = true;
         reanalyzeBtn.textContent = "Rescanning...";
@@ -781,10 +782,7 @@
               otherSeeds.push([sp[0], sp[1]]);
             }
           });
-          var resp = await fetch("/api/room/reanalyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          var _rvPayload = {
               plan_path: ingst.planPathEnhanced,
               overlay_path: ingst.planPath || '',
               seed_px: seedPx,
@@ -798,7 +796,12 @@
               window_mode: ((window.APP_CONFIG || {}).ingestion || {}).window_mode || 'simple',
               other_seeds_px: otherSeeds,
               corridor_face: amend.originalRoom.corridor_face_abs || "",
-            }),
+          };
+          if (_doorSeeds.length) _rvPayload.door_seeds = _doorSeeds;
+          var resp = await fetch("/api/room/reanalyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(_rvPayload),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);
           var data = await resp.json();
@@ -864,7 +867,9 @@
           var newOpenings = canon.openings.filter(function (o) {
             return !deleted.has(sig("opening", o));
           });
-          var newDoors = preservedDoors.length ? [] : canon.doors;
+          // D-204: doors[] is exclusively typed. door_seeds untouched.
+          var newDoors = preservedDoors.length ? []
+            : (canon.doors || []).filter(function (d) { return !!d.face; });
 
           if (canon.hits) state.room_hits = canon.hits;
           if (canon.coarse_hits) state.room_coarse_hits = canon.coarse_hits;

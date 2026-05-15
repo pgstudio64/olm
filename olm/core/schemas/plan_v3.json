@@ -94,7 +94,38 @@
       "additionalProperties": false
     },
 
+    "door_seed": {
+      "type": "object",
+      "required": ["seed_x", "seed_y"],
+      "properties": {
+        "seed_x": { "type": "integer" },
+        "seed_y": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+
     "door": {
+      "type": "object",
+      "required": ["face"],
+      "properties": {
+        "face": { "$ref": "#/$defs/face" },
+        "offset_px": { "type": "integer" },
+        "width_px": { "type": "integer", "minimum": 0 },
+        "offset_cm": { "type": "integer", "minimum": 0 },
+        "width_cm": { "type": "integer", "minimum": 0 },
+        "hinge_side": {
+          "type": "string",
+          "enum": ["left", "right"]
+        },
+        "opens_inward": { "type": "boolean" },
+        "origin": { "type": "string" },
+        "has_door": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+
+    "legacy_door": {
+      "description": "Migration window: accepts mixed seed-only or typed doors.",
       "type": "object",
       "anyOf": [
         { "required": ["seed_x", "seed_y"] },
@@ -158,9 +189,19 @@
         },
         "canonical_top_face": { "$ref": "#/$defs/face" },
         "corridor_face_abs": { "$ref": "#/$defs/face" },
+        "door_seeds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/door_seed" },
+          "description": "Immutable preprocessing seeds (D-204)."
+        },
         "doors": {
           "type": "array",
-          "items": { "$ref": "#/$defs/door" }
+          "items": {
+            "anyOf": [
+              { "$ref": "#/$defs/door" },
+              { "$ref": "#/$defs/legacy_door" }
+            ]
+          }
         },
         "openings": {
           "type": "array",

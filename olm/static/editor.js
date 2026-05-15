@@ -2244,12 +2244,12 @@ function loadRoomHitsAndSeedFromIngState(room) {
       });
     }
   }
-  // Door seeds (orange) — same abs→canon conversion as room seed.
+  // D-204: door seeds from door_seeds[] (immutable preprocessing input).
   state.room_door_seeds_cm = [];
-  (ingRoom.doors || []).forEach(function (d) {
-    if (typeof d.seed_x !== 'number' || typeof d.seed_y !== 'number') return;
+  (ingRoom.door_seeds || []).forEach(function (ds) {
+    if (typeof ds.seed_x !== 'number' || typeof ds.seed_y !== 'number') return;
     var pC = rotP(
-      { x: (d.seed_x - bx0) * sc, y: (d.seed_y - by0) * sc },
+      { x: (ds.seed_x - bx0) * sc, y: (ds.seed_y - by0) * sc },
       cf, absW, absD);
     state.room_door_seeds_cm.push({ x_cm: pC.x, y_cm: pC.y });
   });

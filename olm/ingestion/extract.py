@@ -2055,11 +2055,13 @@ def extract_room_features(
     # Portes : si le caller fournit des portes enrichies (avec face),
     # les restituer telles quelles. Sinon, détecter depuis les arcs.
     # Les seed-only doors (sans face) ne court-circuitent pas la détection.
+    # D-204: doors_out contains ONLY typed doors (with face).
+    # Seed-only entries are consumed as input hints by comb_detect_room
+    # but never returned in the output — they live in door_seeds[].
     doors_out: list[dict] = []
     _enriched_doors = [d for d in (doors_px or []) if d.get("face")]
-    _seedonly_doors = [d for d in (doors_px or []) if not d.get("face")]
     if _enriched_doors:
-        doors_out = _enriched_doors + _seedonly_doors
+        doors_out = list(_enriched_doors)
     else:
         # Filtre largeur min/max porte (cf. DetectionConfigCm).
         from olm.core.detection_config import DEFAULT_DETECTION_CONFIG_CM as _ddc
@@ -2082,7 +2084,6 @@ def extract_room_features(
                 "opens_inward": bool(d.get("opens_inward", True)),
             }
             doors_out.append(entry)
-        doors_out.extend(_seedonly_doors)
 
     # Filtrer les openings qui chevauchent une porte détectée.
     openings = _filter_openings_overlapping_doors(openings, doors_out)
