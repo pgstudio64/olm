@@ -1102,3 +1102,58 @@ class TestDoorSeedsRoundTrip:
             ds = r.get("door_seeds", [])
             for s in ds:
                 assert "seed_x" in s and "seed_y" in s
+
+    def test_import_preprocessed_preserves_door_seeds(self):
+        """D-204 LOAD path: door_seeds[] du source JSON passe au frontend."""
+        from olm.ingestion.extract import extract_rooms_from_preprocessed
+
+        fixture = os.path.join(
+            os.path.dirname(__file__), os.pardir, os.pardir,
+            "project", "plans",
+            "test_floorplan_preprocessed_big_pillars.json",
+        )
+        if not os.path.exists(fixture):
+            pytest.skip("fixture not found")
+
+        with open(fixture) as f:
+            plan_data = json.load(f)
+
+        plan_file = plan_data.get("file", "")
+        plan_dir = os.path.dirname(fixture)
+        plan_path = os.path.join(plan_dir, plan_file)
+        enhanced = plan_path.replace(".png", "-SD.png")
+        overlay = plan_path
+
+        if not os.path.exists(overlay):
+            pytest.skip("overlay PNG not found")
+        if not os.path.exists(enhanced):
+            enhanced = ""
+
+        # Compter combien de pièces ont door_seeds dans le JSON source
+        rooms_with_seeds: dict[str, list] = {}
+        for rid, room in plan_data.get("rooms", {}).items():
+            ds = room.get("door_seeds", [])
+            if ds:
+                rooms_with_seeds[rid] = ds
+
+        if not rooms_with_seeds:
+            pytest.skip("no door_seeds in fixture")
+
+        rooms = extract_rooms_from_preprocessed(
+            plan_data, enhanced, overlay,
+        )
+
+        # Vérifier que chaque pièce avec door_seeds dans le source
+        # a bien door_seeds non vide dans le résultat
+        rooms_by_name = {r["name"]: r for r in rooms}
+        for rid, expected_seeds in rooms_with_seeds.items():
+            assert rid in rooms_by_name, (
+                f"room {rid} absent du résultat"
+            )
+            result_seeds = rooms_by_name[rid].get("door_seeds", [])
+            assert len(result_seeds) == len(expected_seeds), (
+                f"room {rid}: expected {len(expected_seeds)} "
+                f"door_seeds, got {len(result_seeds)}"
+            )
+            for s in result_seeds:
+                assert "seed_x" in s and "seed_y" in s

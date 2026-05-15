@@ -1,9 +1,12 @@
 import json
 from dataclasses import dataclass
 
-from olm.core.app_config import get as _cfg_get
+from olm.core.app_config import (
+    get as _cfg_get,
+    get_current_standard as _cfg_current_standard,
+    get_derogatory_label as _cfg_derogatory_label,
+)
 
-# AFNOR NF X35-102
 # Desk dimensions — human perspective:
 #   width  = large side (left-right when seated) = 180 cm
 #   depth  = front-to-back (towards screen)      = 80 cm
@@ -1019,9 +1022,11 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
         f'font-size="9" fill="{TEXT_DIM}">(door -> south)</text>')
     all_blocks = pattern.north_row.blocks + pattern.south_row.blocks
     if any(b.derogatory for b in all_blocks):
-        out(f'<text x="{cx_content:.1f}" y="{y_bottom + 28:.1f}" '
-            f'text-anchor="middle" font-family="sans-serif" font-size="9" '
-            f'fill="#e8a020">⚠ AFNOR ES-10: derogatory use</text>')
+        _derog_label = _cfg_derogatory_label(_cfg_current_standard())
+        if _derog_label:
+            out(f'<text x="{cx_content:.1f}" y="{y_bottom + 28:.1f}" '
+                f'text-anchor="middle" font-family="sans-serif" font-size="9" '
+                f'fill="#e8a020">⚠ {_derog_label}</text>')
 
     # === vertical legend ===
     ly = y_bottom + 46
@@ -1257,9 +1262,11 @@ def render_block_svg(block: Block, path: str) -> None:
         f'font-size="9" fill="{TEXT_DIM}">(door -> south)</text>')
 
     if block.derogatory:
-        out(f'<text x="{cx_title:.1f}" y="{y_bottom + 28:.1f}" '
-            f'text-anchor="middle" font-family="sans-serif" font-size="9" '
-            f'fill="#e8a020">⚠ AFNOR ES-10: derogatory use</text>')
+        _derog_label = _cfg_derogatory_label(_cfg_current_standard())
+        if _derog_label:
+            out(f'<text x="{cx_title:.1f}" y="{y_bottom + 28:.1f}" '
+                f'text-anchor="middle" font-family="sans-serif" font-size="9" '
+                f'fill="#e8a020">⚠ {_derog_label}</text>')
 
     # === legend ===
     ly = svg_h - 36

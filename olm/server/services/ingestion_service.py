@@ -212,16 +212,26 @@ def reinit_plan(plan_id: str) -> dict:
             for key in ("surface", "seed_x", "seed_y"):
                 if key in r:
                     room[key] = r[key]
-            seed_doors = []
-            for d in (r.get("doors") or []):
-                if (isinstance(d, dict) and "seed_x" in d
-                        and not d.get("face")):
-                    seed_doors.append({
-                        "seed_x": d["seed_x"],
-                        "seed_y": d["seed_y"],
-                    })
-            if seed_doors:
-                room["doors"] = seed_doors
+            # D-204: door_seeds[] is immutable preprocessing input — preserve.
+            ds_new = r.get("door_seeds")
+            if isinstance(ds_new, list) and ds_new:
+                room["door_seeds"] = [
+                    {"seed_x": e["seed_x"], "seed_y": e["seed_y"]}
+                    for e in ds_new
+                    if isinstance(e, dict) and "seed_x" in e and "seed_y" in e
+                ]
+            else:
+                # Legacy fallback: extract seed-only entries from mixed doors[].
+                seed_doors = []
+                for d in (r.get("doors") or []):
+                    if (isinstance(d, dict) and "seed_x" in d
+                            and not d.get("face")):
+                        seed_doors.append({
+                            "seed_x": d["seed_x"],
+                            "seed_y": d["seed_y"],
+                        })
+                if seed_doors:
+                    room["door_seeds"] = seed_doors
             clean_rooms[room_id] = room
     clean["rooms"] = clean_rooms
 

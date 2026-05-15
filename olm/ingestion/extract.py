@@ -1217,6 +1217,7 @@ def extract_rooms_from_preprocessed(
             "openings_raw": r.get("openings") or [],
             "windows_raw": r.get("windows") or [],
             "exclusion_zones_raw": r.get("exclusion_zones") or [],
+            "door_seeds_raw": r.get("door_seeds") or [],
             "canonical_top_face": r.get("canonical_top_face"),
         })
 
@@ -1311,6 +1312,11 @@ def extract_rooms_from_preprocessed(
         for p in needs_detect:
             sx, sy = p["seed_x"], p["seed_y"]
             _other = [s for s in _all_seeds if s != (sx, sy)]
+            _doors_hint = list(p["doors_raw"]) + [
+                {"seed_x": s["seed_x"], "seed_y": s["seed_y"]}
+                for s in p["door_seeds_raw"]
+                if "seed_x" in s and "seed_y" in s
+            ]
             features = extract_room_features(
                 _img_sd, (sx, sy), None, scale_cm_per_px,
                 threshold=_dcfg_import.binarize_threshold,
@@ -1318,7 +1324,7 @@ def extract_rooms_from_preprocessed(
                 binary_raw_precomputed=_bin_raw,
                 color_image=_color_img,
                 other_seeds=_other or None,
-                doors_px=p["doors_raw"],
+                doors_px=_doors_hint,
                 window_mode=window_mode,
             )
             p["bbox_px_opt"] = tuple(features["bbox_px"])
@@ -1440,6 +1446,7 @@ def extract_rooms_from_preprocessed(
             "windows": windows,
             "openings": openings,
             "doors": doors,
+            "door_seeds": p["door_seeds_raw"],
             "exclusion_zones": auto_exclusions or p["exclusion_zones_raw"],
             "hits": _hits,
             "coarse_hits": _coarse_hits,

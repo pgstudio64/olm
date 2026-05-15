@@ -142,6 +142,22 @@ class TestValidPlan:
         ]
         validate_plan(plan)
 
+    def test_exclusion_zone_negative_xy(self):
+        """exclusion_zone with negative x_cm/y_cm must pass (D-205)."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["exclusion_zones"] = [
+            {"x_cm": -10, "y_cm": -5, "width_cm": 50, "depth_cm": 30},
+        ]
+        validate_plan(plan)
+
+    def test_transparent_zone_negative_xy(self):
+        """transparent_zone with negative x_cm/y_cm must pass (D-205)."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["transparent_zones"] = [
+            {"x_cm": -20, "y_cm": -10, "width_cm": 40, "depth_cm": 20},
+        ]
+        validate_plan(plan)
+
 
 class TestInvalidPlan:
     """Plans that must fail validation with a clear message."""

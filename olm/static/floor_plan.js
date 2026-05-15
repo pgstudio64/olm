@@ -218,6 +218,23 @@
   }
   window.updateFloorProperties = updateFloorProperties;
 
+  // Suffix appended to a room label when the user has amended its
+  // geometry (room.room_amended, set by fpRematchRoom) and/or its layout
+  // (fpAmendments[name], set by Amend Layout Save). Returns "":
+  // - "" if neither
+  // - " (Room amended)" if only geometry
+  // - " (Layout amended)" if only layout
+  // - " (Room & Layout amended)" if both
+  function _amendmentSuffix(room) {
+    if (!room) return "";
+    var geo = !!room.room_amended;
+    var lay = !!fpAmendments[room.name];
+    if (geo && lay) return " (Room & Layout amended)";
+    if (geo) return " (Room amended)";
+    if (lay) return " (Layout amended)";
+    return "";
+  }
+
   function rvRenderCurrent() {
     // Floor properties always refreshed (independent of selected room).
     updateFloorProperties();
@@ -249,8 +266,9 @@
       fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
     }
 
-    // Navigation
-    document.getElementById("rvRoomLabel").textContent = roomData.name || "(unnamed)";
+    // Navigation — same amendment-kinds label as Office view.
+    var _rvLabel = (roomData.name || "(unnamed)") + _amendmentSuffix(room);
+    document.getElementById("rvRoomLabel").textContent = _rvLabel;
     document.getElementById("rvNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
 
@@ -320,7 +338,9 @@
 
     // Standard filter: always current_standard (no DOM radio to reset)
 
-    // Action buttons always enabled (handlers guard against missing candidate)
+    // Action buttons always enabled. Handlers branch on candidate presence :
+    // - Add pattern : with candidate → edit existing; without → blank pattern.
+    // - Amend layout : with candidate → amend existing; without → empty room.
     document.getElementById("fpBtnEditPattern").disabled = false;
     document.getElementById("fpBtnAdjustLayout").disabled = false;
     // Show Discard if amendment exists
@@ -329,10 +349,18 @@
 
     // Navigation
     var roomLabel = room.name || "(unnamed)";
-    if (room.room_amended || fpRoomAmendments[room.name]) roomLabel += " (amended)";
+    // Amendment kinds (room.room_amended = geometry, fpAmendments[name] = layout).
+    // fpRoomAmendments is a canonical data cache, not a user-amendment signal.
+    roomLabel += _amendmentSuffix(room);
     document.getElementById("fpRoomLabel").textContent = roomLabel;
     document.getElementById("fpNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
+    // Reset candidate before re-render to avoid stale value leaking into
+    // Amend Layout / Add pattern handlers when the new room has no
+    // candidate (firstCand.click() below would otherwise leave the
+    // previous room's candidate in fpCurrentCandidate).
+    fpCurrentCandidate = null;
+
     // Candidates (sorted best first)
     fpRenderCandidates(room);
 
@@ -642,6 +670,7 @@
       // Clear layout amendment if any (room geometry changed)
       delete fpAmendments[roomName];
       fpRenderCurrent();
+      rvRenderCurrent();
       setStatus("Room \"" + roomName + "\" re-matched with amended geometry.");
     })
     .catch(function(e) { setStatus("Re-matching error: " + e); });
@@ -799,6 +828,30 @@
       }
     });
 
+    // Synthetic blank pattern sized to the room — used when no matching
+    // candidate exists and the user clicks Add pattern / Amend layout.
+    function _blankPatternFromRoom(room) {
+      var openings = (room.openings || []).map(function (o) {
+        return Object.assign({}, o, { has_door: false });
+      });
+      (room.doors || []).forEach(function (d) {
+        if (d && d.face) {
+          openings.push(Object.assign({}, d, { has_door: true }));
+        }
+      });
+      return {
+        name: "",
+        rows: [],
+        row_gaps_cm: [],
+        room_width_cm: room.width_cm || 0,
+        room_depth_cm: room.depth_cm || 0,
+        standard: "",
+        room_windows: room.windows || [],
+        room_openings: openings,
+        room_exclusions: room.exclusion_zones || [],
+      };
+    }
+
     // Review tab — Adjust room (same function as before, now in Review)
     document.getElementById("rvBtnAdjustRoom").addEventListener("click", function() {
       var room = fpCurrent();
@@ -810,13 +863,27 @@
     document.getElementById("fpBtnEditPattern").addEventListener("click", function() {
       if (fpCurrentCandidate && fpCurrentCandidate.pattern) {
         switchToEditorWithPattern(fpCurrentCandidate.pattern);
+        return;
+      }
+      // No candidate → open editor with a blank pattern dimensioned to the room.
+      var room = fpCurrent();
+      if (room) {
+        switchToEditorWithPattern(_blankPatternFromRoom(room));
       }
     });
     document.getElementById("fpBtnAdjustLayout").addEventListener("click", function() {
       var room = fpCurrent();
-      if (room && fpCurrentCandidate && fpCurrentCandidate.pattern) {
+      if (!room) return;
+      if (fpCurrentCandidate && fpCurrentCandidate.pattern) {
         enterAmendMode(room, fpCurrentCandidate);
+        return;
       }
+      // No candidate → enter amend mode with a blank pattern.
+      var stds = (typeof getStandards === "function") ? getStandards() : [];
+      enterAmendMode(room, {
+        pattern: _blankPatternFromRoom(room),
+        standard: stds[0] || "",
+      });
     });
     // Floor plan overlay loading (elements may not exist if overlay is set via ingestion)
     var _fpBtnLoadOv = document.getElementById("fpBtnLoadOverlay");

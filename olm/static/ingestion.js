@@ -376,8 +376,8 @@
           { x: z.x_cm || 0, y: z.y_cm || 0,
             width: z.width_cm || 0, depth: z.depth_cm || 0 },
           corridor, absW, absD);
-        return { x_cm: rr.x, y_cm: rr.y,
-                 width_cm: rr.width, depth_cm: rr.depth,
+        return { x_cm: Math.round(rr.x), y_cm: Math.round(rr.y),
+                 width_cm: Math.round(rr.width), depth_cm: Math.round(rr.depth),
                  origin: z.origin || 'auto' };
       }),
     };
@@ -636,6 +636,29 @@
   // Extracted from plan-item inline handler (P1.4).
   function _onPlanItemClick(newPlanId, newPlanMode) {
     function _doImport() {
+      // Exit any active Room amend / Office amend mode before plan
+      // switch — user already confirmed via the Switch confirmModal above,
+      // amend state for the previous plan is now stale.
+      if (typeof state !== 'undefined' && state) {
+        if (state.amendMode) {
+          state.amendMode = null;
+          state.overlay = null;
+          if (typeof exitAmendUI === 'function') exitAmendUI();
+          if (typeof _restoreEditorState === 'function') _restoreEditorState();
+        }
+        if (state.roomAmendMode) {
+          state.roomAmendMode = null;
+          state.roomRenderOffset = null;
+          if (typeof exitRoomAmendUI === 'function') exitRoomAmendUI();
+        }
+      }
+      // Reset view to Floor (Import sub-tab) regardless of current view
+      // (Room, Office, Catalogue). Avoids confusion when user changes
+      // plan from a non-Floor view — the new plan loads into Floor.
+      var floorBtn = document.querySelector('.tab-btn[data-tab="fpImport"]');
+      if (floorBtn && !floorBtn.classList.contains('active')) {
+        floorBtn.click();
+      }
       _setSelectedPlan(newPlanId, newPlanMode);
       ingState.rooms = [];
       _closePlanPopup();
@@ -1384,7 +1407,7 @@
         var seedR = (OVERLAY_SEED_RADIUS * pxScale).toFixed(2);
         els.push('<circle cx="' + cx + '" cy="' + cy +
           '" r="' + seedR + '" fill="' + COLORS.seed + '"/>');
-        (room.doors || []).forEach(function (d) {
+        (room.door_seeds || []).forEach(function (d) {
           if (typeof d.seed_x !== 'number' || typeof d.seed_y !== 'number') return;
           els.push('<circle cx="' + d.seed_x + '" cy="' + d.seed_y +
             '" r="' + seedR + '" fill="' + COLORS.door_seed + '"/>');

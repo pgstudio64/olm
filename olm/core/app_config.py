@@ -88,6 +88,15 @@ def get_standard_label(slot: str) -> str:
     return std.get("label", slot)
 
 
+def get_derogatory_label(slot: str) -> str:
+    """Return the derogatory-use label for a standard slot.
+
+    Empty string means no derogatory citation is shown for this standard.
+    """
+    std = _cfg.get("standards", {}).get(slot, {})
+    return std.get("derogatory_label", "")
+
+
 def get_spacing(slot: str) -> dict:
     """Get spacing dict for a standard slot."""
     std = _cfg.get("standards", {}).get(slot, {})
