@@ -17,7 +17,12 @@ async function loadSpacingConfigs() {
   try {
     var resp = await fetch("/api/spacing");
     if (resp.ok) {
-      SPACING_CONFIGS = await resp.json();
+      var data = await resp.json();
+      // data is {slot: {label, spacing: {...}}} — extract spacing dicts
+      SPACING_CONFIGS = {};
+      Object.keys(data).forEach(function(slot) {
+        SPACING_CONFIGS[slot] = data[slot].spacing || {};
+      });
       CURRENT_SPACING = SPACING_CONFIGS[state.standard] || null;
     }
   } catch (e) { /* silent */ }
@@ -49,18 +54,19 @@ async function loadAppConfig() {
 }
 
 function getStandards() {
-  if (APP_CONFIG.spacing) return Object.keys(APP_CONFIG.spacing);
+  if (APP_CONFIG.standards) return Object.keys(APP_CONFIG.standards);
   return [];
 }
 
-function getStdLabel(key) {
-  if (APP_CONFIG.standard_labels && APP_CONFIG.standard_labels[key]) {
-    return APP_CONFIG.standard_labels[key];
+function getStdLabel(slot) {
+  if (APP_CONFIG.standards && APP_CONFIG.standards[slot]) {
+    return APP_CONFIG.standards[slot].label || slot;
   }
-  // Generic fallback: "Std 1", "Std 2"...
-  var stds = getStandards();
-  var idx = stds.indexOf(key);
-  return idx >= 0 ? "Std " + (idx + 1) : key;
+  return slot;
+}
+
+function getCurrentStandard() {
+  return APP_CONFIG.current_standard || "";
 }
 
 async function saveConfigField(keyOrPath, value) {
@@ -149,24 +155,25 @@ function renderEditorStandardRadios() {
 function renderCatStandardFilter() {
   var sel = document.getElementById("catFilterStandard");
   if (!sel) return;
-  var html = '<option value="">All</option>';
+  var current = getCurrentStandard();
+  var html = '';
   getStandards().forEach(function(s) {
-    html += '<option value="' + s + '">' + getStdLabel(s) + '</option>';
+    var selected = (s === current) ? ' selected' : '';
+    html += '<option value="' + s + '"' + selected + '>' +
+      getStdLabel(s) + '</option>';
   });
   sel.innerHTML = html;
 }
 
 function renderFpStandardFilter() {
+  // Office shows only the current standard — no filter needed.
+  // Display a badge with the current standard label.
   var container = document.getElementById("fpStandardFilter");
   if (!container) return;
-  var defStd = APP_CONFIG.default_standard || "";
-  var allChecked = defStd ? "" : " checked";
-  var html = '<label><input type="radio" name="fpStandard" value=""' + allChecked + '> All</label>';
-  getStandards().forEach(function(s) {
-    var checked = (s === defStd) ? " checked" : "";
-    html += '<label><input type="radio" name="fpStandard" value="' + s + '"' + checked + '> ' + getStdLabel(s) + '</label>';
-  });
-  container.innerHTML = html;
+  var current = getCurrentStandard();
+  var label = getStdLabel(current);
+  container.innerHTML = '<span style="font-size:11px;color:var(--accent);">' +
+    'Current standard: ' + label + '</span>';
 }
 
 function renderGeneralSettings() {
@@ -229,15 +236,15 @@ function renderGeneralSettings() {
 
   var labelsDiv = document.getElementById("cfgStandardLabels");
   if (labelsDiv) {
-    var defStd = APP_CONFIG.default_standard || "";
+    var current = getCurrentStandard();
     var stds = getStandards();
     var html = '';
     stds.forEach(function(s) {
       var label = getStdLabel(s);
-      var checked = (s === defStd) ? " checked" : "";
+      var checked = (s === current) ? " checked" : "";
       html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
       html += '<input type="radio" name="cfgDefaultStd" value="' + s + '"' + checked +
-        ' style="margin:0;cursor:pointer;" title="Set as default standard">';
+        ' style="margin:0;cursor:pointer;" title="Set as current standard">';
       html += '<input type="text" data-std-label="' + s + '" value="' + label +
         '" style="width:80px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:2px 6px;">';
       html += '</div>';
@@ -246,18 +253,37 @@ function renderGeneralSettings() {
     // Session-life: bound once at init, no dispose needed
     labelsDiv.querySelectorAll("input[data-std-label]").forEach(function(inp) {
       inp.addEventListener("change", function() {
-        var labels = APP_CONFIG.standard_labels || {};
-        labels[inp.dataset.stdLabel] = inp.value;
-        saveConfigField("standard_labels", labels);
-        renderFpStandardFilter();
+        var slot = inp.dataset.stdLabel;
+        fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: ["standards", slot, "label"], value: inp.value }),
+        }).then(function() {
+          return loadAppConfig();
+        }).then(function() {
+          renderFpStandardFilter();
+          renderCatStandardFilter();
+          renderSpacingSettings();
+        });
       });
     });
     // Session-life: bound once at init, no dispose needed
     labelsDiv.querySelectorAll('input[name="cfgDefaultStd"]').forEach(function(radio) {
       radio.addEventListener("change", function() {
-        APP_CONFIG.default_standard = this.value;
-        saveConfigField("default_standard", this.value);
-        renderFpStandardFilter();
+        var slot = this.value;
+        fetch("/api/current-standard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slot: slot }),
+        }).then(function(resp) {
+          if (!resp.ok) throw new Error("Failed");
+          return loadAppConfig();
+        }).then(function() {
+          renderFpStandardFilter();
+          renderCatStandardFilter();
+          if (typeof loadCatalogue === "function") loadCatalogue();
+          if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
+        });
       });
     });
   }

@@ -299,8 +299,7 @@
 
   // ── Standard filter ────────────────────────────────────────────────────
   function fpGetStandardFilter() {
-    var checked = document.querySelector('input[name="fpStandard"]:checked');
-    return checked ? checked.value : "";
+    return getCurrentStandard();
   }
 
   // ── Render current room ────────────────────────────────────────────────
@@ -319,12 +318,7 @@
     // Update room list highlight in Design
     if (window.updateIngRoomList) window.updateIngRoomList();
 
-    // Reset standard filter to default on room change
-    var defStd = (window.APP_CONFIG || {}).default_standard || "";
-    if (defStd) {
-      var radio = document.querySelector('input[name="fpStandard"][value="' + defStd + '"]');
-      if (radio) radio.checked = true;
-    }
+    // Standard filter: always current_standard (no DOM radio to reset)
 
     // Action buttons always enabled (handlers guard against missing candidate)
     document.getElementById("fpBtnEditPattern").disabled = false;
@@ -755,10 +749,7 @@
     document.getElementById("fpZoomFit").addEventListener("click", function() { zoomFit(fpSvg); });
     document.getElementById("fpZoomIn").addEventListener("click", function() { zoomIn(fpSvg); });
 
-    // Standard filter — re-render candidates on change
-    document.getElementById("fpStandardFilter").addEventListener("change", function() {
-      fpRenderCurrent();
-    });
+    // Standard filter is now a static badge (no listener needed)
 
     // Grid toggle sync across all tabs (Review, Design, Editor)
     function syncGridToggle(checked) {
