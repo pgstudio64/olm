@@ -119,7 +119,7 @@ def monkeypatch_catalogue(monkeypatch):
             "row_gaps_cm": [180],
             "room_width_cm": 300,
             "room_depth_cm": 480,
-            "standard": "AFNOR_ADVICE",
+            "standard": "standard1",
             "room_windows": [
                 {"face": "north", "offset_cm": 0, "width_cm": 300},
             ],

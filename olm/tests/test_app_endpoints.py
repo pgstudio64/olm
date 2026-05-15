@@ -250,10 +250,10 @@ class TestFloorPlanMatch:
                 assert isinstance(d["width_cm"], int)
                 assert isinstance(d["depth_cm"], int)
 
-        # by_standard[AFNOR_ADVICE] pointe vers un candidat existant
+        # by_standard[standard1] pointe vers un candidat existant
         by_std = room["by_standard"]
-        assert "AFNOR_ADVICE" in by_std
-        best_name = by_std["AFNOR_ADVICE"]
+        assert "standard1" in by_std
+        best_name = by_std["standard1"]
         assert best_name is not None
         candidate_names = {c["pattern_name"] for c in candidates}
         assert best_name in candidate_names
@@ -514,6 +514,35 @@ class TestConfig:
         assert "desk_depth_cm" in data
         assert "grid_cell_cm" in data
         assert isinstance(data["desk_width_cm"], (int, float))
+
+
+# ====================================================================
+# 5b. POST /api/current-standard
+# ====================================================================
+
+class TestCurrentStandard:
+    """Tests pour POST /api/current-standard."""
+
+    def test_valid_slot_returns_200(self, client):
+        """POST avec slot valide retourne 200 avec current_standard dans la reponse."""
+        resp = client.post("/api/current-standard", json={"slot": "standard2"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["current_standard"] == "standard2"
+
+    def test_config_reflects_new_standard(self, client):
+        """Apres POST, GET /api/config retourne le nouveau current_standard."""
+        client.post("/api/current-standard", json={"slot": "standard2"})
+        resp = client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["current_standard"] == "standard2"
+
+    def test_invalid_slot_returns_400(self, client):
+        """POST avec slot invalide retourne 400."""
+        resp = client.post("/api/current-standard", json={"slot": "invalid"})
+        assert resp.status_code == 400
+        assert "error" in resp.get_json()
 
 
 # ====================================================================

@@ -68,7 +68,7 @@ def _room_payload(*, with_candidate: bool = True, chair_side: str = "S"):
     if with_candidate:
         room["candidate"] = {
             "pattern_name": "PAT_TEST",
-            "standard": "SITE",
+            "standard": "standard3",
             "n_desks": 1,
             "m2_per_desk": 14.4,
             "circulation_grade": "A",

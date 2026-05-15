@@ -28,7 +28,7 @@ from olm.core.room_model import ExclusionZone, RoomSpec
 def _make_pattern(
     rows_spec: list[list[dict]],
     name: str = "test",
-    standard: str = "AFNOR_ADVICE",
+    standard: str = "standard1",
     room_width_cm: int = 400,
     room_depth_cm: int = 400,
     row_gaps_cm: list[int] | None = None,
@@ -71,7 +71,7 @@ def _make_candidate(
     name: str = "C",
     room_width_cm: int = 300,
     room_depth_cm: int = 400,
-    standard: str = "AFNOR_ADVICE",
+    standard: str = "standard1",
     n_desks: int = 4,
 ) -> PatternCandidate:
     """Build a minimal PatternCandidate."""
@@ -211,9 +211,9 @@ class TestSelectCandidates:
         if not catalogue:
             pytest.skip("Empty catalogue")
         room = RoomSpec(width_cm=800, depth_cm=600)
-        result = select_candidates(catalogue, room, standard="AFNOR_ADVICE")
+        result = select_candidates(catalogue, room, standard="standard1")
         assert isinstance(result, SelectionResult)
-        assert result.standard == "AFNOR_ADVICE"
+        assert result.standard == "standard1"
 
     def test_pareto_subset_of_fitting(self, catalogue):
         """Pareto candidates are a subset of all_fitting."""
@@ -515,7 +515,7 @@ class TestGenerateAutoName:
         p = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
-            standard="AFNOR_ADVICE",
+            standard="standard1",
             room_width_cm=310,
             room_depth_cm=480,
         )
@@ -527,14 +527,14 @@ class TestGenerateAutoName:
         p1 = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="310x480_AFNOR_1",
-            standard="AFNOR_ADVICE",
+            standard="standard1",
             room_width_cm=310,
             room_depth_cm=480,
         )
         p2 = _make_pattern(
             [[{"type": "BLOCK_2_FACE"}]],
             name="",
-            standard="AFNOR_ADVICE",
+            standard="standard1",
             room_width_cm=310,
             room_depth_cm=480,
         )
@@ -546,7 +546,7 @@ class TestGenerateAutoName:
         p = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
-            standard="GROUP",
+            standard="standard2",
             room_width_cm=400,
             room_depth_cm=500,
             room_openings=[
@@ -555,14 +555,14 @@ class TestGenerateAutoName:
             ],
         )
         name = generate_auto_name(p, catalogue=[])
-        assert name == "400x500_GROUP_2O_1"
+        assert name == "400x500_Kardham_2O_1"
 
     def test_one_opening_no_suffix(self):
         """Pattern with 1 opening: no O suffix."""
         p = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
-            standard="SITE",
+            standard="standard3",
             room_width_cm=300,
             room_depth_cm=400,
             room_openings=[
@@ -570,26 +570,26 @@ class TestGenerateAutoName:
             ],
         )
         name = generate_auto_name(p, catalogue=[])
-        assert name == "300x400_SITE_1"
+        assert name == "300x400_Site_1"
 
     def test_different_standards_independent(self):
         """Different standard groups have independent increments."""
         p_afnor = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="310x480_AFNOR_1",
-            standard="AFNOR_ADVICE",
+            standard="standard1",
             room_width_cm=310,
             room_depth_cm=480,
         )
         p_site = _make_pattern(
             [[{"type": "BLOCK_1"}]],
             name="",
-            standard="SITE",
+            standard="standard3",
             room_width_cm=310,
             room_depth_cm=480,
         )
         name = generate_auto_name(p_site, catalogue=[p_afnor])
-        assert name == "310x480_SITE_1"
+        assert name == "310x480_Site_1"
 
 
 # ---------------------------------------------------------------------------
@@ -603,10 +603,10 @@ class TestCompactCatalogueNames:
         """Deleting n=2 from [1,2,3] yields [1,2]."""
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_1",
-                          standard="AFNOR_ADVICE", room_width_cm=310,
+                          standard="standard1", room_width_cm=310,
                           room_depth_cm=480),
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_3",
-                          standard="AFNOR_ADVICE", room_width_cm=310,
+                          standard="standard1", room_width_cm=310,
                           room_depth_cm=480),
         ]
         result = compact_catalogue_names(patterns)
@@ -616,7 +616,7 @@ class TestCompactCatalogueNames:
     def test_single_pattern_becomes_1(self):
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_5",
-                          standard="AFNOR_ADVICE", room_width_cm=310,
+                          standard="standard1", room_width_cm=310,
                           room_depth_cm=480),
         ]
         compact_catalogue_names(patterns)
@@ -626,24 +626,24 @@ class TestCompactCatalogueNames:
         """Two different groups are renumbered independently."""
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_3",
-                          standard="AFNOR_ADVICE", room_width_cm=310,
+                          standard="standard1", room_width_cm=310,
                           room_depth_cm=480),
-            _make_pattern([[{"type": "BLOCK_1"}]], name="400x500_SITE_5",
-                          standard="SITE", room_width_cm=400,
+            _make_pattern([[{"type": "BLOCK_1"}]], name="400x500_Site_5",
+                          standard="standard3", room_width_cm=400,
                           room_depth_cm=500),
         ]
         compact_catalogue_names(patterns)
         assert patterns[0]["name"] == "310x480_AFNOR_1"
-        assert patterns[1]["name"] == "400x500_SITE_1"
+        assert patterns[1]["name"] == "400x500_Site_1"
 
     def test_already_compact_unchanged(self):
         """An already compact catalogue is unchanged."""
         patterns = [
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_1",
-                          standard="AFNOR_ADVICE", room_width_cm=310,
+                          standard="standard1", room_width_cm=310,
                           room_depth_cm=480),
             _make_pattern([[{"type": "BLOCK_1"}]], name="310x480_AFNOR_2",
-                          standard="AFNOR_ADVICE", room_width_cm=310,
+                          standard="standard1", room_width_cm=310,
                           room_depth_cm=480),
         ]
         compact_catalogue_names(patterns)
