@@ -974,6 +974,20 @@ def api_config_post():
         return jsonify({"error": str(e)}), 400
 
 
+@app.route("/api/current-standard", methods=["POST"])
+def api_current_standard():
+    """Update the current standard slot."""
+    from olm.server.services.config_service import update_current_standard
+    data = request.json or {}
+    slot = data.get("slot", "")
+    if not slot:
+        return jsonify({"error": "Missing 'slot'"}), 400
+    try:
+        return jsonify(update_current_standard(slot))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # ===================================================================
 # Main
 # ===================================================================

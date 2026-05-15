@@ -11,7 +11,11 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict, dataclass, fields
 
-from olm.core.app_config import get_all_standards, get_spacing
+from olm.core.app_config import (
+    get_all_standards,
+    get_current_standard,
+    get_spacing,
+)
 from olm.core.app_config import reset_spacing as _reset_spacing
 from olm.core.app_config import update_spacing as _update_spacing
 
@@ -25,11 +29,11 @@ class SpacingConfig:
     All dimensions in centimetres.
 
     Attributes:
-        name: Standard identifier.
+        name: Standard slot identifier (e.g. "standard1").
         chair_clearance_cm: ES-01 — Chair clearance zone.
         front_access_cm: ES-02 — Front access (sit/stand).
         access_single_desk_cm: ES-03 — Access for a single desk against a wall.
-        passage_behind_one_row_cm: ES-04 — Total depth desk→zone edge
+        passage_behind_one_row_cm: ES-04 — Total depth desk-to-zone edge
             (chair clearance + free passage).
         passage_between_back_to_back_cm: ES-05 — Passage between two
             back-to-back rows.
@@ -68,10 +72,10 @@ class SpacingConfig:
 def _build_configs() -> dict[str, SpacingConfig]:
     """Build SpacingConfig instances from app_config."""
     configs = {}
-    for name in get_all_standards():
-        d = get_spacing(name)
-        d["name"] = name
-        configs[name] = SpacingConfig.from_dict(d)
+    for slot in get_all_standards():
+        d = get_spacing(slot)
+        d["name"] = slot
+        configs[slot] = SpacingConfig.from_dict(d)
     return configs
 
 
@@ -79,14 +83,20 @@ ALL_CONFIGS: dict[str, SpacingConfig] = _build_configs()
 
 
 def get_default() -> SpacingConfig | None:
-    """Return the first available standard, or None if none loaded."""
+    """Return the current standard config, or the first available."""
+    current = get_current_standard()
+    if current and current in ALL_CONFIGS:
+        return ALL_CONFIGS[current]
     if ALL_CONFIGS:
         return next(iter(ALL_CONFIGS.values()))
     return None
 
 
 def get_default_name() -> str | None:
-    """Return the name of the first available standard, or None."""
+    """Return the current standard slot id, or the first available."""
+    current = get_current_standard()
+    if current and current in ALL_CONFIGS:
+        return current
     if ALL_CONFIGS:
         return next(iter(ALL_CONFIGS.keys()))
     return None
@@ -96,7 +106,7 @@ def reset_config(name: str) -> SpacingConfig:
     """Reset a spacing config to its default values.
 
     Args:
-        name: Standard name.
+        name: Standard slot id.
 
     Returns:
         The reset SpacingConfig.
@@ -111,7 +121,7 @@ def update_config(name: str, values: dict) -> SpacingConfig:
     """Update a spacing config and persist to disk.
 
     Args:
-        name: Standard name.
+        name: Standard slot id.
         values: Dict of field names -> new values.
 
     Returns:

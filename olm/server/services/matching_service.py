@@ -38,7 +38,7 @@ MOCK_ROOM = {
 
 def _pattern_emprise_eo(pattern: dict) -> float:
     """Compute the EO footprint (width) of the first row of a pattern."""
-    block_defs = get_block_defs("SITE")
+    block_defs = get_block_defs("standard3")
     rows = pattern.get("rows", [])
     if not rows:
         return 0.0
@@ -59,7 +59,7 @@ def _pattern_emprise_eo(pattern: dict) -> float:
 
 def _pattern_total_desks(pattern: dict) -> int:
     """Count the total number of desks in a pattern."""
-    block_defs = get_block_defs("SITE")
+    block_defs = get_block_defs("standard3")
     total = 0
     for row in pattern.get("rows", []):
         for block in row.get("blocks", []):

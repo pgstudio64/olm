@@ -3,8 +3,8 @@
 Loads project/config.json once at import time. Provides typed getters
 and writers. Falls back to embedded defaults if config.json is absent.
 
-Spacing standards (e.g. AFNOR, GROUP, SITE) are business data defined
-in project/config.json — the generic core has no built-in standards.
+Standards are generic slots (standard1, standard2, standard3) with
+configurable labels — see docs/specs/STANDARDS.md.
 
 IMPORTANT: This module must NOT import anything from olm.core to
 avoid circular imports. Only stdlib imports (json, os, pathlib, logging).
@@ -22,11 +22,10 @@ logger = logging.getLogger(__name__)
 _CONFIG_PATH = Path(__file__).resolve().parents[2] / "project" / "config.json"
 
 # Embedded defaults (used when config.json is absent).
-# Spacing standards are intentionally empty — they are business data
+# Standards are intentionally empty — they are business data
 # provided by the project/ layer, not by the generic core.
-_EMBEDDED_DEFAULTS = {
+_EMBEDDED_DEFAULTS: dict = {
     "room_code": "14",
-    "standard_labels": {},
     "default_door_width_cm": 90,
     "desk_width_cm": 180,
     "desk_depth_cm": 80,
@@ -36,7 +35,8 @@ _EMBEDDED_DEFAULTS = {
         "w_comfort": 0.5,
         "min_desks_drop_ratio": 0.30,
     },
-    "spacing": {},
+    "standards": {},
+    "current_standard": "",
 }
 
 
@@ -47,9 +47,11 @@ def _load() -> dict:
             with open(_CONFIG_PATH, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logger.warning("Failed to load %s: %s — using defaults", _CONFIG_PATH, e)
+            logger.warning("Failed to load %s: %s — using defaults",
+                           _CONFIG_PATH, e)
     else:
-        logger.info("Config not found at %s — using embedded defaults", _CONFIG_PATH)
+        logger.info("Config not found at %s — using embedded defaults",
+                     _CONFIG_PATH)
     return json.loads(json.dumps(_EMBEDDED_DEFAULTS))  # deep copy
 
 
@@ -75,22 +77,41 @@ def get(key: str, default=None):
     return _cfg.get(key, default)
 
 
-def get_spacing(standard: str) -> dict:
-    """Get spacing dict for a standard. Returns defaults if not found."""
-    spacing = _cfg.get("spacing", {})
-    defaults = _EMBEDDED_DEFAULTS.get("spacing", {})
-    return spacing.get(standard, defaults.get(standard, {}))
-
-
 def get_all_standards() -> list[str]:
-    """Return the list of standard keys."""
-    return list(_cfg.get("spacing", {}).keys())
+    """Return the list of standard slot ids (insertion order)."""
+    return list(_cfg.get("standards", {}).keys())
 
 
-def get_standard_label(key: str) -> str:
-    """Return the display label for a standard key."""
-    labels = _cfg.get("standard_labels", {})
-    return labels.get(key, key)
+def get_standard_label(slot: str) -> str:
+    """Return the display label for a standard slot."""
+    std = _cfg.get("standards", {}).get(slot, {})
+    return std.get("label", slot)
+
+
+def get_spacing(slot: str) -> dict:
+    """Get spacing dict for a standard slot."""
+    std = _cfg.get("standards", {}).get(slot, {})
+    return dict(std.get("spacing", {}))
+
+
+def get_current_standard() -> str:
+    """Return the current_standard slot id."""
+    return _cfg.get("current_standard", "")
+
+
+def set_current_standard(slot: str) -> None:
+    """Set current_standard and persist atomically.
+
+    Args:
+        slot: A valid standard slot id.
+
+    Raises:
+        ValueError: If slot is not in the defined standards.
+    """
+    if slot not in get_all_standards():
+        raise ValueError(f"Unknown standard slot: {slot}")
+    _cfg["current_standard"] = slot
+    _save()
 
 
 def get_room_code() -> str:
@@ -125,20 +146,36 @@ def update_nested(path: list[str], value) -> None:
     _save()
 
 
-def update_spacing(standard: str, values: dict) -> None:
-    """Update spacing values for a standard and persist."""
-    spacing = _cfg.setdefault("spacing", {})
-    current = spacing.setdefault(standard, {})
-    current.update(values)
+def update_spacing(slot: str, values: dict) -> None:
+    """Update spacing values for a standard slot and persist."""
+    standards = _cfg.setdefault("standards", {})
+    std = standards.setdefault(slot, {})
+    spacing = std.setdefault("spacing", {})
+    spacing.update(values)
     _save()
 
 
-def reset_spacing(standard: str) -> None:
-    """Reset spacing for a standard to embedded defaults."""
-    defaults = _EMBEDDED_DEFAULTS.get("spacing", {}).get(standard, {})
-    if not defaults:
-        raise ValueError(f"Unknown standard: {standard}")
-    _cfg.setdefault("spacing", {})[standard] = dict(defaults)
+def update_standard_label(slot: str, label: str) -> None:
+    """Update the display label for a standard slot and persist."""
+    standards = _cfg.setdefault("standards", {})
+    std = standards.setdefault(slot, {})
+    std["label"] = label
+    _save()
+
+
+def reset_spacing(slot: str) -> None:
+    """Reset spacing for a standard to embedded defaults.
+
+    Note: with generic slots, embedded defaults are empty. This
+    raises ValueError if the slot has no embedded defaults.
+    """
+    defaults = _EMBEDDED_DEFAULTS.get("standards", {}).get(slot, {})
+    spacing = defaults.get("spacing", {})
+    if not spacing:
+        raise ValueError(f"No embedded defaults for slot: {slot}")
+    standards = _cfg.setdefault("standards", {})
+    std = standards.setdefault(slot, {})
+    std["spacing"] = dict(spacing)
     _save()
 
 

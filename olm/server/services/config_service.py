@@ -296,12 +296,21 @@ def invalidate_block_cache(standard_name: str | None = None) -> None:
 
 
 def get_config() -> dict:
-    """Return full config dict augmented with olm_version and dev_mode."""
+    """Return full config dict augmented with olm_version and dev_mode.
+
+    Exposes ``standards`` (slot -> {label, spacing}) and ``current_standard``.
+    Legacy keys ``standard_labels``, ``spacing``, ``default_standard`` are
+    omitted.
+    """
     from olm import __version__
     from olm.core import app_config
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
     cfg["dev_mode"] = _DEV_MODE
+    # Remove legacy keys that no longer exist in config.json
+    cfg.pop("standard_labels", None)
+    cfg.pop("spacing", None)
+    cfg.pop("default_standard", None)
     return cfg
 
 
@@ -344,16 +353,15 @@ def get_blocks(standard: str | None = None) -> dict:
     """Return block definitions for the requested standard.
 
     Args:
-        standard: standard name (e.g. ``"SITE"``). If ``None``, uses the
-                  default from config.
+        standard: standard slot id. If ``None``, uses current_standard.
 
     Returns:
         Dict with ``blocks``, ``standard``, and ``constants``.
     """
     import olm.core.pattern_generator as pg
-    from olm.core.spacing_config import get_default, get_default_name
-    default_name = get_default_name() or ""
-    std = standard or default_name
+    from olm.core.app_config import get_current_standard
+    from olm.core.spacing_config import get_default
+    std = standard or get_current_standard()
     cfg = ALL_CONFIGS.get(std, get_default())
     block_defs = get_block_defs(std)
     return {
@@ -464,11 +472,15 @@ def get_health_status(uptime_seconds: float) -> tuple[dict, bool]:
 
 
 def get_spacing() -> dict:
-    """Return all spacing configurations."""
-    configs = {}
-    for name, cfg in ALL_CONFIGS.items():
-        configs[name] = cfg.to_dict()
-    return configs
+    """Return all spacing configurations (slot -> {label, spacing})."""
+    from olm.core import app_config
+    result = {}
+    for slot, cfg in ALL_CONFIGS.items():
+        result[slot] = {
+            "label": app_config.get_standard_label(slot),
+            "spacing": cfg.to_dict(),
+        }
+    return result
 
 
 def update_spacing(data: dict) -> dict:
@@ -495,3 +507,35 @@ def update_spacing(data: dict) -> dict:
         updated = sp_update(name, values)
     invalidate_block_cache(name)
     return {"ok": True, "config": updated.to_dict()}
+
+
+def update_label(slot: str, label: str) -> dict:
+    """Update the display label for a standard slot.
+
+    Args:
+        slot: Standard slot id.
+        label: New display label.
+
+    Returns:
+        ``{"ok": True}``.
+    """
+    from olm.core import app_config
+    app_config.update_standard_label(slot, label)
+    return {"ok": True}
+
+
+def update_current_standard(slot: str) -> dict:
+    """Update the current_standard and persist.
+
+    Args:
+        slot: Standard slot id.
+
+    Returns:
+        ``{"ok": True, "current_standard": slot}``.
+
+    Raises:
+        ValueError: If slot is invalid.
+    """
+    from olm.core import app_config
+    app_config.set_current_standard(slot)
+    return {"ok": True, "current_standard": slot}
