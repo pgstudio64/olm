@@ -711,6 +711,30 @@ def adapt_to_room(
 # ---------------------------------------------------------------------------
 
 @dataclass
+class BlockPosition:
+    """Absolute position of a block within the pattern.
+
+    Attributes:
+        row_idx: Row index.
+        block_idx: Block index within the row.
+        x_cm: NW corner of the block (EO axis).
+        y_cm: NW corner of the block (NS axis).
+        eo_cm: Block EO extent (after rotation).
+        ns_cm: Block NS extent (after rotation).
+        block_type: Block type name.
+        orientation: Block orientation in degrees.
+    """
+    row_idx: int
+    block_idx: int
+    x_cm: int
+    y_cm: int
+    eo_cm: int
+    ns_cm: int
+    block_type: str
+    orientation: int
+
+
+@dataclass
 class DeskPosition:
     """Absolute position of a desk within the pattern.
 
@@ -808,16 +832,16 @@ def _rotate_desk_layout(
     return dx, dy, dw, dd
 
 
-def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
-    """Compute absolute positions of all desks in a pattern.
+def compute_block_positions(pattern: dict) -> list[BlockPosition]:
+    """Compute absolute positions of all blocks in a pattern.
 
     Args:
-        pattern: JSON pattern (adapted or not).
+        pattern: JSON pattern (catalogue format).
 
     Returns:
-        List of DeskPosition with absolute coordinates.
+        List of BlockPosition with absolute coordinates.
     """
-    desks = []
+    positions: list[BlockPosition] = []
     row_y = 0
     rows = pattern.get("rows", [])
     row_gaps = pattern.get("row_gaps_cm", [])
@@ -834,32 +858,64 @@ def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
             offset_ns = block.get("offset_ns_cm", 0)
 
             eo, ns, _ = _BLOCK_REGISTRY.get(btype, (0, 0, 0))
-            desk_layout = _DESK_LAYOUTS.get(btype, [])
-
-            for di, (dx, dy, dw, dd) in enumerate(desk_layout):
-                if orient != 0:
-                    dx, dy, dw, dd = _rotate_desk_layout(
-                        dx, dy, dw, dd, eo, ns, orient,
-                    )
-                desks.append(DeskPosition(
-                    row_idx=ri,
-                    block_idx=bi,
-                    desk_idx=di,
-                    x_cm=block_x + dx,
-                    y_cm=row_y + offset_ns + dy,
-                    width_cm=dw,
-                    depth_cm=dd,
-                    block_type=btype,
-                ))
-
             block_eo = ns if orient in (90, 270) else eo
+            block_ns = eo if orient in (90, 270) else ns
+
+            positions.append(BlockPosition(
+                row_idx=ri,
+                block_idx=bi,
+                x_cm=block_x,
+                y_cm=row_y + offset_ns,
+                eo_cm=block_eo,
+                ns_cm=block_ns,
+                block_type=btype,
+                orientation=orient,
+            ))
+
             block_x += block_eo
 
-        # Row height = max NS of blocks
         max_ns = 0
         for block in row.get("blocks", []):
             max_ns = max(max_ns, _block_ns_extent(block))
         row_y += max_ns
+
+    return positions
+
+
+def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
+    """Compute absolute positions of all desks in a pattern.
+
+    Delegates block-level positioning to ``compute_block_positions``,
+    then expands each block into its constituent desks.
+
+    Args:
+        pattern: JSON pattern (adapted or not).
+
+    Returns:
+        List of DeskPosition with absolute coordinates.
+    """
+    block_positions = compute_block_positions(pattern)
+    desks: list[DeskPosition] = []
+
+    for bp in block_positions:
+        desk_layout = _DESK_LAYOUTS.get(bp.block_type, [])
+        eo_0, ns_0, _ = _BLOCK_REGISTRY.get(bp.block_type, (0, 0, 0))
+
+        for di, (dx, dy, dw, dd) in enumerate(desk_layout):
+            if bp.orientation != 0:
+                dx, dy, dw, dd = _rotate_desk_layout(
+                    dx, dy, dw, dd, eo_0, ns_0, bp.orientation,
+                )
+            desks.append(DeskPosition(
+                row_idx=bp.row_idx,
+                block_idx=bp.block_idx,
+                desk_idx=di,
+                x_cm=bp.x_cm + dx,
+                y_cm=bp.y_cm + dy,
+                width_cm=dw,
+                depth_cm=dd,
+                block_type=bp.block_type,
+            ))
 
     return desks
 

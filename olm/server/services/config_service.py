@@ -167,104 +167,10 @@ def get_corridor_rgb() -> tuple[int, int, int]:
 
 
 # ---------------------------------------------------------------------------
-# Block definitions
+# Block definitions — delegated to olm.core.spacing_config.build_block_defs
 # ---------------------------------------------------------------------------
 
-_BASE_BLOCKS = [
-    BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE,
-    BLOCK_4_FACE, BLOCK_6_FACE, BLOCK_2_ORTHO_L, BLOCK_2_ORTHO_R,
-]
-
-# Face-to-face blocks: E/W zones = chair + passage (ES-06)
-_FACE_TO_FACE_BLOCKS = {"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"}
-
-# Orthogonal blocks: chair + passage_single zones on the chair faces
-_ORTHO_BLOCKS = {
-    "BLOCK_2_ORTHO_R": {"north", "east"},
-    "BLOCK_2_ORTHO_L": {"north", "west"},
-}
-
-# Block dimension formulas: (eo_factor_w, eo_factor_d, ns_factor_w, ns_factor_d)
-_BLOCK_DESK_FACTORS = {
-    "BLOCK_1":          (0, 1, 1, 0),
-    "BLOCK_2_FACE":     (0, 2, 1, 0),
-    "BLOCK_2_SIDE":     (0, 1, 2, 0),
-    "BLOCK_3_SIDE":     (0, 1, 3, 0),
-    "BLOCK_4_FACE":     (0, 2, 2, 0),
-    "BLOCK_6_FACE":     (0, 2, 3, 0),
-    "BLOCK_2_ORTHO_R":  (1, 0, 1, 1),
-    "BLOCK_2_ORTHO_L":  (1, 0, 1, 1),
-}
-
-
-def _block_def_to_json(block) -> dict:
-    """Convert a Block to a JSON dict, recomputing dimensions from config."""
-    factors = _BLOCK_DESK_FACTORS.get(block.name)
-    if factors:
-        fw, fd, gw, gd = factors
-        eo = fw * DESK_W_CM + fd * DESK_D_CM
-        ns = gw * DESK_W_CM + gd * DESK_D_CM
-    else:
-        eo = block.eo_cm
-        ns = block.ns_cm
-    return {
-        "name": block.name,
-        "eo_cm": eo,
-        "ns_cm": ns,
-        "n_desks": block.n_desks,
-        "derogatory": block.derogatory,
-        "faces": {
-            "north": {"non_superposable_cm": block.faces.north.non_superposable_cm,
-                       "candidate_cm": block.faces.north.candidate_cm},
-            "south": {"non_superposable_cm": block.faces.south.non_superposable_cm,
-                       "candidate_cm": block.faces.south.candidate_cm},
-            "east":  {"non_superposable_cm": block.faces.east.non_superposable_cm,
-                       "candidate_cm": block.faces.east.candidate_cm},
-            "west":  {"non_superposable_cm": block.faces.west.non_superposable_cm,
-                       "candidate_cm": block.faces.west.candidate_cm},
-        },
-    }
-
-
-def _build_block_defs(cfg) -> dict:
-    """Build block definitions for a given standard.
-
-    Fixed zones (chair clearance) and circulation zones vary
-    according to the layout standard.
-    """
-    chair = cfg.chair_clearance_cm
-    passage = cfg.passage_cm
-    passage_single = cfg.access_single_desk_cm - chair
-
-    defs = {}
-    for block in _BASE_BLOCKS:
-        d = _block_def_to_json(block)
-        if block.name in _FACE_TO_FACE_BLOCKS:
-            for face in ("east", "west"):
-                d["faces"][face] = {
-                    "non_superposable_cm": chair,
-                    "candidate_cm": passage,
-                }
-        elif block.name in _ORTHO_BLOCKS:
-            chair_faces = _ORTHO_BLOCKS[block.name]
-            for face in ("north", "south", "east", "west"):
-                if face in chair_faces:
-                    d["faces"][face] = {
-                        "non_superposable_cm": chair,
-                        "candidate_cm": passage_single,
-                    }
-                else:
-                    d["faces"][face] = {
-                        "non_superposable_cm": 0,
-                        "candidate_cm": 0,
-                    }
-        else:
-            d["faces"]["west"] = {
-                "non_superposable_cm": chair,
-                "candidate_cm": passage_single,
-            }
-        defs[block.name] = d
-    return defs
+from olm.core.spacing_config import build_block_defs as _build_block_defs
 
 
 # Cache by standard

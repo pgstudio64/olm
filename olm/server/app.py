@@ -802,6 +802,100 @@ def api_pattern_delete(name: str):
     return jsonify(result)
 
 
+@app.route("/api/patterns/<name>/fit", methods=["POST"])
+def api_pattern_fit(name: str):
+    """Fit room to pattern: compute and apply minimum room dimensions."""
+    from olm.core.pattern_fit import (
+        PatternStructurallyInvalid,
+        fit_room_to_pattern,
+    )
+    from olm.core.spacing_config import ALL_CONFIGS
+    from olm.server.services.catalogue_service import (
+        find_pattern,
+        load_catalogue,
+        save_catalogue,
+    )
+    patterns = load_catalogue()
+    idx = find_pattern(patterns, name)
+    if idx < 0:
+        return jsonify({"error": f"Pattern not found: {name}"}), 404
+    pat = patterns[idx]
+    std_slot = pat.get("standard", "")
+    spacing = ALL_CONFIGS.get(std_slot)
+    if spacing is None:
+        return jsonify({"error": f"Unknown standard: {std_slot}"}), 400
+    try:
+        result = fit_room_to_pattern(pat, spacing)
+    except PatternStructurallyInvalid as e:
+        return jsonify({"error": str(e)}), 400
+    save_catalogue(patterns)
+    return jsonify({
+        "old_width": result.old_width,
+        "old_depth": result.old_depth,
+        "new_width": result.new_width,
+        "new_depth": result.new_depth,
+        "direction": result.direction,
+        "warnings": result.warnings,
+    })
+
+
+@app.route("/api/patterns/fit-all", methods=["POST"])
+def api_patterns_fit_all():
+    """Fit all patterns in the catalogue."""
+    from olm.core.pattern_fit import (
+        PatternStructurallyInvalid,
+        fit_room_to_pattern,
+    )
+    from olm.core.spacing_config import ALL_CONFIGS
+    from olm.server.services.catalogue_service import (
+        load_catalogue,
+        save_catalogue,
+    )
+    patterns = load_catalogue()
+    fitted: list[dict] = []
+    skipped: list[dict] = []
+    noop_count = 0
+
+    for pat in patterns:
+        name = pat.get("name", "?")
+        std_slot = pat.get("standard", "")
+        spacing = ALL_CONFIGS.get(std_slot)
+        if spacing is None:
+            skipped.append({"name": name, "reason": f"unknown standard: {std_slot}"})
+            continue
+        try:
+            result = fit_room_to_pattern(pat, spacing)
+        except PatternStructurallyInvalid as e:
+            skipped.append({"name": name, "reason": str(e)})
+            continue
+        entry = {
+            "name": name,
+            "result": {
+                "old_width": result.old_width,
+                "old_depth": result.old_depth,
+                "new_width": result.new_width,
+                "new_depth": result.new_depth,
+                "direction": result.direction,
+                "warnings": result.warnings,
+            },
+        }
+        if result.direction == "noop":
+            noop_count += 1
+        fitted.append(entry)
+
+    save_catalogue(patterns)
+    return jsonify({
+        "fitted": fitted,
+        "skipped": skipped,
+        "summary": {
+            "total": len(patterns),
+            "fitted": len(fitted),
+            "noop": noop_count,
+            "skipped": len(skipped),
+        },
+    })
+
+
 @app.route("/api/patterns/<name>/duplicate", methods=["POST"])
 def api_pattern_duplicate(name: str):
     """Duplicate a pattern with a new name."""

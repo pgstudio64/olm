@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict, dataclass, fields
 
+import olm.core.pattern_generator as _pg
 from olm.core.app_config import (
     get_all_standards,
     get_current_standard,
@@ -131,3 +132,115 @@ def update_config(name: str, values: dict) -> SpacingConfig:
     ALL_CONFIGS[name] = SpacingConfig.from_dict(
         {**get_spacing(name), "name": name})
     return ALL_CONFIGS[name]
+
+
+# ── Block definitions per standard ────────────────────────────────────────
+# Extracted from olm/server/services/config_service.py so that core modules
+# (pattern_fit) can build block defs without importing the server layer.
+
+_BASE_BLOCKS = [
+    _pg.BLOCK_1, _pg.BLOCK_2_FACE, _pg.BLOCK_2_SIDE, _pg.BLOCK_3_SIDE,
+    _pg.BLOCK_4_FACE, _pg.BLOCK_6_FACE,
+    _pg.BLOCK_2_ORTHO_L, _pg.BLOCK_2_ORTHO_R,
+]
+
+# Face-to-face blocks: E/W zones = chair + passage (ES-06)
+_FACE_TO_FACE_BLOCKS = {"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"}
+
+# Orthogonal blocks: chair + passage_single zones on the chair faces
+_ORTHO_BLOCKS: dict[str, set[str]] = {
+    "BLOCK_2_ORTHO_R": {"north", "east"},
+    "BLOCK_2_ORTHO_L": {"north", "west"},
+}
+
+# Block dimension formulas: (eo_factor_w, eo_factor_d, ns_factor_w, ns_factor_d)
+_BLOCK_DESK_FACTORS: dict[str, tuple[int, int, int, int]] = {
+    "BLOCK_1":          (0, 1, 1, 0),
+    "BLOCK_2_FACE":     (0, 2, 1, 0),
+    "BLOCK_2_SIDE":     (0, 1, 2, 0),
+    "BLOCK_3_SIDE":     (0, 1, 3, 0),
+    "BLOCK_4_FACE":     (0, 2, 2, 0),
+    "BLOCK_6_FACE":     (0, 2, 3, 0),
+    "BLOCK_2_ORTHO_R":  (1, 0, 1, 1),
+    "BLOCK_2_ORTHO_L":  (1, 0, 1, 1),
+}
+
+
+def _block_def_to_json(block: _pg.Block) -> dict:
+    """Convert a Block to a JSON dict, recomputing dimensions from config.
+
+    Uses current module-level DESK_W_CM / DESK_D_CM from pattern_generator
+    so that runtime desk-dimension changes are reflected.
+    """
+    factors = _BLOCK_DESK_FACTORS.get(block.name)
+    if factors:
+        fw, fd, gw, gd = factors
+        eo = fw * _pg.DESK_W_CM + fd * _pg.DESK_D_CM
+        ns = gw * _pg.DESK_W_CM + gd * _pg.DESK_D_CM
+    else:
+        eo = block.eo_cm
+        ns = block.ns_cm
+    return {
+        "name": block.name,
+        "eo_cm": eo,
+        "ns_cm": ns,
+        "n_desks": block.n_desks,
+        "derogatory": block.derogatory,
+        "faces": {
+            "north": {"non_superposable_cm": block.faces.north.non_superposable_cm,
+                       "candidate_cm": block.faces.north.candidate_cm},
+            "south": {"non_superposable_cm": block.faces.south.non_superposable_cm,
+                       "candidate_cm": block.faces.south.candidate_cm},
+            "east":  {"non_superposable_cm": block.faces.east.non_superposable_cm,
+                       "candidate_cm": block.faces.east.candidate_cm},
+            "west":  {"non_superposable_cm": block.faces.west.non_superposable_cm,
+                       "candidate_cm": block.faces.west.candidate_cm},
+        },
+    }
+
+
+def build_block_defs(cfg: SpacingConfig) -> dict[str, dict]:
+    """Build block definitions for a given standard.
+
+    Fixed zones (chair clearance) and circulation zones vary
+    according to the layout standard.
+
+    Args:
+        cfg: Spacing configuration for the target standard.
+
+    Returns:
+        Dict mapping block name to its JSON definition (with faces).
+    """
+    chair = cfg.chair_clearance_cm
+    passage = cfg.passage_cm
+    passage_single = cfg.access_single_desk_cm - chair
+
+    defs: dict[str, dict] = {}
+    for block in _BASE_BLOCKS:
+        d = _block_def_to_json(block)
+        if block.name in _FACE_TO_FACE_BLOCKS:
+            for face in ("east", "west"):
+                d["faces"][face] = {
+                    "non_superposable_cm": chair,
+                    "candidate_cm": passage,
+                }
+        elif block.name in _ORTHO_BLOCKS:
+            chair_faces = _ORTHO_BLOCKS[block.name]
+            for face in ("north", "south", "east", "west"):
+                if face in chair_faces:
+                    d["faces"][face] = {
+                        "non_superposable_cm": chair,
+                        "candidate_cm": passage_single,
+                    }
+                else:
+                    d["faces"][face] = {
+                        "non_superposable_cm": 0,
+                        "candidate_cm": 0,
+                    }
+        else:
+            d["faces"]["west"] = {
+                "non_superposable_cm": chair,
+                "candidate_cm": passage_single,
+            }
+        defs[block.name] = d
+    return defs

@@ -925,3 +925,71 @@ class TestPlanSaveAtomic:
         client.post("/api/plans/notmp/save", json=sample_plan_json)
         tmp_file = tmp_plans_dir / "notmp.json.tmp"
         assert not tmp_file.exists()
+
+
+# ====================================================================
+# 9. POST /api/patterns/<name>/fit
+# ====================================================================
+
+
+class TestPatternFit:
+    """Tests pour les endpoints fit."""
+
+    def test_fit_endpoint_ok(self, client, monkeypatch_catalogue):
+        """Fit retourne un FitResult valide et met a jour les dims."""
+        cat = monkeypatch_catalogue
+        name = cat[0]["name"]
+        old_w = cat[0]["room_width_cm"]
+        old_d = cat[0]["room_depth_cm"]
+        resp = client.post(f"/api/patterns/{name}/fit")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["direction"] in ("shrink", "expand", "noop")
+        assert data["old_width"] == old_w
+        assert data["old_depth"] == old_d
+        assert isinstance(data["new_width"], int)
+        assert isinstance(data["new_depth"], int)
+        assert data["new_width"] % 10 == 0
+        assert data["new_depth"] % 10 == 0
+
+    def test_fit_endpoint_404(self, client, monkeypatch_catalogue):
+        """Pattern inexistant -> 404."""
+        resp = client.post("/api/patterns/NONEXISTENT/fit")
+        assert resp.status_code == 404
+
+    def test_fit_endpoint_structural_error(self, client, monkeypatch):
+        """Pattern avec collision -> 400."""
+        collision_cat = [{
+            "name": "COLLISION",
+            "rows": [{"blocks": [
+                {"type": "BLOCK_4_FACE", "orientation": 0},
+                {"type": "BLOCK_4_FACE", "orientation": 0, "gap_cm": -160},
+            ]}],
+            "row_gaps_cm": [],
+            "room_width_cm": 800,
+            "room_depth_cm": 600,
+            "standard": "standard1",
+            "room_windows": [],
+            "room_openings": [],
+            "room_exclusions": [],
+        }]
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: collision_cat,
+        )
+        resp = client.post("/api/patterns/COLLISION/fit")
+        assert resp.status_code == 400
+        assert "overlap" in resp.get_json()["error"].lower()
+
+    def test_fit_all_endpoint_summary(self, client, monkeypatch_catalogue):
+        """Fit-all retourne la structure { fitted, skipped, summary }."""
+        resp = client.post("/api/patterns/fit-all")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "fitted" in data
+        assert "skipped" in data
+        assert "summary" in data
+        s = data["summary"]
+        assert s["total"] == len(monkeypatch_catalogue)
+        assert s["fitted"] + s["skipped"] == s["total"]
+        assert s["noop"] >= 0
