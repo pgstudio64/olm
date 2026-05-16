@@ -1155,6 +1155,7 @@ async function init() {
       row.blocks.splice(state.selectedBlock, 1);
       state.selectedBlock = -1;
       render(); updateDSL(); updateRowList();
+      canonicalizeState();
     }
   });
 

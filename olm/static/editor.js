@@ -796,7 +796,24 @@ function wouldDetachAnyStick(axis, deltaCm) {
   var b = state.rows[ri] && state.rows[ri].blocks[bi];
   if (!b) return false;
 
-  // Snapshot
+  // D-214: collect sticks that are CURRENTLY valid (touching their wall).
+  // Phantom sticks (block not touching the wall) are excluded so they
+  // do not block movement. A phantom stick can become valid again if
+  // the user moves the block back to the wall.
+  var validBefore = [];
+  var row = state.rows[ri];
+  for (var bi2 = 0; bi2 < row.blocks.length; bi2++) {
+    var blk = row.blocks[bi2];
+    var sticks = blk.sticks || [];
+    for (var si = 0; si < sticks.length; si++) {
+      if (faceTouchesWall(ri, bi2, sticks[si])) {
+        validBefore.push({ bi: bi2, face: sticks[si] });
+      }
+    }
+  }
+  if (validBefore.length === 0) return false;
+
+  // Snapshot: apply the tentative move
   var oldVal;
   if (axis === "NS") {
     oldVal = b.offset_ns_cm || 0;
@@ -806,16 +823,13 @@ function wouldDetachAnyStick(axis, deltaCm) {
     b.gap_cm = oldVal + deltaCm;
   }
 
-  // Check all blocks in this row for broken sticks (using zone-aware test)
+  // Check only the sticks that were valid before the move
   var detached = false;
-  var row = state.rows[ri];
-  for (var bi2 = 0; bi2 < row.blocks.length; bi2++) {
-    var blk = row.blocks[bi2];
-    var sticks = blk.sticks || [];
-    for (var si = 0; si < sticks.length; si++) {
-      if (!faceTouchesWall(ri, bi2, sticks[si])) { detached = true; break; }
+  for (var vi = 0; vi < validBefore.length; vi++) {
+    if (!faceTouchesWall(ri, validBefore[vi].bi, validBefore[vi].face)) {
+      detached = true;
+      break;
     }
-    if (detached) break;
   }
 
   // Restore
@@ -1883,6 +1897,7 @@ function addBlock(blockType) {
   updateRowList();
   updateDSL();
   zoomFit();
+  canonicalizeState();
 }
 
 function addRow(andRender) {
@@ -1900,6 +1915,39 @@ function addRow(andRender) {
     updateDSL();
     zoomFit();
   }
+}
+
+
+// --- D-213: canonicalize block order via backend ---
+// Serializes concurrent calls to avoid state races.
+var _canonPromise = Promise.resolve();
+
+function canonicalizeState() {
+  _canonPromise = _canonPromise.then(function () {
+    return _doCanonicalizeState();
+  });
+  return _canonPromise;
+}
+
+function _doCanonicalizeState() {
+  var payload = buildPatternPayload();
+  return fetch("/api/patterns/canonicalize-inline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.rows) {
+        state.rows = data.rows;
+        render();
+        updateDSL();
+        updateRowList();
+      }
+    })
+    .catch(function (err) {
+      console.warn("canonicalize-inline failed:", err);
+    });
 }
 
 async function save() {

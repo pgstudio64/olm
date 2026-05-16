@@ -953,6 +953,24 @@ def api_pattern_compact_inline():
     })
 
 
+@app.route("/api/patterns/canonicalize-inline", methods=["POST"])
+def api_pattern_canonicalize_inline():
+    """Canonicalize block order within each row (D-213).
+
+    In-memory variant (not saved to disk). Sorts blocks by ascending
+    x_cm and recomputes gap_cm to preserve spatial positions.
+    """
+    from olm.core.pattern_canonicalize import canonicalize_blocks
+    pat = request.get_json(force=True)
+    if not pat:
+        return jsonify({"error": "No pattern data"}), 400
+    result = canonicalize_blocks(pat)
+    return jsonify({
+        "rows": pat.get("rows", []),
+        "n_reorderings": result.n_reorderings,
+    })
+
+
 @app.route("/api/patterns/fit-all", methods=["POST"])
 def api_patterns_fit_all():
     """Fit all patterns in the catalogue."""

@@ -1454,3 +1454,69 @@ class TestCatalogueSaveAsDefault:
             saved = json.load(f)
         assert len(saved["patterns"]) == 1
         assert saved["patterns"][0]["standard"] == "standard1"
+
+
+# ====================================================================
+# 8. POST /api/patterns/canonicalize-inline (D-213)
+# ====================================================================
+
+class TestCanonicalizeInline:
+    """Tests pour POST /api/patterns/canonicalize-inline."""
+
+    def test_non_canonical_reordered(self, client):
+        """Pattern with negative gap -> blocks reordered, n_reorderings=1."""
+        payload = {
+            "name": "TEST",
+            "rows": [{
+                "blocks": [
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 380,
+                     "sticks": ["N", "E"]},
+                    {"type": "BLOCK_1", "orientation": 180, "gap_cm": -460},
+                ],
+            }],
+            "row_gaps_cm": [],
+            "room_width_cm": 460,
+            "room_depth_cm": 300,
+            "standard": "standard3",
+        }
+        resp = client.post("/api/patterns/canonicalize-inline", json=payload)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["n_reorderings"] == 1
+        blocks = data["rows"][0]["blocks"]
+        # orient-180 at x=0 is now first
+        assert blocks[0]["orientation"] == 180
+        assert blocks[0]["gap_cm"] == 0
+        # orient-0 at x=380 is now second, gap=300
+        assert blocks[1]["orientation"] == 0
+        assert blocks[1]["gap_cm"] == 300
+        assert blocks[1].get("sticks") == ["N", "E"]
+
+    def test_already_canonical_noop(self, client):
+        """Pattern already canonical -> n_reorderings=0."""
+        payload = {
+            "name": "CANON",
+            "rows": [{
+                "blocks": [
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 0},
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 100},
+                ],
+            }],
+            "row_gaps_cm": [],
+            "room_width_cm": 500,
+            "room_depth_cm": 300,
+            "standard": "standard1",
+        }
+        resp = client.post("/api/patterns/canonicalize-inline", json=payload)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["n_reorderings"] == 0
+
+    def test_empty_payload_400(self, client):
+        """Empty payload returns 400."""
+        resp = client.post(
+            "/api/patterns/canonicalize-inline",
+            data="",
+            content_type="application/json",
+        )
+        assert resp.status_code == 400

@@ -119,6 +119,10 @@ def create_pattern(data: dict) -> dict:
     if auto_name or "name" not in data:
         data["name"] = generate_auto_name(data, patterns)
 
+    # D-213: canonicalize block order before saving
+    from olm.core.pattern_canonicalize import canonicalize_blocks
+    canonicalize_blocks(data)
+
     idx = find_pattern(patterns, data["name"])
     if idx >= 0:
         patterns[idx] = data

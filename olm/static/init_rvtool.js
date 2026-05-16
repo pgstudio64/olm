@@ -1774,6 +1774,7 @@
         rvTool.dragOffset = null;
         rvTool.resizeStart = null;
         _rvCommitFromState();
+        if (typeof canonicalizeState === "function") canonicalizeState();
         return;
       }
       if (rvTool.mode === "openingMoving") {

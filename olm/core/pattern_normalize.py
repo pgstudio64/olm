@@ -14,6 +14,7 @@ import copy
 import logging
 from dataclasses import dataclass, field
 
+from olm.core.pattern_canonicalize import canonicalize_blocks
 from olm.core.pattern_fit import (
     FitResult,
     PatternStructurallyInvalid,
@@ -74,6 +75,8 @@ def normalize_pattern(
     """Normalize a pattern's spacings to the target standard.
 
     Mutates ``pattern`` in place:
+    - Canonicalizes block order (D-213): sorts blocks within each row
+      by ascending x_cm and recomputes gap_cm.
     - Adjusts ``gap_cm`` between consecutive blocks in each row.
     - Adjusts ``row_gaps_cm`` between consecutive rows.
     - Updates ``pattern["standard"]`` to the target standard.
@@ -95,6 +98,16 @@ def normalize_pattern(
     old_standard = pattern.get("standard", "")
     new_standard = target_spacing.name
     warnings: list[str] = []
+
+    # Step 0: canonicalize block order (D-213) — sort by spatial x_cm,
+    # recompute gap_cm. Must run before intra-row gap normalization
+    # which assumes JSON order = spatial order.
+    canon = canonicalize_blocks(pattern)
+    if canon.n_reorderings > 0:
+        warnings.append(
+            f"Canonicalized {canon.n_reorderings} row(s) "
+            f"(blocks reordered by spatial position)"
+        )
 
     block_defs = build_block_defs(target_spacing)
     rows = pattern.get("rows", [])

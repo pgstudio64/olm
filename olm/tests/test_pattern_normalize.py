@@ -396,6 +396,57 @@ class TestCrossStandardCompress:
         assert pat["standard"] == "standard1"
 
 
+class TestNormalizePatternCanonicalizes:
+    """D-213 regression: normalize_pattern canonicalizes before gap normalization.
+
+    User pattern 460x300_Site_1: two BLOCK_1s with negative gap producing
+    reversed spatial order. After normalize_pattern (Compact), blocks must
+    be in spatial order with chairs INWARD and correct gap.
+    """
+
+    def test_compact_inward_chairs(self):
+        """Compact on reversed-gap pattern -> chairs inward, correct room."""
+        pat = {
+            "name": "460x300_Site_1",
+            "rows": [{
+                "blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 0,
+                        "gap_cm": 380, "offset_ns_cm": 0,
+                        "sticks": ["N", "E"],
+                    },
+                    {
+                        "type": "BLOCK_1", "orientation": 180,
+                        "gap_cm": -460, "offset_ns_cm": 0,
+                    },
+                ],
+            }],
+            "row_gaps_cm": [],
+            "room_width_cm": 460,
+            "room_depth_cm": 300,
+            "standard": "standard3",
+        }
+        result = normalize_pattern(pat, STD3)
+        blocks = pat["rows"][0]["blocks"]
+
+        # After canonicalize: orient-180 first (x=0), orient-0 second (x=380)
+        # After intra-row normalize (STD3):
+        #   orient-180 BLOCK_1: west(orig) rotated to east -> east.total = 90
+        #   orient-0 BLOCK_1: west.total = 90
+        #   required_gap = 90 + 90 = 180
+        assert blocks[0]["orientation"] == 180
+        assert blocks[1]["orientation"] == 0
+        assert blocks[1]["gap_cm"] == 180
+
+        # Chairs INWARD: orient-180 has chair on east, orient-0 has chair
+        # on west -> they face each other. Verified by gap being 180 (not 0).
+
+        # Room dimensions: fit_room_to_pattern computes min room
+        # Block 0 at x=0 (eo=80), block 1 at x=0+80+180=260 (eo=80)
+        # Total EO = 260+80 = 340. With dtw=0 (Site), room width = 340.
+        assert pat["room_width_cm"] == 340
+
+
 class TestNormalizeCatalogue:
     """normalize_catalogue processes multiple patterns."""
 
