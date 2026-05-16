@@ -155,28 +155,24 @@
       bindHandle("fpRightResize");
     })();
 
-    // ---- Pattern Editor: 3 resizable columns (Room, Layout, Right) ----
+    // ---- Pattern Editor: independent left / right column resize ----
     (function () {
       var main = document.getElementById("peMain");
       if (!main) return;
-      var ROOM_KEY = "peRoomWidth", LAYOUT_KEY = "peLayoutWidth", RIGHT_KEY = "peRightWidth";
-      var MIN_ROOM = 150, MAX_ROOM = 300;
-      var MIN_LAYOUT = 150, MAX_LAYOUT = 350;
-      var MIN_R = 200, MAX_R = 520;
-      var roomW = parseInt(localStorage.getItem(ROOM_KEY), 10);
-      var layoutW = parseInt(localStorage.getItem(LAYOUT_KEY), 10);
+      var LEFT_KEY = "peLeftWidth", RIGHT_KEY = "peRightWidth";
+      var MIN_L = 216, MAX_L = 420, MIN_R = 259, MAX_R = 520;
+      var leftW = parseInt(localStorage.getItem(LEFT_KEY), 10);
       var rightW = parseInt(localStorage.getItem(RIGHT_KEY), 10);
-      if (!(roomW >= MIN_ROOM && roomW <= MAX_ROOM)) roomW = 180;
-      if (!(layoutW >= MIN_LAYOUT && layoutW <= MAX_LAYOUT)) layoutW = 180;
+      if (!(leftW >= MIN_L && leftW <= MAX_L)) leftW = 220;
       if (!(rightW >= MIN_R && rightW <= MAX_R)) rightW = 260;
 
       function applyCols() {
         main.style.gridTemplateColumns =
-          roomW + "px 8px " + layoutW + "px 8px 1fr 8px " + rightW + "px";
+          leftW + "px 8px 1fr 8px " + rightW + "px";
       }
       applyCols();
 
-      function bindHandle(handleId, getSetter) {
+      function bindHandle(handleId, which) {
         var handle = document.getElementById(handleId);
         if (!handle) return;
         var dragging = false, startX = 0, startW = 0;
@@ -184,14 +180,19 @@
           if (e.button !== 0) return;
           dragging = true;
           startX = e.clientX;
-          startW = getSetter.get();
+          startW = which === "left" ? leftW : rightW;
           handle.classList.add("active");
           document.body.style.cursor = "col-resize";
           e.preventDefault();
         });
         document.addEventListener("mousemove", function (e) {
           if (!dragging) return;
-          getSetter.set(startW, e.clientX - startX);
+          var delta = e.clientX - startX;
+          if (which === "left") {
+            leftW = Math.min(MAX_L, Math.max(MIN_L, startW + delta));
+          } else {
+            rightW = Math.min(MAX_R, Math.max(MIN_R, startW - delta));
+          }
           applyCols();
         });
         document.addEventListener("mouseup", function () {
@@ -199,25 +200,13 @@
           dragging = false;
           handle.classList.remove("active");
           document.body.style.cursor = "";
-          getSetter.save();
+          localStorage.setItem(which === "left" ? LEFT_KEY : RIGHT_KEY,
+            String(which === "left" ? leftW : rightW));
         });
       }
 
-      bindHandle("peRoomResize", {
-        get: function() { return roomW; },
-        set: function(sw, delta) { roomW = Math.min(MAX_ROOM, Math.max(MIN_ROOM, sw + delta)); },
-        save: function() { localStorage.setItem(ROOM_KEY, String(roomW)); }
-      });
-      bindHandle("peLeftResize", {
-        get: function() { return layoutW; },
-        set: function(sw, delta) { layoutW = Math.min(MAX_LAYOUT, Math.max(MIN_LAYOUT, sw + delta)); },
-        save: function() { localStorage.setItem(LAYOUT_KEY, String(layoutW)); }
-      });
-      bindHandle("peRightResize", {
-        get: function() { return rightW; },
-        set: function(sw, delta) { rightW = Math.min(MAX_R, Math.max(MIN_R, sw - delta)); },
-        save: function() { localStorage.setItem(RIGHT_KEY, String(rightW)); }
-      });
+      bindHandle("peLeftResize", "left");
+      bindHandle("peRightResize", "right");
     })();
   });
 })();

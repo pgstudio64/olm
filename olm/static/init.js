@@ -53,6 +53,17 @@ async function init() {
       callback();
     }
   }
+  // PE left-column segmented control (Room / Layout)
+  document.querySelectorAll(".pe-left-tab").forEach(function(tab) {
+    tab.addEventListener("click", function() {
+      document.querySelectorAll(".pe-left-tab").forEach(function(t) { t.classList.remove("active"); });
+      document.querySelectorAll(".pe-left-pane").forEach(function(p) { p.classList.remove("active"); });
+      tab.classList.add("active");
+      var pane = document.getElementById(tab.dataset.peTab);
+      if (pane) pane.classList.add("active");
+    });
+  });
+
   document.getElementById("btnNew").addEventListener("click", function() {
     _guardPatternRoomAmend(resetState);
   });
