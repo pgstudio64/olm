@@ -351,9 +351,15 @@ async function init() {
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       var isLayoutTab = btn.dataset.tab === "lytDesign" || btn.dataset.tab === "lytCatalogue";
-      // Block tab switch while room amend mode is active (must Save or Discard first)
+      // Guard: room amend mode active — confirm discard before switching
       if (state.roomAmendMode && btn.dataset.tab !== "fpReview") {
-        alertModal("Save or discard room changes before switching tabs.");
+        confirmModal("Discard unsaved room changes?").then(function(ok) {
+          if (!ok) return;
+          state.roomAmendMode = null; state.roomRenderOffset = null;
+          exitRoomAmendUI();
+          // Re-trigger the tab click now that amend mode is cleared
+          btn.click();
+        });
         return;
       }
       function _doSwitch() {

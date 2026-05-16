@@ -325,6 +325,15 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     elements.push({ z: 6, s: doorParts[1] });
   });
 
+  // Door exclusion zone rectangles (D-208, step 4b visualization)
+  var _doorOpenings = (state.room_doors || []).map(function(d) {
+    return Object.assign({}, d, { has_door: true });
+  });
+  drawDoorExclusionRects(
+    elements, _doorOpenings, state.standard,
+    roomX, roomY, roomWPx, roomHPx, SCALE,
+  );
+
   // Auto-door transparent masks (debug re-analyze) — orange dashed rect.
   if (isReview && state.room_auto_door_masks && state.room_auto_door_masks.length) {
     state.room_auto_door_masks.forEach(function (m) {

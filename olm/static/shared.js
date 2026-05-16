@@ -650,3 +650,57 @@ function pxToSvg(clientX, clientY, domRect, viewBox) {
     y: viewBox.y + (clientY - domRect.top - offsetY) / renderH * viewBox.h
   };
 }
+
+/**
+ * Draw door exclusion zone rectangles for a pattern.
+ *
+ * For each room_opening with has_door=true (or room_doors entry),
+ * draws a dashed red rect representing the door_exclusion_depth_cm zone.
+ *
+ * @param {Array} elements  z-sorted element list to push into
+ * @param {Array} openings  combined openings (with has_door) or room_doors
+ * @param {string} standard pattern standard slot (e.g. "standard1")
+ * @param {number} roomX    room left in SVG units
+ * @param {number} roomY    room top in SVG units
+ * @param {number} roomWPx  room width in SVG units
+ * @param {number} roomHPx  room height in SVG units
+ * @param {number} scale    cm-to-SVG scale factor
+ */
+function drawDoorExclusionRects(
+  elements, openings, standard, roomX, roomY, roomWPx, roomHPx, scale
+) {
+  var spacing = SPACING_CONFIGS ? SPACING_CONFIGS[standard] : null;
+  if (!spacing) return;
+  var depth = spacing.door_exclusion_depth_cm;
+  if (!depth || depth <= 0) return;
+  var depthPx = depth * scale;
+
+  (openings || []).forEach(function(o) {
+    if (!o.has_door && !o._isDoor) return;
+    var face = o.face;
+    var off = (o.offset_cm || 0) * scale;
+    var w = (o.width_cm || 0) * scale;
+    var rx, ry, rw, rh;
+    if (face === "south") {
+      rx = roomX + off; ry = roomY + roomHPx - depthPx;
+      rw = w; rh = depthPx;
+    } else if (face === "north") {
+      rx = roomX + off; ry = roomY;
+      rw = w; rh = depthPx;
+    } else if (face === "east") {
+      rx = roomX + roomWPx - depthPx; ry = roomY + off;
+      rw = depthPx; rh = w;
+    } else if (face === "west") {
+      rx = roomX; ry = roomY + off;
+      rw = depthPx; rh = w;
+    } else {
+      return;
+    }
+    elements.push({ z: 5.8, s:
+      '<rect x="' + rx.toFixed(1) + '" y="' + ry.toFixed(1) +
+      '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) +
+      '" fill="none" stroke="red" stroke-width="1"' +
+      ' stroke-dasharray="4,3"/>'
+    });
+  });
+}

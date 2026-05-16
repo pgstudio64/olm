@@ -548,6 +548,12 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
     }
   }
 
+  // Door exclusion zone rectangles (D-208)
+  drawDoorExclusionRects(
+    elements, p.room_openings, p.standard,
+    offsetX, offsetY, roomW, roomH, scale,
+  );
+
   // Bottom caption: desks + scoring (z=10)
   var sc = computePatternScoring(p);
   var cartFs = Math.max(6, Math.min(9, roomW * 0.06));
