@@ -57,6 +57,11 @@ def set_dev_mode(enabled: bool) -> None:
     global _DEV_MODE
     _DEV_MODE = enabled
 
+
+def is_dev_mode() -> bool:
+    """Return True if the server is running in developer mode."""
+    return _DEV_MODE
+
 # ---------------------------------------------------------------------------
 # Paths — resolved once at import time
 # ---------------------------------------------------------------------------

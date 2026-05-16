@@ -758,14 +758,56 @@ def api_catalogue_export():
 
 @app.route("/api/catalogue/import", methods=["POST"])
 def api_catalogue_import():
-    """Import patterns into the catalogue (merge)."""
+    """Import patterns (standard-scoped replace)."""
     from olm.server.services.catalogue_service import import_catalogue
     try:
-        return jsonify(import_catalogue(request.json))
+        data = request.json or {}
+        data.pop("mode", None)  # legacy compat: ignore if present
+        return jsonify(import_catalogue(data))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.exception("catalogue import failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/catalogue/import-default", methods=["POST"])
+def api_catalogue_import_default():
+    """Import default catalogue (standard-scoped replace)."""
+    from olm.server.services.catalogue_service import (
+        import_default_catalogue,
+    )
+    try:
+        data = request.json or {}
+        target_standard = data.get("target_standard")
+        return jsonify(import_default_catalogue(
+            target_standard=target_standard,
+        ))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("catalogue import-default failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/catalogue/save-as-default", methods=["POST"])
+def api_catalogue_save_as_default():
+    """Save private catalogue as default (--dev only, per-standard)."""
+    from olm.server.services.catalogue_service import (
+        save_as_default_catalogue,
+    )
+    try:
+        data = request.get_json(silent=True) or {}
+        target_standard = data.get("target_standard")
+        return jsonify(save_as_default_catalogue(
+            target_standard=target_standard,
+        ))
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("catalogue save-as-default failed")
         return jsonify({"error": str(e)}), 500
 
 

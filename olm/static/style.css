@@ -131,6 +131,13 @@
   .btn-ok { border-color: #1e4020; color: var(--ok); background: #0e2010; }
   .btn-ok:hover { border-color: var(--ok); }
 
+  #eraseMenu .btn:hover,
+  #exportMenu .btn:hover,
+  #catExportMenu .btn:hover,
+  #catImportMenu .btn:hover,
+  #catExportMenuGrid .btn:hover,
+  #catImportMenuGrid .btn:hover { background: var(--border); }
+
   #deskCount {
     margin-left: auto;
     color: var(--accent);

@@ -151,7 +151,7 @@ def _compute_min_room(
     y_maxs: list[int] = []
 
     for bp in positions:
-        fc = _get_face_zones(bp.block_type, bp.orientation, block_defs)
+        fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
         eff_w = fc.west.total_cm if fc.west.total_cm > 0 else desk_to_wall
         eff_e = fc.east.total_cm if fc.east.total_cm > 0 else desk_to_wall
         eff_n = fc.north.total_cm if fc.north.total_cm > 0 else desk_to_wall
@@ -166,6 +166,16 @@ def _compute_min_room(
     bbox_x_max = max(x_maxs)
     bbox_y_min = min(y_mins)
     bbox_y_max = max(y_maxs)
+
+    # Step 4b: door exclusion zones — extend bbox so that blocks
+    # in the door's band have at least door_exclusion_depth_cm of
+    # clearance between them and the wall on the door's face.
+    door_warns = _apply_door_exclusion_to_bbox(
+        pattern, positions, block_defs, spacing,
+        bbox_x_min, bbox_x_max, bbox_y_min, bbox_y_max,
+    )
+    bbox_x_min, bbox_x_max, bbox_y_min, bbox_y_max = door_warns[0]
+    warnings.extend(door_warns[1])
 
     width = bbox_x_max - bbox_x_min
     depth = bbox_y_max - bbox_y_min
@@ -189,7 +199,7 @@ def _compute_min_room(
     return width, depth, warnings
 
 
-def _get_face_zones(
+def get_face_zones(
     block_type: str,
     orientation: int,
     block_defs: dict[str, dict],
@@ -288,6 +298,154 @@ def _check_preconditions(
                 f"min_block_separation "
                 f"{spacing.min_block_separation_cm} cm"
             )
+
+
+def _apply_door_exclusion_to_bbox(
+    pattern: dict,
+    positions: list[BlockPosition],
+    block_defs: dict[str, dict],
+    spacing: SpacingConfig,
+    bbox_x_min: int,
+    bbox_x_max: int,
+    bbox_y_min: int,
+    bbox_y_max: int,
+) -> tuple[tuple[int, int, int, int], list[str]]:
+    """Step 4b: extend bbox to enforce door exclusion zones.
+
+    For each door (room_openings with has_door=True), ensures that
+    blocks in the door's horizontal/vertical band have at least
+    door_exclusion_depth_cm of clearance from the wall on that face.
+
+    Uses the ARCHITECT's chirurgical approach: only extends the bbox
+    when a block's effective footprint (block + face zones) overlaps
+    the door's band on the relevant axis.
+
+    Args:
+        pattern: Catalogue pattern.
+        positions: Block positions with absolute coordinates.
+        block_defs: Block definitions for the target standard.
+        spacing: Spacing config for the target standard.
+        bbox_x_min..bbox_y_max: Current bounding box.
+
+    Returns:
+        ((new_x_min, new_x_max, new_y_min, new_y_max), warnings)
+    """
+    warnings: list[str] = []
+    desk_to_wall = spacing.desk_to_wall_cm
+    depth_cm = spacing.door_exclusion_depth_cm
+
+    for feat in pattern.get("room_openings", []):
+        if not feat.get("has_door", False):
+            continue
+
+        face = feat.get("face", "")
+        offset = feat.get("offset_cm", 0)
+        w = feat.get("width_cm", 0)
+
+        if face == "south":
+            # Door band is [offset, offset+w] on X axis.
+            # Find the maximum y_max of blocks whose effective
+            # X footprint overlaps the door band.
+            max_y_in_band = bbox_y_min  # no block => no extension
+            for i, bp in enumerate(positions):
+                fc = get_face_zones(
+                    bp.block_type, bp.orientation, block_defs,
+                )
+                eff_w = fc.west.total_cm if fc.west.total_cm > 0 \
+                    else desk_to_wall
+                eff_e = fc.east.total_cm if fc.east.total_cm > 0 \
+                    else desk_to_wall
+                bx_min = bp.x_cm - eff_w
+                bx_max = bp.x_cm + bp.eo_cm + eff_e
+                eff_s = fc.south.total_cm if fc.south.total_cm > 0 \
+                    else desk_to_wall
+                by_max = bp.y_cm + bp.ns_cm + eff_s
+                if max(bx_min, offset) < min(bx_max, offset + w):
+                    max_y_in_band = max(max_y_in_band, by_max)
+            required = max_y_in_band + depth_cm
+            if required > bbox_y_max:
+                warnings.append(
+                    f"Door on south: extended depth by "
+                    f"{required - bbox_y_max} cm for exclusion zone"
+                )
+                bbox_y_max = required
+
+        elif face == "north":
+            min_y_in_band = bbox_y_max
+            for i, bp in enumerate(positions):
+                fc = get_face_zones(
+                    bp.block_type, bp.orientation, block_defs,
+                )
+                eff_w = fc.west.total_cm if fc.west.total_cm > 0 \
+                    else desk_to_wall
+                eff_e = fc.east.total_cm if fc.east.total_cm > 0 \
+                    else desk_to_wall
+                bx_min = bp.x_cm - eff_w
+                bx_max = bp.x_cm + bp.eo_cm + eff_e
+                eff_n = fc.north.total_cm if fc.north.total_cm > 0 \
+                    else desk_to_wall
+                by_min = bp.y_cm - eff_n
+                if max(bx_min, offset) < min(bx_max, offset + w):
+                    min_y_in_band = min(min_y_in_band, by_min)
+            required = min_y_in_band - depth_cm
+            if required < bbox_y_min:
+                warnings.append(
+                    f"Door on north: extended depth by "
+                    f"{bbox_y_min - required} cm for exclusion zone"
+                )
+                bbox_y_min = required
+
+        elif face == "east":
+            max_x_in_band = bbox_x_min
+            for i, bp in enumerate(positions):
+                fc = get_face_zones(
+                    bp.block_type, bp.orientation, block_defs,
+                )
+                eff_n = fc.north.total_cm if fc.north.total_cm > 0 \
+                    else desk_to_wall
+                eff_s = fc.south.total_cm if fc.south.total_cm > 0 \
+                    else desk_to_wall
+                by_min = bp.y_cm - eff_n
+                by_max = bp.y_cm + bp.ns_cm + eff_s
+                eff_e = fc.east.total_cm if fc.east.total_cm > 0 \
+                    else desk_to_wall
+                bx_max = bp.x_cm + bp.eo_cm + eff_e
+                if max(by_min, offset) < min(by_max, offset + w):
+                    max_x_in_band = max(max_x_in_band, bx_max)
+            required = max_x_in_band + depth_cm
+            if required > bbox_x_max:
+                warnings.append(
+                    f"Door on east: extended width by "
+                    f"{required - bbox_x_max} cm for exclusion zone"
+                )
+                bbox_x_max = required
+
+        elif face == "west":
+            min_x_in_band = bbox_x_max
+            for i, bp in enumerate(positions):
+                fc = get_face_zones(
+                    bp.block_type, bp.orientation, block_defs,
+                )
+                eff_n = fc.north.total_cm if fc.north.total_cm > 0 \
+                    else desk_to_wall
+                eff_s = fc.south.total_cm if fc.south.total_cm > 0 \
+                    else desk_to_wall
+                by_min = bp.y_cm - eff_n
+                by_max = bp.y_cm + bp.ns_cm + eff_s
+                eff_w = fc.west.total_cm if fc.west.total_cm > 0 \
+                    else desk_to_wall
+                bx_min = bp.x_cm - eff_w
+                if max(by_min, offset) < min(by_max, offset + w):
+                    min_x_in_band = min(min_x_in_band, bx_min)
+            required = min_x_in_band - depth_cm
+            if required < bbox_x_min:
+                warnings.append(
+                    f"Door on west: extended width by "
+                    f"{bbox_x_min - required} cm for exclusion zone"
+                )
+                bbox_x_min = required
+
+    return (bbox_x_min, bbox_x_max, bbox_y_min, bbox_y_max), warnings
 
 
 def _rects_overlap(

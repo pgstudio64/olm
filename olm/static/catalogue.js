@@ -3,6 +3,34 @@
 
 let catalogueData = [];
 
+// IDs of the 3 synchronized Standard selectors (Editor, Card, Grid)
+var _CAT_STD_IDS = [
+  "catFilterStandard",        // Card (historical ID, keeps retrocompat)
+  "catFilterStandardEditor",
+  "catFilterStandardGrid",
+];
+
+/**
+ * Read the current catalogue standard (any of the 3 selectors).
+ */
+window.getCatStandard = function() {
+  for (var i = 0; i < _CAT_STD_IDS.length; i++) {
+    var el = document.getElementById(_CAT_STD_IDS[i]);
+    if (el && el.value) return el.value;
+  }
+  return "";
+};
+
+/**
+ * Write the same value to all 3 Standard selectors.
+ */
+window.setCatStandard = function(val) {
+  _CAT_STD_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = val;
+  });
+};
+
 // --- Event delegation (P1.4) ---
 // Single click handler on #catalogueGrid dispatches card-click and card-delete.
 // Single click handler on #matrixSvg dispatches matrix-pattern clicks.
@@ -64,8 +92,21 @@ async function loadCatalogue() {
     if (!resp.ok) throw new Error(await resp.text());
     var data = await resp.json();
     catalogueData = data.patterns || [];
+    // First-launch banners (Card + Grid): show when empty + default available
+    ["catDefaultBanner", "catDefaultBannerGrid"].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = data.default_available ? "block" : "none";
+    });
+    // Save-as-default buttons (Card + Grid): visible only in --dev mode
+    ["btnCatSaveAsDefault", "btnCatSaveAsDefaultGrid"].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el && typeof APP_CONFIG !== "undefined") {
+        el.style.display = APP_CONFIG.dev_mode ? "block" : "none";
+      }
+    });
     try {
       renderCatalogue();
+      renderMatrixView();
     } catch (renderErr) {
       console.error("renderCatalogue error:", renderErr);
       document.getElementById("catalogueGrid").innerHTML =
@@ -91,7 +132,10 @@ function renderCatalogue() {
     return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
   });
 
-  document.getElementById("catCount").textContent = filtered.length + " pattern(s)";
+  ["catCount", "catCountGrid"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = filtered.length + " pattern(s)";
+  });
 
   if (filtered.length === 0) {
     grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:24px;">No patterns.</div>';
@@ -157,7 +201,7 @@ let matrixMeta = { widths: [], depths: [], colXs: [], rowYs: [], colWidths: [], 
 
 
 function getFilteredPatterns() {
-  var stdFilter = document.getElementById("catFilterStandard").value;
+  var stdFilter = getCatStandard();
   var minW = parseInt(document.getElementById("catFilterMinW").value) || 0;
   var maxW = parseInt(document.getElementById("catFilterMaxW").value) || Infinity;
   var minD = parseInt(document.getElementById("catFilterMinD").value) || 0;
@@ -586,7 +630,10 @@ function updateMatrixRulers() {
 function renderMatrixView() {
   var filtered = getFilteredPatterns();
   var svg = document.getElementById("matrixSvg");
-  document.getElementById("catCount").textContent = filtered.length + " pattern(s)";
+  ["catCount", "catCountGrid"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = filtered.length + " pattern(s)";
+  });
 
   if (filtered.length === 0) {
     svg.innerHTML = '<text x="50" y="40" fill="#6e6a62" font-size="12" font-family="monospace">No patterns.</text>';

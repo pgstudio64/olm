@@ -1,0 +1,298 @@
+"""Pattern normalization — recalibrate spacings to a target standard.
+
+Normalizes all internal spacings (gap_cm between blocks in a row,
+row_gaps_cm between rows) to the exact minimum required by the target
+standard, then delegates to fit_room_to_pattern for room dimension
+computation.
+
+Philosophy: symmetric normalization (B) — gaps are expanded if too tight
+and compressed if too loose, converging to the standard's exact minimum.
+"""
+from __future__ import annotations
+
+import copy
+import logging
+from dataclasses import dataclass, field
+
+from olm.core.pattern_fit import (
+    FitResult,
+    PatternStructurallyInvalid,
+    fit_room_to_pattern,
+    get_face_zones,
+)
+from olm.core.spacing_config import SpacingConfig, build_block_defs
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class NormalizeResult:
+    """Result of a normalize operation on a single pattern.
+
+    Attributes:
+        name: Pattern name.
+        gaps_changed: Number of intra-row gaps modified.
+        row_gaps_changed: Number of inter-row gaps modified.
+        fit: FitResult from fit_room_to_pattern (room dimensions).
+        old_standard: Original standard of the pattern before normalization.
+        new_standard: Target standard applied after normalization.
+        warnings: Accumulated warnings from normalization + fit.
+    """
+
+    name: str
+    gaps_changed: int
+    row_gaps_changed: int
+    fit: FitResult
+    old_standard: str
+    new_standard: str
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def direction(self) -> str:
+        """Summary direction: 'expanded', 'compressed', or 'noop'."""
+        if self.gaps_changed == 0 and self.row_gaps_changed == 0:
+            if self.fit.direction == "noop":
+                return "noop"
+        if self.fit.direction == "expand":
+            return "expanded"
+        if self.fit.direction == "shrink":
+            return "compressed"
+        if self.gaps_changed > 0 or self.row_gaps_changed > 0:
+            return "expanded"
+        return "noop"
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def normalize_pattern(
+    pattern: dict,
+    target_spacing: SpacingConfig,
+) -> NormalizeResult:
+    """Normalize a pattern's spacings to the target standard.
+
+    Mutates ``pattern`` in place:
+    - Adjusts ``gap_cm`` between consecutive blocks in each row.
+    - Adjusts ``row_gaps_cm`` between consecutive rows.
+    - Updates ``pattern["standard"]`` to the target standard.
+    - Delegates to ``fit_room_to_pattern`` for room dimension recompute.
+
+    Does NOT touch ``offset_ns_cm`` (intentional design choice, not spacing).
+
+    Args:
+        pattern: Catalogue pattern (JSON dict). Mutated in place.
+        target_spacing: Target spacing configuration.
+
+    Returns:
+        NormalizeResult with change counts and fit result.
+
+    Raises:
+        PatternStructurallyInvalid: If blocks overlap after normalization
+            (raised by fit_room_to_pattern).
+    """
+    old_standard = pattern.get("standard", "")
+    new_standard = target_spacing.name
+    warnings: list[str] = []
+
+    block_defs = build_block_defs(target_spacing)
+    rows = pattern.get("rows", [])
+
+    # Step 1a: normalize intra-row gaps
+    gaps_changed = _normalize_intra_row_gaps(rows, block_defs, warnings)
+
+    # Step 1b: normalize inter-row gaps
+    row_gaps_changed = _normalize_inter_row_gaps(
+        rows, pattern, block_defs, warnings,
+    )
+
+    # Update standard to target
+    pattern["standard"] = new_standard
+
+    # Step 2: fit room to pattern (recompute room dimensions)
+    fit_result = fit_room_to_pattern(pattern, target_spacing)
+    warnings.extend(fit_result.warnings)
+
+    return NormalizeResult(
+        name=pattern.get("name", "?"),
+        gaps_changed=gaps_changed,
+        row_gaps_changed=row_gaps_changed,
+        fit=fit_result,
+        old_standard=old_standard,
+        new_standard=new_standard,
+        warnings=warnings,
+    )
+
+
+def normalize_catalogue(
+    patterns: list[dict],
+    target_spacing: SpacingConfig,
+) -> list[NormalizeResult]:
+    """Normalize all patterns in a catalogue to the target standard.
+
+    Mutates each pattern in place.
+
+    Args:
+        patterns: List of catalogue patterns (JSON dicts).
+        target_spacing: Target spacing configuration.
+
+    Returns:
+        List of NormalizeResult, one per pattern.
+    """
+    results: list[NormalizeResult] = []
+    for pat in patterns:
+        try:
+            result = normalize_pattern(pat, target_spacing)
+            results.append(result)
+        except PatternStructurallyInvalid as e:
+            logger.warning(
+                "Pattern '%s' structurally invalid after normalization: %s",
+                pat.get("name", "?"), e,
+            )
+            results.append(NormalizeResult(
+                name=pat.get("name", "?"),
+                gaps_changed=0,
+                row_gaps_changed=0,
+                fit=FitResult(
+                    old_width=pat.get("room_width_cm", 0),
+                    old_depth=pat.get("room_depth_cm", 0),
+                    new_width=pat.get("room_width_cm", 0),
+                    new_depth=pat.get("room_depth_cm", 0),
+                    direction="noop",
+                ),
+                old_standard=pat.get("standard", ""),
+                new_standard=target_spacing.name,
+                warnings=[f"Structurally invalid: {e}"],
+            ))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Internals
+# ---------------------------------------------------------------------------
+
+
+def _normalize_intra_row_gaps(
+    rows: list[dict],
+    block_defs: dict[str, dict],
+    warnings: list[str],
+) -> int:
+    """Normalize gap_cm between consecutive blocks within each row.
+
+    For each pair of consecutive blocks (i, i+1) in a row:
+      gap_cm[i+1] = east[i].total_cm + west[i+1].total_cm
+
+    The first block's gap_cm is left unchanged (it is an offset from
+    the origin, adjusted later by fit_room_to_pattern's translation).
+
+    Returns:
+        Number of gaps changed.
+    """
+    changed = 0
+    for ri, row in enumerate(rows):
+        blocks = row.get("blocks", [])
+        if len(blocks) < 2:
+            continue
+        for bi in range(len(blocks) - 1):
+            left = blocks[bi]
+            right = blocks[bi + 1]
+
+            left_fc = get_face_zones(
+                left.get("type", ""),
+                left.get("orientation", 0),
+                block_defs,
+            )
+            right_fc = get_face_zones(
+                right.get("type", ""),
+                right.get("orientation", 0),
+                block_defs,
+            )
+
+            required_gap = left_fc.east.total_cm + right_fc.west.total_cm
+            current_gap = right.get("gap_cm", 0)
+
+            if current_gap != required_gap:
+                old_gap = current_gap
+                right["gap_cm"] = required_gap
+                changed += 1
+                logger.debug(
+                    "Row %d, blocks %d-%d: gap_cm %d -> %d",
+                    ri, bi, bi + 1, old_gap, required_gap,
+                )
+
+    return changed
+
+
+def _normalize_inter_row_gaps(
+    rows: list[dict],
+    pattern: dict,
+    block_defs: dict[str, dict],
+    warnings: list[str],
+) -> int:
+    """Normalize row_gaps_cm between consecutive rows.
+
+    For each pair of consecutive rows (i, i+1):
+      row_gaps_cm[i] = max(south of each block in row i)
+                     + max(north of each block in row i+1)
+
+    Uses max per row (conservative approximation; a pair-by-pair X-projection
+    analysis could be tighter but is unnecessary at this stage).
+
+    Returns:
+        Number of row gaps changed.
+    """
+    row_gaps = pattern.get("row_gaps_cm", [])
+    changed = 0
+
+    for gi in range(len(row_gaps)):
+        if gi >= len(rows) - 1:
+            break
+
+        upper_row = rows[gi]
+        lower_row = rows[gi + 1]
+
+        max_south = _max_face_total(upper_row, "south", block_defs)
+        max_north = _max_face_total(lower_row, "north", block_defs)
+
+        required_gap = max_south + max_north
+        current_gap = row_gaps[gi]
+
+        if current_gap != required_gap:
+            old_gap = current_gap
+            row_gaps[gi] = required_gap
+            changed += 1
+            logger.debug(
+                "Row gap %d: %d -> %d (south=%d + north=%d)",
+                gi, old_gap, required_gap, max_south, max_north,
+            )
+
+    pattern["row_gaps_cm"] = row_gaps
+    return changed
+
+
+def _max_face_total(
+    row: dict,
+    face: str,
+    block_defs: dict[str, dict],
+) -> int:
+    """Return the maximum face zone total_cm for a given face across a row.
+
+    Args:
+        row: Row dict with 'blocks' list.
+        face: Face name ('north', 'south', 'east', 'west').
+        block_defs: Block definitions for the target standard.
+
+    Returns:
+        Maximum total_cm for the specified face. 0 if the row is empty.
+    """
+    max_total = 0
+    for block in row.get("blocks", []):
+        fc = get_face_zones(
+            block.get("type", ""),
+            block.get("orientation", 0),
+            block_defs,
+        )
+        face_zone = getattr(fc, face)
+        max_total = max(max_total, face_zone.total_cm)
+    return max_total

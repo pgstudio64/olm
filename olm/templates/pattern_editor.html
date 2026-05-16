@@ -36,7 +36,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:30px 8px 4px 0;white-space:nowrap;">
     <div id="hdrPlanSelector" style="position:relative;">
       <div id="hdrCurrentPlan" class="hdr-current-plan" title="Current floor plan — click to switch">
-        <span id="hdrCurrentPlanText" style="font-style:italic;font-weight:normal;color:var(--text-dim);">Select a floor plan...</span>
+        <span id="hdrCurrentPlanText" style="font-style:italic;font-weight:normal;color:var(--text-dim);font-size:var(--fs-sm);" data-placeholder="1">Select a floor plan...</span>
         <span style="color:var(--text-dim);font-size:9px;margin-left:6px;">&#9660;</span>
       </div>
       <div id="hdrPlanPopup" style="display:none;position:absolute;top:calc(100% + 2px);right:0;min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
@@ -57,7 +57,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div id="eraseWrapper" style="display:none;position:relative;flex-shrink:0;">
         <button class="btn" id="btnErasePlan" title="Reinit or clear data">Reinit ▾</button>
         <div id="eraseMenu" style="display:none;position:absolute;top:100%;left:0;z-index:100;min-width:140px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
-          <button class="btn" id="btnEraseAll" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Reinit plan</button>
+          <button class="btn" id="btnEraseAll" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Reinit floorplan</button>
           <button class="btn" id="btnEraseLayout" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Clear layout</button>
         </div>
       </div>
@@ -610,10 +610,12 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <!-- CENTER COLUMN -->
   <div class="col canvas-col">
     <div class="ol-header">
+      <label style="font-size:11px;color:var(--text-dim);">Standard:
+        <select id="catFilterStandardEditor" title="Standard" style="font-size:11px;padding:2px 4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
+          <!-- Populated dynamically by renderCatStandardFilter() -->
+        </select>
+      </label>
       <span id="autoName">-</span>
-      <div class="standard-row" id="headerStandard">
-        <!-- Populated dynamically by renderEditorStandardRadios() -->
-      </div>
       <button class="btn" id="btnNew">New</button>
       <button class="btn" id="btnLoad">Load</button>
       <button class="btn" id="btnSave">Save</button>
@@ -718,7 +720,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="catalogue-toolbar">
       <label style="margin-left:8px;">Standard:
         <select id="catFilterStandard">
-          <option value="">All</option>
           <!-- Populated dynamically by renderCatStandardFilter() -->
         </select>
       </label>
@@ -736,11 +737,26 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <input type="number" id="catFilterMaxD" value="" min="0" step="10" style="width:60px;">
       </label>
       <span style="flex:1;"></span>
-      <button class="view-toggle" id="btnCatExport" title="Export catalogue">&#x2B07; Export</button>
-      <button class="view-toggle" id="btnCatImport" title="Import patterns">&#x2B06; Import</button>
+      <div style="position:relative;display:inline-block;">
+        <button class="view-toggle" id="btnCatExport" title="Export catalogue">&#x2B06; Export &#x25BE;</button>
+        <div id="catExportMenu" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:220px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
+          <button class="btn" id="btnCatExportFile" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to file (.json)</button>
+          <button class="btn" id="btnCatSaveAsDefault" style="display:none;width:100%;text-align:left;border:none;padding:4px 12px;">Save as default catalogue</button>
+        </div>
+      </div>
+      <div style="position:relative;display:inline-block;">
+        <button class="view-toggle" id="btnCatImport" title="Import patterns">&#x2B07; Import &#x25BE;</button>
+        <div id="catImportMenu" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:240px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
+          <button class="btn" id="btnCatImportFile" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">From file...</button>
+          <button class="btn" id="btnCatImportDefault" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Default catalogue</button>
+        </div>
+      </div>
       <input type="file" id="catImportFile" accept=".json" style="display:none;">
       <button class="view-toggle" id="btnFitAll" title="Fit all patterns to their minimum room">Fit all to pattern</button>
       <span id="catCount" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
+    </div>
+    <div id="catDefaultBanner" style="display:none;padding:8px 16px;background:var(--surface2);border:1px solid var(--accent);margin:4px 0;font-size:12px;">
+      Catalogue is empty. <button class="btn" id="btnCatLoadDefault" style="font-size:11px;padding:2px 8px;">Import default catalogue</button>
     </div>
     <div class="catalogue-grid" id="catalogueGrid">
       <div style="color:var(--text-dim);font-size:12px;padding:24px;">Loading catalogue...</div>
@@ -752,11 +768,36 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <div class="sub-tab-content" id="subtabCatGrid">
   <div style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
     <div class="catalogue-toolbar">
+      <label style="margin-left:8px;">Standard:
+        <select id="catFilterStandardGrid">
+          <!-- Populated dynamically by renderCatStandardFilter() -->
+        </select>
+      </label>
+      <span style="flex:1;"></span>
+      <div style="position:relative;display:inline-block;">
+        <button class="view-toggle" id="btnCatExportGrid" title="Export catalogue">&#x2B06; Export &#x25BE;</button>
+        <div id="catExportMenuGrid" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:220px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
+          <button class="btn" id="btnCatExportFileGrid" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to file (.json)</button>
+          <button class="btn" id="btnCatSaveAsDefaultGrid" style="display:none;width:100%;text-align:left;border:none;padding:4px 12px;">Save as default catalogue</button>
+        </div>
+      </div>
+      <div style="position:relative;display:inline-block;">
+        <button class="view-toggle" id="btnCatImportGrid" title="Import patterns">&#x2B07; Import &#x25BE;</button>
+        <div id="catImportMenuGrid" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:240px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
+          <button class="btn" id="btnCatImportFileGrid" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">From file...</button>
+          <button class="btn" id="btnCatImportDefaultGrid" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Default catalogue</button>
+        </div>
+      </div>
+      <input type="file" id="catImportFileGrid" accept=".json" style="display:none;">
+      <button class="view-toggle" id="btnFitAllGrid" title="Fit all patterns to their minimum room">Fit all to pattern</button>
+      <span id="catCountGrid" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
       <span style="flex:1;"></span>
       <button class="view-toggle" id="btnMatrixZoomIn" title="Zoom in">+</button>
       <button class="view-toggle" id="btnMatrixZoomOut" title="Zoom out">&#8722;</button>
       <button class="view-toggle" id="btnMatrixZoomFit" title="Fit all">&#8861;</button>
-      <span style="flex:1;"></span>
+    </div>
+    <div id="catDefaultBannerGrid" style="display:none;padding:8px 16px;background:var(--surface2);border:1px solid var(--accent);margin:4px 0;font-size:12px;">
+      Catalogue is empty. <button class="btn" id="btnCatLoadDefaultGrid" style="font-size:11px;padding:2px 8px;">Import default catalogue</button>
     </div>
     <div class="matrix-container" id="matrixContainer">
       <div class="matrix-ruler-top" id="matrixRulerTop"></div>

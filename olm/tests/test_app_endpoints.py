@@ -1157,3 +1157,252 @@ class TestDoorSeedsRoundTrip:
             )
             for s in result_seeds:
                 assert "seed_x" in s and "seed_y" in s
+
+
+# ====================================================================
+# 10. Catalogue import with mode + import-default + save-as-default
+# ====================================================================
+
+
+def _make_importable_pattern(name: str, standard: str = "standard1") -> dict:
+    """Build a minimal valid pattern for import tests."""
+    return {
+        "name": name,
+        "rows": [{"blocks": [
+            {"type": "BLOCK_1", "orientation": 0, "gap_cm": 0},
+        ]}],
+        "row_gaps_cm": [],
+        "room_width_cm": 500,
+        "room_depth_cm": 500,
+        "standard": standard,
+        "room_windows": [],
+        "room_openings": [],
+        "room_exclusions": [],
+    }
+
+
+class TestCatalogueImportIsolation:
+    """Tests for standard-scoped import (D-208 isolation model)."""
+
+    def test_import_replaces_target_preserves_others(
+        self, client, monkeypatch,
+    ):
+        """Case a: import in std3 replaces std3, preserves std1."""
+        existing = [
+            _make_importable_pattern("STD1_PAT", "standard1"),
+            _make_importable_pattern("STD3_OLD1", "standard3"),
+            _make_importable_pattern("STD3_OLD2", "standard3"),
+        ]
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: existing,
+        )
+        saved = []
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.save_catalogue",
+            lambda pats: saved.extend(pats),
+        )
+        resp = client.post("/api/catalogue/import", json={
+            "patterns": [_make_importable_pattern("STD3_NEW", "standard3")],
+            "target_standard": "standard3",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["imported"] == 1
+        assert data["total"] == 2
+        # std1 pattern preserved, std3 replaced
+        stds = [p["standard"] for p in saved]
+        assert stds.count("standard1") == 1
+        assert stds.count("standard3") == 1
+
+    def test_import_into_empty_catalogue(self, client, monkeypatch):
+        """Case b: import into empty catalogue."""
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: [],
+        )
+        saved = []
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.save_catalogue",
+            lambda pats: saved.extend(pats),
+        )
+        resp = client.post("/api/catalogue/import", json={
+            "patterns": [
+                _make_importable_pattern("A", "standard2"),
+                _make_importable_pattern("B", "standard2"),
+            ],
+            "target_standard": "standard2",
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()["total"] == 2
+
+    def test_import_replaces_only_target_standard(
+        self, client, monkeypatch,
+    ):
+        """Case c: import in std1 replaces std1, preserves std3."""
+        existing = [
+            _make_importable_pattern("S1_A", "standard1"),
+            _make_importable_pattern("S1_B", "standard1"),
+            _make_importable_pattern("S3_A", "standard3"),
+        ]
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: existing,
+        )
+        saved = []
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.save_catalogue",
+            lambda pats: saved.extend(pats),
+        )
+        resp = client.post("/api/catalogue/import", json={
+            "patterns": [_make_importable_pattern("S1_NEW", "standard1")],
+            "target_standard": "standard1",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["total"] == 2  # 1 std1 (new) + 1 std3 (preserved)
+        stds = [p["standard"] for p in saved]
+        assert stds.count("standard1") == 1
+        assert stds.count("standard3") == 1
+
+    def test_import_recalibration_info(self, client, monkeypatch):
+        """Recalibration summary is included in the response."""
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: [],
+        )
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.save_catalogue",
+            lambda pats: None,
+        )
+        resp = client.post("/api/catalogue/import", json={
+            "patterns": [_make_importable_pattern("P1")],
+        })
+        data = resp.get_json()
+        recal = data["recalibration"]
+        for key in ("expanded", "compressed", "noop", "with_warnings"):
+            assert key in recal
+
+    def test_import_with_unknown_standard_400(self, client, monkeypatch):
+        """Import with unknown target_standard returns 400."""
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: [],
+        )
+        resp = client.post("/api/catalogue/import", json={
+            "patterns": [_make_importable_pattern("P1")],
+            "target_standard": "nonexistent_standard",
+        })
+        assert resp.status_code == 400
+        assert "unknown" in resp.get_json()["error"].lower()
+
+
+class TestCatalogueImportDefault:
+    """Tests for import-default endpoint (no standard filter on default)."""
+
+    def test_import_default_empty_returns_error(self, client, monkeypatch):
+        """Import default when default is empty -> 400."""
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_default_catalogue",
+            lambda: [],
+        )
+        resp = client.post("/api/catalogue/import-default", json={
+            "target_standard": "standard1",
+        })
+        assert resp.status_code == 400
+        assert "empty" in resp.get_json()["error"].lower()
+
+    def test_import_default_recalibrates_all(self, client, monkeypatch):
+        """Import default loads ALL patterns and recalibrates to target."""
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_default_catalogue",
+            lambda: [
+                _make_importable_pattern("DEF_S1", "standard1"),
+                _make_importable_pattern("DEF_S3", "standard3"),
+            ],
+        )
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: [_make_importable_pattern("PRIV_S1", "standard1")],
+        )
+        saved = []
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.save_catalogue",
+            lambda pats: saved.extend(pats),
+        )
+        resp = client.post("/api/catalogue/import-default", json={
+            "target_standard": "standard2",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # All 2 default patterns imported and recalibrated to std2
+        assert data["imported"] == 2
+        # std1 from private preserved, std2 from import replaces
+        std2_pats = [p for p in saved if p["standard"] == "standard2"]
+        assert len(std2_pats) == 2
+
+
+class TestCatalogueSaveAsDefault:
+    """Tests for save-as-default endpoint (per-standard)."""
+
+    def test_save_as_default_no_dev_mode(self, client, monkeypatch):
+        """save-as-default returns 403 when not in --dev mode."""
+        monkeypatch.setattr(
+            "olm.server.services.config_service._DEV_MODE", False,
+        )
+        resp = client.post("/api/catalogue/save-as-default")
+        assert resp.status_code == 403
+
+    def test_save_as_default_no_patterns_for_standard(
+        self, client, monkeypatch,
+    ):
+        """save-as-default with no patterns for target standard -> 400."""
+        monkeypatch.setattr(
+            "olm.server.services.config_service._DEV_MODE", True,
+        )
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: [_make_importable_pattern("P1", "standard1")],
+        )
+        resp = client.post("/api/catalogue/save-as-default", json={
+            "target_standard": "standard3",
+        })
+        assert resp.status_code == 400
+        assert "no patterns" in resp.get_json()["error"].lower()
+
+    def test_save_as_default_overwrites_entirely(
+        self, client, monkeypatch, tmp_path,
+    ):
+        """save-as-default overwrites entire default (no merge)."""
+        monkeypatch.setattr(
+            "olm.server.services.config_service._DEV_MODE", True,
+        )
+        pat_s1 = _make_importable_pattern("S1_PAT", "standard1")
+        pat_s3 = _make_importable_pattern("S3_PAT", "standard3")
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.load_catalogue",
+            lambda: [pat_s1, pat_s3],
+        )
+        default_path = str(tmp_path / "default_catalogue.json")
+        # Pre-populate default with a std3 pattern
+        with open(default_path, "w") as f:
+            json.dump({"patterns": [
+                _make_importable_pattern("DEF_S3", "standard3"),
+            ]}, f)
+        monkeypatch.setattr(
+            "olm.server.services.catalogue_service.DEFAULT_CATALOGUE_PATH",
+            default_path,
+        )
+        resp = client.post("/api/catalogue/save-as-default", json={
+            "target_standard": "standard1",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"]
+        assert data["count"] == 1
+        assert data["standard"] == "standard1"
+        # Default should contain ONLY std1 — std3 from old default is gone
+        with open(default_path) as f:
+            saved = json.load(f)
+        assert len(saved["patterns"]) == 1
+        assert saved["patterns"][0]["standard"] == "standard1"

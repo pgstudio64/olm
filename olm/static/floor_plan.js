@@ -552,8 +552,8 @@
 
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
-    var radios = document.querySelectorAll('input[name="standard"]');
-    radios.forEach(function(r) { r.checked = (r.value === state.standard); });
+    // Sync all Standard selectors to the pattern's standard
+    if (state.standard) setCatStandard(state.standard);
     document.getElementById("autoName").textContent = state.name;
 
     // Inject floor plan overlay if visible

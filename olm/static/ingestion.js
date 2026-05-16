@@ -588,6 +588,7 @@
       disp.style.fontStyle = id ? 'normal' : 'italic';
       disp.style.fontWeight = id ? '' : 'normal';
       disp.style.color = id ? '' : 'var(--text-dim)';
+      disp.style.fontSize = id ? '' : 'var(--fs-sm)';
     }
     _renderPlanList();
   }

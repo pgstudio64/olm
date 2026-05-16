@@ -19,10 +19,20 @@ logger = logging.getLogger(__name__)
 # Catalogue paths — resolved from config_service
 # ---------------------------------------------------------------------------
 
-from olm.server.services.config_service import PROJECT_ROOT, atomic_write_json
+from olm.server.services.config_service import (
+    BASE_DIR,
+    PROJECT_ROOT,
+    atomic_write_json,
+    is_dev_mode,
+)
 
 CATALOGUE_DIR = os.path.join(PROJECT_ROOT, "project", "catalogue")
 CATALOGUE_PATH = os.path.join(CATALOGUE_DIR, "patterns.json")
+
+# Default catalogue shipped with the public code (olm/data/).
+DEFAULT_CATALOGUE_PATH = os.path.join(
+    BASE_DIR, "data", "default_catalogue.json",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +55,19 @@ def save_catalogue(patterns: list[dict]) -> None:
     atomic_write_json(CATALOGUE_PATH, {"patterns": patterns})
 
 
+def load_default_catalogue() -> list[dict]:
+    """Load the default catalogue shipped with the public code.
+
+    Returns:
+        List of pattern dicts, or [] if file is absent or empty.
+    """
+    if not os.path.exists(DEFAULT_CATALOGUE_PATH):
+        return []
+    with open(DEFAULT_CATALOGUE_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get("patterns", [])
+
+
 def find_pattern(patterns: list[dict], name: str) -> int:
     """Return the pattern index by name, or -1 if not found."""
     for i, p in enumerate(patterns):
@@ -59,9 +82,20 @@ def find_pattern(patterns: list[dict], name: str) -> int:
 
 
 def list_patterns() -> dict:
-    """Return all patterns with count."""
+    """Return all patterns with count.
+
+    Includes ``default_available`` flag for the first-launch banner:
+    True when the private catalogue is empty and the default is not.
+    """
     patterns = load_catalogue()
-    return {"patterns": patterns, "count": len(patterns)}
+    default_available = (
+        len(patterns) == 0 and len(load_default_catalogue()) > 0
+    )
+    return {
+        "patterns": patterns,
+        "count": len(patterns),
+        "default_available": default_available,
+    }
 
 
 def create_pattern(data: dict) -> dict:
@@ -161,14 +195,75 @@ def export_catalogue() -> dict:
     return {"patterns": load_catalogue()}
 
 
-def import_catalogue(data: dict) -> dict:
-    """Import patterns into the catalogue (merge).
+def _get_target_spacing(target_standard: str | None = None):
+    """Return the SpacingConfig for the target standard.
 
     Args:
-        data: dict with ``patterns`` list.
+        target_standard: Explicit standard slot id. If ``None``,
+            falls back to the global active standard.
+
+    Raises:
+        ValueError: if the standard is unknown or not configured.
+    """
+    from olm.core.spacing_config import ALL_CONFIGS, get_default_name
+    slot = target_standard or get_default_name()
+    if not slot or slot not in ALL_CONFIGS:
+        raise ValueError(f"Unknown standard: {slot!r}")
+    return ALL_CONFIGS[slot]
+
+
+def _recalibrate(
+    patterns: list[dict],
+    target_standard: str | None = None,
+) -> dict:
+    """Recalibrate patterns to the target standard via normalization.
+
+    Mutates patterns in place.
+
+    Args:
+        patterns: List of pattern dicts.
+        target_standard: Explicit standard slot. Falls back to global.
 
     Returns:
-        ``{"ok": True, "imported": int, "total": int}``.
+        Summary dict with counts: expanded / compressed / noop / errors.
+    """
+    from olm.core.pattern_normalize import normalize_catalogue
+    spacing = _get_target_spacing(target_standard)
+    results = normalize_catalogue(patterns, spacing)
+
+    expanded = sum(1 for r in results if r.direction == "expanded")
+    compressed = sum(1 for r in results if r.direction == "compressed")
+    noop = sum(1 for r in results if r.direction == "noop")
+    with_warnings = sum(1 for r in results if r.warnings)
+
+    for r in results:
+        if r.warnings:
+            logger.info(
+                "Pattern '%s': %s",
+                r.name, "; ".join(r.warnings),
+            )
+
+    return {
+        "expanded": expanded,
+        "compressed": compressed,
+        "noop": noop,
+        "with_warnings": with_warnings,
+    }
+
+
+def import_catalogue(data: dict) -> dict:
+    """Import patterns into the catalogue with recalibration.
+
+    Standard-scoped replace: imported patterns (after recalibration to
+    the target standard) replace all existing patterns of that standard.
+    Patterns of other standards are preserved (strict isolation).
+
+    Args:
+        data: dict with ``patterns`` list and optional ``target_standard``.
+
+    Returns:
+        ``{"ok": True, "imported": int, "total": int,
+          "recalibration": {...}}``.
 
     Raises:
         ValueError: if validation fails.
@@ -186,18 +281,149 @@ def import_catalogue(data: dict) -> dict:
         if missing:
             raise ValueError(f"Pattern #{i}: missing fields: {missing}")
 
-    catalogue = load_catalogue()
-    n_before = len(catalogue)
-    for p in imported:
-        catalogue.append(p)
+    # Deep-copy to avoid mutating caller's data during recalibration
+    imported = copy.deepcopy(imported)
+
+    # Pop target_standard from data (injected by frontend)
+    target_standard = data.pop("target_standard", None)
+
+    # Recalibrate imported patterns to target standard
+    recal_summary = _recalibrate(imported, target_standard)
+
+    # Resolve the actual standard name after recalibration
+    target_actual = _get_target_spacing(target_standard).name
+
+    # Standard-scoped replace: keep patterns of other standards,
+    # replace all patterns of the target standard with imported ones.
+    existing = load_catalogue()
+    catalogue = [p for p in existing if p.get("standard") != target_actual]
+    catalogue.extend(imported)
 
     compact_catalogue_names(catalogue)
     save_catalogue(catalogue)
 
     return {
         "ok": True,
-        "imported": len(catalogue) - n_before,
+        "imported": len(imported),
         "total": len(catalogue),
+        "recalibration": recal_summary,
+    }
+
+
+def import_default_catalogue(
+    target_standard: str | None = None,
+) -> dict:
+    """Import the default catalogue into the private catalogue.
+
+    Loads ALL patterns from the default (no standard filter), then
+    delegates to ``import_catalogue`` which recalibrates everything
+    to the target standard (standard-scoped replace on the private side).
+
+    Args:
+        target_standard: Standard to recalibrate to. Falls back to global.
+
+    Returns:
+        Same structure as ``import_catalogue``.
+
+    Raises:
+        ValueError: if default catalogue is empty.
+    """
+    default_patterns = load_default_catalogue()
+    if not default_patterns:
+        raise ValueError("Default catalogue is empty")
+    data: dict = {"patterns": default_patterns}
+    if target_standard:
+        data["target_standard"] = target_standard
+    return import_catalogue(data)
+
+
+def save_as_default_catalogue(
+    target_standard: str | None = None,
+) -> dict:
+    """Save private catalogue patterns of the target standard as default.
+
+    Standard-scoped: only patterns matching the target standard are
+    written to the default file. Patterns of other standards already
+    present in the default are preserved (strict isolation).
+
+    Requires --dev mode. Runs structural validations before writing.
+
+    Args:
+        target_standard: Standard to save. Falls back to global.
+
+    Returns:
+        ``{"ok": True, "count": int, "standard": str}``.
+
+    Raises:
+        PermissionError: if not in --dev mode.
+        ValueError: if validation fails (with descriptive message).
+    """
+    if not is_dev_mode():
+        raise PermissionError(
+            "Save as default is only available in --dev mode"
+        )
+
+    target_actual = _get_target_spacing(target_standard).name
+    all_patterns = load_catalogue()
+    patterns = [
+        p for p in all_patterns if p.get("standard") == target_actual
+    ]
+    if not patterns:
+        raise ValueError(
+            f"No patterns for standard '{target_actual}' "
+            f"in the private catalogue"
+        )
+
+    # Structural checks via pattern_fit
+    from olm.core.catalogue_matcher import compute_block_positions
+    from olm.core.pattern_fit import _rects_overlap
+
+    for pat in patterns:
+        name = pat.get("name", "?")
+        positions = compute_block_positions(pat)
+        room_w = pat.get("room_width_cm", 0)
+        room_d = pat.get("room_depth_cm", 0)
+
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                a, b = positions[i], positions[j]
+                if _rects_overlap(
+                    a.x_cm, a.y_cm, a.eo_cm, a.ns_cm,
+                    b.x_cm, b.y_cm, b.eo_cm, b.ns_cm,
+                ):
+                    raise ValueError(
+                        f"Pattern '{name}': blocks "
+                        f"({a.row_idx},{a.block_idx}) and "
+                        f"({b.row_idx},{b.block_idx}) overlap"
+                    )
+
+        for bp in positions:
+            if (bp.x_cm < 0 or bp.y_cm < 0
+                    or bp.x_cm + bp.eo_cm > room_w
+                    or bp.y_cm + bp.ns_cm > room_d):
+                raise ValueError(
+                    f"Pattern '{name}': block "
+                    f"({bp.row_idx},{bp.block_idx}) "
+                    f"{bp.block_type} exceeds room bounds "
+                    f"({room_w}x{room_d} cm)"
+                )
+
+    # Overwrite the entire default (no merge — the default is mono-standard)
+    default_dir = os.path.dirname(DEFAULT_CATALOGUE_PATH)
+    os.makedirs(default_dir, exist_ok=True)
+    atomic_write_json(
+        DEFAULT_CATALOGUE_PATH,
+        {"patterns": copy.deepcopy(patterns)},
+    )
+
+    logger.info(
+        "Saved %d patterns (standard '%s') as default catalogue",
+        len(patterns), target_actual,
+    )
+    return {
+        "ok": True,
+        "count": len(patterns),
+        "standard": target_actual,
     }
 
 

@@ -274,3 +274,210 @@ class TestFitSoftWarnings:
 
         assert result.direction in ("shrink", "expand", "noop")
         assert any("max_island_size" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
+# Door exclusion zone tests (Anomaly 3, D-208)
+# ---------------------------------------------------------------------------
+
+
+def _door_opening(
+    face: str,
+    offset_cm: int = 0,
+    width_cm: int = 90,
+) -> dict:
+    """Build a door opening dict for test patterns."""
+    return {
+        "face": face,
+        "offset_cm": offset_cm,
+        "width_cm": width_cm,
+        "has_door": True,
+        "opens_inward": True,
+        "hinge_side": "left",
+    }
+
+
+class TestDoorExclusionSouth:
+    """Case 7: door on south face — room depth extended."""
+
+    def test_block_in_door_band_extends_depth(self):
+        """BLOCK_4_FACE at origin with door on south face.
+        Block occupies the band x=[0, 360].
+        Door at offset=0, width=90 overlaps the band.
+        Depth must accommodate block + face zones + exclusion."""
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("south", offset_cm=0, width_cm=90)],
+        )
+        sp = _spacing()
+        # Without door exclusion: depth = 400 (20 + 360 + 20)
+        # With door exclusion 180: the block's y_max (with eff_s=20)
+        # is at y=20+360+20=400. Door extends to 400+180=580.
+        # Snap: 580 -> 580 (already aligned).
+        result = fit_room_to_pattern(pat, sp)
+        assert result.new_depth >= 580
+        assert any("door" in w.lower() for w in result.warnings)
+
+
+class TestDoorExclusionNorth:
+    """Case 8: door on north face — room depth extended."""
+
+    def test_block_in_door_band_extends_north(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("north", offset_cm=0, width_cm=360)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Block with eff_n=20 has y_min at -20 (relative).
+        # Door extends to y_min - 180 = -200. bbox_y_min = -200.
+        # Total depth increases by 180.
+        assert result.new_depth >= 580
+
+
+class TestDoorExclusionEast:
+    """Case 9: door on east face — room width extended."""
+
+    def test_extends_width(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("east", offset_cm=0, width_cm=360)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Block east zone = 160, x_max = 0+160+160 = 320.
+        # Door on east: max_x_in_band = 320, required = 320+180 = 500.
+        # Total width = 500 - (-160) = 660 -> snap 660.
+        assert result.new_width >= 660
+
+
+class TestDoorExclusionWest:
+    """Case 10: door on west face — room width extended."""
+
+    def test_extends_width(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("west", offset_cm=0, width_cm=360)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Block west zone = 160, x_min = -160.
+        # Door on west: min_x_in_band = -160, required = -160-180 = -340.
+        # Total width = 320 - (-340) = 660 -> snap 660.
+        assert result.new_width >= 660
+
+
+class TestOpeningWithoutDoor:
+    """Case 11: opening without has_door — no exclusion zone."""
+
+    def test_no_extension(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[{
+                "face": "south", "offset_cm": 0, "width_cm": 90,
+                "has_door": False,
+            }],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Same as without any door: 480x400
+        assert result.new_width == 480
+        assert result.new_depth == 400
+
+
+class TestNoDoorRegression:
+    """Case 12: pattern without doors — original behavior preserved."""
+
+    def test_no_door_same_as_before(self):
+        pat = _pattern(room_w=800, room_d=600)
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        assert result.new_width == 480
+        assert result.new_depth == 400
+
+
+class TestDoorAtCorner:
+    """Case 13: door at offset=0 (corner) with block at x=0."""
+
+    def test_corner_door(self):
+        # BLOCK_1 at x=0: eo=80, west zone=100, east zone=20
+        # Door south at offset=0, width=90.
+        # Block effective x range: [-100, 100]. Overlaps [0, 90].
+        # Block y_max with eff_s=20: 0+180+20=200.
+        # Required: 200+180=380. Depth >= 380.
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("south", offset_cm=0, width_cm=90)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        assert result.new_depth >= 380
+
+
+class TestDoorFullWidth:
+    """Case 14: door covering the entire face width."""
+
+    def test_full_width_door(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("south", offset_cm=0, width_cm=800)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # All blocks are in the band. Same as case 7.
+        assert result.new_depth >= 580
+
+
+class TestMultipleDoorsOnSameFace:
+    """Case 15: two doors on the same face — most constraining wins."""
+
+    def test_two_doors_south(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800,
+            room_d=800,
+            openings=[
+                _door_opening("south", offset_cm=0, width_cm=90),
+                _door_opening("south", offset_cm=200, width_cm=90),
+            ],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Both doors overlap the block band [offset-100, offset+eo+160].
+        # Both require depth >= 580.
+        assert result.new_depth >= 580
+
+
+class TestDoorNoBlockInBand:
+    """Case 16: door on a face with no block in the door's band."""
+
+    def test_no_extension_when_no_block_in_band(self):
+        # BLOCK_1 at x=0 (effective x range [-100, 100]).
+        # Door south at offset=500, width=90 (band [500, 590]).
+        # No block overlaps this band => no extension.
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("south", offset_cm=500, width_cm=90)],
+        )
+        sp = _spacing()
+        # Without door exclusion: width=200, depth=220 (snap).
+        # Door at offset 500 forces width via feature_constraints (500+90=590).
+        # But no block in door band => no depth extension beyond 220.
+        result = fit_room_to_pattern(pat, sp)
+        assert result.new_depth == 220

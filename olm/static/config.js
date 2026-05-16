@@ -133,28 +133,10 @@ function renderSpacingSettings() {
   });
 }
 
-function renderEditorStandardRadios() {
-  var container = document.getElementById("headerStandard");
-  if (!container) return;
-  var stds = getStandards();
-  var html = "";
-  stds.forEach(function(s, i) {
-    var checked = i === 0 ? " checked" : "";
-    html += '<label><input type="radio" name="standard" value="' + s + '"' + checked + '> ' + getStdLabel(s) + '</label>';
-  });
-  container.innerHTML = html;
-  // Session-life: bound once at init, no dispose needed
-  container.querySelectorAll('input[name="standard"]').forEach(function(r) {
-    r.addEventListener("change", function() {
-      state.standard = this.value;
-      loadBlockDefs().then(function() { render(); updateAutoName(); });
-    });
-  });
-}
+// renderEditorStandardRadios() removed — standard now controlled
+// by catFilterStandard in the common toolbar (D-208).
 
 function renderCatStandardFilter() {
-  var sel = document.getElementById("catFilterStandard");
-  if (!sel) return;
   var current = getCurrentStandard();
   var html = '';
   getStandards().forEach(function(s) {
@@ -162,7 +144,11 @@ function renderCatStandardFilter() {
     html += '<option value="' + s + '"' + selected + '>' +
       getStdLabel(s) + '</option>';
   });
-  sel.innerHTML = html;
+  // Populate all 3 synchronized selectors
+  _CAT_STD_IDS.forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (sel) sel.innerHTML = html;
+  });
 }
 
 function renderFpStandardFilter() {

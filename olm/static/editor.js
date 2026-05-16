@@ -2036,8 +2036,8 @@ async function loadPattern(name) {
     state.corridor_face_abs = "";
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
-    var radios = document.querySelectorAll('input[name="standard"]');
-    radios.forEach(function(r) { r.checked = (r.value === state.standard); });
+    // Sync all Standard selectors to the pattern's standard
+    setCatStandard(state.standard);
     // Use the actual catalogue name (with auto-generated suffix)
     state.name = data.name || computeAutoName();
     state._savedName = state.name;
@@ -2068,8 +2068,8 @@ function loadPatternFromData(data) {
   state._savedName = data.name || null;
   document.getElementById("roomWidth").value = state.room_width_cm;
   document.getElementById("roomDepth").value = state.room_depth_cm;
-  var radios = document.querySelectorAll('input[name="standard"]');
-  radios.forEach(function(r) { r.checked = (r.value === state.standard); });
+  // Sync all Standard selectors to the pattern's standard
+  setCatStandard(state.standard);
   updateAutoName();
   updateRowList();
   render();
@@ -2144,11 +2144,11 @@ function enterAmendMode(room, candidate) {
     var el = document.getElementById(id);
     if (el) { el.disabled = true; el.style.opacity = "0.4"; }
   });
-  // Disable standard radios
-  document.querySelectorAll('#headerStandard input').forEach(function(r) {
-    r.disabled = true;
+  // Disable all standard selectors during amend
+  _CAT_STD_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.disabled = true; el.style.opacity = "0.4"; }
   });
-  document.getElementById("headerStandard").style.opacity = "0.4";
 
   // Replace Save label, show Cancel
   document.getElementById("btnSave").textContent = "Save amendment";
@@ -2165,10 +2165,10 @@ function exitAmendUI() {
     var el = document.getElementById(id);
     if (el) { el.disabled = false; el.style.opacity = ""; }
   });
-  document.querySelectorAll('#headerStandard input').forEach(function(r) {
-    r.disabled = false;
+  _CAT_STD_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.disabled = false; el.style.opacity = ""; }
   });
-  document.getElementById("headerStandard").style.opacity = "";
   document.getElementById("btnSave").textContent = "Save";
   document.getElementById("btnAmendCancel").style.display = "none";
   document.querySelector(".ol-header").classList.remove("edit-mode");
@@ -2423,7 +2423,7 @@ function resetState() {
   state.row_gaps_cm = [];
   state.room_width_cm = parseInt(document.getElementById("roomWidth").value) || 300;
   state.room_depth_cm = parseInt(document.getElementById("roomDepth").value) || 480;
-  state.standard = document.querySelector('input[name="standard"]:checked').value;
+  state.standard = getCatStandard() || getStandards()[0] || "";
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
   // D-122 P4 : openings séparé de doors dans le state.
   state.room_openings = [];

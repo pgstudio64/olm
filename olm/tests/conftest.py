@@ -139,4 +139,9 @@ def monkeypatch_catalogue(monkeypatch):
         "olm.server.services.matching_service.load_catalogue",
         lambda: fake_catalogue,
     )
+    # Prevent writes to the real catalogue file on disk
+    monkeypatch.setattr(
+        "olm.server.services.catalogue_service.save_catalogue",
+        lambda pats: None,
+    )
     return fake_catalogue
