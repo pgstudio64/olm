@@ -481,3 +481,97 @@ class TestDoorNoBlockInBand:
         # But no block in door band => no depth extension beyond 220.
         result = fit_room_to_pattern(pat, sp)
         assert result.new_depth == 220
+
+
+class TestDoorBandFrameMismatch:
+    """Case 17: block with gap_cm>0 — door band must be converted to OLD frame.
+
+    Regression test for the Kardham bug: BLOCK_1 at gap_cm=220 in a 300x300
+    room with a south door at offset=0 width=90.  Without the OLD-frame
+    conversion the door band [0,90] misses the block at x=220 and no
+    exclusion zone is applied — the room shrinks so the chair zone
+    overlaps the door arc.
+    """
+
+    def test_depth_extended_with_gap(self):
+        # BLOCK_1: eo=80, ns=180. west zone=100, east zone=20 (d2w).
+        # At gap_cm=220: x_cm=220. bx=[120, 320]. bbox_x_min=120.
+        # eff_n=20, eff_s=20 => by_max=0+180+20=200.
+        # Door south offset=0 width=90:
+        #   Converted to OLD: [120, 210]. Overlaps [120, 320].
+        #   required = 200 + 180 = 380. bbox_y_min = -20.
+        #   depth = 380-(-20) = 400. width = 320-120 = 200.
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=300,
+            room_d=300,
+            openings=[_door_opening("south", offset_cm=0, width_cm=90)],
+        )
+        pat["rows"][0]["blocks"][0]["gap_cm"] = 220
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # With correct conversion: depth >= 370 (400 after snap).
+        assert result.new_depth >= 370, (
+            f"Expected depth >= 370 but got {result.new_depth}"
+        )
+        assert result.new_width >= 180, (
+            f"Expected width >= 180 but got {result.new_width}"
+        )
+        assert any("door" in w.lower() for w in result.warnings)
+
+
+class TestDoorBandOutOfRange:
+    """Case 18: door band between two blocks — no block overlaps the band.
+
+    Two BLOCK_1 in one row separated by gap_cm=400.  Door south at
+    offset=200 width=90 falls between the two blocks' effective
+    footprints.  No extension expected (guard against false positives
+    after OLD-frame conversion).
+    """
+
+    def test_no_extension_between_blocks(self):
+        # Block 1 at x=0: bx=[-100, 100].
+        # Block 2 at x=480 (0+80+400): bx=[380, 580].
+        # bbox_x_min=-100.
+        # Door OLD band: [-100+200, -100+290] = [100, 190].
+        # Block 1: max(-100,100)=100 < min(100,190)=100 => FALSE.
+        # Block 2: max(380,100)=380 < min(580,190)=190 => FALSE.
+        # No extension.
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=800,
+            room_d=800,
+            extra_blocks=[{"type": "BLOCK_1", "gap_cm": 400}],
+            openings=[_door_opening("south", offset_cm=200, width_cm=90)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Base depth for BLOCK_1: 20 + 180 + 20 = 220.
+        assert result.new_depth == 220, (
+            f"Expected depth 220 (no extension) but got "
+            f"{result.new_depth}"
+        )
+
+
+class TestDoorMinFace:
+    """Case 19: door wider than computed face — face forced to door width.
+
+    BLOCK_1 alone gives width=200 (100+80+20).  A south door of
+    width=250 must force the room width to at least 250.
+    """
+
+    def test_face_forced_to_door_width(self):
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=800,
+            room_d=800,
+            openings=[_door_opening("south", offset_cm=0, width_cm=250)],
+        )
+        sp = _spacing()
+        result = fit_room_to_pattern(pat, sp)
+        # Without B2 fix: width stays at 200 and the door is clipped.
+        # With B2 fix: width forced to at least 250 (snap -> 250).
+        assert result.new_width >= 250, (
+            f"Expected width >= 250 but got {result.new_width}"
+        )
+        assert any("door" in w.lower() for w in result.warnings)

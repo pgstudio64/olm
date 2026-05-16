@@ -316,9 +316,20 @@ def _apply_door_exclusion_to_bbox(
     blocks in the door's horizontal/vertical band have at least
     door_exclusion_depth_cm of clearance from the wall on that face.
 
-    Uses the ARCHITECT's chirurgical approach: only extends the bbox
-    when a block's effective footprint (block + face zones) overlaps
-    the door's band on the relevant axis.
+    Only extends the bbox when a block's effective footprint (block +
+    face zones) overlaps the door's band on the relevant axis.
+
+    Door offsets are stored in NEW-frame coordinates (relative to the
+    future room walls).  Block positions are in OLD-frame (absolute
+    pattern coordinates).  The door band is converted to OLD-frame
+    before the overlap test:
+    - south/north: door_x_old = bbox_x_min + offset
+    - east/west:   door_y_old = bbox_y_min + offset
+
+    Limitation: when doors on perpendicular faces both extend the
+    bbox, the iterative update of bbox_x_min / bbox_y_min can cause
+    a conservative over-extension (room slightly larger than the
+    strict minimum) but never an under-extension.
 
     Args:
         pattern: Catalogue pattern.
@@ -343,9 +354,8 @@ def _apply_door_exclusion_to_bbox(
         w = feat.get("width_cm", 0)
 
         if face == "south":
-            # Door band is [offset, offset+w] on X axis.
-            # Find the maximum y_max of blocks whose effective
-            # X footprint overlaps the door band.
+            door_x_old_min = bbox_x_min + offset
+            door_x_old_max = bbox_x_min + offset + w
             max_y_in_band = bbox_y_min  # no block => no extension
             for i, bp in enumerate(positions):
                 fc = get_face_zones(
@@ -360,7 +370,9 @@ def _apply_door_exclusion_to_bbox(
                 eff_s = fc.south.total_cm if fc.south.total_cm > 0 \
                     else desk_to_wall
                 by_max = bp.y_cm + bp.ns_cm + eff_s
-                if max(bx_min, offset) < min(bx_max, offset + w):
+                if max(bx_min, door_x_old_min) < min(
+                    bx_max, door_x_old_max,
+                ):
                     max_y_in_band = max(max_y_in_band, by_max)
             required = max_y_in_band + depth_cm
             if required > bbox_y_max:
@@ -371,6 +383,8 @@ def _apply_door_exclusion_to_bbox(
                 bbox_y_max = required
 
         elif face == "north":
+            door_x_old_min = bbox_x_min + offset
+            door_x_old_max = bbox_x_min + offset + w
             min_y_in_band = bbox_y_max
             for i, bp in enumerate(positions):
                 fc = get_face_zones(
@@ -385,7 +399,9 @@ def _apply_door_exclusion_to_bbox(
                 eff_n = fc.north.total_cm if fc.north.total_cm > 0 \
                     else desk_to_wall
                 by_min = bp.y_cm - eff_n
-                if max(bx_min, offset) < min(bx_max, offset + w):
+                if max(bx_min, door_x_old_min) < min(
+                    bx_max, door_x_old_max,
+                ):
                     min_y_in_band = min(min_y_in_band, by_min)
             required = min_y_in_band - depth_cm
             if required < bbox_y_min:
@@ -396,6 +412,8 @@ def _apply_door_exclusion_to_bbox(
                 bbox_y_min = required
 
         elif face == "east":
+            door_y_old_min = bbox_y_min + offset
+            door_y_old_max = bbox_y_min + offset + w
             max_x_in_band = bbox_x_min
             for i, bp in enumerate(positions):
                 fc = get_face_zones(
@@ -410,7 +428,9 @@ def _apply_door_exclusion_to_bbox(
                 eff_e = fc.east.total_cm if fc.east.total_cm > 0 \
                     else desk_to_wall
                 bx_max = bp.x_cm + bp.eo_cm + eff_e
-                if max(by_min, offset) < min(by_max, offset + w):
+                if max(by_min, door_y_old_min) < min(
+                    by_max, door_y_old_max,
+                ):
                     max_x_in_band = max(max_x_in_band, bx_max)
             required = max_x_in_band + depth_cm
             if required > bbox_x_max:
@@ -421,6 +441,8 @@ def _apply_door_exclusion_to_bbox(
                 bbox_x_max = required
 
         elif face == "west":
+            door_y_old_min = bbox_y_min + offset
+            door_y_old_max = bbox_y_min + offset + w
             min_x_in_band = bbox_x_max
             for i, bp in enumerate(positions):
                 fc = get_face_zones(
@@ -435,7 +457,9 @@ def _apply_door_exclusion_to_bbox(
                 eff_w = fc.west.total_cm if fc.west.total_cm > 0 \
                     else desk_to_wall
                 bx_min = bp.x_cm - eff_w
-                if max(by_min, offset) < min(by_max, offset + w):
+                if max(by_min, door_y_old_min) < min(
+                    by_max, door_y_old_max,
+                ):
                     min_x_in_band = min(min_x_in_band, bx_min)
             required = min_x_in_band - depth_cm
             if required < bbox_x_min:
@@ -489,8 +513,23 @@ def _apply_feature_constraints(
             if face in ("east", "west") and offset == 0 and feat_w == room_d:
                 continue
 
-            # Skip doors — they will be repositioned in _revalidate_features
+            # Doors are repositionable — skip the offset+width check.
+            # But enforce a minimum: the face must be at least as wide
+            # as the door itself, otherwise _revalidate_features would
+            # clip the door below its semantic width.
             if feat.get("has_door", False):
+                if face in ("north", "south") and feat_w > width:
+                    warnings.append(
+                        f"Door on {face}: forced width from "
+                        f"{width} to {feat_w} cm"
+                    )
+                    width = feat_w
+                elif face in ("east", "west") and feat_w > depth:
+                    warnings.append(
+                        f"Door on {face}: forced depth from "
+                        f"{depth} to {feat_w} cm"
+                    )
+                    depth = feat_w
                 continue
 
             if face in ("north", "south"):
