@@ -44,16 +44,18 @@
     var _rvGhostRect = null;
 
     // Resolve active SVG canvas and DSL textarea based on amend context
+    function _isPatternEditorActive() {
+      // PE is active if roomAmendMode says "pattern" OR if the PE sub-tab is visible
+      if (state.roomAmendMode && state.roomAmendMode.context === "pattern") return true;
+      var editorSub = document.getElementById("subtabCatEditor");
+      return editorSub && editorSub.classList.contains("active");
+    }
     function _getActiveSvg() {
-      if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
-        return document.getElementById("canvas");
-      }
+      if (_isPatternEditorActive()) return document.getElementById("canvas");
       return document.getElementById("rvCanvas");
     }
     function _getActiveDslEl() {
-      if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
-        return document.getElementById("dslRoom");
-      }
+      if (_isPatternEditorActive()) return document.getElementById("dslRoom");
       return document.getElementById("rvRoomDsl");
     }
     function _renderActive() {
@@ -61,8 +63,7 @@
     }
     // Post-modification hook: sync PE-specific UI after visual edits
     function _syncPatternEditorUI() {
-      if (!state.roomAmendMode ||
-          state.roomAmendMode.context !== "pattern") return;
+      // Called after door edits — works in PE even without roomAmendMode
       // Update dimension inputs
       var wEl = document.getElementById("roomWidth");
       var dEl = document.getElementById("roomDepth");
@@ -1084,12 +1085,15 @@
           else if (!d.origin) d.origin = "auto";
         });
         _syncPatternEditorUI();
+        if (typeof markDirty === "function") markDirty();
       });
     }
 
     // Canvas mousedown: start drawing, drag, or resize (both canvases)
     function _onRoomCanvasMousedown(e) {
-      if (!state.roomAmendMode) return;
+      // PE canvas: allow door interactions without roomAmendMode
+      var isPeCanvas = peCvEl && (e.currentTarget === peCvEl);
+      if (!state.roomAmendMode && !isPeCanvas) return;
       if (e.button !== 0) return;
 
       var openingDelete = e.target.closest("[data-opening-delete]");
@@ -1395,7 +1399,8 @@
 
     // Canvas click: deselect on empty area (both canvases)
     function _onRoomCanvasClick(e) {
-      if (!state.roomAmendMode) return;
+      var isPeCanvas2 = peCvEl && (e.currentTarget === peCvEl);
+      if (!state.roomAmendMode && !isPeCanvas2) return;
       if (rvTool.mode === "placing" || rvTool.mode === "drawing") return;
       var exclTarget = e.target.closest("[data-excl]");
       var openingTarget = e.target.closest("[data-opening-handle]") ||
@@ -1419,9 +1424,9 @@
     if (rvCvEl) rvCvEl.addEventListener("click", _onRoomCanvasClick);
     if (peCvEl) peCvEl.addEventListener("click", _onRoomCanvasClick);
 
-    // Delete key → remove selected opening.
+    // Delete key → remove selected opening (works in PE without roomAmendMode).
     document.addEventListener("keydown", function (e) {
-      if (!state.roomAmendMode) return;
+      if (!state.roomAmendMode && !state.selectedOpening) return;
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       if (document.activeElement &&
           (document.activeElement.tagName === "INPUT" ||

@@ -117,6 +117,7 @@
     letter-spacing: 0.03em;
   }
   .btn:hover { border-color: var(--accent); }
+  .btn.active { border-color: var(--accent); color: var(--accent); }
   .btn-ok { border-color: #1e4020; color: var(--ok); background: #0e2010; }
   .btn-ok:hover { border-color: var(--ok); }
 

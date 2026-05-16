@@ -83,7 +83,7 @@ def fit_room_to_pattern(
     pattern["room_depth_cm"] = new_d
 
     # Step 8: re-validate features against the new room
-    feat_warnings = _revalidate_features(pattern, new_w, new_d)
+    feat_warnings = _revalidate_features(pattern, new_w, new_d, old_w, old_d)
     warnings.extend(feat_warnings)
 
     direction = _determine_direction(old_w, old_d, new_w, new_d)
@@ -466,29 +466,46 @@ def _apply_feature_constraints(
 ) -> tuple[int, int, list[str]]:
     """Step 5: ensure room faces can accommodate features.
 
+    Full-width features (offset=0, width=face_length) are treated as
+    extensible: they shrink/expand with the room and do not block fit.
+
     Returns:
         (adjusted_width, adjusted_depth, warnings)
     """
     warnings: list[str] = []
+    room_w = pattern.get("room_width_cm", 0)
+    room_d = pattern.get("room_depth_cm", 0)
 
     for feature_key in ("room_windows", "room_openings"):
         for feat in pattern.get(feature_key, []):
             face = feat.get("face", "")
-            extent = feat.get("offset_cm", 0) + feat.get("width_cm", 0)
+            offset = feat.get("offset_cm", 0)
+            feat_w = feat.get("width_cm", 0)
+            extent = offset + feat_w
+
+            # Skip full-width features — they adapt to the room
+            if face in ("north", "south") and offset == 0 and feat_w == room_w:
+                continue
+            if face in ("east", "west") and offset == 0 and feat_w == room_d:
+                continue
+
+            # Skip doors — they will be repositioned in _revalidate_features
+            if feat.get("has_door", False):
+                continue
 
             if face in ("north", "south"):
                 if extent > width:
                     warnings.append(
-                        f"Feature on {face} (offset={feat.get('offset_cm')}"
-                        f" + width={feat.get('width_cm')}) forced room "
+                        f"Feature on {face} (offset={offset}"
+                        f" + width={feat_w}) forced room "
                         f"width from {width} to {extent} cm"
                     )
                     width = extent
             elif face in ("east", "west"):
                 if extent > depth:
                     warnings.append(
-                        f"Feature on {face} (offset={feat.get('offset_cm')}"
-                        f" + width={feat.get('width_cm')}) forced room "
+                        f"Feature on {face} (offset={offset}"
+                        f" + width={feat_w}) forced room "
                         f"depth from {depth} to {extent} cm"
                     )
                     depth = extent
@@ -500,6 +517,8 @@ def _revalidate_features(
     pattern: dict,
     room_width: int,
     room_depth: int,
+    old_room_w: int = 0,
+    old_room_d: int = 0,
 ) -> list[str]:
     """Step 8: clip or drop features that no longer fit.
 
@@ -514,30 +533,59 @@ def _revalidate_features(
         to_drop: list[int] = []
         for idx, feat in enumerate(pattern.get(feature_key, [])):
             face = feat.get("face", "")
+            old_face_len = (
+                old_room_w if face in ("north", "south") else old_room_d
+            )
             face_len = (
                 room_width if face in ("north", "south") else room_depth
             )
             offset = feat.get("offset_cm", 0)
             w = feat.get("width_cm", 0)
 
+            # Full-width features adapt silently to the new room size
+            if offset == 0 and w == old_face_len:
+                feat["width_cm"] = face_len
+                continue
+
             if offset + w <= face_len:
                 continue
 
-            max_w = face_len - offset
             is_door = feat.get("has_door", False)
 
-            if max_w < 0:
-                to_drop.append(idx)
+            # Doors: reposition to fit within the new face length
+            if is_door and w <= face_len:
+                new_offset = face_len - w
                 warnings.append(
-                    f"{feature_key[5:]} on {face} at offset {offset}: "
-                    f"dropped (offset beyond face length {face_len} cm)"
+                    f"Door on {face}: repositioned from offset "
+                    f"{offset} to {new_offset} cm"
                 )
+                feat["offset_cm"] = new_offset
+                continue
+
+            max_w = face_len - offset
+
+            if max_w < 0:
+                if is_door:
+                    # Door wider than face — reposition at 0
+                    feat["offset_cm"] = 0
+                    feat["width_cm"] = min(w, face_len)
+                    warnings.append(
+                        f"Door on {face}: repositioned to offset 0, "
+                        f"width clipped to {feat['width_cm']} cm"
+                    )
+                else:
+                    to_drop.append(idx)
+                    warnings.append(
+                        f"{feature_key[5:]} on {face} at offset {offset}: "
+                        f"dropped (offset beyond face length {face_len} cm)"
+                    )
             elif is_door and max_w < MIN_DOOR_WIDTH_CM:
-                to_drop.append(idx)
+                # Reposition door to fit
+                new_offset = max(0, face_len - w)
+                feat["offset_cm"] = new_offset
                 warnings.append(
-                    f"Door on {face} at offset {offset}: "
-                    f"dropped (clipped width {max_w} cm < "
-                    f"minimum {MIN_DOOR_WIDTH_CM} cm)"
+                    f"Door on {face}: repositioned from offset "
+                    f"{offset} to {new_offset} cm"
                 )
             else:
                 warnings.append(

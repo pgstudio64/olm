@@ -427,9 +427,10 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview, 
     // Seed déjà dessiné plus haut (indépendamment de la présence de hits).
   }
 
-  // Opening/window handles — in Room amend mode (Floor Review or Pattern editor).
-  var _inAmend = (isReview || isPatternAmend) && state.roomAmendMode;
-  if (_inAmend) {
+  // Opening/window handles — in Room amend mode (Floor Review) or always for doors in PE.
+  var _inAmend = (isReview && state.roomAmendMode);
+  var _peShowDoorHandles = isPatternAmend;  // PE: always show door handles
+  if (_inAmend || _peShowDoorHandles) {
     // zf = SVG units per CSS pixel (computed in _renderImpl, exposed here).
     var hzf = window._currentZf || 1;
     var handleR = 6 * hzf;       // ~6 px constant
@@ -560,12 +561,16 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview, 
           ' style="pointer-events:none;">' + dslLabel + '</text>' });
       }
     }
-    (state.room_windows || []).forEach(function (w, i) {
-      _emitOpeningHandle("window", i, w.face, w.offset_cm, w.width_cm);
-    });
-    (state.room_openings || []).forEach(function (o, i) {
-      _emitOpeningHandle("opening", i, o.face, o.offset_cm, o.width_cm);
-    });
+    if (_inAmend) {
+      // Floor Review: all opening types interactive
+      (state.room_windows || []).forEach(function (w, i) {
+        _emitOpeningHandle("window", i, w.face, w.offset_cm, w.width_cm);
+      });
+      (state.room_openings || []).forEach(function (o, i) {
+        _emitOpeningHandle("opening", i, o.face, o.offset_cm, o.width_cm);
+      });
+    }
+    // Doors always interactive (Floor Review + Pattern Editor)
     (state.room_doors || []).forEach(function (d, i) {
       _emitOpeningHandle("door", i, d.face, d.offset_cm, d.width_cm);
     });
@@ -1124,8 +1129,7 @@ function _renderImpl(targetSvg) {
     dLabel + '</text>' });
 
   // Windows, doors, openings, exclusion zones
-  var _peAmend = state.roomAmendMode &&
-    state.roomAmendMode.context === "pattern" && !isReview && !isDesign;
+  var _peAmend = !isReview && !isDesign;
   renderRoomElements(
     elements, roomX, roomY, roomWPx, roomHPx, isReview, _peAmend);
 
@@ -2315,13 +2319,9 @@ function enterRoomAmendMode(room, context) {
       peDsl.style.color = "var(--text)";
       peDsl.style.cursor = "";
     }
-    // Show Save room / Discard, hide Adjust room
+    // Toggle Adjust room button to active state
     var peAdjust = document.getElementById("peBtnAdjustRoom");
-    if (peAdjust) peAdjust.style.display = "none";
-    var peSave = document.getElementById("peBtnSaveRoom");
-    if (peSave) peSave.style.display = "";
-    var peDiscard = document.getElementById("peBtnDiscardRoom");
-    if (peDiscard) peDiscard.style.display = "";
+    if (peAdjust) peAdjust.classList.add("active");
     // Apply DSL button visible in mode
     var peApply = document.getElementById("btnApplyRoomDSL");
     if (peApply) peApply.style.display = "";
@@ -2396,13 +2396,9 @@ function exitRoomAmendUI() {
       peDsl.style.color = "var(--text-dim)";
       peDsl.style.cursor = "default";
     }
-    // Show Adjust room, hide Save/Discard
+    // Restore Adjust room button to normal state
     var peAdjust = document.getElementById("peBtnAdjustRoom");
-    if (peAdjust) peAdjust.style.display = "";
-    var peSave = document.getElementById("peBtnSaveRoom");
-    if (peSave) peSave.style.display = "none";
-    var peDiscard = document.getElementById("peBtnDiscardRoom");
-    if (peDiscard) peDiscard.style.display = "none";
+    if (peAdjust) peAdjust.classList.remove("active");
     // Hide Apply DSL button
     var peApply = document.getElementById("btnApplyRoomDSL");
     if (peApply) peApply.style.display = "none";
@@ -2438,13 +2434,22 @@ function resetState() {
   clearDirty();
   state.rows = [];
   state.row_gaps_cm = [];
-  state.room_width_cm = parseInt(document.getElementById("roomWidth").value) || 300;
-  state.room_depth_cm = parseInt(document.getElementById("roomDepth").value) || 480;
+  var defW = APP_CONFIG.default_pattern_width_cm || 300;
+  var defD = APP_CONFIG.default_pattern_depth_cm || 480;
+  state.room_width_cm = defW;
+  state.room_depth_cm = defD;
+  document.getElementById("roomWidth").value = defW;
+  document.getElementById("roomDepth").value = defD;
   state.standard = getCatStandard() || getStandards()[0] || "";
-  state.room_windows = [{ face: "north", offset_cm: 0, width_cm: state.room_width_cm }];
+  state.room_windows = [{ face: "north", offset_cm: 0, width_cm: defW }];
   // D-122 P4 : openings séparé de doors dans le state.
   state.room_openings = [];
-  state.room_doors = [{ face: "south", offset_cm: 0, width_cm: APP_CONFIG.default_door_width_cm || 90, opens_inward: true, hinge_side: "left" }];
+  var doorW = APP_CONFIG.default_door_width_cm || 90;
+  var doorPos = APP_CONFIG.default_pattern_door_position || "left";
+  var doorOffset = 0;
+  if (doorPos === "center") doorOffset = Math.round((defW - doorW) / 2);
+  else if (doorPos === "right") doorOffset = defW - doorW;
+  state.room_doors = [{ face: "south", offset_cm: doorOffset, width_cm: doorW, opens_inward: true, hinge_side: "left" }];
   state.room_exclusions = [];
   state.selectedRow = 0;
   state.selectedBlock = -1;
@@ -2486,12 +2491,9 @@ function zoomIn(targetSvg) {
   const factor = ZOOM_IN_FACTOR;
   const newW = vb.w * factor;
   const newH = vb.h * factor;
-  // Room/Office views: minimum 5 m (500 cm) de largeur visible.
-  var isRoomView = targetSvg && (targetSvg.id === "rvCanvas" || targetSvg.id === "fpCanvas");
-  if (isRoomView) {
-    var minW = 500 * SCALE;  // 500 cm en unités SVG
-    if (newW < minW) return;
-  }
+  // Minimum 2 m (200 cm) de largeur visible — all views.
+  var minW = 200 * SCALE;
+  if (newW < minW) return;
   vb.x += (vb.w - newW) / 2;
   vb.y += (vb.h - newH) / 2;
   vb.w = newW;

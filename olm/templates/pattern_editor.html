@@ -235,6 +235,21 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <!-- CATALOGUE -->
   <div class="settings-tab-pane" id="stCatalogue">
     <div class="settings-section">
+      <div class="section-title">New pattern defaults</div>
+      <div class="settings-grid">
+        <label class="settings-label">Default width (cm)</label>
+        <input type="number" id="cfgDefPatternW" class="settings-input" style="width:70px;" min="100" step="10">
+        <label class="settings-label">Default depth (cm)</label>
+        <input type="number" id="cfgDefPatternD" class="settings-input" style="width:70px;" min="100" step="10">
+        <label class="settings-label">Default door position</label>
+        <select id="cfgDefPatternDoor" class="settings-input" style="width:100px;">
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-title">Spacing standards</div>
       <div class="hint-text">Edit spacing values per standard. Changes are saved immediately.</div>
       <div id="spacingSettingsGrid" style="display:grid;grid-template-columns:200px repeat(3,120px);gap:2px 8px;font-size:11px;font-family:var(--font-mono);"></div>
@@ -578,14 +593,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
 
         <div class="section-title">Room definition</div>
-        <div style="display:flex;gap:4px;margin-bottom:4px;">
-          <button class="btn" id="peBtnAdjustRoom" style="flex:1;">Adjust room</button>
-          <button class="btn" id="peBtnSaveRoom" style="flex:1;display:none;">Save room</button>
-          <button class="btn btn-cancel" id="peBtnDiscardRoom" style="flex:1;display:none;">Discard</button>
-        </div>
-        <textarea id="dslRoom" rows="8" spellcheck="false" readonly style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;cursor:default;"
+        <textarea id="dslRoom" rows="8" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;"
           placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
-        <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;display:none;">Apply</button>
+        <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;">Apply</button>
         <div style="margin-bottom:8px;">
           <span id="dslHelpToggle" class="help-link">Syntax help</span>
         </div>
@@ -619,45 +629,58 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div class="fp-resize-handle" id="peLeftResize"></div>
   <!-- CENTER COLUMN -->
   <div class="col canvas-col">
-    <div class="ol-header">
+    <!-- Bar 1: Pattern identity -->
+    <div class="fp-nav ol-header" style="display:flex;align-items:center;gap:10px;padding:var(--sp-sm) var(--sp-lg);flex-wrap:nowrap;">
+      <span id="autoName">-</span>
       <label style="font-size:11px;color:var(--text-dim);">Standard:
         <select id="catFilterStandardEditor" title="Standard" style="font-size:11px;padding:2px 4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
-          <!-- Populated dynamically by renderCatStandardFilter() -->
         </select>
       </label>
-      <span id="autoName">-</span>
+      <span style="flex:1;"></span>
       <button class="btn" id="btnNew">New</button>
       <button class="btn" id="btnDuplicate">Duplicate</button>
       <button class="btn" id="btnDelete">Delete</button>
-      <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions">Fit to pattern</button>
       <button class="btn" id="btnSave" style="display:none;">Save pattern</button>
       <button class="btn btn-cancel" id="btnAmendCancel" style="display:none;">Discard</button>
-      <span id="deskCount">0 desk(s)</span>
     </div>
+    <!-- Bar 2: Room + Zoom + Grid -->
     <div class="canvas-toolbar">
       <table class="nav-layout"><tr>
         <td class="nav-left"></td>
         <td class="nav-center">
-          <label><input type="checkbox" id="circToggle"> Circulation</label>
-          <label><input type="checkbox" id="edOverlayToggle"> Overlay</label>
-          <input type="range" id="edOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
-          <span id="edOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
           <label><input type="checkbox" id="gridToggle" checked> Grid</label>
-        </td>
-        <td class="nav-right">
           <button id="btnZoomOut" class="btn btn-toolbar" title="Zoom out">&#8722;</button>
           <button id="btnZoomFit" class="btn btn-toolbar" title="Fit all">&#8861;</button>
           <button id="btnZoomIn" class="btn btn-toolbar" title="Zoom in">+</button>
-          <span class="editor-only" id="editorOnlyToolbar">
-          <span style="color:var(--border);margin:0 4px;">|</span>
-          <button id="btnRotate" class="btn btn-toolbar" title="Rotate 90° CW (R)">&#x21BB; Rot</button>
-          <button id="btnOffsetN" class="btn btn-toolbar" title="North -10cm (&#8593;)">&#x25B2; N</button>
-          <button id="btnOffsetS" class="btn btn-toolbar" title="South +10cm (&#8595;)">&#x25BC; S</button>
-          <button id="btnOffsetW" class="btn btn-toolbar" title="West -10cm (&#8592;)">&#x25C0; W</button>
-          <button id="btnOffsetE" class="btn btn-toolbar" title="East +10cm (&#8594;)">&#x25B6; E</button>
+        </td>
+        <td class="nav-right">
+          <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions">Fit to pattern</button>
+          <button class="btn" id="peBtnAddDoor" title="Add a door to the room">Add door</button>
+        </td>
+      </tr></table>
+    </div>
+    <!-- Hidden overlay controls (referenced by JS, not shown in PE) -->
+    <div style="display:none;">
+      <input type="checkbox" id="edOverlayToggle">
+      <input type="range" id="edOverlayOpacity" min="5" max="80" value="25">
+      <span id="edOverlayOpacityVal">25%</span>
+    </div>
+    <!-- Bar 3: Layout tools -->
+    <div class="canvas-toolbar">
+      <table class="nav-layout"><tr>
+        <td class="nav-left">
+          <span id="deskCount">0 desk(s)</span>
+        </td>
+        <td class="nav-center">
+          <label><input type="checkbox" id="circToggle"> Circulation</label>
+          <span class="editor-only" id="editorOnlyToolbar" style="display:inline-grid;grid-template-columns:auto auto auto;gap:1px;vertical-align:middle;margin-left:12px;">
+          <span></span><button id="btnOffsetN" class="btn btn-toolbar" title="North -10cm (&#8593;)">&#x25B2;</button><span></span>
+          <button id="btnOffsetW" class="btn btn-toolbar" title="West -10cm (&#8592;)">&#x25C0;</button><button id="btnRotate" class="btn btn-toolbar" title="Rotate 90° CW (R)">&#x21BB;</button><button id="btnOffsetE" class="btn btn-toolbar" title="East +10cm (&#8594;)">&#x25B6;</button>
+          <span></span><button id="btnOffsetS" class="btn btn-toolbar" title="South +10cm (&#8595;)">&#x25BC;</button><span></span>
           <span id="canvasDims" style="display:none;"></span>
           </span>
         </td>
+        <td class="nav-right"></td>
       </tr></table>
     </div>
     <div class="canvas-wrap">
@@ -699,17 +722,16 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <tr><td>Gap EW (cm)</td><td id="selGap">-</td></tr>
           <tr><td>Offset NS (cm)</td><td id="selOffset">0</td></tr>
         </table>
-        <div style="margin-top:8px;">
-          <div class="section-title" style="margin-bottom:4px;">Wall stick</div>
-          <div class="standard-row" id="stickCheckboxes">
-            <label><input type="checkbox" id="stickN" value="N"> N</label>
-            <label><input type="checkbox" id="stickS" value="S"> S</label>
-            <label><input type="checkbox" id="stickE" value="E"> E</label>
-            <label><input type="checkbox" id="stickW" value="W"> W</label>
-          </div>
-        </div>
-        <div style="margin-top:10px; color:var(--text-dim); font-size:10px; line-height:1.6;">
-          <div class="section-title" style="margin-bottom:4px;">Keyboard shortcuts</div>
+
+        <div class="section-title">Wall stick</div>
+        <table id="stickCheckboxes" style="border-collapse:collapse;">
+          <tr><td></td><td></td><td style="text-align:center;padding:2px;"><input type="checkbox" id="stickN" value="N"></td><td>N</td><td></td></tr>
+          <tr><td>W</td><td style="padding:2px;"><input type="checkbox" id="stickW" value="W"></td><td></td><td style="padding:2px;"><input type="checkbox" id="stickE" value="E"></td><td>E</td></tr>
+          <tr><td></td><td></td><td style="text-align:center;padding:2px;"><input type="checkbox" id="stickS" value="S"></td><td>S</td><td></td></tr>
+        </table>
+
+        <div class="section-title">Keyboard shortcuts</div>
+        <div style="color:var(--text-dim); font-size:10px; line-height:1.6;">
           &larr; &rarr; : gap EW &plusmn;10cm (Shift = 50cm)<br>
           &uarr; &darr; : offset NS &plusmn;10cm (Shift = 50cm)<br>
           R : rotate 90° CW<br>

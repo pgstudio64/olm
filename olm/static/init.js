@@ -75,20 +75,25 @@ async function init() {
     _guardPatternRoomAmend(deletePattern);
   });
   document.getElementById("btnAmendCancel").addEventListener("click", function() {
-    var msg = state.roomAmendMode
-      ? "Discard unsaved room changes?"
-      : "Discard unsaved changes?";
+    var msg = "Discard unsaved changes?";
     confirmModal(msg).then(function(ok) {
       if (!ok) return;
       clearDirty();
       if (state.roomAmendMode) {
         var ctx = state.roomAmendMode.context || "floor";
-        state.roomAmendMode = null; state.roomRenderOffset = null;
-        exitRoomAmendUI();
-        if (ctx === "floor") {
-          document.querySelector('.tab-btn[data-tab="fpReview"]').click();
+        if (ctx === "pattern") {
+          // Restore room from original and reload pattern
+          state.roomAmendMode = null; state.roomRenderOffset = null;
+          exitRoomAmendUI();
+          if (state._savedName) {
+            loadPattern(state._savedName);
+          } else {
+            resetState();
+          }
         } else {
-          render(); updateDSL();
+          state.roomAmendMode = null; state.roomRenderOffset = null;
+          exitRoomAmendUI();
+          document.querySelector('.tab-btn[data-tab="fpReview"]').click();
         }
       } else if (state.amendMode) {
         state.amendMode = null;
@@ -104,63 +109,22 @@ async function init() {
       setStatus("Discarded.");
     });
   });
-  // Pattern editor room amend controls
-  document.getElementById("peBtnAdjustRoom").addEventListener("click", function() {
-    // Build a room object from current editor state
-    var room = {
-      name: state.name || state._savedName || "pattern",
-      width_cm: state.room_width_cm,
-      depth_cm: state.room_depth_cm,
-      windows: JSON.parse(JSON.stringify(state.room_windows || [])),
-      openings: JSON.parse(JSON.stringify(state.room_openings || [])),
-      doors: JSON.parse(JSON.stringify(state.room_doors || [])),
-      exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions || [])),
-      transparent_zones: JSON.parse(
-        JSON.stringify(state.room_transparents || [])),
-    };
-    enterRoomAmendMode(room, "pattern");
-    updateDSL();
-    setStatus("Adjusting room. Edit DSL then Apply, or Save room / Discard.");
-  });
-  document.getElementById("peBtnSaveRoom").addEventListener("click", function() {
-    if (!state.roomAmendMode || state.roomAmendMode.context !== "pattern") {
-      return;
-    }
-    // Apply room changes to editor state (already in state.room_*)
-    state.roomAmendMode = null;
-    state.roomRenderOffset = null;
-    exitRoomAmendUI();
+  // Pattern editor — Add door
+  document.getElementById("peBtnAddDoor").addEventListener("click", function() {
+    var doorW = APP_CONFIG.default_door_width_cm || 90;
+    var doorPos = APP_CONFIG.default_pattern_door_position || "left";
+    var offset = 0;
+    if (doorPos === "center") offset = Math.round((state.room_width_cm - doorW) / 2);
+    else if (doorPos === "right") offset = state.room_width_cm - doorW;
+    state.room_doors.push({
+      face: "south", offset_cm: offset, width_cm: doorW,
+      opens_inward: true, hinge_side: "left"
+    });
+    state.selectedOpening = { type: "door", index: state.room_doors.length - 1 };
+    markDirty();
     render();
     updateDSL();
-    setStatus("Room changes applied.");
-  });
-  document.getElementById("peBtnDiscardRoom").addEventListener("click", function() {
-    if (!state.roomAmendMode || state.roomAmendMode.context !== "pattern") {
-      return;
-    }
-    confirmModal("Discard unsaved room changes?").then(function(ok) {
-      if (!ok) return;
-      // Restore from original
-      var orig = state.roomAmendMode.originalRoom;
-      state.room_width_cm = orig.width_cm;
-      state.room_depth_cm = orig.depth_cm;
-      state.room_windows = JSON.parse(
-        JSON.stringify(orig.windows || []));
-      state.room_openings = JSON.parse(
-        JSON.stringify(orig.openings || []));
-      state.room_doors = JSON.parse(
-        JSON.stringify(orig.doors || []));
-      state.room_exclusions = JSON.parse(
-        JSON.stringify(orig.exclusion_zones || []));
-      document.getElementById("roomWidth").value = orig.width_cm;
-      document.getElementById("roomDepth").value = orig.depth_cm;
-      state.roomAmendMode = null;
-      state.roomRenderOffset = null;
-      exitRoomAmendUI();
-      render();
-      updateDSL();
-      setStatus("Room changes discarded.");
-    });
+    setStatus("Door added. Click to move, resize or delete.");
   });
 
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
@@ -727,12 +691,12 @@ async function init() {
 
   // --- Fit to pattern (editor) ---
   document.getElementById("btnFit").addEventListener("click", function() {
-    if (!state._savedName) {
-      setStatus("Save the pattern first before fitting.");
-      return;
-    }
-    var name = state._savedName;
-    fetch("/api/patterns/" + encodeURIComponent(name) + "/fit", { method: "POST" })
+    var payload = buildPatternPayload();
+    fetch("/api/patterns/fit-inline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
       .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
       .then(function(res) {
         if (!res.ok) {
@@ -741,15 +705,24 @@ async function init() {
         }
         var d = res.data;
         // Update editor state with new dims
+        var prevW = state.room_width_cm;
+        var prevD = state.room_depth_cm;
         state.room_width_cm = d.new_width;
         state.room_depth_cm = d.new_depth;
         document.getElementById("roomWidth").value = d.new_width;
         document.getElementById("roomDepth").value = d.new_depth;
+        // Adjust full-width windows to new dimensions
+        (state.room_windows || []).forEach(function(w) {
+          var wallLen = (w.face === "north" || w.face === "south") ? prevW : prevD;
+          var newLen = (w.face === "north" || w.face === "south") ? d.new_width : d.new_depth;
+          if (w.offset_cm === 0 && w.width_cm === wallLen) {
+            w.width_cm = newLen;
+          }
+        });
+        markDirty();
         render();
         zoomFit();
         updateDSL();
-        // Reload the full pattern to pick up any feature changes
-        loadPattern(name);
         // Toast
         if (d.direction === "shrink") {
           setStatus("Room shrunk: " + d.old_width + "x" + d.old_depth + " -> " + d.new_width + "x" + d.new_depth + " cm");
@@ -873,7 +846,8 @@ async function init() {
           e.target.closest("[data-excl-handle]") || e.target.closest("[data-room-handle]") ||
           e.target.closest("[data-transp]") || e.target.closest("[data-transp-handle]") ||
           e.target.closest("[data-opening-handle]") || e.target.closest("[data-opening-delete]") ||
-          e.target.closest("[data-opening-resize]")) return;
+          e.target.closest("[data-opening-resize]") || e.target.closest("[data-door-hinge]") ||
+          e.target.closest("[data-door-dir]")) return;
       if (svg.id === "rvCanvas" && window.rvTool &&
           (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing" ||
            window.rvTool.mode === "roomResizing" ||
@@ -902,6 +876,12 @@ async function init() {
       var vb = state.viewBox;
       var isZoomIn = e.deltaY < 0;
       var factor = isZoomIn ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
+      // Zoom-in limit: minimum 200 cm visible (all views)
+      if (isZoomIn) {
+        var minW = 200 * SCALE;
+        if (vb.w * factor < minW) return;
+      }
+      // Zoom-out limit: max ZOOM_OUT_MAX_FIT_RATIO × fitted view
       if (!isZoomIn && state._fitViewBox) {
         if (vb.w * factor > state._fitViewBox.w * ZOOM_OUT_MAX_FIT_RATIO) return;
       }
@@ -949,6 +929,12 @@ async function init() {
   });
 
   canvas.addEventListener("click", function(e) {
+    // Skip if clicking on door/opening interactive elements
+    if (e.target.closest("[data-opening-handle]") ||
+        e.target.closest("[data-opening-delete]") ||
+        e.target.closest("[data-opening-resize]") ||
+        e.target.closest("[data-door-hinge]") ||
+        e.target.closest("[data-door-dir]")) return;
     var exclTarget = e.target.closest("[data-excl]");
     if (exclTarget) {
       state.selectedExclusion = parseInt(exclTarget.dataset.excl);

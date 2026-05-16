@@ -881,6 +881,35 @@ def api_pattern_fit(name: str):
     })
 
 
+@app.route("/api/patterns/fit-inline", methods=["POST"])
+def api_pattern_fit_inline():
+    """Fit room to pattern using in-memory state (not saved to disk)."""
+    from olm.core.pattern_fit import (
+        PatternStructurallyInvalid,
+        fit_room_to_pattern,
+    )
+    from olm.core.spacing_config import ALL_CONFIGS
+    pat = request.get_json(force=True)
+    if not pat:
+        return jsonify({"error": "No pattern data"}), 400
+    std_slot = pat.get("standard", "")
+    spacing = ALL_CONFIGS.get(std_slot)
+    if spacing is None:
+        return jsonify({"error": f"Unknown standard: {std_slot}"}), 400
+    try:
+        result = fit_room_to_pattern(pat, spacing)
+    except PatternStructurallyInvalid as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({
+        "old_width": result.old_width,
+        "old_depth": result.old_depth,
+        "new_width": result.new_width,
+        "new_depth": result.new_depth,
+        "direction": result.direction,
+        "warnings": result.warnings,
+    })
+
+
 @app.route("/api/patterns/fit-all", methods=["POST"])
 def api_patterns_fit_all():
     """Fit all patterns in the catalogue."""

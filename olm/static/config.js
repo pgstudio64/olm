@@ -232,7 +232,15 @@ function renderGeneralSettings() {
   el = document.getElementById("cfgGrid");
   if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
 
+  // New pattern defaults (Settings > Catalogue)
+  el = document.getElementById("cfgDefPatternW");
+  if (el) { el.value = APP_CONFIG.default_pattern_width_cm || 300; el.onchange = function() { saveConfigField("default_pattern_width_cm", parseInt(this.value)||300); }; }
 
+  el = document.getElementById("cfgDefPatternD");
+  if (el) { el.value = APP_CONFIG.default_pattern_depth_cm || 480; el.onchange = function() { saveConfigField("default_pattern_depth_cm", parseInt(this.value)||480); }; }
+
+  el = document.getElementById("cfgDefPatternDoor");
+  if (el) { el.value = APP_CONFIG.default_pattern_door_position || "left"; el.onchange = function() { saveConfigField("default_pattern_door_position", this.value); }; }
 
   el = document.getElementById("cfgPlansDir");
   if (el) {
