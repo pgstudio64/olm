@@ -657,7 +657,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <button id="btnZoomIn" class="btn btn-toolbar" title="Zoom in">+</button>
         </td>
         <td class="nav-right">
-          <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions">Fit to pattern</button>
+          <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions (keeps current gaps)">Fit to pattern</button>
+          <button class="btn" id="btnCompact" title="Tighten gaps to the standard minimum, then fit room">Compact</button>
           <button class="btn" id="peBtnAddDoor" title="Add a door to the room">Add door</button>
         </td>
       </tr></table>
@@ -729,7 +730,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <tr><td>Offset NS (cm)</td><td id="selOffset">0</td></tr>
         </table>
 
-        <div class="section-title">Wall stick</div>
+        <div class="section-title">Locks</div>
         <table id="stickCheckboxes" style="border-collapse:collapse;">
           <tr><td></td><td></td><td style="text-align:center;padding:2px;"><input type="checkbox" id="stickN" value="N"></td><td>N</td><td></td></tr>
           <tr><td>W</td><td style="padding:2px;"><input type="checkbox" id="stickW" value="W"></td><td></td><td style="padding:2px;"><input type="checkbox" id="stickE" value="E"></td><td>E</td></tr>
@@ -886,7 +887,7 @@ P3: BLOCK_4_FACE; 230; BLOCK_4_FACE       <span style="color:var(--text-dim)">--
 P4: 50, BLOCK_2_FACE                      <span style="color:var(--text-dim)">-- 50cm gap before first block (wall offset)</span>
 P5: BLOCK_4_FACE@90                       <span style="color:var(--text-dim)">-- block rotated 90deg</span>
 P6: BLOCK_1 S20                           <span style="color:var(--text-dim)">-- block offset 20cm south (N20 = north)</span>
-P7: BLOCK_2_FACE @SN @SW                  <span style="color:var(--text-dim)">-- stick to north and west walls</span>
+P7: BLOCK_2_FACE @SN @SW                  <span style="color:var(--text-dim)">-- lock to north and west walls</span>
 
 <span style="color:var(--text-dim)">Blocks: BLOCK_1  BLOCK_2_FACE  BLOCK_2_SIDE  BLOCK_3_SIDE  BLOCK_4_FACE  BLOCK_6_FACE
         BLOCK_2_ORTHO_L  BLOCK_2_ORTHO_R

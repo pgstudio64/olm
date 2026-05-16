@@ -688,6 +688,139 @@ function totalDesks() {
 function totalBlocks() {
   return state.rows.reduce((s, r) => s + r.blocks.length, 0);
 }
+/**
+ * Compute absolute positions of all blocks in cm (no SCALE).
+ * Returns an array of { rowIdx, blockIdx, x_cm, y_cm, w_cm, h_cm }.
+ * Used by render (× SCALE) and by faceTouchesWall (strict cm equality).
+ */
+function computeBlockPositions() {
+  var positions = [];
+  var y_cm = 0;
+  for (var ri = 0; ri < state.rows.length; ri++) {
+    var row = state.rows[ri];
+    var x_cm = 0;
+    var rowMaxNS = 0;
+    for (var bi = 0; bi < row.blocks.length; bi++) {
+      var b = row.blocks[bi];
+      var g = getEffectiveGeom(b.type, b.orientation);
+      if (b.gap_cm) x_cm += b.gap_cm;
+      var bx = x_cm;
+      var by = y_cm + (b.offset_ns_cm || 0);
+      positions.push({
+        rowIdx: ri, blockIdx: bi,
+        x_cm: bx, y_cm: by, w_cm: g.eo, h_cm: g.ns
+      });
+      x_cm += g.eo;
+      if (g.ns > rowMaxNS) rowMaxNS = g.ns;
+    }
+    y_cm += rowMaxNS;
+    if (ri < state.rows.length - 1) {
+      y_cm += (state.row_gaps_cm[ri] || 0);
+    }
+  }
+  return positions;
+}
+
+/**
+ * Test whether a specific face of a block touches the room wall.
+ * Uses strict cm equality (no tolerance).
+ *
+ * @param {number} rowIdx  - row index
+ * @param {number} blockIdx - block index within the row
+ * @param {string} face    - "N", "S", "E", "W"
+ * @returns {boolean}
+ */
+function faceTouchesWall(rowIdx, blockIdx, face) {
+  var positions = computeBlockPositions();
+  for (var i = 0; i < positions.length; i++) {
+    var p = positions[i];
+    if (p.rowIdx === rowIdx && p.blockIdx === blockIdx) {
+      if (face === "N") return p.y_cm === 0;
+      if (face === "S") return p.y_cm + p.h_cm === state.room_depth_cm;
+      if (face === "W") return p.x_cm === 0;
+      if (face === "E") return p.x_cm + p.w_cm === state.room_width_cm;
+    }
+  }
+  return false;
+}
+
+/**
+ * Compute minimum room dimensions to fit current blocks without overlap.
+ * Width: max over rows of sum of block widths (gap=0 between every pair).
+ * Depth: sum of max NS extent per row (row_gaps=0).
+ */
+function computeMinRoomDims() {
+  var min_w = 0;
+  var min_d = 0;
+  for (var ri = 0; ri < state.rows.length; ri++) {
+    var row = state.rows[ri];
+    var rowW = 0;
+    var rowMaxNS = 0;
+    for (var bi = 0; bi < row.blocks.length; bi++) {
+      var g = getEffectiveGeom(row.blocks[bi].type, row.blocks[bi].orientation);
+      rowW += g.eo;
+      if (g.ns > rowMaxNS) rowMaxNS = g.ns;
+    }
+    if (rowW > min_w) min_w = rowW;
+    min_d += rowMaxNS;
+  }
+  return { min_w: min_w, min_d: min_d };
+}
+
+/**
+ * Check if a movement would detach any locked block from its wall.
+ * Simulates the move, recomputes positions, and checks all sticks.
+ *
+ * @param {string} axis - "NS" or "EO"
+ * @param {number} deltaCm - movement delta
+ * @returns {boolean} true if at least one stick would be violated
+ */
+function wouldDetachAnyStick(axis, deltaCm) {
+  if (deltaCm === 0) return false;
+  var ri = state.selectedRow;
+  var bi = state.selectedBlock;
+  var b = state.rows[ri] && state.rows[ri].blocks[bi];
+  if (!b) return false;
+
+  // Snapshot
+  var oldVal;
+  if (axis === "NS") {
+    oldVal = b.offset_ns_cm || 0;
+    b.offset_ns_cm = oldVal + deltaCm;
+  } else {
+    oldVal = b.gap_cm || 0;
+    b.gap_cm = Math.max(0, oldVal + deltaCm);
+  }
+
+  // Recompute and check all blocks in this row for broken sticks
+  var positions = computeBlockPositions();
+  var detached = false;
+  for (var i = 0; i < positions.length; i++) {
+    var p = positions[i];
+    if (p.rowIdx !== ri) continue;
+    var blk = state.rows[ri].blocks[p.blockIdx];
+    var sticks = blk.sticks || [];
+    for (var si = 0; si < sticks.length; si++) {
+      var face = sticks[si];
+      var touches = false;
+      if (face === "N") touches = p.y_cm === 0;
+      else if (face === "S") touches = p.y_cm + p.h_cm === state.room_depth_cm;
+      else if (face === "W") touches = p.x_cm === 0;
+      else if (face === "E") touches = p.x_cm + p.w_cm === state.room_width_cm;
+      if (!touches) { detached = true; break; }
+    }
+    if (detached) break;
+  }
+
+  // Restore
+  if (axis === "NS") {
+    b.offset_ns_cm = oldVal;
+  } else {
+    b.gap_cm = oldVal;
+  }
+  return detached;
+}
+
 function computePatternDims() {
   if (state.rows.length === 0) return { eoBlocks: 0, nsBlocks: 0, eoTotal: 0, nsTotal: 0 };
   normalizeRowGaps();
@@ -819,98 +952,131 @@ function _renderImpl(targetSvg) {
   }
 
   if (hasBlocks) {
-  // Blocks are positioned from the NW corner of the room (MARGIN),
-  // independent of zones — desks stay fixed regardless of standard.
-  const originX = MARGIN;
-  const originY = MARGIN;
+  // Block positions computed once in cm, then scaled for rendering.
+  const blockPos = computeBlockPositions();
 
-  let yRow = originY;
   let globalDeskIndex = 0;
 
-  // Positions for gap labels
+  // Pre-build rowBlockPos and rowYPos aligned with state.rows indices.
+  // Compute row start Y positions (cm) for all rows, including empty ones.
   const rowBlockPos = [];
   const rowYPos = [];
+  var y_cm_acc = 0;
+  for (var rri = 0; rri < state.rows.length; rri++) {
+    rowBlockPos.push([]);
+    var rowMaxNS_r = 0;
+    for (var bbi = 0; bbi < state.rows[rri].blocks.length; bbi++) {
+      var gb = getEffectiveGeom(state.rows[rri].blocks[bbi].type, state.rows[rri].blocks[bbi].orientation);
+      if (gb.ns > rowMaxNS_r) rowMaxNS_r = gb.ns;
+    }
+    rowYPos.push({ y: y_cm_acc * SCALE, h: rowMaxNS_r * SCALE });
+    y_cm_acc += rowMaxNS_r;
+    if (rri < state.rows.length - 1) y_cm_acc += (state.row_gaps_cm[rri] || 0);
+  }
 
-  for (let ri = 0; ri < state.rows.length; ri++) {
-    const row = state.rows[ri];
-    let xBlock = originX;
-    let rowMaxNS = 0;
-    const curRowBlocks = [];
+  for (let pi = 0; pi < blockPos.length; pi++) {
+    const pos = blockPos[pi];
+    const ri = pos.rowIdx;
+    const bi = pos.blockIdx;
+    const b = state.rows[ri].blocks[bi];
+    const g = getEffectiveGeom(b.type, b.orientation);
+    const f = g.faces;
 
-    for (let bi = 0; bi < row.blocks.length; bi++) {
-      const b = row.blocks[bi];
-      const g = getEffectiveGeom(b.type, b.orientation);
-      const f = g.faces;
-      const offsetNS = (b.offset_ns_cm || 0) * SCALE;
+    const bx = pos.x_cm * SCALE;
+    const by = pos.y_cm * SCALE;
+    const bw = pos.w_cm * SCALE;
+    const bh = pos.h_cm * SCALE;
+    rowBlockPos[ri].push({ x: bx, y: by, w: bw, h: bh, gap_cm: b.gap_cm || 0 });
 
-      if (b.gap_cm) xBlock += b.gap_cm * SCALE;
+    // Setback zone dimensions (always computed for the opaque background)
+    var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
+    var wNSup = isOrtho ? 0 : (((f.west && f.west.non_superposable_cm) || 0) * SCALE);
+    var eNSup = isOrtho ? 0 : (((f.east && f.east.non_superposable_cm) || 0) * SCALE);
+    var nNSup = isOrtho ? 0 : (((f.north && f.north.non_superposable_cm) || 0) * SCALE);
+    var sNSup = isOrtho ? 0 : (((f.south && f.south.non_superposable_cm) || 0) * SCALE);
+    var wCandPx = isOrtho ? 0 : (((f.west && f.west.candidate_cm) || 0) * SCALE);
+    var eCandPx = isOrtho ? 0 : (((f.east && f.east.candidate_cm) || 0) * SCALE);
+    var nCandPx = isOrtho ? 0 : (((f.north && f.north.candidate_cm) || 0) * SCALE);
+    var sCandPx = isOrtho ? 0 : (((f.south && f.south.candidate_cm) || 0) * SCALE);
 
-      const bx = xBlock;
-      const by = yRow + offsetNS;
-      const bw = g.eo * SCALE;
-      const bh = g.ns * SCALE;
-      curRowBlocks.push({ x: bx, y: by, w: bw, h: bh, gap_cm: b.gap_cm || 0 });
+    renderBlockZones(elements, bx, by, bw, bh, b.type, b.orientation, f, SCALE, 0.5);
 
-      // Setback zone dimensions (always computed for the opaque background)
-      var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
-      var wNSup = isOrtho ? 0 : (((f.west && f.west.non_superposable_cm) || 0) * SCALE);
-      var eNSup = isOrtho ? 0 : (((f.east && f.east.non_superposable_cm) || 0) * SCALE);
-      var nNSup = isOrtho ? 0 : (((f.north && f.north.non_superposable_cm) || 0) * SCALE);
-      var sNSup = isOrtho ? 0 : (((f.south && f.south.non_superposable_cm) || 0) * SCALE);
-      var wCandPx = isOrtho ? 0 : (((f.west && f.west.candidate_cm) || 0) * SCALE);
-      var eCandPx = isOrtho ? 0 : (((f.east && f.east.candidate_cm) || 0) * SCALE);
-      var nCandPx = isOrtho ? 0 : (((f.north && f.north.candidate_cm) || 0) * SCALE);
-      var sCandPx = isOrtho ? 0 : (((f.south && f.south.candidate_cm) || 0) * SCALE);
+    // Opaque background full footprint (masks the grid under block + zones)
+    var blockMinX = bx - wNSup - wCandPx;
+    if (blockMinX < minX) minX = blockMinX;
+    var wTotal = wNSup + wCandPx;
+    var eTotal = eNSup + eCandPx;
+    var nTotal = nNSup + nCandPx;
+    var sTotal = sNSup + sCandPx;
+    elements.push({ z: 0.5, s: '<rect x="' + (bx - wTotal) + '" y="' + (by - nTotal) +
+      '" width="' + (bw + wTotal + eTotal) + '" height="' + (bh + nTotal + sTotal) +
+      '" fill="' + COLOR_WALL_STROKE + '"/>' });
+    elements.push({ z: 3, s: '<rect x="' + bx + '" y="' + by +
+      '" width="' + bw + '" height="' + bh +
+      '" fill="none" stroke="' + COLOR_BLOCK_BORDER +
+      '" stroke-width="1" stroke-dasharray="4 3"/>' });
 
-      renderBlockZones(elements, bx, by, bw, bh, b.type, b.orientation, f, SCALE, 0.5);
+    // Workstations (via shared renderBlockDesks)
+    globalDeskIndex += renderBlockDesks(elements, bx, by, b.type, b.orientation, SCALE, globalDeskIndex);
 
-      // Opaque background full footprint (masks the grid under block + zones)
-      var blockMinX = bx - wNSup - wCandPx;
-      if (blockMinX < minX) minX = blockMinX;
-      var wTotal = wNSup + wCandPx;
-      var eTotal = eNSup + eCandPx;
-      var nTotal = nNSup + nCandPx;
-      var sTotal = sNSup + sCandPx;
-      // Opaque background: covers block + setback zones (even in circulation mode)
-      elements.push({ z: 0.5, s: '<rect x="' + (bx - wTotal) + '" y="' + (by - nTotal) +
-        '" width="' + (bw + wTotal + eTotal) + '" height="' + (bh + nTotal + sTotal) +
-        '" fill="' + COLOR_WALL_STROKE + '"/>' });
-      elements.push({ z: 3, s: '<rect x="' + bx + '" y="' + by +
+    // Highlight selected block
+    var isSelected = (state.selectedRow === ri && state.selectedBlock === bi);
+    if (isSelected) {
+      elements.push({ z: 8, s: '<rect x="' + bx + '" y="' + by +
         '" width="' + bw + '" height="' + bh +
-        '" fill="none" stroke="' + COLOR_BLOCK_BORDER +
-        '" stroke-width="1" stroke-dasharray="4 3"/>' });
-
-      // Workstations (via shared renderBlockDesks)
-      globalDeskIndex += renderBlockDesks(elements, bx, by, b.type, b.orientation, SCALE, globalDeskIndex);
-
-
-      // Highlight selected block
-      if (isSelected) {
-        elements.push({ z: 8, s: '<rect x="' + bx + '" y="' + by +
-          '" width="' + bw + '" height="' + bh +
-          '" fill="none" stroke="' + COLOR_GOOD + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
-      }
-
-      // Clickable zone
-      elements.push({ z: 9, s: '<rect x="' + bx + '" y="' + by +
-        '" width="' + bw + '" height="' + bh +
-        '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
-
-      xBlock += bw;
-      if (g.ns > rowMaxNS) rowMaxNS = g.ns;
+        '" fill="none" stroke="' + COLOR_GOOD + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
     }
 
-    const rowBottomY = yRow + rowMaxNS * SCALE;
-    if (rowBottomY > totalH) totalH = rowBottomY;
-    if (xBlock > totalW) totalW = xBlock;
+    // Clickable zone
+    elements.push({ z: 9, s: '<rect x="' + bx + '" y="' + by +
+      '" width="' + bw + '" height="' + bh +
+      '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
 
-    rowYPos.push({ y: yRow, h: rowMaxNS * SCALE });
-    rowBlockPos.push(curRowBlocks);
-
-    yRow += rowMaxNS * SCALE;
-    if (ri < state.rows.length - 1) {
-      yRow += state.row_gaps_cm[ri] * SCALE;
+    // Lock icons on faces that touch a wall
+    var lockSize = 24 * zf;  // ~24 CSS px constant
+    var lockInset = 7 * zf;  // offset towards block interior
+    var bSticks = b.sticks || [];
+    var lockFaces = [
+      { face: "N", touches: pos.y_cm === 0,
+        cx: bx + bw / 2, cy: by + lockInset },
+      { face: "S", touches: pos.y_cm + pos.h_cm === state.room_depth_cm,
+        cx: bx + bw / 2, cy: by + bh - lockInset },
+      { face: "W", touches: pos.x_cm === 0,
+        cx: bx + lockInset, cy: by + bh / 2 },
+      { face: "E", touches: pos.x_cm + pos.w_cm === state.room_width_cm,
+        cx: bx + bw - lockInset, cy: by + bh / 2 },
+    ];
+    for (var lf = 0; lf < lockFaces.length; lf++) {
+      var lk = lockFaces[lf];
+      if (!lk.touches) continue;
+      var locked = bSticks.indexOf(lk.face) >= 0;
+      var lx = lk.cx - lockSize / 2;
+      var ly = lk.cy - lockSize / 2;
+      var opacity = locked ? "1" : "0.75";
+      // Shackle path: closed when locked, open when unlocked
+      var shackle = locked
+        ? 'M3,6 V4 a4,4 0 0,1 8,0 V6'
+        : 'M3,6 V4 a4,4 0 0,1 8,0 V1';
+      var sc = lockSize / 14;  // native SVG is 14 wide
+      elements.push({ z: 10, s:
+        '<g transform="translate(' + lx + ',' + ly + ') scale(' + sc + ')" ' +
+        'opacity="' + opacity + '" style="cursor:pointer" ' +
+        'data-lock-face="' + lk.face + '" data-lock-row="' + ri +
+        '" data-lock-block="' + bi + '">' +
+        '<rect x="-5" y="-2" width="24" height="20" fill="transparent"/>' +
+        '<rect x="0" y="6" width="14" height="10" rx="2" fill="rgba(0,0,0,0.75)"/>' +
+        '<path d="' + shackle + '" fill="none" stroke="#ffd400" stroke-width="1.8" stroke-linecap="round"/>' +
+        '<circle cx="7" cy="11" r="1.6" fill="#ffd400"/>' +
+        '</g>' });
     }
+  }
+  // Compute totalW / totalH from block positions
+  for (let pi = 0; pi < blockPos.length; pi++) {
+    var bp = blockPos[pi];
+    var bRight = bp.x_cm * SCALE + bp.w_cm * SCALE;
+    if (bRight > totalW) totalW = bRight;
+    var bBottom = bp.y_cm * SCALE + bp.h_cm * SCALE;
+    if (bBottom > totalH) totalH = bBottom;
   }
 
   // Distance labels between neighboring blocks (z=7)
@@ -1517,10 +1683,20 @@ function updateInfo() {
       _safeText("selGap", b.gap_cm || 0);
       _safeText("selOffset", b.offset_ns_cm || 0);
       var bs = b.sticks || [];
-      var stN = document.getElementById("stickN"); if (stN) stN.checked = bs.indexOf("N") >= 0;
-      var stS = document.getElementById("stickS"); if (stS) stS.checked = bs.indexOf("S") >= 0;
-      var stE = document.getElementById("stickE"); if (stE) stE.checked = bs.indexOf("E") >= 0;
-      var stW = document.getElementById("stickW"); if (stW) stW.checked = bs.indexOf("W") >= 0;
+      var ri = state.selectedRow, bi = state.selectedBlock;
+      // Disabled only when face does NOT touch wall AND no stick set
+      // (so user can still uncheck an orphan stick).
+      function _stickDisabled(face) {
+        return !faceTouchesWall(ri, bi, face) && bs.indexOf(face) < 0;
+      }
+      var stN = document.getElementById("stickN");
+      if (stN) { stN.checked = bs.indexOf("N") >= 0; stN.disabled = _stickDisabled("N"); }
+      var stS = document.getElementById("stickS");
+      if (stS) { stS.checked = bs.indexOf("S") >= 0; stS.disabled = _stickDisabled("S"); }
+      var stE = document.getElementById("stickE");
+      if (stE) { stE.checked = bs.indexOf("E") >= 0; stE.disabled = _stickDisabled("E"); }
+      var stW = document.getElementById("stickW");
+      if (stW) { stW.checked = bs.indexOf("W") >= 0; stW.disabled = _stickDisabled("W"); }
     } else {
       if (selInfo) selInfo.style.display = "none";
       if (selHint) selHint.style.display = "block";
@@ -1682,14 +1858,11 @@ function addBlock(blockType) {
       usedCm += gb.eo + (row.blocks[i].gap_cm || 0);
     }
     var newBlockW = getEffectiveGeom(blockType, 0).eo;
+    // Always append to the selected row. Clamp the gap so the block fits
+    // if possible; if even gap=0 doesn't fit, the block overflows visually
+    // (user can manually move/resize). No auto-row-creation.
     var remaining = state.room_width_cm - usedCm - newBlockW;
-    if (remaining < 0) {
-      // Row full: create a new row
-      addRow(false);
-      row = state.rows[state.selectedRow];
-    } else {
-      block.gap_cm = Math.max(0, Math.min(defaultGap, remaining));
-    }
+    block.gap_cm = Math.max(0, Math.min(defaultGap, remaining));
   }
   row.blocks.push(block);
   state.selectedBlock = row.blocks.length - 1;
@@ -2588,36 +2761,32 @@ function getSelectedBlock() {
 function rotateSelectedBlock() {
   const b = getSelectedBlock();
   if (!b) { setStatus("No block selected for rotation"); return; }
+  if (b.sticks && b.sticks.length > 0) {
+    setStatus("Cannot rotate locked block \u2014 remove locks first");
+    return;
+  }
   markDirty();
   b.orientation = ((b.orientation || 0) + 90) % 360;
   setStatus("Rotation " + b.type + " -> " + b.orientation + "\u00B0");
   updateDSL(); updateRowList(); zoomFit();
 }
 
-function cleanSticks(b) {
-  // Remove sticks inconsistent with block position
-  if (!b) return;
-  if (!b.sticks || b.sticks.length === 0) return;
-  // Any movement removes all sticks
-  var cleaned = [];
-  b.sticks = cleaned.length > 0 ? cleaned : undefined;
-}
 
 function offsetSelectedBlock(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
+  if (wouldDetachAnyStick("NS", deltaCm)) return;
   markDirty();
   b.offset_ns_cm = (b.offset_ns_cm || 0) + deltaCm;
-  cleanSticks(b);
   render(); updateDSL();
 }
 
 function offsetSelectedBlockEO(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
+  if (wouldDetachAnyStick("EO", deltaCm)) return;
   markDirty();
   b.gap_cm = Math.max(0, (b.gap_cm || 0) + deltaCm);
-  cleanSticks(b);
   render(); updateDSL();
 }
 

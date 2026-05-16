@@ -914,6 +914,45 @@ def api_pattern_fit_inline():
     })
 
 
+@app.route("/api/patterns/compact-inline", methods=["POST"])
+def api_pattern_compact_inline():
+    """Compact pattern: normalize gaps to standard minimum + fit room.
+
+    In-memory variant (not saved to disk). Used by the editor's
+    Compact button. Unlike fit-inline (which preserves user gaps),
+    this collapses all gap_cm and row_gaps_cm down to the standard's
+    exact minimum, then resizes the room to match.
+    """
+    from olm.core.pattern_fit import PatternStructurallyInvalid
+    from olm.core.pattern_normalize import normalize_pattern
+    from olm.core.spacing_config import ALL_CONFIGS
+    pat = request.get_json(force=True)
+    if not pat:
+        return jsonify({"error": "No pattern data"}), 400
+    std_slot = pat.get("standard", "")
+    spacing = ALL_CONFIGS.get(std_slot)
+    if spacing is None:
+        return jsonify({"error": f"Unknown standard: {std_slot}"}), 400
+    try:
+        result = normalize_pattern(pat, spacing)
+    except PatternStructurallyInvalid as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({
+        "old_width": result.fit.old_width,
+        "old_depth": result.fit.old_depth,
+        "new_width": result.fit.new_width,
+        "new_depth": result.fit.new_depth,
+        "direction": result.fit.direction,
+        "gaps_changed": result.gaps_changed,
+        "row_gaps_changed": result.row_gaps_changed,
+        "warnings": result.warnings,
+        "rows": pat.get("rows", []),
+        "row_gaps_cm": pat.get("row_gaps_cm", []),
+        "room_openings": pat.get("room_openings", []),
+        "room_windows": pat.get("room_windows", []),
+    })
+
+
 @app.route("/api/patterns/fit-all", methods=["POST"])
 def api_patterns_fit_all():
     """Fit all patterns in the catalogue."""
@@ -984,6 +1023,25 @@ def api_pattern_duplicate(name: str):
         return jsonify({"error": str(e)}), 409
     except Exception as e:
         logger.exception("pattern duplicate failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pattern/adapt-room-size", methods=["POST"])
+def api_pattern_adapt_room_size():
+    """Adapt a pattern to new room dimensions (locks preserved)."""
+    from olm.core.catalogue_matcher import adapt_dimensions
+    data = request.json
+    if not data or "pattern" not in data:
+        return jsonify({"error": "Required field: pattern"}), 400
+    new_w = data.get("new_width_cm")
+    new_d = data.get("new_depth_cm")
+    if new_w is None or new_d is None:
+        return jsonify({"error": "Required fields: new_width_cm, new_depth_cm"}), 400
+    try:
+        result = adapt_dimensions(data["pattern"], int(new_w), int(new_d))
+        return jsonify({"pattern": result})
+    except Exception as e:
+        logger.exception("adapt-room-size failed")
         return jsonify({"error": str(e)}), 500
 
 

@@ -706,6 +706,37 @@ def adapt_to_room(
     return adapted
 
 
+def adapt_dimensions(
+    pattern: dict, target_width: int, target_depth: int,
+) -> dict:
+    """Adapt a pattern to new room dimensions (width and depth).
+
+    Reuses _adapt_row_eo and _adapt_ns to reposition blocks while
+    preserving lock (stick) anchoring.
+
+    Args:
+        pattern: JSON pattern with room_width_cm/room_depth_cm.
+        target_width: New room width in cm.
+        target_depth: New room depth in cm.
+
+    Returns:
+        New pattern dict with adjusted gaps and updated dimensions.
+    """
+    orig_w = pattern.get("room_width_cm", 0)
+    orig_d = pattern.get("room_depth_cm", 0)
+
+    adapted = copy.deepcopy(pattern)
+    adapted["rows"] = [
+        _adapt_row_eo(row, orig_w, target_width)
+        for row in pattern.get("rows", [])
+    ]
+    adapted["room_width_cm"] = target_width
+    adapted["room_depth_cm"] = target_depth
+
+    adapted = _adapt_ns(adapted, orig_d, target_depth)
+    return adapted
+
+
 # ---------------------------------------------------------------------------
 # Step 4 — Individual desk removal in forbidden zones
 # ---------------------------------------------------------------------------

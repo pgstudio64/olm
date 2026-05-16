@@ -247,7 +247,7 @@ async function init() {
     }
   });
 
-  // Wall stick checkboxes
+  // Lock checkboxes (Locks section — sidebar)
   ["stickN", "stickS", "stickE", "stickW"].forEach(function(id) {
     document.getElementById(id).addEventListener("change", function() {
       var b = getSelectedBlock();
@@ -258,10 +258,43 @@ async function init() {
       if (document.getElementById("stickE").checked) sticks.push("E");
       if (document.getElementById("stickW").checked) sticks.push("W");
       b.sticks = sticks.length > 0 ? sticks : undefined;
+      markDirty();
       updateDSL();
       render();
     });
   });
+
+  // Lock icons on canvas — event delegation (click on SVG lock toggles stick)
+  function _handleLockClick(e) {
+    var el = e.target.closest("[data-lock-face]");
+    if (!el) return;
+    // Prevent the block-selection handler from running on the same click.
+    e.stopImmediatePropagation();
+    var face = el.getAttribute("data-lock-face");
+    var ri = parseInt(el.getAttribute("data-lock-row"));
+    var bi = parseInt(el.getAttribute("data-lock-block"));
+    if (isNaN(ri) || isNaN(bi)) return;
+    var row = state.rows[ri];
+    if (!row || !row.blocks[bi]) return;
+    var b = row.blocks[bi];
+    var sticks = b.sticks ? b.sticks.slice() : [];
+    var idx = sticks.indexOf(face);
+    if (idx >= 0) {
+      sticks.splice(idx, 1);
+    } else {
+      sticks.push(face);
+    }
+    b.sticks = sticks.length > 0 ? sticks : undefined;
+    // Select this block so the sidebar checkboxes update
+    state.selectedRow = ri;
+    state.selectedBlock = bi;
+    markDirty();
+    updateDSL();
+    render();
+  }
+  document.getElementById("canvas").addEventListener("click", _handleLockClick);
+  var peCanvas = document.getElementById("peCanvas");
+  if (peCanvas) peCanvas.addEventListener("click", _handleLockClick);
   document.getElementById("gridToggle").addEventListener("change", function(e) {
     if (window.syncGridToggle) window.syncGridToggle(e.target.checked);
     else { state.gridVisible = e.target.checked; }
@@ -290,19 +323,59 @@ async function init() {
 
   // Room dimensions
   function onRoomChange() {
-    markDirty();
     var oldW = state.room_width_cm;
     var oldD = state.room_depth_cm;
-    state.room_width_cm = parseInt(document.getElementById("roomWidth").value) || 300;
-    state.room_depth_cm = parseInt(document.getElementById("roomDepth").value) || 480;
+    var newW = parseInt(document.getElementById("roomWidth").value) || 300;
+    var newD = parseInt(document.getElementById("roomDepth").value) || 480;
+    // Refuse shrink below the minimum required by current blocks.
+    var mins = computeMinRoomDims();
+    if (newW < mins.min_w || newD < mins.min_d) {
+      document.getElementById("roomWidth").value = oldW;
+      document.getElementById("roomDepth").value = oldD;
+      setStatus("Minimum room size: " + mins.min_w + " x " + mins.min_d + " cm");
+      return;
+    }
+    markDirty();
+    state.room_width_cm = newW;
+    state.room_depth_cm = newD;
     // Update full-width windows
     state.room_windows.forEach(function(w) {
       var wallOld = (w.face === "north" || w.face === "south") ? oldW : oldD;
-      var wallNew = (w.face === "north" || w.face === "south") ? state.room_width_cm : state.room_depth_cm;
+      var wallNew = (w.face === "north" || w.face === "south") ? newW : newD;
       if (w.offset_cm === 0 && w.width_cm === wallOld) {
         w.width_cm = wallNew;
       }
     });
+    // Adapt block positions via backend if dimensions changed and blocks exist
+    if ((newW !== oldW || newD !== oldD) && state.rows.length > 0 && totalBlocks() > 0) {
+      var payload = {
+        pattern: {
+          rows: state.rows,
+          row_gaps_cm: state.row_gaps_cm,
+          room_width_cm: oldW,
+          room_depth_cm: oldD,
+        },
+        new_width_cm: newW,
+        new_depth_cm: newD,
+      };
+      fetch("/api/pattern/adapt-room-size", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.pattern) {
+            state.rows = data.pattern.rows || state.rows;
+            state.row_gaps_cm = data.pattern.row_gaps_cm || state.row_gaps_cm;
+            updateDSL();
+            render();
+          }
+        })
+        .catch(function(err) {
+          console.error("adapt-room-size failed:", err);
+        });
+    }
     updateAutoName();
     zoomFit();
   }
@@ -745,6 +818,55 @@ async function init() {
         }
       })
       .catch(function(err) { setStatus("Fit error: " + err.message); });
+  });
+
+  // --- Compact (editor) : normalize gaps + fit room ---
+  var _btnCompact = document.getElementById("btnCompact");
+  if (_btnCompact) _btnCompact.addEventListener("click", function() {
+    var payload = buildPatternPayload();
+    fetch("/api/patterns/compact-inline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) {
+          setStatus("Compact error: " + (res.data.error || "unknown"));
+          return;
+        }
+        var d = res.data;
+        state.room_width_cm = d.new_width;
+        state.room_depth_cm = d.new_depth;
+        document.getElementById("roomWidth").value = d.new_width;
+        document.getElementById("roomDepth").value = d.new_depth;
+        if (d.rows) {
+          state.rows = d.rows;
+          state.row_gaps_cm = d.row_gaps_cm || [];
+        }
+        if (d.room_windows) state.room_windows = d.room_windows;
+        if (d.room_openings) _splitOpeningsIntoState(d.room_openings);
+        markDirty();
+        render();
+        zoomFit();
+        updateDSL();
+        updateRowList();
+        var changed = (d.gaps_changed || 0) + (d.row_gaps_changed || 0);
+        if (changed > 0 || d.direction !== "noop") {
+          setStatus("Compacted: " + changed + " gap(s) tightened, room "
+            + d.old_width + "x" + d.old_depth + " -> " + d.new_width + "x" + d.new_depth);
+        } else {
+          setStatus("Already compact (" + d.new_width + "x" + d.new_depth + " cm)");
+        }
+        var warnEl = document.getElementById("editorWarnings");
+        if (d.warnings && d.warnings.length > 0) {
+          warnEl.textContent = d.warnings.join(" | ");
+          warnEl.style.display = "block";
+        } else {
+          warnEl.style.display = "none";
+        }
+      })
+      .catch(function(err) { setStatus("Compact error: " + err.message); });
   });
 
   // --- Fit all to pattern (catalogue, Card + Grid) ---

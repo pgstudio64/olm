@@ -996,6 +996,54 @@ class TestPatternFit:
 
 
 # ---------------------------------------------------------------------------
+# adapt-room-size endpoint (D-211)
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptRoomSize:
+    """Tests for POST /api/pattern/adapt-room-size."""
+
+    def test_adapt_room_size_stick_e(self, client):
+        """Stick E block stays flush with east wall after width increase."""
+        pattern = {
+            "name": "test",
+            "rows": [{"blocks": [
+                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 220,
+                 "sticks": ["E"]},
+            ]}],
+            "row_gaps_cm": [],
+            "room_width_cm": 300,
+            "room_depth_cm": 300,
+        }
+        resp = client.post("/api/pattern/adapt-room-size", json={
+            "pattern": pattern,
+            "new_width_cm": 400,
+            "new_depth_cm": 300,
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        adapted = data["pattern"]
+        assert adapted["room_width_cm"] == 400
+        # gap must have increased by 100 (220 -> 320)
+        assert adapted["rows"][0]["blocks"][0]["gap_cm"] == 320
+
+    def test_adapt_room_size_missing_pattern(self, client):
+        """Missing pattern field -> 400."""
+        resp = client.post("/api/pattern/adapt-room-size", json={
+            "new_width_cm": 400,
+            "new_depth_cm": 300,
+        })
+        assert resp.status_code == 400
+
+    def test_adapt_room_size_missing_dimensions(self, client):
+        """Missing dimension fields -> 400."""
+        resp = client.post("/api/pattern/adapt-room-size", json={
+            "pattern": {"rows": [], "room_width_cm": 300, "room_depth_cm": 300},
+        })
+        assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # D-204 : door_seeds round-trip regression
 # ---------------------------------------------------------------------------
 

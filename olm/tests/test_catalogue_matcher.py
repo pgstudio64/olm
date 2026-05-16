@@ -6,6 +6,7 @@ import pytest
 from olm.core.catalogue_matcher import (
     PatternCandidate,
     SelectionResult,
+    adapt_dimensions,
     adapt_to_room,
     compact_catalogue_names,
     compute_desk_positions,
@@ -346,6 +347,52 @@ class TestAdaptToRoom:
         adapted = adapt_to_room(p, target)
         assert adapted["room_width_cm"] == 500
         assert adapted["room_depth_cm"] == 400
+
+
+# ---------------------------------------------------------------------------
+# 5b. adapt_dimensions
+# ---------------------------------------------------------------------------
+
+class TestAdaptDimensions:
+    """Verifies adapt_dimensions preserves locks."""
+
+    def test_stick_e_preserved_on_width_increase(self):
+        """Block with stick E stays flush with east wall after width increase."""
+        # BLOCK_1 eo_cm = 80. gap = 300 - 80 = 220 -> flush at east wall.
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "sticks": ["E"], "gap_cm": 220}],
+        ], room_width_cm=300, room_depth_cm=300)
+
+        adapted = adapt_dimensions(p, 400, 300)
+        assert adapted["room_width_cm"] == 400
+        assert adapted["room_depth_cm"] == 300
+
+        # Block must remain flush with east wall (gap + eo = 400)
+        blocks = adapted["rows"][0]["blocks"]
+        from olm.core.catalogue_matcher import _block_eo_extent
+        x = blocks[0].get("gap_cm", 0) + _block_eo_extent(blocks[0])
+        assert x == 400
+
+    def test_stick_s_offset_increases_on_depth_increase(self):
+        """Single row with stick S: offset_ns_cm increases by depth delta."""
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "sticks": ["S"], "gap_cm": 0,
+              "offset_ns_cm": 100}],
+        ], room_width_cm=300, room_depth_cm=300)
+
+        adapted = adapt_dimensions(p, 300, 400)
+        assert adapted["room_depth_cm"] == 400
+        blocks = adapted["rows"][0]["blocks"]
+        assert blocks[0]["offset_ns_cm"] == 200  # 100 + (400-300)
+
+    def test_no_change_when_dimensions_equal(self):
+        """Same dimensions returns identical pattern."""
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "gap_cm": 50}],
+        ], room_width_cm=300, room_depth_cm=300)
+
+        adapted = adapt_dimensions(p, 300, 300)
+        assert adapted["rows"][0]["blocks"][0]["gap_cm"] == 50
 
 
 # ---------------------------------------------------------------------------
