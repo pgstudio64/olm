@@ -1,7 +1,7 @@
 "use strict";
 
 // --- Event delegation for re-rendered lists (P1.4) ---
-// Single click handler on #rowList, #modalList, #blockPalette.
+// Single click handler on #rowList, #blockPalette.
 // Session-life: bound once, no dispose needed.
 var _edDelegationWired = false;
 function _wireEdDelegation() {
@@ -54,17 +54,6 @@ function _wireEdDelegation() {
           state.row_gaps_cm[gi3] = Math.max(0, val);
           render(); updateDSL(); updateRowList();
         }
-      }
-    });
-  }
-
-  // Modal list: load pattern on click
-  var modalList = document.getElementById("modalList");
-  if (modalList) {
-    modalList.addEventListener("click", function(e) {
-      var li = e.target.closest("li");
-      if (li && li.dataset.patternName) {
-        loadPattern(li.dataset.patternName);
       }
     });
   }
@@ -146,6 +135,7 @@ function markDirty() {
   if (!state.dirty) {
     state.dirty = true;
     document.querySelector(".ol-header").classList.add("edit-mode");
+    document.getElementById("btnSave").style.display = "";
     document.getElementById("btnAmendCancel").style.display = "";
   }
 }
@@ -153,6 +143,8 @@ function clearDirty() {
   state.dirty = false;
   document.querySelector(".ol-header").classList.remove("edit-mode");
   if (!state.amendMode) {
+    document.getElementById("btnSave").style.display = "none";
+    document.getElementById("btnSave").textContent = "Save pattern";
     document.getElementById("btnAmendCancel").style.display = "none";
   }
 }
@@ -1975,41 +1967,6 @@ async function save() {
   }
 }
 
-async function loadList() {
-  try {
-    const resp = await fetch("/api/patterns");
-    if (!resp.ok) throw new Error(await resp.text());
-    const data = await resp.json();
-    const raw = data.patterns || data || [];
-    // Sort like catalogue: depth asc, width asc, name asc (numeric)
-    var sorted = raw.slice().sort(function(a, b) {
-      if (typeof a === "string") return a.localeCompare(b, undefined, { numeric: true });
-      var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
-      if (da !== 0) return da;
-      var wa = (a.room_width_cm || 0) - (b.room_width_cm || 0);
-      if (wa !== 0) return wa;
-      return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
-    });
-    const list = sorted.map(function(p) { return typeof p === "string" ? p : p.name; });
-    const ul = document.getElementById("modalList");
-    ul.innerHTML = "";
-    if (list.length === 0) {
-      ul.innerHTML = "<li style=\"color:var(--text-dim)\">No patterns saved.</li>";
-    } else {
-      // Event delegation handles pattern click (P1.4)
-      _wireEdDelegation();
-      list.forEach(function(name) {
-        const li = document.createElement("li");
-        li.textContent = name;
-        li.dataset.patternName = name;
-        ul.appendChild(li);
-      });
-    }
-    document.getElementById("loadModal").classList.add("active");
-  } catch (err) {
-    setStatus("Load list error: " + err.message);
-  }
-}
 
 // D-122 P4 : convertit une liste d'openings combinés (avec has_door) vers
 // les 2 collections state.room_openings (non-doors) + state.room_doors.
@@ -2027,7 +1984,6 @@ function _splitOpeningsIntoState(combinedList) {
 }
 
 async function loadPattern(name) {
-  document.getElementById("loadModal").classList.remove("active");
   try {
     const resp = await fetch("/api/patterns/" + encodeURIComponent(name));
     if (!resp.ok) throw new Error(await resp.text());
@@ -2106,7 +2062,7 @@ function switchToEditorWithPattern(data) {
 var AMEND_DISABLE_IDS = [
   "roomWidth", "roomDepth", "btnWidthPlus", "btnWidthMinus",
   "btnDepthPlus", "btnDepthMinus", "dslRoom", "btnApplyRoomDSL",
-  "btnNew", "btnLoad", "btnDuplicate", "btnDelete", "btnFit",
+  "btnNew", "btnDuplicate", "btnDelete", "btnFit",
 ];
 
 function enterAmendMode(room, candidate) {
@@ -2191,7 +2147,7 @@ function exitAmendUI() {
 // IDs to disable in room-amend mode (layout controls + catalogue actions)
 var ROOM_AMEND_DISABLE_IDS = [
   "dslText", "btnApplyDSL", "btnAddRow",
-  "btnNew", "btnLoad", "btnDuplicate", "btnDelete",
+  "btnNew", "btnDuplicate", "btnDelete",
   "gapIntra",
 ];
 

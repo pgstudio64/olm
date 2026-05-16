@@ -31,7 +31,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <button class="tab-btn" data-tab="lytCatalogue">Catalogue</button>
       </div>
     </div>
-    <span id="tabDescription" class="tab-description"></span>
   </div>
   <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:30px 8px 4px 0;white-space:nowrap;">
     <div id="hdrPlanSelector" style="position:relative;">
@@ -101,6 +100,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <label class="settings-label">Grid cell (cm)</label>
         <input type="number" id="cfgGrid" class="settings-input">
       </div>
+    </div>
+    <div class="settings-section">
+      <div class="section-title">Current standard</div>
+      <div id="cfgStandardLabels"></div>
     </div>
     <div class="settings-section">
       <div class="section-title">Export</div>
@@ -204,10 +207,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <!-- LAYOUT -->
   <div class="settings-tab-pane" id="stLayout">
     <div class="settings-section">
-      <div class="section-title">Selected standard for matching</div>
-      <div id="cfgStandardLabels"></div>
-    </div>
-    <div class="settings-section">
       <div class="section-title">Default workstation</div>
       <div class="settings-grid">
         <label class="settings-label">Desk width (cm)</label>
@@ -239,6 +238,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <div class="section-title">Spacing standards</div>
       <div class="hint-text">Edit spacing values per standard. Changes are saved immediately.</div>
       <div id="spacingSettingsGrid" style="display:grid;grid-template-columns:200px repeat(3,120px);gap:2px 8px;font-size:11px;font-family:var(--font-mono);"></div>
+      <div style="margin-top:8px;">
+        <span id="spacingHelpToggle" class="help-link">Parameters reference</span>
+      </div>
     </div>
     <div class="settings-section">
       <button class="btn" id="btnResetSpacing">Reset spacing to defaults</button>
@@ -505,6 +507,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <!-- Populated dynamically by renderFpStandardFilter() -->
         </div>
         <div class="section-title">Candidate solutions</div>
+        <div style="margin-bottom:4px;">
+          <span id="candidateHelpToggle" class="help-link">Scoring help</span>
+        </div>
         <div id="fpCandidatesList"></div>
       </div>
       <div class="fp-resize-handle" id="fpDesignLeftResize" style="order:-1;"></div>
@@ -536,15 +541,14 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <button class="sub-tab-btn active" data-subtab="catCards">Card view</button>
     <button class="sub-tab-btn" data-subtab="catGrid">Grid view</button>
     <button class="sub-tab-btn" data-subtab="catEditor">Pattern editor</button>
-    <span id="subTabDescription" class="tab-description"></span>
   </div>
 
 <!-- SUB-TAB: PATTERN EDITOR -->
 <div class="sub-tab-content" id="subtabCatEditor">
 <div class="main" id="peMain">
 
-  <!-- LEFT COLUMN -->
-  <div class="col">
+  <!-- ROOM COLUMN -->
+  <div class="col" id="peRoomCol">
     <div class="col-inner">
 
       <div class="section-title">Room</div>
@@ -567,8 +571,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
       </div>
 
-
-
       <div class="section-title">Room definition</div>
       <div style="display:flex;gap:4px;margin-bottom:4px;">
         <button class="btn" id="peBtnAdjustRoom" style="flex:1;">Adjust room</button>
@@ -578,34 +580,36 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <textarea id="dslRoom" rows="8" spellcheck="false" readonly style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;cursor:default;"
         placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
       <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;display:none;">Apply</button>
-      <div style="margin-bottom:8px;text-align:right;">
+      <div style="margin-bottom:8px;">
         <span id="dslHelpToggle" class="help-link">Syntax help</span>
       </div>
 
+    </div>
+  </div>
 
+  <div class="fp-resize-handle" id="peRoomResize"></div>
+
+  <!-- LAYOUT COLUMN -->
+  <div class="col" id="peLayoutCol">
+    <div class="col-inner">
 
       <div class="section-title">Layout</div>
       <textarea id="dslText" rows="2" spellcheck="false" style="width:100%;margin-bottom:4px;"></textarea>
       <button class="btn" id="btnApplyDSL" style="width:100%;margin-bottom:4px;">Apply</button>
-      <div style="margin-bottom:8px;text-align:right;">
+      <div style="margin-bottom:8px;">
         <span id="dslLayoutHelpToggle" class="help-link">Syntax help</span>
       </div>
 
       <div class="section-title">Blocks</div>
       <div id="blockPalette"></div>
 
-
-
       <div class="section-title">Rows</div>
-      <button class="btn" id="btnAddRow" style="width:100%;margin-bottom:8px;">+ Row</button>
       <div id="rowList"></div>
-
-
-
-      <div class="section-title">Parameters</div>
-      <div class="param-row">
-        <label>Intra-row gap (cm)</label>
-        <input type="number" id="gapIntra" value="180" min="0" step="10">
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+        <button class="btn" id="btnAddRow" style="flex-shrink:0;">+ Row</button>
+        <span style="color:var(--text-dim);font-size:var(--fs-sm);">gap:</span>
+        <input type="number" id="gapIntra" value="180" min="0" step="10" style="width:60px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:var(--fs-base);padding:3px 4px;text-align:right;">
+        <span style="color:var(--text-dim);font-size:var(--fs-sm);">cm</span>
       </div>
 
     </div>
@@ -622,11 +626,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </label>
       <span id="autoName">-</span>
       <button class="btn" id="btnNew">New</button>
-      <button class="btn" id="btnLoad">Load</button>
-      <button class="btn" id="btnSave">Save</button>
       <button class="btn" id="btnDuplicate">Duplicate</button>
       <button class="btn" id="btnDelete">Delete</button>
       <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions">Fit to pattern</button>
+      <button class="btn" id="btnSave" style="display:none;">Save pattern</button>
       <button class="btn btn-cancel" id="btnAmendCancel" style="display:none;">Discard</button>
       <span id="deskCount">0 desk(s)</span>
     </div>
@@ -816,16 +819,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
 </div><!-- /tabLytCatalogue -->
 
-<!-- Load pattern modal -->
-<div class="modal-overlay" id="loadModal">
-  <div class="modal">
-    <h3>Load a pattern</h3>
-    <ul class="modal-list" id="modalList"></ul>
-    <div class="modal-footer">
-      <button class="btn" id="btnModalClose">Cancel</button>
-    </div>
-  </div>
-</div>
 
 <script src="/static/store.js?v={{ v }}"></script>
 <script src="/static/canonical_io.js?v={{ v }}"></script>
@@ -882,6 +875,46 @@ Row: blocks separated by ,  with gap (cm) between  |  ; = new row + inter-row ga
       <button id="diagCopy" class="btn btn-toolbar" style="font-size:11px;">Copy</button>
     </div>
   </div>
+</div>
+<div id="spacingHelpBackdrop" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.35);z-index:9000;" onclick="this.style.display='none';document.getElementById('spacingHelpTooltip').style.display='none';"></div>
+<div id="spacingHelpTooltip" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9001;padding:24px 32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;line-height:1.8;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,0.25);max-height:80vh;overflow-y:auto;min-width:550px;max-width:700px;"><span class="tooltip-close" onclick="this.parentElement.style.display='none';document.getElementById('spacingHelpBackdrop').style.display='none';">&times;</span>
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Workstation</div>
+– <b>Chair setback</b> — Distance behind the desk to push back the chair<br>
+– <b>Front desk access</b> — Clear space in front of the desk to sit down<br>
+– <b>Single desk access</b> — Access space for an isolated desk (no facing neighbour)<br>
+– <b>Desk to wall gap</b> — Minimum distance between desk edge and wall
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Circulation</div>
+– <b>Passage behind row</b> — Passage width behind a row — used to reach inner desks<br>
+– <b>Back-to-back passage</b> — Passage width between two back-to-back rows<br>
+– <b>Circulation passage</b> — Minimum passage width between blocks<br>
+– <b>Main corridor width</b> — Width of the main circulation corridor
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:8px;margin-bottom:4px;">Layout</div>
+– <b>Min block separation</b> — Minimum distance between two adjacent blocks<br>
+– <b>Max island size</b> — Maximum number of desks in a continuous island<br>
+– <b>Door clearance zone</b> — Depth of the clear zone in front of a door
+</div>
+<div id="candidateHelpBackdrop" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.35);z-index:9000;" onclick="this.style.display='none';document.getElementById('candidateHelpTooltip').style.display='none';"></div>
+<div id="candidateHelpTooltip" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9001;padding:24px 32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;line-height:1.8;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,0.25);max-height:80vh;overflow-y:auto;min-width:550px;max-width:700px;"><span class="tooltip-close" onclick="this.parentElement.style.display='none';document.getElementById('candidateHelpBackdrop').style.display='none';">&times;</span>
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Candidate solutions</div>
+Each room is matched against the pattern catalogue. Solutions are ranked by a weighted score combining several criteria.
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Scoring weights</div>
+– <b>Density</b> — More desks in the room = higher score<br>
+– <b>Comfort</b> — Better circulation grade = higher score<br>
+– <b>Back to door</b> — Penalty for desks facing away from the door<br>
+– <b>Natural light</b> — Bonus for desks closer to windows<br>
+– <b>Face to wall</b> — Penalty for desks directly facing a blank wall
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Circulation grades</div>
+– <b style="color:#58c080;">A</b> — Min passage ≥ main corridor width<br>
+– <b style="color:#7ab060;">B</b> — Min passage > circulation passage<br>
+– <b style="color:#c8a050;">C</b> — Min passage = circulation passage<br>
+– <b style="color:#c07040;">D</b> — Min passage ≥ 50% of circulation passage<br>
+– <b style="color:#c05858;">F</b> — Min passage below 50% of circulation passage
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Solution card</div>
+– <b>Pattern name</b> — Name and standard of the matched pattern<br>
+– <b>Desks</b> — Number of workstations placed in the room<br>
+– <b>m²/desk</b> — Room area divided by desk count<br>
+– <b>Grade</b> — Circulation grade (A to F)<br>
+– <b>Score</b> — Weighted total (higher = better)
 </div>
 </body>
 </html>

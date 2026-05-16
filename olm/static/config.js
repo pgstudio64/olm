@@ -90,29 +90,59 @@ async function saveConfigField(keyOrPath, value) {
 }
 
 var SPACING_FIELDS = [
-  { key: "chair_clearance_cm",             label: "ES-01 Chair clearance" },
-  { key: "front_access_cm",               label: "ES-02 Front access" },
-  { key: "access_single_desk_cm",          label: "ES-03 Single desk access" },
-  { key: "passage_behind_one_row_cm",      label: "ES-04 Behind one row" },
-  { key: "passage_between_back_to_back_cm",label: "ES-05 Between back-to-back" },
-  { key: "passage_cm",                    label: "ES-06 Inter-block passage" },
-  { key: "door_exclusion_depth_cm",        label: "ES-08 Door exclusion" },
-  { key: "desk_to_wall_cm",               label: "ES-09 Desk to wall" },
-  { key: "max_island_size",               label: "ES-10 Max island size" },
-  { key: "min_block_separation_cm",        label: "ES-11 Block separation" },
-  { key: "main_corridor_cm",              label: "PS-04 Main corridor" },
+  { group: "Workstation", key: "chair_clearance_cm",
+    label: "Chair setback",
+    help: "Distance behind the desk to push back the chair" },
+  { key: "front_access_cm",
+    label: "Front desk access",
+    help: "Clear space in front of the desk to sit down" },
+  { key: "access_single_desk_cm",
+    label: "Single desk access",
+    help: "Access space for an isolated desk (no facing neighbour)" },
+  { key: "desk_to_wall_cm",
+    label: "Desk to wall gap",
+    help: "Minimum distance between desk edge and wall" },
+  { group: "Circulation", key: "passage_behind_one_row_cm",
+    label: "Passage behind row",
+    help: "Passage width behind a row — used to reach inner desks" },
+  { key: "passage_between_back_to_back_cm",
+    label: "Back-to-back passage",
+    help: "Passage width between two back-to-back rows" },
+  { key: "passage_cm",
+    label: "Circulation passage",
+    help: "Minimum passage width between blocks" },
+  { key: "main_corridor_cm",
+    label: "Main corridor width",
+    help: "Width of the main circulation corridor" },
+  { group: "Layout", key: "min_block_separation_cm",
+    label: "Min block separation",
+    help: "Minimum distance between two adjacent blocks" },
+  { key: "max_island_size",
+    label: "Max island size",
+    help: "Maximum number of desks in a continuous island" },
+  { key: "door_exclusion_depth_cm",
+    label: "Door clearance zone",
+    help: "Depth of the clear zone in front of a door" },
 ];
 
 function renderSpacingSettings() {
   var grid = document.getElementById("spacingSettingsGrid");
   if (!grid || !SPACING_CONFIGS) return;
   var stds = getStandards();
+  var nCols = 1 + stds.length;  // parameter + one col per standard
   var html = '<div style="font-weight:bold;color:var(--text-dim);">Parameter</div>';
   stds.forEach(function(s) {
     html += '<div style="font-weight:bold;text-align:center;color:var(--accent);">' +
       getStdLabel(s) + '</div>';
   });
   SPACING_FIELDS.forEach(function(f) {
+    // Group header row spanning all columns
+    if (f.group) {
+      html += '<div style="grid-column:1/-1;color:var(--accent);font-weight:bold;' +
+        'font-size:10px;letter-spacing:0.1em;text-transform:uppercase;' +
+        'margin-top:8px;padding-bottom:2px;border-bottom:1px solid var(--border);">' +
+        f.group + '</div>';
+    }
     html += '<div style="color:var(--text-dim);padding:2px 0;">' + f.label + '</div>';
     stds.forEach(function(s) {
       var val = SPACING_CONFIGS[s] ? SPACING_CONFIGS[s][f.key] : "";
@@ -131,6 +161,19 @@ function renderSpacingSettings() {
     };
     _cfgTrack(inp, "change", handler);
   });
+
+  // Help link — opens centered modal with parameter definitions
+  var helpLink = document.getElementById("spacingHelpToggle");
+  if (helpLink) {
+    helpLink.onclick = function() {
+      var tip = document.getElementById("spacingHelpTooltip");
+      var backdrop = document.getElementById("spacingHelpBackdrop");
+      if (!tip) return;
+      var show = tip.style.display === "none";
+      tip.style.display = show ? "block" : "none";
+      if (backdrop) backdrop.style.display = show ? "block" : "none";
+    };
+  }
 }
 
 // renderEditorStandardRadios() removed — standard now controlled

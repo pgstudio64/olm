@@ -57,9 +57,6 @@ async function init() {
     _guardPatternRoomAmend(resetState);
   });
   document.getElementById("btnSave").addEventListener("click", save);
-  document.getElementById("btnLoad").addEventListener("click", function() {
-    _guardPatternRoomAmend(loadList);
-  });
   document.getElementById("btnDuplicate").addEventListener("click", function() {
     _guardPatternRoomAmend(duplicatePattern);
   });
@@ -290,9 +287,6 @@ async function init() {
       render();
     });
   });
-  document.getElementById("btnModalClose").addEventListener("click", function() {
-    document.getElementById("loadModal").classList.remove("active");
-  });
   document.getElementById("gridToggle").addEventListener("change", function(e) {
     if (window.syncGridToggle) window.syncGridToggle(e.target.checked);
     else { state.gridVisible = e.target.checked; }
@@ -426,12 +420,6 @@ async function init() {
   }
 
   // Tab descriptions (flat nav — 4 tabs)
-  var TAB_DESCRIPTIONS = {
-    "fpImport": "Load the floor plan and manage rooms",
-    "fpReview": "Review and adjust each room",
-    "lytDesign": "Office layout for each room",
-    "lytCatalogue": "Browse and edit the pattern catalogue",
-  };
 
   // Main tabs (flat nav)
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
@@ -455,8 +443,6 @@ async function init() {
         var tabId = "tab" + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1);
         var tab = document.getElementById(tabId);
         if (tab) tab.classList.add("active");
-        var descEl = document.getElementById("tabDescription");
-        if (descEl) descEl.textContent = TAB_DESCRIPTIONS[btn.dataset.tab] || "";
         if (isLayoutTab) {
           _restoreEditorState();
           loadCatalogue();
@@ -492,16 +478,6 @@ async function init() {
   });
 
   // Sub-tabs (Catalogue sub-tab-bar)
-  var SUB_TAB_DESCRIPTIONS = {
-    "catCards": "Browse patterns as cards",
-    "catGrid": "Patterns organized by room dimensions",
-    "catEditor": "Create and edit patterns",
-  };
-
-  function _updateSubTabDescription(subtabName) {
-    var el = document.getElementById("subTabDescription");
-    if (el) el.textContent = SUB_TAB_DESCRIPTIONS[subtabName] || "";
-  }
 
   document.querySelectorAll(".sub-tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
@@ -513,7 +489,6 @@ async function init() {
         parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
         var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
         if (subtab) subtab.classList.add("active");
-        _updateSubTabDescription(btn.dataset.subtab);
         if (btn.dataset.subtab === "catCards") loadCatalogue();
         if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
       }
@@ -539,7 +514,6 @@ async function init() {
     });
   });
   // Initial description
-  _updateSubTabDescription("catCards");
 
   // Matrix pan/zoom
   initMatrixPanZoom();
@@ -852,6 +826,7 @@ async function init() {
     // Sync editor state.standard and reload block defs
     if (newStd && typeof state !== "undefined" && state.standard !== newStd) {
       state.standard = newStd;
+      markDirty();
       if (typeof loadBlockDefs === "function") {
         loadBlockDefs().then(function() {
           if (typeof render === "function") render();
@@ -874,12 +849,6 @@ async function init() {
   document.getElementById("btnOffsetS").addEventListener("click", function() { offsetSelectedBlock(GRID_STEP_CM); });
   document.getElementById("btnOffsetW").addEventListener("click", function() { offsetSelectedBlockEO(-GRID_STEP_CM); });
   document.getElementById("btnOffsetE").addEventListener("click", function() { offsetSelectedBlockEO(GRID_STEP_CM); });
-  document.getElementById("loadModal").addEventListener("click", function(e) {
-    if (e.target === document.getElementById("loadModal")) {
-      document.getElementById("loadModal").classList.remove("active");
-    }
-  });
-
   document.getElementById("btnZoomIn").addEventListener("click", function() { zoomIn(); });
   document.getElementById("btnZoomOut").addEventListener("click", function() { zoomOut(); });
   document.getElementById("btnZoomFit").addEventListener("click", function() { zoomFit(); });
@@ -1064,8 +1033,6 @@ async function init() {
   // Floor + Room sidebar resize handles extracted to
   // olm/static/init_resize.js as of D-94 P3.
 
-  var descEl = document.getElementById("tabDescription");
-  if (descEl) descEl.textContent = TAB_DESCRIPTIONS["fpImport"] || "";
 
   // Save button — writes directly to plan JSON on disk
   document.getElementById("btnSavePlan").addEventListener("click", function() {
@@ -1075,6 +1042,19 @@ async function init() {
       alertModal("Save not available — load a floor plan first.");
     }
   });
+
+  // Candidate solutions help modal
+  var candidateHelpLink = document.getElementById("candidateHelpToggle");
+  if (candidateHelpLink) {
+    candidateHelpLink.addEventListener("click", function() {
+      var tip = document.getElementById("candidateHelpTooltip");
+      var backdrop = document.getElementById("candidateHelpBackdrop");
+      if (!tip) return;
+      var show = tip.style.display === "none";
+      tip.style.display = show ? "block" : "none";
+      if (backdrop) backdrop.style.display = show ? "block" : "none";
+    });
+  }
 
   // Export dropdown toggle
   document.getElementById("btnExportPlan").addEventListener("click", function() {

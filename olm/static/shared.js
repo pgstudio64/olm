@@ -699,8 +699,8 @@ function drawDoorExclusionRects(
     elements.push({ z: 5.8, s:
       '<rect x="' + rx.toFixed(1) + '" y="' + ry.toFixed(1) +
       '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) +
-      '" fill="none" stroke="red" stroke-width="1"' +
-      ' stroke-dasharray="4,3"/>'
+      '" fill="none" stroke="#c08040" stroke-width="0.5"' +
+      ' stroke-dasharray="3,3"/>'
     });
   });
 }
