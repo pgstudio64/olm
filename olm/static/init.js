@@ -45,25 +45,29 @@ async function init() {
   document.getElementById("btnDuplicate").addEventListener("click", duplicatePattern);
   document.getElementById("btnDelete").addEventListener("click", deletePattern);
   document.getElementById("btnAmendCancel").addEventListener("click", function() {
-    clearDirty();
-    if (state.roomAmendMode) {
-      state.roomAmendMode = null; state.roomRenderOffset = null;
-      exitRoomAmendUI();
-      document.querySelector('.tab-btn[data-tab="fpReview"]').click();
-    } else if (state.amendMode) {
-      state.amendMode = null;
-      state.overlay = null;
-      exitAmendUI();
-      document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
-      fpRenderCurrent();
-    } else if (state._savedName) {
-      // Dirty editor, not amend — reload saved pattern
-      loadPattern(state._savedName);
-    } else {
-      // New unsaved pattern — reset to empty
-      resetState();
-    }
-    setStatus("Cancelled.");
+    var msg = state.roomAmendMode
+      ? "Discard unsaved room changes?"
+      : "Discard unsaved changes?";
+    confirmModal(msg).then(function(ok) {
+      if (!ok) return;
+      clearDirty();
+      if (state.roomAmendMode) {
+        state.roomAmendMode = null; state.roomRenderOffset = null;
+        exitRoomAmendUI();
+        document.querySelector('.tab-btn[data-tab="fpReview"]').click();
+      } else if (state.amendMode) {
+        state.amendMode = null;
+        state.overlay = null;
+        exitAmendUI();
+        document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
+        fpRenderCurrent();
+      } else if (state._savedName) {
+        loadPattern(state._savedName);
+      } else {
+        resetState();
+      }
+      setStatus("Discarded.");
+    });
   });
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
   document.getElementById("btnApplyDSL").addEventListener("click", applyDSL);
@@ -98,9 +102,13 @@ async function init() {
   });
   document.getElementById("rvBtnCancelRoom").addEventListener("click", function() {
     if (!state.roomAmendMode) return;
-    state.roomAmendMode = null; state.roomRenderOffset = null;
-    exitRoomAmendUI();
-    rvRenderCurrent();
+    confirmModal("Discard unsaved room changes?").then(function(ok) {
+      if (!ok) return;
+      state.roomAmendMode = null; state.roomRenderOffset = null;
+      exitRoomAmendUI();
+      rvRenderCurrent();
+      setStatus("Discarded.");
+    });
   });
 
   document.getElementById("btnResetSpacing").addEventListener("click", async function() {
@@ -301,16 +309,16 @@ async function init() {
     }
   }
 
-  // Cancel any active amend mode when navigating away from editor.
-  // Returns a Promise<boolean> (true = proceed, false = cancelled).
+  // Guard: discard unsaved amend/room changes before navigating.
+  // Returns a Promise<boolean> (true = proceed, false = stay).
   function _cancelAmendIfActive() {
     if (state.amendMode && state.dirty) {
-      return confirmModal("Unsaved layout changes will be lost. Continue?").then(function(ok) {
+      return confirmModal("Discard unsaved layout changes?").then(function(ok) {
         if (!ok) return false;
         state.amendMode = null; state.overlay = null;
         exitAmendUI(); _restoreEditorState();
         return !state.roomAmendMode ? true :
-          confirmModal("Unsaved room changes will be lost. Continue?").then(function(ok2) {
+          confirmModal("Discard unsaved room changes?").then(function(ok2) {
             if (!ok2) return false;
             state.roomAmendMode = null; state.roomRenderOffset = null;
             exitRoomAmendUI(); return true;
@@ -322,7 +330,7 @@ async function init() {
       exitAmendUI(); _restoreEditorState();
     }
     if (state.roomAmendMode) {
-      return confirmModal("Unsaved room changes will be lost. Continue?").then(function(ok) {
+      return confirmModal("Discard unsaved room changes?").then(function(ok) {
         if (!ok) return false;
         state.roomAmendMode = null; state.roomRenderOffset = null;
         exitRoomAmendUI(); return true;
@@ -343,9 +351,9 @@ async function init() {
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
       var isLayoutTab = btn.dataset.tab === "lytDesign" || btn.dataset.tab === "lytCatalogue";
-      // Block tab switch while room amend mode is active (must Save or Cancel first)
+      // Block tab switch while room amend mode is active (must Save or Discard first)
       if (state.roomAmendMode && btn.dataset.tab !== "fpReview") {
-        alertModal("Save or cancel room changes before switching tabs.");
+        alertModal("Save or discard room changes before switching tabs.");
         return;
       }
       function _doSwitch() {

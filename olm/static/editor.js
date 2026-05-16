@@ -2150,14 +2150,14 @@ function enterAmendMode(room, candidate) {
     if (el) { el.disabled = true; el.style.opacity = "0.4"; }
   });
 
-  // Replace Save label, show Cancel
+  // Replace Save label, show Discard
   document.getElementById("btnSave").textContent = "Save amendment";
   document.getElementById("btnAmendCancel").style.display = "";
 
   // Visual cue: amend mode banner
   document.querySelector(".ol-header").classList.add("edit-mode");
   _safeText("autoName", "\u270E " + room.name);
-  setStatus("Adjusting layout for room \"" + room.name + "\". Save to apply, Cancel to discard.");
+  setStatus("Adjusting layout for room \"" + room.name + "\". Save to apply, Discard to cancel.");
 }
 
 function exitAmendUI() {
@@ -2313,7 +2313,7 @@ function enterRoomAmendMode(room) {
   dslEl.style.cursor = "";
   document.getElementById("rvAmendApply").style.display = "";
 
-  // Show Save/Cancel/AddExcl in nav bar, hide Adjust room
+  // Show Save/Discard/AddExcl in nav bar, hide Adjust room
   document.getElementById("rvBtnAdjustRoom").style.display = "none";
   document.getElementById("rvBtnSaveRoom").style.display = "";
   document.getElementById("rvBtnCancelRoom").style.display = "";
@@ -2347,7 +2347,7 @@ function exitRoomAmendUI() {
   dslEl.style.cursor = "default";
   document.getElementById("rvAmendApply").style.display = "none";
 
-  // Restore nav bar: show Adjust room, hide Save/Cancel/AddExcl
+  // Restore nav bar: show Adjust room, hide Save/Discard/AddExcl
   document.getElementById("rvBtnAdjustRoom").style.display = "";
   document.getElementById("rvBtnSaveRoom").style.display = "none";
   document.getElementById("rvBtnCancelRoom").style.display = "none";
