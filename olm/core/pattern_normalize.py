@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 from olm.core.catalogue_matcher import compute_block_positions
 from olm.core.pattern_canonicalize import canonicalize_blocks
+from olm.core.pattern_compact_walls import compact_walls
 from olm.core.pattern_fit import (
     FitResult,
     PatternStructurallyInvalid,
@@ -112,6 +113,12 @@ def normalize_pattern(
             f"Canonicalized {canon.n_reorderings} row(s) "
             f"(blocks reordered by spatial position)"
         )
+
+    # Step 0b: compact walls (D-217) — move east/south walls inward,
+    # dragging attached blocks. Modifies gap_cm and row_gaps_cm only.
+    # Must run before normalize_intra/inter so that gaps of attached
+    # blocks are reduced before being normalized to standard minimums.
+    compact_walls(pattern, target_spacing)
 
     block_defs = build_block_defs(target_spacing)
     rows = pattern.get("rows", [])
