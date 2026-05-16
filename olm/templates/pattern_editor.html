@@ -570,9 +570,14 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
 
       <div class="section-title">Room definition</div>
-      <textarea id="dslRoom" rows="8" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;"
+      <div style="display:flex;gap:4px;margin-bottom:4px;">
+        <button class="btn" id="peBtnAdjustRoom" style="flex:1;">Adjust room</button>
+        <button class="btn" id="peBtnSaveRoom" style="flex:1;display:none;">Save room</button>
+        <button class="btn btn-cancel" id="peBtnDiscardRoom" style="flex:1;display:none;">Discard</button>
+      </div>
+      <textarea id="dslRoom" rows="8" spellcheck="false" readonly style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;cursor:default;"
         placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
-      <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;">Apply</button>
+      <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;display:none;">Apply</button>
       <div style="margin-bottom:8px;text-align:right;">
         <span id="dslHelpToggle" class="help-link">Syntax help</span>
       </div>

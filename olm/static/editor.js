@@ -2265,140 +2265,190 @@ function loadRoomHitsAndSeedFromIngState(room) {
 }
 window.loadRoomHitsAndSeedFromIngState = loadRoomHitsAndSeedFromIngState;
 
-function enterRoomAmendMode(room) {
-  // Stay in Review — edit room in-place
+function enterRoomAmendMode(room, context) {
+  // context: "floor" (Floor Review) or "pattern" (Pattern editor)
+  context = context || "floor";
   state.roomAmendMode = {
     roomName: room.name,
     originalRoom: JSON.parse(JSON.stringify(room)),
+    context: context,
   };
-  // D-99: fresh render offset for this amend session.
   state.roomRenderOffset = { x_cm: 0, y_cm: 0 };
 
-  // R-12 B: room already canonical in fpData (via fromStorage at load).
+  // Load room data into shared state
   var localRoom = room;
-  state.rows = [];
-  state.row_gaps_cm = [];
+  if (context === "floor") {
+    // Floor Review: clear layout, keep room only
+    state.rows = [];
+    state.row_gaps_cm = [];
+  }
+  // Pattern editor: keep existing rows/blocks (layout stays visible)
   state.room_width_cm = localRoom.width_cm;
   state.room_depth_cm = localRoom.depth_cm;
   state.room_windows = JSON.parse(JSON.stringify(localRoom.windows || []));
-  // D-122 P4 : state.room_openings (sans doors) + state.room_doors séparés,
-  // même invariant que ingState.rooms / fpData.rooms post-fromStorage.
   state.room_openings = JSON.parse(JSON.stringify(localRoom.openings || []));
   state.room_doors = JSON.parse(JSON.stringify(localRoom.doors || []));
-  state.room_exclusions = JSON.parse(JSON.stringify(localRoom.exclusion_zones || []));
-  state.room_transparents = JSON.parse(JSON.stringify(localRoom.transparent_zones || []));
-  // D-122 P3 : state.corridor_face canonique = "south" par construction ;
-  // on ne stocke plus que corridor_face_abs (repère absolu) pour piloter
-  // la rotation overlay et les conversions abs↔canon.
+  state.room_exclusions = JSON.parse(
+    JSON.stringify(localRoom.exclusion_zones || []));
+  state.room_transparents = JSON.parse(
+    JSON.stringify(localRoom.transparent_zones || []));
   state.corridor_face_abs = room.corridor_face_abs || "";
   state.walls_user_edited = !!room.walls_user_edited;
 
-  // Hits + seed pour V/H-rays debug — chargés depuis ingState.rooms.
-  loadRoomHitsAndSeedFromIngState(room);
-
-  // Inject overlay for visual reference, aligned to room bbox
-  if (window.fpOverlay) {
-    var ov = window.fpOverlay;
-    var ovOffX = 0, ovOffY = 0;
-    if (room.bbox_px) {
-      ovOffX = room.bbox_px[0] / ov.pxPerCm;
-      ovOffY = room.bbox_px[1] / ov.pxPerCm;
+  if (context === "floor") {
+    // Floor-specific: hits, overlay
+    loadRoomHitsAndSeedFromIngState(room);
+    if (window.fpOverlay) {
+      var ov = window.fpOverlay;
+      var ovOffX = 0, ovOffY = 0;
+      if (room.bbox_px) {
+        ovOffX = room.bbox_px[0] / ov.pxPerCm;
+        ovOffY = room.bbox_px[1] / ov.pxPerCm;
+      }
+      state.overlay = {
+        dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: 30,
+        offsetX: ovOffX, offsetY: ovOffY,
+        imgW: ov.imgW, imgH: ov.imgH,
+      };
     }
-    state.overlay = {
-      dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm,
-      opacity: 30,
-      offsetX: ovOffX, offsetY: ovOffY,
-      imgW: ov.imgW, imgH: ov.imgH,
-    };
+    render(document.getElementById("rvCanvas"));
+
+    // Enable editing in Review sidebar
+    var dslEl = document.getElementById("rvRoomDsl");
+    dslEl.readOnly = false;
+    dslEl.style.color = "var(--text)";
+    dslEl.style.cursor = "";
+    document.getElementById("rvAmendApply").style.display = "";
+
+    // Show Save/Discard/AddExcl in nav bar, hide Adjust room
+    document.getElementById("rvBtnAdjustRoom").style.display = "none";
+    document.getElementById("rvBtnSaveRoom").style.display = "";
+    document.getElementById("rvBtnCancelRoom").style.display = "";
+    var rvAddMenuWrap = document.getElementById("rvAddMenuWrap");
+    if (rvAddMenuWrap) rvAddMenuWrap.style.display = "";
+    var rvBtnReanalyze = document.getElementById("rvBtnReanalyze");
+    if (rvBtnReanalyze) rvBtnReanalyze.style.display = "";
+    var rvLockWallsWrap = document.getElementById("rvLockWallsWrap");
+    if (rvLockWallsWrap) rvLockWallsWrap.style.display = "";
+    var rvLockWallsCb = document.getElementById("rvLockWalls");
+    if (rvLockWallsCb) rvLockWallsCb.checked = !!state.walls_user_edited;
+    var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
+    if (rvBtnCheck) {
+      rvBtnCheck.style.display = APP_CONFIG.dev_mode ? "" : "none";
+    }
+    var rvBtnDiag = document.getElementById("rvBtnDiag");
+    if (rvBtnDiag) {
+      rvBtnDiag.style.display = APP_CONFIG.dev_mode ? "" : "none";
+    }
+    document.getElementById("rvBtnPrev").disabled = true;
+    document.getElementById("rvBtnNext").disabled = true;
+    document.querySelector("#tabFpReview .fp-nav").classList.add("edit-mode");
+    document.getElementById("rvRoomLabel").textContent =
+      "\u270E " + room.name;
+
+  } else {
+    // Pattern editor context
+    render();  // re-render the editor canvas
+
+    // DSL Room textarea → editable
+    var peDsl = document.getElementById("dslRoom");
+    if (peDsl) {
+      peDsl.readOnly = false;
+      peDsl.style.color = "var(--text)";
+      peDsl.style.cursor = "";
+    }
+    // Show Save room / Discard, hide Adjust room
+    var peAdjust = document.getElementById("peBtnAdjustRoom");
+    if (peAdjust) peAdjust.style.display = "none";
+    var peSave = document.getElementById("peBtnSaveRoom");
+    if (peSave) peSave.style.display = "";
+    var peDiscard = document.getElementById("peBtnDiscardRoom");
+    if (peDiscard) peDiscard.style.display = "";
+    // Apply DSL button visible in mode
+    var peApply = document.getElementById("btnApplyRoomDSL");
+    if (peApply) peApply.style.display = "";
   }
-
-  render(document.getElementById("rvCanvas"));
-  // Ne pas zoomFit ici — conserver le zoom courant de l'utilisateur.
-
-  // Enable editing in Review sidebar
-  var dslEl = document.getElementById("rvRoomDsl");
-  dslEl.readOnly = false;
-  dslEl.style.color = "var(--text)";
-  dslEl.style.cursor = "";
-  document.getElementById("rvAmendApply").style.display = "";
-
-  // Show Save/Discard/AddExcl in nav bar, hide Adjust room
-  document.getElementById("rvBtnAdjustRoom").style.display = "none";
-  document.getElementById("rvBtnSaveRoom").style.display = "";
-  document.getElementById("rvBtnCancelRoom").style.display = "";
-  var rvAddMenuWrap = document.getElementById("rvAddMenuWrap");
-  if (rvAddMenuWrap) rvAddMenuWrap.style.display = "";
-  var rvBtnReanalyze = document.getElementById("rvBtnReanalyze");
-  if (rvBtnReanalyze) rvBtnReanalyze.style.display = "";
-  var rvLockWallsWrap = document.getElementById("rvLockWallsWrap");
-  if (rvLockWallsWrap) rvLockWallsWrap.style.display = "";
-  var rvLockWallsCb = document.getElementById("rvLockWalls");
-  if (rvLockWallsCb) rvLockWallsCb.checked = !!state.walls_user_edited;
-  var rvBtnCheck = document.getElementById("rvBtnCheckOrient");
-  if (rvBtnCheck) rvBtnCheck.style.display = APP_CONFIG.dev_mode ? "" : "none";
-  var rvBtnDiag = document.getElementById("rvBtnDiag");
-  if (rvBtnDiag) rvBtnDiag.style.display = APP_CONFIG.dev_mode ? "" : "none";
-
-  // Disable navigation during edit
-  document.getElementById("rvBtnPrev").disabled = true;
-  document.getElementById("rvBtnNext").disabled = true;
-
-  // Visual cue: amber edit-mode on nav bar
-  document.querySelector("#tabFpReview .fp-nav").classList.add("edit-mode");
-  document.getElementById("rvRoomLabel").textContent = "\u270E " + room.name;
 }
 
 function exitRoomAmendUI() {
-  // Restore Review sidebar to read-only
-  var dslEl = document.getElementById("rvRoomDsl");
-  dslEl.readOnly = true;
-  dslEl.style.color = "var(--text-dim)";
-  dslEl.style.cursor = "default";
-  document.getElementById("rvAmendApply").style.display = "none";
+  var context = (state.roomAmendMode && state.roomAmendMode.context)
+    || "floor";
 
-  // Restore nav bar: show Adjust room, hide Save/Discard/AddExcl
-  document.getElementById("rvBtnAdjustRoom").style.display = "";
-  document.getElementById("rvBtnSaveRoom").style.display = "none";
-  document.getElementById("rvBtnCancelRoom").style.display = "none";
-  var rvAddMenuWrap2 = document.getElementById("rvAddMenuWrap");
-  if (rvAddMenuWrap2) rvAddMenuWrap2.style.display = "none";
-  var rvAddMenu2 = document.getElementById("rvAddMenu");
-  if (rvAddMenu2) rvAddMenu2.style.display = "none";
-  var rvBtnReanalyze2 = document.getElementById("rvBtnReanalyze");
-  if (rvBtnReanalyze2) rvBtnReanalyze2.style.display = "none";
-  var rvLockWallsWrap2 = document.getElementById("rvLockWallsWrap");
-  if (rvLockWallsWrap2) rvLockWallsWrap2.style.display = "none";
-  var rvLockWalls2 = document.getElementById("rvLockWalls");
-  if (rvLockWalls2) rvLockWalls2.checked = false;
-  var rvBtnCheck2 = document.getElementById("rvBtnCheckOrient");
-  if (rvBtnCheck2) rvBtnCheck2.style.display = "none";
-  var rvBtnDiag2 = document.getElementById("rvBtnDiag");
-  if (rvBtnDiag2) rvBtnDiag2.style.display = "none";
-  var rvBadge = document.getElementById("rvOrientBadge");
-  if (rvBadge) rvBadge.style.display = "none";
+  if (context === "floor") {
+    // Restore Review sidebar to read-only
+    var dslEl = document.getElementById("rvRoomDsl");
+    if (dslEl) {
+      dslEl.readOnly = true;
+      dslEl.style.color = "var(--text-dim)";
+      dslEl.style.cursor = "default";
+    }
+    var rvApply = document.getElementById("rvAmendApply");
+    if (rvApply) rvApply.style.display = "none";
 
-  // Reset rvTool and clean up any drawing in progress
-  if (window.rvTool) {
-    window.rvTool.mode = "idle";
-    window.rvTool.selectedIndex = -1;
-    window.rvTool.drawStart = null;
-    window.rvTool.dragOffset = null;
+    // Restore nav bar: show Adjust room, hide Save/Discard/AddExcl
+    document.getElementById("rvBtnAdjustRoom").style.display = "";
+    document.getElementById("rvBtnSaveRoom").style.display = "none";
+    document.getElementById("rvBtnCancelRoom").style.display = "none";
+    var rvAddMenuWrap2 = document.getElementById("rvAddMenuWrap");
+    if (rvAddMenuWrap2) rvAddMenuWrap2.style.display = "none";
+    var rvAddMenu2 = document.getElementById("rvAddMenu");
+    if (rvAddMenu2) rvAddMenu2.style.display = "none";
+    var rvBtnReanalyze2 = document.getElementById("rvBtnReanalyze");
+    if (rvBtnReanalyze2) rvBtnReanalyze2.style.display = "none";
+    var rvLockWallsWrap2 = document.getElementById("rvLockWallsWrap");
+    if (rvLockWallsWrap2) rvLockWallsWrap2.style.display = "none";
+    var rvLockWalls2 = document.getElementById("rvLockWalls");
+    if (rvLockWalls2) rvLockWalls2.checked = false;
+    var rvBtnCheck2 = document.getElementById("rvBtnCheckOrient");
+    if (rvBtnCheck2) rvBtnCheck2.style.display = "none";
+    var rvBtnDiag2 = document.getElementById("rvBtnDiag");
+    if (rvBtnDiag2) rvBtnDiag2.style.display = "none";
+    var rvBadge = document.getElementById("rvOrientBadge");
+    if (rvBadge) rvBadge.style.display = "none";
+
+    // Reset rvTool and clean up any drawing in progress
+    if (window.rvTool) {
+      window.rvTool.mode = "idle";
+      window.rvTool.selectedIndex = -1;
+      window.rvTool.drawStart = null;
+      window.rvTool.dragOffset = null;
+    }
+    state.selectedExclusion = -1;
+    var _rvBtn = document.getElementById("rvBtnAddExcl");
+    if (_rvBtn) _rvBtn.classList.remove("active");
+    var _rvCv = document.getElementById("rvCanvas");
+    if (_rvCv) _rvCv.style.cursor = "";
+    if (window.rvRemoveGhostRect) window.rvRemoveGhostRect();
+
+    // Re-enable navigation
+    document.getElementById("rvBtnPrev").disabled = false;
+    document.getElementById("rvBtnNext").disabled = false;
+
+    // Remove edit-mode
+    var fpNav = document.querySelector("#tabFpReview .fp-nav");
+    if (fpNav) fpNav.classList.remove("edit-mode");
+
+    state.overlay = null;
+
+  } else {
+    // Pattern editor context
+    var peDsl = document.getElementById("dslRoom");
+    if (peDsl) {
+      peDsl.readOnly = true;
+      peDsl.style.color = "var(--text-dim)";
+      peDsl.style.cursor = "default";
+    }
+    // Show Adjust room, hide Save/Discard
+    var peAdjust = document.getElementById("peBtnAdjustRoom");
+    if (peAdjust) peAdjust.style.display = "";
+    var peSave = document.getElementById("peBtnSaveRoom");
+    if (peSave) peSave.style.display = "none";
+    var peDiscard = document.getElementById("peBtnDiscardRoom");
+    if (peDiscard) peDiscard.style.display = "none";
+    // Hide Apply DSL button
+    var peApply = document.getElementById("btnApplyRoomDSL");
+    if (peApply) peApply.style.display = "none";
   }
-  state.selectedExclusion = -1;
-  var _rvBtn = document.getElementById("rvBtnAddExcl");
-  if (_rvBtn) _rvBtn.classList.remove("active");
-  var _rvCv = document.getElementById("rvCanvas");
-  if (_rvCv) _rvCv.style.cursor = "";
-  if (window.rvRemoveGhostRect) window.rvRemoveGhostRect();
-
-  // Re-enable navigation
-  document.getElementById("rvBtnPrev").disabled = false;
-  document.getElementById("rvBtnNext").disabled = false;
-
-  // Remove edit-mode
-  document.querySelector("#tabFpReview .fp-nav").classList.remove("edit-mode");
-
-  state.overlay = null;
 }
 
 function duplicatePattern() {

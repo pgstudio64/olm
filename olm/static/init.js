@@ -39,11 +39,33 @@ async function init() {
   requestAnimationFrame(function() { zoomFit(); });
   loadCatalogue();
 
-  document.getElementById("btnNew").addEventListener("click", resetState);
+  // Guard: confirm discard if pattern room amend is active
+  function _guardPatternRoomAmend(callback) {
+    if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
+      confirmModal("Discard unsaved room changes?").then(function(ok) {
+        if (!ok) return;
+        state.roomAmendMode = null;
+        state.roomRenderOffset = null;
+        exitRoomAmendUI();
+        callback();
+      });
+    } else {
+      callback();
+    }
+  }
+  document.getElementById("btnNew").addEventListener("click", function() {
+    _guardPatternRoomAmend(resetState);
+  });
   document.getElementById("btnSave").addEventListener("click", save);
-  document.getElementById("btnLoad").addEventListener("click", loadList);
-  document.getElementById("btnDuplicate").addEventListener("click", duplicatePattern);
-  document.getElementById("btnDelete").addEventListener("click", deletePattern);
+  document.getElementById("btnLoad").addEventListener("click", function() {
+    _guardPatternRoomAmend(loadList);
+  });
+  document.getElementById("btnDuplicate").addEventListener("click", function() {
+    _guardPatternRoomAmend(duplicatePattern);
+  });
+  document.getElementById("btnDelete").addEventListener("click", function() {
+    _guardPatternRoomAmend(deletePattern);
+  });
   document.getElementById("btnAmendCancel").addEventListener("click", function() {
     var msg = state.roomAmendMode
       ? "Discard unsaved room changes?"
@@ -52,9 +74,14 @@ async function init() {
       if (!ok) return;
       clearDirty();
       if (state.roomAmendMode) {
+        var ctx = state.roomAmendMode.context || "floor";
         state.roomAmendMode = null; state.roomRenderOffset = null;
         exitRoomAmendUI();
-        document.querySelector('.tab-btn[data-tab="fpReview"]').click();
+        if (ctx === "floor") {
+          document.querySelector('.tab-btn[data-tab="fpReview"]').click();
+        } else {
+          render(); updateDSL();
+        }
       } else if (state.amendMode) {
         state.amendMode = null;
         state.overlay = null;
@@ -69,6 +96,65 @@ async function init() {
       setStatus("Discarded.");
     });
   });
+  // Pattern editor room amend controls
+  document.getElementById("peBtnAdjustRoom").addEventListener("click", function() {
+    // Build a room object from current editor state
+    var room = {
+      name: state.name || state._savedName || "pattern",
+      width_cm: state.room_width_cm,
+      depth_cm: state.room_depth_cm,
+      windows: JSON.parse(JSON.stringify(state.room_windows || [])),
+      openings: JSON.parse(JSON.stringify(state.room_openings || [])),
+      doors: JSON.parse(JSON.stringify(state.room_doors || [])),
+      exclusion_zones: JSON.parse(JSON.stringify(state.room_exclusions || [])),
+      transparent_zones: JSON.parse(
+        JSON.stringify(state.room_transparents || [])),
+    };
+    enterRoomAmendMode(room, "pattern");
+    updateDSL();
+    setStatus("Adjusting room. Edit DSL then Apply, or Save room / Discard.");
+  });
+  document.getElementById("peBtnSaveRoom").addEventListener("click", function() {
+    if (!state.roomAmendMode || state.roomAmendMode.context !== "pattern") {
+      return;
+    }
+    // Apply room changes to editor state (already in state.room_*)
+    state.roomAmendMode = null;
+    state.roomRenderOffset = null;
+    exitRoomAmendUI();
+    render();
+    updateDSL();
+    setStatus("Room changes applied.");
+  });
+  document.getElementById("peBtnDiscardRoom").addEventListener("click", function() {
+    if (!state.roomAmendMode || state.roomAmendMode.context !== "pattern") {
+      return;
+    }
+    confirmModal("Discard unsaved room changes?").then(function(ok) {
+      if (!ok) return;
+      // Restore from original
+      var orig = state.roomAmendMode.originalRoom;
+      state.room_width_cm = orig.width_cm;
+      state.room_depth_cm = orig.depth_cm;
+      state.room_windows = JSON.parse(
+        JSON.stringify(orig.windows || []));
+      state.room_openings = JSON.parse(
+        JSON.stringify(orig.openings || []));
+      state.room_doors = JSON.parse(
+        JSON.stringify(orig.doors || []));
+      state.room_exclusions = JSON.parse(
+        JSON.stringify(orig.exclusion_zones || []));
+      document.getElementById("roomWidth").value = orig.width_cm;
+      document.getElementById("roomDepth").value = orig.depth_cm;
+      state.roomAmendMode = null;
+      state.roomRenderOffset = null;
+      exitRoomAmendUI();
+      render();
+      updateDSL();
+      setStatus("Room changes discarded.");
+    });
+  });
+
   document.getElementById("btnAddRow").addEventListener("click", function() { addRow(true); });
   document.getElementById("btnApplyDSL").addEventListener("click", applyDSL);
   document.getElementById("btnApplyRoomDSL").addEventListener("click", applyRoomDSL);
@@ -419,19 +505,37 @@ async function init() {
 
   document.querySelectorAll(".sub-tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
-      if (btn.dataset.subtab !== "catEditor") {
-        if (_cancelAmendIfActive() === false) return;
+      function _doSubSwitch() {
+        var bar = btn.parentElement;
+        bar.querySelectorAll(":scope > .sub-tab-btn").forEach(function(b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        var parentTab = bar.parentElement;
+        parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
+        var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
+        if (subtab) subtab.classList.add("active");
+        _updateSubTabDescription(btn.dataset.subtab);
+        if (btn.dataset.subtab === "catCards") loadCatalogue();
+        if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
       }
-      var bar = btn.parentElement;
-      bar.querySelectorAll(":scope > .sub-tab-btn").forEach(function(b) { b.classList.remove("active"); });
-      btn.classList.add("active");
-      var parentTab = bar.parentElement;
-      parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
-      var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
-      if (subtab) subtab.classList.add("active");
-      _updateSubTabDescription(btn.dataset.subtab);
-      if (btn.dataset.subtab === "catCards") loadCatalogue();
-      if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
+      // Guard: pattern room amend active — confirm discard
+      if (state.roomAmendMode && state.roomAmendMode.context === "pattern"
+          && btn.dataset.subtab !== "catEditor") {
+        confirmModal("Discard unsaved room changes?").then(function(ok) {
+          if (!ok) return;
+          state.roomAmendMode = null; state.roomRenderOffset = null;
+          exitRoomAmendUI();
+          _doSubSwitch();
+        });
+        return;
+      }
+      if (btn.dataset.subtab !== "catEditor") {
+        var result = _cancelAmendIfActive();
+        if (result && typeof result.then === "function") {
+          result.then(function(ok) { if (ok) _doSubSwitch(); });
+          return;
+        }
+      }
+      _doSubSwitch();
     });
   });
   // Initial description
@@ -735,6 +839,13 @@ async function init() {
   }
   // Standard change handler — shared by all 3 synchronized selectors
   function _onCatStandardChange() {
+    // Guard: if pattern room amend is active, block standard change
+    if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
+      // Revert selector to current standard
+      setCatStandard(state.standard);
+      alertModal("Save or discard room changes before changing standard.");
+      return;
+    }
     var newStd = this.value;
     // Sync all 3 selectors
     setCatStandard(newStd);
