@@ -447,6 +447,207 @@ class TestNormalizePatternCanonicalizes:
         assert pat["room_width_cm"] == 340
 
 
+class TestInterRowOffset:
+    """D-216: inter-row gap accounts for offset_ns_cm via pair-by-pair X projection."""
+
+    def test_negative_offset_user_case(self):
+        """480x500_Site_1: offset_ns_cm=-40 on row 1 block causes overlap.
+
+        After canonicalize, row 0 = [BLOCK_1 orient 180 gap=0, BLOCK_1 orient 0].
+        Row 1 = [BLOCK_1 orient 0 gap=400 offset_ns_cm=-40].
+        row_gaps_cm=[180] originally.
+
+        With STD3 (Site): after intra-row normalize, row 0 gap becomes 180
+        (east[180]=90 + west[0]=90). After inter-row normalize, row_gap[0]
+        must be >= 40 to prevent WS03 from overlapping WS02.
+
+        Formula: pair_required = offset_ns[b] + ns[b] + south[b] - max_ns_upper
+                                 - offset_ns[b'] + north[b']
+        For (WS02, WS03): 0 + 180 + 0 - 180 - (-40) + 0 = 40.
+        """
+        pat = {
+            "name": "480x500_Site_1",
+            "rows": [
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 180,
+                        "gap_cm": 0, "offset_ns_cm": 0,
+                        "sticks": ["N"],
+                    },
+                    {
+                        "type": "BLOCK_1", "orientation": 0,
+                        "gap_cm": 310, "offset_ns_cm": 0,
+                    },
+                ]},
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 0,
+                        "gap_cm": 400, "offset_ns_cm": -40,
+                    },
+                ]},
+            ],
+            "row_gaps_cm": [180],
+            "room_width_cm": 480,
+            "room_depth_cm": 500,
+            "standard": "standard3",
+        }
+        result = normalize_pattern(pat, STD3)
+        # Required row_gap must be at least 40 to avoid overlap
+        assert pat["row_gaps_cm"][0] == 40
+
+    def test_no_offset_unchanged(self):
+        """All offset_ns_cm=0: row_gap same as old max_south + max_north.
+
+        Two BLOCK_1 orient 0 (south=0, north=0) => required_gap = 0.
+        """
+        pat = _pattern_two_rows(row_gap=100, standard="standard1")
+        result = normalize_pattern(pat, STD1)
+        # BLOCK_1 orient 0: south=0, north=0 => required=0
+        assert pat["row_gaps_cm"][0] == 0
+
+    def test_positive_offset_upper(self):
+        """Block in row 0 with offset_ns_cm=+50, faces N/S absent.
+
+        BLOCK_1 orient 0: ns=180, south=0, north=0. max_ns_upper=180.
+        pair_required = 50 + 180 + 0 - 180 - 0 + 0 = 50.
+        """
+        pat = _pattern_two_rows(row_gap=0, standard="standard3")
+        pat["rows"][0]["blocks"][0]["offset_ns_cm"] = 50
+        result = normalize_pattern(pat, STD3)
+        assert pat["row_gaps_cm"][0] == 50
+
+    def test_no_x_overlap(self):
+        """Two blocks in row 0 and 1 block in row 1 with no X overlap.
+
+        Row 0: BLOCK_1 orient 0 at gap=0 (x=0, eo=80, west=90 -> eff [-90,80]).
+        Row 1: BLOCK_1 orient 0 at gap=500 (x=500, eo=80, west=90 -> eff [410,580]).
+        No X overlap => row_gap = 0.
+        """
+        pat = {
+            "name": "NO_OVERLAP",
+            "rows": [
+                {"blocks": [
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 0},
+                ]},
+                {"blocks": [
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 500},
+                ]},
+            ],
+            "row_gaps_cm": [100],
+            "room_width_cm": 1000,
+            "room_depth_cm": 1000,
+            "standard": "standard3",
+            "room_windows": [],
+            "room_openings": [],
+            "room_exclusions": [],
+        }
+        result = normalize_pattern(pat, STD3)
+        assert pat["row_gaps_cm"][0] == 0
+
+    def test_extreme_offset_warning(self):
+        """offset_ns_cm=-200 triggers a warning in normalize result."""
+        pat = _pattern_two_rows(row_gap=0, standard="standard3")
+        pat["rows"][1]["blocks"][0]["offset_ns_cm"] = -200
+        result = normalize_pattern(pat, STD3)
+        extreme_warnings = [
+            w for w in result.warnings if "extreme offset_ns_cm" in w
+        ]
+        assert len(extreme_warnings) >= 1
+        assert "-200" in extreme_warnings[0]
+
+    def test_combined_offset_face_zones(self):
+        """Combination: offset_ns_cm + active south face zone on upper block.
+
+        Row 0: BLOCK_1 orient 90 at gap=0. At orient 90, N/S faces are active
+        (original W/E become N/S after rotation). south_zone = old east = 0,
+        north_zone = old west = chair+passage = 90 (STD3).
+        Actually at orient 90: new_south = old_east = absent(0),
+        new_north = old_west = 90. ns = eo_orig = 80.
+        offset_ns_cm = +30.
+        max_ns_upper = 80 (orient 90: ns = eo_orig = 80).
+
+        Row 1: BLOCK_1 orient 90, offset_ns_cm = 0.
+        north_zone = old_west = 90.
+
+        pair_required = 30 + 80 + 0 - 80 - 0 + 90 = 120.
+        """
+        pat = {
+            "name": "COMBINED",
+            "rows": [
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 90,
+                        "gap_cm": 0, "offset_ns_cm": 30,
+                    },
+                ]},
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 90,
+                        "gap_cm": 0, "offset_ns_cm": 0,
+                    },
+                ]},
+            ],
+            "row_gaps_cm": [0],
+            "room_width_cm": 1000,
+            "room_depth_cm": 1000,
+            "standard": "standard3",
+            "room_windows": [],
+            "room_openings": [],
+            "room_exclusions": [],
+        }
+        result = normalize_pattern(pat, STD3)
+        assert pat["row_gaps_cm"][0] == 120
+
+    def test_3_rows_independent(self):
+        """3 rows, 2 row_gaps: each gap computed independently.
+
+        Row 0: BLOCK_1 orient 0, offset_ns=0. ns=180.
+        Row 1: BLOCK_1 orient 0, offset_ns=-30. ns=180.
+        Row 2: BLOCK_1 orient 0, offset_ns=-50. ns=180.
+
+        All at gap=0, same X position => all pairs have X overlap.
+        max_ns per row = 180.
+
+        row_gap[0]: pair (row0, row1).
+          pair_required = 0 + 180 + 0 - 180 - (-30) + 0 = 30.
+        row_gap[1]: pair (row1, row2).
+          pair_required = -30 + 180 + 0 - 180 - (-50) + 0 = 20.
+        """
+        pat = {
+            "name": "THREE_ROWS",
+            "rows": [
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 0,
+                        "gap_cm": 0, "offset_ns_cm": 0,
+                    },
+                ]},
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 0,
+                        "gap_cm": 0, "offset_ns_cm": -30,
+                    },
+                ]},
+                {"blocks": [
+                    {
+                        "type": "BLOCK_1", "orientation": 0,
+                        "gap_cm": 0, "offset_ns_cm": -50,
+                    },
+                ]},
+            ],
+            "row_gaps_cm": [200, 200],
+            "room_width_cm": 1000,
+            "room_depth_cm": 1000,
+            "standard": "standard3",
+            "room_windows": [],
+            "room_openings": [],
+            "room_exclusions": [],
+        }
+        result = normalize_pattern(pat, STD3)
+        assert pat["row_gaps_cm"][0] == 30
+        assert pat["row_gaps_cm"][1] == 20
+
+
 class TestNormalizeCatalogue:
     """normalize_catalogue processes multiple patterns."""
 

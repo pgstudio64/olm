@@ -10,10 +10,10 @@ and compressed if too loose, converging to the standard's exact minimum.
 """
 from __future__ import annotations
 
-import copy
 import logging
 from dataclasses import dataclass, field
 
+from olm.core.catalogue_matcher import compute_block_positions
 from olm.core.pattern_canonicalize import canonicalize_blocks
 from olm.core.pattern_fit import (
     FitResult,
@@ -24,6 +24,10 @@ from olm.core.pattern_fit import (
 from olm.core.spacing_config import SpacingConfig, build_block_defs
 
 logger = logging.getLogger(__name__)
+
+# Threshold (cm) for emitting a warning about extreme offset_ns_cm values.
+# A block whose offset extends more than this beyond its row depth triggers a warning.
+_EXTREME_OFFSET_THRESHOLD_CM = 100
 
 
 @dataclass
@@ -243,69 +247,188 @@ def _normalize_inter_row_gaps(
     block_defs: dict[str, dict],
     warnings: list[str],
 ) -> int:
-    """Normalize row_gaps_cm between consecutive rows.
+    """Normalize row_gaps_cm between consecutive rows (D-216).
 
-    For each pair of consecutive rows (i, i+1):
-      row_gaps_cm[i] = max(south of each block in row i)
-                     + max(north of each block in row i+1)
+    Uses pair-by-pair X-projection analysis: for each pair of blocks
+    (b in row i, b' in row i+1), if their effective X footprints overlap,
+    a vertical clearance constraint is imposed.
 
-    Uses max per row (conservative approximation; a pair-by-pair X-projection
-    analysis could be tighter but is unnecessary at this stage).
+    Effective X footprint includes west_zone and east_zone (face zones),
+    but NOT desk_to_wall fallback (irrelevant for inter-block spacing).
+
+    Formula per overlapping pair:
+      pair_required = offset_ns[b] + ns[b] + south_zone[b].total_cm
+                    - max_ns_upper - offset_ns[b'] + north_zone[b'].total_cm
+
+    Where max_ns_upper = max(ns_cm) over all blocks in row i.
 
     Returns:
         Number of row gaps changed.
     """
     row_gaps = pattern.get("row_gaps_cm", [])
+    if not row_gaps:
+        return 0
+
+    # Compute block positions once (uses current gap_cm values, post intra-row
+    # normalization). Positions give us x_cm, eo_cm, ns_cm per block.
+    positions = compute_block_positions(pattern)
+
+    # Group positions by row_idx
+    rows_positions: dict[int, list] = {}
+    for bp in positions:
+        rows_positions.setdefault(bp.row_idx, []).append(bp)
+
+    # Compute max_ns per row (same logic as compute_block_positions uses
+    # to advance row_y).
+    max_ns_per_row: dict[int, int] = {}
+    for ri, bps in rows_positions.items():
+        max_ns_per_row[ri] = max((bp.ns_cm for bp in bps), default=0)
+
     changed = 0
 
     for gi in range(len(row_gaps)):
         if gi >= len(rows) - 1:
             break
 
-        upper_row = rows[gi]
-        lower_row = rows[gi + 1]
+        upper_positions = rows_positions.get(gi, [])
+        lower_positions = rows_positions.get(gi + 1, [])
 
-        max_south = _max_face_total(upper_row, "south", block_defs)
-        max_north = _max_face_total(lower_row, "north", block_defs)
+        if not upper_positions or not lower_positions:
+            # No pairs to check — gap should be 0
+            required_gap = 0
+        else:
+            max_ns_upper = max_ns_per_row.get(gi, 0)
+            required_gap = _compute_pair_required_gap(
+                upper_positions, lower_positions,
+                rows, gi, block_defs, max_ns_upper, warnings,
+            )
 
-        required_gap = max_south + max_north
         current_gap = row_gaps[gi]
-
         if current_gap != required_gap:
             old_gap = current_gap
             row_gaps[gi] = required_gap
             changed += 1
             logger.debug(
-                "Row gap %d: %d -> %d (south=%d + north=%d)",
-                gi, old_gap, required_gap, max_south, max_north,
+                "Row gap %d: %d -> %d (pair-by-pair X projection)",
+                gi, old_gap, required_gap,
             )
 
     pattern["row_gaps_cm"] = row_gaps
     return changed
 
 
-def _max_face_total(
-    row: dict,
-    face: str,
+def _compute_pair_required_gap(
+    upper_positions: list,
+    lower_positions: list,
+    rows: list[dict],
+    gi: int,
     block_defs: dict[str, dict],
+    max_ns_upper: int,
+    warnings: list[str],
 ) -> int:
-    """Return the maximum face zone total_cm for a given face across a row.
+    """Compute required row_gap for row pair (gi, gi+1) via X projection.
+
+    For each pair (b, b') where effective X footprints overlap,
+    computes the minimum row_gap to prevent vertical collision.
 
     Args:
-        row: Row dict with 'blocks' list.
-        face: Face name ('north', 'south', 'east', 'west').
+        upper_positions: BlockPositions in row gi.
+        lower_positions: BlockPositions in row gi+1.
+        rows: Pattern rows (JSON).
+        gi: Row gap index (between row gi and gi+1).
         block_defs: Block definitions for the target standard.
+        max_ns_upper: max(ns_cm) over blocks in row gi.
+        warnings: Accumulated warnings list (mutated).
 
     Returns:
-        Maximum total_cm for the specified face. 0 if the row is empty.
+        Required gap (>= 0).
     """
-    max_total = 0
-    for block in row.get("blocks", []):
-        fc = get_face_zones(
-            block.get("type", ""),
-            block.get("orientation", 0),
-            block_defs,
+    upper_row_blocks = rows[gi].get("blocks", [])
+    lower_row_blocks = rows[gi + 1].get("blocks", [])
+
+    max_required = 0
+
+    for bp_upper in upper_positions:
+        block_upper = upper_row_blocks[bp_upper.block_idx]
+        fc_upper = get_face_zones(
+            bp_upper.block_type, bp_upper.orientation, block_defs,
         )
-        face_zone = getattr(fc, face)
-        max_total = max(max_total, face_zone.total_cm)
-    return max_total
+        offset_ns_upper = block_upper.get("offset_ns_cm", 0)
+
+        # Effective X footprint (body + EW face zones)
+        x_min_upper = bp_upper.x_cm - fc_upper.west.total_cm
+        x_max_upper = bp_upper.x_cm + bp_upper.eo_cm + fc_upper.east.total_cm
+
+        # Extreme offset warning for upper block
+        _check_extreme_offset(
+            offset_ns_upper, bp_upper.ns_cm, max_ns_upper,
+            gi, bp_upper.block_idx, warnings,
+        )
+
+        for bp_lower in lower_positions:
+            block_lower = lower_row_blocks[bp_lower.block_idx]
+            fc_lower = get_face_zones(
+                bp_lower.block_type, bp_lower.orientation, block_defs,
+            )
+            offset_ns_lower = block_lower.get("offset_ns_cm", 0)
+
+            # Effective X footprint (body + EW face zones)
+            x_min_lower = bp_lower.x_cm - fc_lower.west.total_cm
+            x_max_lower = (
+                bp_lower.x_cm + bp_lower.eo_cm + fc_lower.east.total_cm
+            )
+
+            # X overlap check
+            if max(x_min_upper, x_min_lower) >= min(x_max_upper, x_max_lower):
+                continue  # No X overlap — no vertical constraint
+
+            # Vertical constraint: bottom[b] <= top[b']
+            pair_required = (
+                offset_ns_upper + bp_upper.ns_cm
+                + fc_upper.south.total_cm
+                - max_ns_upper
+                - offset_ns_lower
+                + fc_lower.north.total_cm
+            )
+            max_required = max(max_required, pair_required)
+
+    # Extreme offset warnings for lower row blocks
+    max_ns_lower = max((bp.ns_cm for bp in lower_positions), default=0)
+    for bp_lower in lower_positions:
+        block_lower = lower_row_blocks[bp_lower.block_idx]
+        offset_ns_lower = block_lower.get("offset_ns_cm", 0)
+        _check_extreme_offset(
+            offset_ns_lower, bp_lower.ns_cm, max_ns_lower,
+            gi + 1, bp_lower.block_idx, warnings,
+        )
+
+    return max(0, max_required)
+
+
+def _check_extreme_offset(
+    offset_ns: int,
+    ns_cm: int,
+    max_ns_row: int,
+    row_idx: int,
+    block_idx: int,
+    warnings: list[str],
+) -> None:
+    """Emit warning if offset_ns_cm is extreme.
+
+    Criteria:
+    - Block extends more than _EXTREME_OFFSET_THRESHOLD_CM beyond row depth.
+    - Block rises more than _EXTREME_OFFSET_THRESHOLD_CM above row origin.
+    """
+    extends_below = offset_ns + ns_cm - max_ns_row
+    if extends_below > _EXTREME_OFFSET_THRESHOLD_CM:
+        warnings.append(
+            f"Block at row {row_idx}, idx {block_idx} has extreme "
+            f"offset_ns_cm {offset_ns} (block extends {extends_below} cm "
+            f"beyond row depth)"
+        )
+    if offset_ns < -_EXTREME_OFFSET_THRESHOLD_CM:
+        warnings.append(
+            f"Block at row {row_idx}, idx {block_idx} has extreme "
+            f"offset_ns_cm {offset_ns} (block rises {-offset_ns} cm "
+            f"above row origin)"
+        )
