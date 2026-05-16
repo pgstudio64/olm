@@ -1683,7 +1683,6 @@ function updateInfo() {
     if (b) {
       if (selInfo) selInfo.style.display = "block";
       if (selHint) selHint.style.display = "none";
-      }
       _safeText("selRow", state.selectedRow);
       _safeText("selBlock", state.selectedBlock);
       _safeText("selType", b.type);
