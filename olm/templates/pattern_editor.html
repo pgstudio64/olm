@@ -655,6 +655,12 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <button id="btnZoomOut" class="btn btn-toolbar" title="Zoom out">&#8722;</button>
           <button id="btnZoomFit" class="btn btn-toolbar" title="Fit all">&#8861;</button>
           <button id="btnZoomIn" class="btn btn-toolbar" title="Zoom in">+</button>
+          <span id="editorOnlyToolbar" style="display:inline-grid;grid-template-columns:auto auto auto;gap:1px;vertical-align:middle;margin-left:12px;">
+          <span></span><button id="btnOffsetN" class="btn btn-toolbar" title="North -10cm (&#8593;)">&#x25B2;</button><span></span>
+          <button id="btnOffsetW" class="btn btn-toolbar" title="West -10cm (&#8592;)">&#x25C0;</button><button id="btnRotate" class="btn btn-toolbar" title="Rotate 90° CW (R)">&#x21BB;</button><button id="btnOffsetE" class="btn btn-toolbar" title="East +10cm (&#8594;)">&#x25B6;</button>
+          <span></span><button id="btnOffsetS" class="btn btn-toolbar" title="South +10cm (&#8595;)">&#x25BC;</button><span></span>
+          </span>
+          <span id="canvasDims" style="display:none;"></span>
         </td>
         <td class="nav-right">
           <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions (keeps current gaps)">Fit to pattern</button>
@@ -669,32 +675,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <input type="range" id="edOverlayOpacity" min="5" max="80" value="25">
       <span id="edOverlayOpacityVal">25%</span>
     </div>
-    <!-- Hidden toolbar buttons (still wired to keyboard shortcuts, kept in DOM) -->
-    <div style="display:none;">
-      <button id="btnRotate"></button>
-      <button id="btnOffsetN"></button>
-      <button id="btnOffsetS"></button>
-      <button id="btnOffsetW"></button>
-      <button id="btnOffsetE"></button>
-      <span id="editorOnlyToolbar"></span>
-      <span id="canvasDims"></span>
-    </div>
     <div class="canvas-wrap">
       <svg id="canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
         <text x="400" y="300" text-anchor="middle" fill="#6e6a62" font-size="12"
               font-family="monospace">Add blocks to get started</text>
       </svg>
-      <div id="blockHud" style="display:none;position:absolute;z-index:20;background:rgba(14,14,13,0.85);border:1px solid var(--border);border-radius:4px;padding:4px;cursor:move;">
-        <table style="border-collapse:collapse;">
-          <tr><td></td><td style="text-align:center;padding:1px;"><button class="btn btn-toolbar" id="hudN" title="North -10cm">&#x25B2;</button></td><td></td></tr>
-          <tr><td style="padding:1px;"><button class="btn btn-toolbar" id="hudW" title="West -10cm">&#x25C0;</button></td><td style="padding:1px;"><button class="btn btn-toolbar" id="hudRot" title="Rotate 90° CW">&#x21BB;</button></td><td style="padding:1px;"><button class="btn btn-toolbar" id="hudE" title="East +10cm">&#x25B6;</button></td></tr>
-          <tr><td></td><td style="text-align:center;padding:1px;"><button class="btn btn-toolbar" id="hudS" title="South +10cm">&#x25BC;</button></td><td></td></tr>
-        </table>
-        <div style="display:flex;gap:2px;margin-top:2px;">
-          <button class="btn" id="hudCancel" style="flex:1;padding:0 2px;font-size:9px;line-height:1.2;" title="Cancel">&times;</button>
-          <button class="btn" id="hudDone" style="flex:1;padding:0 2px;font-size:9px;line-height:1.2;" title="Done">&#10003;</button>
-        </div>
-      </div>
     </div>
     <div id="editorWarnings" style="display:none;padding:4px 8px;font-size:10px;color:#c09050;background:#2a2520;border-top:1px solid #4a4030;max-height:60px;overflow-y:auto;"></div>
     <div class="status-bar" id="statusBar">Ready.</div>
@@ -730,8 +715,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <tr><td>Offset NS (cm)</td><td id="selOffset">0</td></tr>
         </table>
 
-        <div class="section-title">Locks</div>
-        <table id="stickCheckboxes" style="border-collapse:collapse;">
+        <div class="section-title" style="margin-left:8px;">Lock to walls</div>
+        <table id="stickCheckboxes" style="border-collapse:collapse;margin-left:8px;">
           <tr><td></td><td></td><td style="text-align:center;padding:2px;"><input type="checkbox" id="stickN" value="N"></td><td>N</td><td></td></tr>
           <tr><td>W</td><td style="padding:2px;"><input type="checkbox" id="stickW" value="W"></td><td></td><td style="padding:2px;"><input type="checkbox" id="stickE" value="E"></td><td>E</td></tr>
           <tr><td></td><td></td><td style="text-align:center;padding:2px;"><input type="checkbox" id="stickS" value="S"></td><td>S</td><td></td></tr>

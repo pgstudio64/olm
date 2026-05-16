@@ -722,8 +722,8 @@ function computeBlockPositions() {
 }
 
 /**
- * Test whether a specific face of a block touches the room wall.
- * Uses strict cm equality (no tolerance).
+ * Test whether a specific face of a block (including setback zones)
+ * touches the room wall. Uses strict cm equality (no tolerance).
  *
  * @param {number} rowIdx  - row index
  * @param {number} blockIdx - block index within the row
@@ -731,14 +731,28 @@ function computeBlockPositions() {
  * @returns {boolean}
  */
 function faceTouchesWall(rowIdx, blockIdx, face) {
+  var row = state.rows[rowIdx];
+  if (!row || !row.blocks[blockIdx]) return false;
+  var b = row.blocks[blockIdx];
+  var g = getEffectiveGeom(b.type, b.orientation);
+  var f = g.faces;
+  var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
+  // Zone extent in cm for the requested face
+  var zone = 0;
+  if (!isOrtho) {
+    var faceDir = face === "N" ? "north" : face === "S" ? "south"
+                : face === "E" ? "east" : "west";
+    var fd = f[faceDir];
+    if (fd) zone = (fd.non_superposable_cm || 0) + (fd.candidate_cm || 0);
+  }
   var positions = computeBlockPositions();
   for (var i = 0; i < positions.length; i++) {
     var p = positions[i];
     if (p.rowIdx === rowIdx && p.blockIdx === blockIdx) {
-      if (face === "N") return p.y_cm === 0;
-      if (face === "S") return p.y_cm + p.h_cm === state.room_depth_cm;
-      if (face === "W") return p.x_cm === 0;
-      if (face === "E") return p.x_cm + p.w_cm === state.room_width_cm;
+      if (face === "N") return p.y_cm - zone === 0;
+      if (face === "S") return p.y_cm + p.h_cm + zone === state.room_depth_cm;
+      if (face === "W") return p.x_cm - zone === 0;
+      if (face === "E") return p.x_cm + p.w_cm + zone === state.room_width_cm;
     }
   }
   return false;
@@ -789,25 +803,17 @@ function wouldDetachAnyStick(axis, deltaCm) {
     b.offset_ns_cm = oldVal + deltaCm;
   } else {
     oldVal = b.gap_cm || 0;
-    b.gap_cm = Math.max(0, oldVal + deltaCm);
+    b.gap_cm = oldVal + deltaCm;
   }
 
-  // Recompute and check all blocks in this row for broken sticks
-  var positions = computeBlockPositions();
+  // Check all blocks in this row for broken sticks (using zone-aware test)
   var detached = false;
-  for (var i = 0; i < positions.length; i++) {
-    var p = positions[i];
-    if (p.rowIdx !== ri) continue;
-    var blk = state.rows[ri].blocks[p.blockIdx];
+  var row = state.rows[ri];
+  for (var bi2 = 0; bi2 < row.blocks.length; bi2++) {
+    var blk = row.blocks[bi2];
     var sticks = blk.sticks || [];
     for (var si = 0; si < sticks.length; si++) {
-      var face = sticks[si];
-      var touches = false;
-      if (face === "N") touches = p.y_cm === 0;
-      else if (face === "S") touches = p.y_cm + p.h_cm === state.room_depth_cm;
-      else if (face === "W") touches = p.x_cm === 0;
-      else if (face === "E") touches = p.x_cm + p.w_cm === state.room_width_cm;
-      if (!touches) { detached = true; break; }
+      if (!faceTouchesWall(ri, bi2, sticks[si])) { detached = true; break; }
     }
     if (detached) break;
   }
@@ -1032,19 +1038,28 @@ function _renderImpl(targetSvg) {
       '" width="' + bw + '" height="' + bh +
       '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
 
-    // Lock icons on faces that touch a wall
+    // Lock icons — only in Pattern Editor (not in Review/Office views)
+    if (isReview || isDesign) { /* skip locks */ }
+    else {
     var lockSize = 24 * zf;  // ~24 CSS px constant
-    var lockInset = 7 * zf;  // offset towards block interior
+    var lockInset = 7 * zf;  // offset towards block interior from outer edge
     var bSticks = b.sticks || [];
+    // Outer edges of the full block footprint (desk + setback zones)
+    var outerN = by - nTotal;
+    var outerS = by + bh + sTotal;
+    var outerW = bx - wTotal;
+    var outerE = bx + bw + eTotal;
+    var outerCx = (outerW + outerE) / 2;
+    var outerCy = (outerN + outerS) / 2;
     var lockFaces = [
-      { face: "N", touches: pos.y_cm === 0,
-        cx: bx + bw / 2, cy: by + lockInset },
-      { face: "S", touches: pos.y_cm + pos.h_cm === state.room_depth_cm,
-        cx: bx + bw / 2, cy: by + bh - lockInset },
-      { face: "W", touches: pos.x_cm === 0,
-        cx: bx + lockInset, cy: by + bh / 2 },
-      { face: "E", touches: pos.x_cm + pos.w_cm === state.room_width_cm,
-        cx: bx + bw - lockInset, cy: by + bh / 2 },
+      { face: "N", touches: faceTouchesWall(ri, bi, "N"),
+        cx: outerCx, cy: outerN + lockInset },
+      { face: "S", touches: faceTouchesWall(ri, bi, "S"),
+        cx: outerCx, cy: outerS - lockInset },
+      { face: "W", touches: faceTouchesWall(ri, bi, "W"),
+        cx: outerW + lockInset, cy: outerCy },
+      { face: "E", touches: faceTouchesWall(ri, bi, "E"),
+        cx: outerE - lockInset, cy: outerCy },
     ];
     for (var lf = 0; lf < lockFaces.length; lf++) {
       var lk = lockFaces[lf];
@@ -1052,24 +1067,30 @@ function _renderImpl(targetSvg) {
       var locked = bSticks.indexOf(lk.face) >= 0;
       var lx = lk.cx - lockSize / 2;
       var ly = lk.cy - lockSize / 2;
-      var opacity = locked ? "1" : "0.75";
       // Shackle path: closed when locked, open when unlocked
       var shackle = locked
         ? 'M3,6 V4 a4,4 0 0,1 8,0 V6'
         : 'M3,6 V4 a4,4 0 0,1 8,0 V1';
+      var lockColor = locked ? '#c8a800' : '#aaa';
       var sc = lockSize / 14;  // native SVG is 14 wide
+      var lockAttrs = 'data-lock-face="' + lk.face +
+        '" data-lock-row="' + ri + '" data-lock-block="' + bi + '"';
+      // Visual lock icon (z=10)
       elements.push({ z: 10, s:
         '<g transform="translate(' + lx + ',' + ly + ') scale(' + sc + ')" ' +
-        'opacity="' + opacity + '" style="cursor:pointer" ' +
-        'data-lock-face="' + lk.face + '" data-lock-row="' + ri +
-        '" data-lock-block="' + bi + '">' +
-        '<rect x="-5" y="-2" width="24" height="20" fill="transparent"/>' +
-        '<rect x="0" y="6" width="14" height="10" rx="2" fill="rgba(0,0,0,0.75)"/>' +
-        '<path d="' + shackle + '" fill="none" stroke="#ffd400" stroke-width="1.8" stroke-linecap="round"/>' +
-        '<circle cx="7" cy="11" r="1.6" fill="#ffd400"/>' +
+        'pointer-events="none">' +
+        '<rect x="-2" y="-1" width="18" height="19" rx="3" fill="rgba(0,0,0,0.6)"/>' +
+        '<path d="' + shackle + '" fill="none" stroke="' + lockColor + '" stroke-width="1.8" stroke-linecap="round"/>' +
+        '<rect x="0" y="6" width="14" height="10" rx="2" fill="rgba(0,0,0,0.5)" stroke="' + lockColor + '" stroke-width="0.7"/>' +
+        '<circle cx="7" cy="11" r="1.6" fill="' + lockColor + '"/>' +
         '</g>' });
+      // Hit rect for click (z=11, no transform, full lockSize)
+      elements.push({ z: 11, s:
+        '<rect x="' + lx + '" y="' + ly + '" width="' + lockSize + '" height="' + lockSize +
+        '" fill="transparent" style="cursor:pointer" ' + lockAttrs + '/>' });
     }
-  }
+  } // end lock icons
+  } // end if not review/design
   // Compute totalW / totalH from block positions
   for (let pi = 0; pi < blockPos.length; pi++) {
     var bp = blockPos[pi];
@@ -1657,24 +1678,11 @@ function updateInfo() {
 
   const selInfo = document.getElementById("selectionInfo");
   const selHint = document.getElementById("selectionHint");
-  var blockHud = document.getElementById("blockHud");
   if (state.selectedBlock >= 0 && state.rows[state.selectedRow]) {
     const b = state.rows[state.selectedRow].blocks[state.selectedBlock];
     if (b) {
       if (selInfo) selInfo.style.display = "block";
       if (selHint) selHint.style.display = "none";
-      if (blockHud) {
-        if (blockHud.style.display === "none") {
-          blockHud.style.display = "";
-          blockHud._positioned = false;
-          if (typeof window._hudSaveSnapshot === "function") window._hudSaveSnapshot();
-        }
-        if (!blockHud._positioned) {
-          blockHud._positioned = true;
-          requestAnimationFrame(function() {
-            if (typeof window._updateHudPosition === "function") window._updateHudPosition();
-          });
-        }
       }
       _safeText("selRow", state.selectedRow);
       _safeText("selBlock", state.selectedBlock);
@@ -1700,12 +1708,15 @@ function updateInfo() {
     } else {
       if (selInfo) selInfo.style.display = "none";
       if (selHint) selHint.style.display = "block";
-      if (blockHud) blockHud.style.display = "none";
+      // Reset lock checkboxes when no block is selected
+      ["stickN", "stickS", "stickE", "stickW"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.checked = false; el.disabled = true; }
+      });
     }
   } else {
     if (selInfo) selInfo.style.display = "none";
     if (selHint) selHint.style.display = "block";
-    if (blockHud) blockHud.style.display = "none";
   }
 }
 
@@ -1745,6 +1756,7 @@ function updateRowList() {
 }
 
 function deleteRow(i) {
+  markDirty();
   state.rows.splice(i, 1);
   if (i < state.row_gaps_cm.length) {
     state.row_gaps_cm.splice(i, 1);
@@ -1794,6 +1806,7 @@ async function applyDSL() {
       state.selectedBlock = -1;
       updateRowList();
       render();
+
       zoomFit();
       setStatus("DSL applied.");
       return;
@@ -1810,6 +1823,7 @@ async function applyDSL() {
       state.selectedBlock = -1;
       updateRowList();
       render();
+
       zoomFit();
       setStatus("JSON applied.");
     }
@@ -2786,7 +2800,7 @@ function offsetSelectedBlockEO(deltaCm) {
   if (!b) return;
   if (wouldDetachAnyStick("EO", deltaCm)) return;
   markDirty();
-  b.gap_cm = Math.max(0, (b.gap_cm || 0) + deltaCm);
+  b.gap_cm = (b.gap_cm || 0) + deltaCm;
   render(); updateDSL();
 }
 

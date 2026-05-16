@@ -266,7 +266,10 @@ async function init() {
 
   // Lock icons on canvas — event delegation (click on SVG lock toggles stick)
   function _handleLockClick(e) {
-    var el = e.target.closest("[data-lock-face]");
+    var el = e.target;
+    if (!el.getAttribute || !el.getAttribute("data-lock-face")) {
+      el = el.closest ? el.closest("[data-lock-face]") : null;
+    }
     if (!el) return;
     // Prevent the block-selection handler from running on the same click.
     e.stopImmediatePropagation();
@@ -959,84 +962,7 @@ async function init() {
   document.getElementById("btnOffsetS").addEventListener("click", function() { offsetSelectedBlock(GRID_STEP_CM); });
   document.getElementById("btnOffsetW").addEventListener("click", function() { offsetSelectedBlockEO(-GRID_STEP_CM); });
   document.getElementById("btnOffsetE").addEventListener("click", function() { offsetSelectedBlockEO(GRID_STEP_CM); });
-  // HUD buttons — mirror toolbar actions
-  document.getElementById("hudRot").addEventListener("click", rotateSelectedBlock);
-  document.getElementById("hudN").addEventListener("click", function() { offsetSelectedBlock(-GRID_STEP_CM); });
-  document.getElementById("hudS").addEventListener("click", function() { offsetSelectedBlock(GRID_STEP_CM); });
-  document.getElementById("hudW").addEventListener("click", function() { offsetSelectedBlockEO(-GRID_STEP_CM); });
-  document.getElementById("hudE").addEventListener("click", function() { offsetSelectedBlockEO(GRID_STEP_CM); });
 
-  // HUD Done / Cancel
-  var _hudSnapshot = null;  // saved block state for Cancel
-  window._hudSaveSnapshot = function() {
-    var b = getSelectedBlock();
-    if (b) _hudSnapshot = JSON.parse(JSON.stringify(b));
-    else _hudSnapshot = null;
-  }
-  function _hudHide() {
-    var hud = document.getElementById("blockHud");
-    if (hud) hud.style.display = "none";
-  }
-  document.getElementById("hudDone").addEventListener("click", _hudDone);
-  document.getElementById("hudCancel").addEventListener("click", _hudCancel);
-  function _hudCancel() {
-    if (_hudSnapshot) {
-      var b = getSelectedBlock();
-      if (b) Object.assign(b, _hudSnapshot);
-      _hudSnapshot = null;
-      render(); updateDSL(); updateRowList();
-    }
-    _hudHide();
-  }
-  function _hudDone() {
-    _hudSnapshot = null;
-    _hudHide();
-  }
-
-  // Keyboard: Enter = Done, Escape = Cancel (when HUD visible)
-  document.addEventListener("keydown", function(e) {
-    var hud = document.getElementById("blockHud");
-    if (!hud || hud.style.display === "none") return;
-    if (document.activeElement &&
-        (document.activeElement.tagName === "INPUT" ||
-         document.activeElement.tagName === "TEXTAREA" ||
-         document.activeElement.tagName === "SELECT")) return;
-    if (e.key === "Enter") { e.preventDefault(); _hudDone(); }
-    else if (e.key === "Escape") { e.preventDefault(); _hudCancel(); }
-  });
-
-  // HUD positioning — center of canvas-wrap, fixed
-  window._updateHudPosition = function() {
-    var hud = document.getElementById("blockHud");
-    if (!hud || hud.style.display === "none") return;
-    var wrap = hud.parentElement;
-    if (!wrap) return;
-    hud.style.left = "50%";
-    hud.style.top = "50%";
-    hud.style.transform = "translate(-50%, -50%)";
-  };
-
-  // HUD drag
-  (function() {
-    var hud = document.getElementById("blockHud");
-    if (!hud) return;
-    var dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
-    hud.addEventListener("mousedown", function(e) {
-      if (e.target.tagName === "BUTTON") return;
-      dragging = true;
-      startX = e.clientX; startY = e.clientY;
-      origLeft = parseInt(hud.style.left) || 0;
-      origTop = parseInt(hud.style.top) || 0;
-      hud.style.transform = "";
-      e.preventDefault();
-    });
-    document.addEventListener("mousemove", function(e) {
-      if (!dragging) return;
-      hud.style.left = (origLeft + e.clientX - startX) + "px";
-      hud.style.top = (origTop + e.clientY - startY) + "px";
-    });
-    document.addEventListener("mouseup", function() { dragging = false; });
-  })();
   document.getElementById("btnZoomIn").addEventListener("click", function() { zoomIn(); });
   document.getElementById("btnZoomOut").addEventListener("click", function() { zoomOut(); });
   document.getElementById("btnZoomFit").addEventListener("click", function() { zoomFit(); });
@@ -1051,7 +977,8 @@ async function init() {
           e.target.closest("[data-transp]") || e.target.closest("[data-transp-handle]") ||
           e.target.closest("[data-opening-handle]") || e.target.closest("[data-opening-delete]") ||
           e.target.closest("[data-opening-resize]") || e.target.closest("[data-door-hinge]") ||
-          e.target.closest("[data-door-dir]")) return;
+          e.target.closest("[data-door-dir]") ||
+          e.target.getAttribute && e.target.getAttribute("data-lock-face")) return;
       if (svg.id === "rvCanvas" && window.rvTool &&
           (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing" ||
            window.rvTool.mode === "roomResizing" ||
