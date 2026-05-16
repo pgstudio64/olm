@@ -907,6 +907,10 @@ def api_pattern_fit_inline():
         "new_depth": result.new_depth,
         "direction": result.direction,
         "warnings": result.warnings,
+        "rows": pat.get("rows", []),
+        "row_gaps_cm": pat.get("row_gaps_cm", []),
+        "room_openings": pat.get("room_openings", []),
+        "room_windows": pat.get("room_windows", []),
     })
 
 

@@ -883,8 +883,9 @@ function _renderImpl(targetSvg) {
       // Workstations (via shared renderBlockDesks)
       globalDeskIndex += renderBlockDesks(elements, bx, by, b.type, b.orientation, SCALE, globalDeskIndex);
 
-      // Highlight selected block (aligned to block edges)
-      if (ri === state.selectedRow && bi === state.selectedBlock) {
+
+      // Highlight selected block
+      if (isSelected) {
         elements.push({ z: 8, s: '<rect x="' + bx + '" y="' + by +
           '" width="' + bw + '" height="' + bh +
           '" fill="none" stroke="' + COLOR_GOOD + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
@@ -1490,11 +1491,25 @@ function updateInfo() {
 
   const selInfo = document.getElementById("selectionInfo");
   const selHint = document.getElementById("selectionHint");
+  var blockHud = document.getElementById("blockHud");
   if (state.selectedBlock >= 0 && state.rows[state.selectedRow]) {
     const b = state.rows[state.selectedRow].blocks[state.selectedBlock];
     if (b) {
       if (selInfo) selInfo.style.display = "block";
       if (selHint) selHint.style.display = "none";
+      if (blockHud) {
+        if (blockHud.style.display === "none") {
+          blockHud.style.display = "";
+          blockHud._positioned = false;
+          if (typeof window._hudSaveSnapshot === "function") window._hudSaveSnapshot();
+        }
+        if (!blockHud._positioned) {
+          blockHud._positioned = true;
+          requestAnimationFrame(function() {
+            if (typeof window._updateHudPosition === "function") window._updateHudPosition();
+          });
+        }
+      }
       _safeText("selRow", state.selectedRow);
       _safeText("selBlock", state.selectedBlock);
       _safeText("selType", b.type);
@@ -1509,10 +1524,12 @@ function updateInfo() {
     } else {
       if (selInfo) selInfo.style.display = "none";
       if (selHint) selHint.style.display = "block";
+      if (blockHud) blockHud.style.display = "none";
     }
   } else {
     if (selInfo) selInfo.style.display = "none";
     if (selHint) selHint.style.display = "block";
+    if (blockHud) blockHud.style.display = "none";
   }
 }
 
