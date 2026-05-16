@@ -1052,8 +1052,8 @@ function _renderImpl(targetSvg) {
       '" width="' + bw + '" height="' + bh +
       '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
 
-    // Lock icons — only in Pattern Editor (not in Review/Office views)
-    if (isReview || isDesign) { /* skip locks */ }
+    // Lock icons — only in Pattern Editor (not in Review/Office/Amend views)
+    if (isReview || isDesign || state.amendMode) { /* skip locks */ }
     else {
     var lockSize = 24 * zf;  // ~24 CSS px constant
     var lockInset = 7 * zf;  // offset towards block interior from outer edge
@@ -2376,6 +2376,12 @@ function enterAmendMode(room, candidate) {
   document.getElementById("btnSave").textContent = "Save amendment";
   document.getElementById("btnAmendCancel").style.display = "";
 
+  // D-215: dedicated amend-layout CSS mode — hide non-relevant controls
+  document.body.classList.add("amend-layout-mode");
+  // Force Layout sub-tab active (Room tab hidden by CSS)
+  var layoutTab = document.querySelector('[data-pe-tab="peTabLayout"]');
+  if (layoutTab) layoutTab.click();
+
   // Visual cue: amend mode banner
   document.querySelector(".ol-header").classList.add("edit-mode");
   _safeText("autoName", "\u270E " + room.name);
@@ -2394,6 +2400,12 @@ function exitAmendUI() {
   document.getElementById("btnSave").textContent = "Save";
   document.getElementById("btnAmendCancel").style.display = "none";
   document.querySelector(".ol-header").classList.remove("edit-mode");
+  // D-215: remove dedicated amend-layout CSS mode
+  document.body.classList.remove("amend-layout-mode");
+  // Restore Room sub-tab as default (must happen AFTER class removal
+  // so peTabRoom is visible again when the click activates it)
+  var roomTab = document.querySelector('[data-pe-tab="peTabRoom"]');
+  if (roomTab) roomTab.click();
   // Restore sub-tab bar
   var subBar = document.querySelector("#tabLytCatalogue > .sub-tab-bar");
   if (subBar) subBar.style.display = "";

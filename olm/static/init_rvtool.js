@@ -1150,6 +1150,10 @@
       }
 
       // Opening delete badge → remove the opening from state and commit.
+      // D-215: block in amend-layout mode (openings are read-only)
+      if (openingDelete && state.amendMode) {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       if (openingDelete) {
         var dparts = openingDelete.dataset.openingDelete.split("-");
         var dtype = dparts[0], didx = parseInt(dparts[1], 10);
@@ -1171,6 +1175,10 @@
       }
 
       // Door hinge badge → toggle L/R
+      // D-215: block in amend-layout mode
+      if (doorHinge && state.amendMode) {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       if (doorHinge) {
         var hIdx = parseInt(doorHinge.dataset.doorHinge, 10);
         var hDoor = (state.room_doors || [])[hIdx];
@@ -1184,6 +1192,10 @@
         return;
       }
       // Door direction badge → toggle INT/EXT
+      // D-215: block in amend-layout mode
+      if (doorDir && state.amendMode) {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       if (doorDir) {
         var dIdx = parseInt(doorDir.dataset.doorDir, 10);
         var dDoor = (state.room_doors || [])[dIdx];
@@ -1198,6 +1210,10 @@
       }
 
       // Opening resize handle (square) → start width resize.
+      // D-215: block in amend-layout mode
+      if (openingResize && state.amendMode) {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       if (openingResize) {
         var rparts = openingResize.dataset.openingResize.split("-");
         var rtype = rparts[0], ridx = parseInt(rparts[1], 10), rend = rparts[2];
@@ -1223,6 +1239,10 @@
       }
 
       // Opening handle → select + start move along its wall (or dblclick → edit).
+      // D-215: block in amend-layout mode (covers both drag and dblclick edit)
+      if (openingHandle && state.amendMode) {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       if (openingHandle) {
         var parts = openingHandle.dataset.openingHandle.split("-");
         var otype = parts[0], oidx = parseInt(parts[1], 10);

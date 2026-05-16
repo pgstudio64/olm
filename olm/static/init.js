@@ -271,6 +271,8 @@ async function init() {
       el = el.closest ? el.closest("[data-lock-face]") : null;
     }
     if (!el) return;
+    // D-215: locks are hidden in amend-layout mode — no-op guard
+    if (state.amendMode) return;
     // Prevent the block-selection handler from running on the same click.
     e.stopImmediatePropagation();
     var face = el.getAttribute("data-lock-face");

@@ -1139,3 +1139,17 @@
     padding: 0;
   }
   .minimap canvas { display: block; border-radius: 4px; }
+
+  /* D-215: Amend Layout dedicated mode — hide non-relevant PE controls */
+  .amend-layout-mode #peTabRoom { display: none; }
+  .amend-layout-mode .pe-left-tabs { display: none; }
+  .amend-layout-mode #peBtnAddDoor { display: none; }
+  .amend-layout-mode #btnFit { display: none; }
+  .amend-layout-mode #btnCompact { display: none; }
+  .amend-layout-mode #btnNew { display: none; }
+  .amend-layout-mode #btnDuplicate { display: none; }
+  .amend-layout-mode #btnDelete { display: none; }
+  .amend-layout-mode #btnCatSaveAsDefault { display: none; }
+  .amend-layout-mode #btnCatSaveAsDefaultGrid { display: none; }
+  .amend-layout-mode #stickCheckboxes { display: none; }
+  .amend-layout-mode #stickCheckboxesTitle { display: none; }
