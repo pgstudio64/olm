@@ -43,8 +43,38 @@
 
     var _rvGhostRect = null;
 
+    // Resolve active SVG canvas and DSL textarea based on amend context
+    function _getActiveSvg() {
+      if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
+        return document.getElementById("canvas");
+      }
+      return document.getElementById("rvCanvas");
+    }
+    function _getActiveDslEl() {
+      if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
+        return document.getElementById("dslRoom");
+      }
+      return document.getElementById("rvRoomDsl");
+    }
+    function _renderActive() {
+      render(_getActiveSvg());
+    }
+    // Post-modification hook: sync PE-specific UI after visual edits
+    function _syncPatternEditorUI() {
+      if (!state.roomAmendMode ||
+          state.roomAmendMode.context !== "pattern") return;
+      // Update dimension inputs
+      var wEl = document.getElementById("roomWidth");
+      var dEl = document.getElementById("roomDepth");
+      if (wEl) wEl.value = state.room_width_cm;
+      if (dEl) dEl.value = state.room_depth_cm;
+      // Update DSL textarea
+      var dslEl = _getActiveDslEl();
+      if (dslEl) dslEl.value = _stateToDsl();
+    }
+
     function rvScreenToRoomCm(evt, customSnapCm) {
-      var svg = document.getElementById("rvCanvas");
+      var svg = _getActiveSvg();
       var pt = svg.createSVGPoint();
       pt.x = evt.clientX;
       pt.y = evt.clientY;
@@ -57,7 +87,8 @@
     }
 
     async function rvApplyDslAsync() {
-      var text = document.getElementById("rvRoomDsl").value.trim();
+      var text = (_getActiveDslEl() || {}).value || "";
+      text = text.trim();
       if (!text) return;
       try {
         var resp = await fetch("/api/room-dsl/parse", {
@@ -74,24 +105,28 @@
         _splitOpeningsIntoState(data.openings);
         state.room_exclusions = data.exclusion_zones || [];
         state.room_transparents = data.transparent_zones || [];
-        render(document.getElementById("rvCanvas"));
+        _renderActive();
         if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
+        _syncPatternEditorUI();
       } catch (err) { console.error("rvApplyDslAsync:", err); }
     }
 
     function rvDslAppendExcl(x_cm, y_cm, w_cm, h_cm) {
-      var el = document.getElementById("rvRoomDsl");
+      var el = _getActiveDslEl();
+      if (!el) return;
       var line = "EXCLUSION " + x_cm + " " + y_cm + " " + w_cm + " " + h_cm;
       el.value = el.value.trimEnd() + "\n" + line;
     }
     function rvDslAppendTransparent(x_cm, y_cm, w_cm, h_cm) {
-      var el = document.getElementById("rvRoomDsl");
+      var el = _getActiveDslEl();
+      if (!el) return;
       var line = "TRANSPARENT " + x_cm + " " + y_cm + " " + w_cm + " " + h_cm;
       el.value = el.value.trimEnd() + "\n" + line;
     }
 
     function rvDslReplaceExcl(index, x_cm, y_cm, w_cm, h_cm) {
-      var el = document.getElementById("rvRoomDsl");
+      var el = _getActiveDslEl();
+      if (!el) return;
       var lines = el.value.split("\n");
       var count = 0;
       for (var i = 0; i < lines.length; i++) {
@@ -107,7 +142,8 @@
     }
 
     function rvDslDeleteExcl(index) {
-      var el = document.getElementById("rvRoomDsl");
+      var el = _getActiveDslEl();
+      if (!el) return;
       var lines = el.value.split("\n");
       var count = 0;
       for (var i = 0; i < lines.length; i++) {
@@ -123,7 +159,7 @@
     }
 
     function rvShowGhostRect(x_svg, y_svg, w_svg, h_svg) {
-      var svg = document.getElementById("rvCanvas");
+      var svg = _getActiveSvg();
       if (!_rvGhostRect) {
         _rvGhostRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         _rvGhostRect.setAttribute("fill", "none");
@@ -214,7 +250,8 @@
     }
 
     var rvCvEl = document.getElementById("rvCanvas");
-    if (!rvCvEl) return;
+    var peCvEl = document.getElementById("canvas");
+    if (!rvCvEl && !peCvEl) return;
 
     // --- Opening placement buttons (Add Window / Door / Opening) ---
     // Click a button → enter placingOpening mode; next click on a wall
@@ -240,13 +277,13 @@
       if (rvTool.mode === "placingOpening" && rvTool.placingOpeningType === type) {
         rvTool.mode = "idle";
         rvTool.placingOpeningType = null;
-        rvCvEl.style.cursor = "";
+        _getActiveSvg().style.cursor = "";
         return;
       }
       rvTool.mode = "placingOpening";
       rvTool.placingOpeningType = type;
       if (btn) btn.classList.add("active");
-      rvCvEl.style.cursor = "crosshair";
+      _getActiveSvg().style.cursor = "crosshair";
     }
     ([
       ["rvBtnAddWindow", "window"],
@@ -272,7 +309,7 @@
       if (cb) {
         cb.addEventListener("change", function () {
           state[entry[1]] = cb.checked;
-          render(document.getElementById("rvCanvas"));
+          _renderActive();
         });
       }
     });
@@ -935,6 +972,7 @@
           state.room_doors = clampOd(newDoors.concat(preservedDoors), _sW, _sD);
           _rvCommitFromState();
           if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
+        _syncPatternEditorUI();
         } catch (err) {
           alertModal("Rescan failed: " + err.message);
         } finally {
@@ -973,16 +1011,16 @@
             rvTool.mode = "placing";
             rvTool.selectedIndex = -1;
             state.selectedExclusion = -1;
-            rvCvEl.style.cursor = "crosshair";
+            _getActiveSvg().style.cursor = "crosshair";
             rvTool.placingZoneKind = "exclusion";
-            render(rvCvEl);
+            _renderActive();
           } else if (kind === "transparent") {
             rvTool.mode = "placing";
             rvTool.selectedIndex = -1;
             state.selectedExclusion = -1;
-            rvCvEl.style.cursor = "crosshair";
+            _getActiveSvg().style.cursor = "crosshair";
             rvTool.placingZoneKind = "transparent";
-            render(rvCvEl);
+            _renderActive();
           }
         });
       });
@@ -996,14 +1034,14 @@
         if (rvTool.mode === "placing") {
           rvTool.mode = "idle";
           rvBtnAddExclEl.classList.remove("active");
-          rvCvEl.style.cursor = "";
+          _getActiveSvg().style.cursor = "";
         } else {
           rvTool.mode = "placing";
           rvTool.selectedIndex = -1;
           state.selectedExclusion = -1;
           rvBtnAddExclEl.classList.add("active");
-          rvCvEl.style.cursor = "crosshair";
-          render(rvCvEl);
+          _getActiveSvg().style.cursor = "crosshair";
+          _renderActive();
         }
       });
     }
@@ -1027,7 +1065,7 @@
       (state.room_doors || []).forEach(function (d) {
         if (d.origin) originCache[_keyFor("d", d)] = d.origin;
       });
-      var el = document.getElementById("rvRoomDsl");
+      var el = _getActiveDslEl();
       if (el) el.value = _stateToDsl();
       rvApplyDslAsync().then(function () {
         (state.room_windows || []).forEach(function (w) {
@@ -1045,11 +1083,12 @@
           if (originCache[k]) d.origin = originCache[k];
           else if (!d.origin) d.origin = "auto";
         });
+        _syncPatternEditorUI();
       });
     }
 
-    // rvCanvas mousedown: start drawing, drag, or resize
-    rvCvEl.addEventListener("mousedown", function (e) {
+    // Canvas mousedown: start drawing, drag, or resize (both canvases)
+    function _onRoomCanvasMousedown(e) {
       if (!state.roomAmendMode) return;
       if (e.button !== 0) return;
 
@@ -1100,7 +1139,7 @@
           state.selectedTransparent = tIdx;
           state.selectedExclusion = -1;
           state.selectedOpening = null;
-          render(rvCvEl);
+          _renderActive();
         }
         e.preventDefault(); e.stopPropagation();
         return;
@@ -1173,7 +1212,7 @@
           mouseStart: rpt0,
         };
         state.isPanning = false;
-        render(rvCvEl);
+        _renderActive();
         e.preventDefault(); e.stopPropagation();
         if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
         return;
@@ -1204,7 +1243,7 @@
           mouseStart: pt0,
         };
         state.isPanning = false;
-        render(rvCvEl);
+        _renderActive();
         e.preventDefault(); e.stopPropagation();
         if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
         return;
@@ -1286,7 +1325,7 @@
         // Exit placing mode.
         rvTool.mode = "idle";
         rvTool.placingOpeningType = null;
-        rvCvEl.style.cursor = "";
+        _getActiveSvg().style.cursor = "";
         ["rvBtnAddWindow", "rvBtnAddDoor", "rvBtnAddOpening"].forEach(function (id) {
           var b = document.getElementById(id);
           if (b) b.classList.remove("active");
@@ -1334,7 +1373,7 @@
           rvTool.selectedIndex = idx;
           rvTool.mode = "selected";
           state.selectedExclusion = idx;
-          render(rvCvEl);
+          _renderActive();
         }
         e.preventDefault();
         e.stopPropagation();
@@ -1348,12 +1387,14 @@
         state.selectedOpening = null;
         state.selectedExclusion = -1;
         state.selectedTransparent = -1;
-        render(rvCvEl);
+        _renderActive();
       }
-    });
+    }
+    if (rvCvEl) rvCvEl.addEventListener("mousedown", _onRoomCanvasMousedown);
+    if (peCvEl) peCvEl.addEventListener("mousedown", _onRoomCanvasMousedown);
 
-    // rvCanvas click: deselect on empty area
-    rvCvEl.addEventListener("click", function (e) {
+    // Canvas click: deselect on empty area (both canvases)
+    function _onRoomCanvasClick(e) {
       if (!state.roomAmendMode) return;
       if (rvTool.mode === "placing" || rvTool.mode === "drawing") return;
       var exclTarget = e.target.closest("[data-excl]");
@@ -1372,9 +1413,11 @@
         state.selectedExclusion = -1;
         state.selectedOpening = null;
         state.selectedTransparent = -1;
-        render(rvCvEl);
+        _renderActive();
       }
-    });
+    }
+    if (rvCvEl) rvCvEl.addEventListener("click", _onRoomCanvasClick);
+    if (peCvEl) peCvEl.addEventListener("click", _onRoomCanvasClick);
 
     // Delete key → remove selected opening.
     document.addEventListener("keydown", function (e) {
@@ -1507,7 +1550,7 @@
           opR.width_cm = newW;
         }
         opR.origin = "manual";
-        render(rvCvEl);
+        _renderActive();
         return;
       }
       if (rvTool.mode === "transpDragging" && rvTool.dragOffset) {
@@ -1519,7 +1562,7 @@
         var tMaxY = state.room_depth_cm - tzDrag.depth_cm;
         tzDrag.x_cm = Math.max(0, Math.min(tMaxX, tpt2.x_cm - rvTool.dragOffset.dx_cm));
         tzDrag.y_cm = Math.max(0, Math.min(tMaxY, tpt2.y_cm - rvTool.dragOffset.dy_cm));
-        render(rvCvEl);
+        _renderActive();
         return;
       }
       if (rvTool.mode === "transpResizing" && rvTool.resizeStart) {
@@ -1552,7 +1595,7 @@
           tzRes.width_cm = Math.max(TMIN, Math.min(tRoomW - trs.x_cm, trs.width_cm + tdx));
           tzRes.depth_cm = Math.max(TMIN, Math.min(tRoomD - trs.y_cm, trs.depth_cm + tdy));
         }
-        render(rvCvEl);
+        _renderActive();
         return;
       }
       if (rvTool.mode === "openingMoving" && rvTool.openingMove) {
@@ -1587,7 +1630,7 @@
           op.offset_cm = Math.max(0, Math.min(maxOff, om.startOffset + delta));
         }
         op.origin = "manual";
-        render(rvCvEl);
+        _renderActive();
         return;
       }
       if (rvTool.mode === "drawing" && rvTool.drawStart) {
@@ -1609,7 +1652,7 @@
         var maxY3 = state.room_depth_cm - excl3.depth_cm;
         excl3.x_cm = Math.max(0, Math.min(maxX3, pt3.x_cm - rvTool.dragOffset.dx_cm));
         excl3.y_cm = Math.max(0, Math.min(maxY3, pt3.y_cm - rvTool.dragOffset.dy_cm));
-        render(rvCvEl);
+        _renderActive();
         return;
       }
       if (rvTool.mode === "roomResizing" && rvTool.roomResizeStart) {
@@ -1678,8 +1721,9 @@
           c.y_cm = (c.y_cm || 0) - shiftY;
           return c;
         });
-        render(rvCvEl);
+        _renderActive();
         if (window.rvUpdateRoomInfo) window.rvUpdateRoomInfo();
+        _syncPatternEditorUI();
         return;
       }
       if (rvTool.mode === "resizing" && rvTool.resizeStart) {
@@ -1714,7 +1758,7 @@
           exclR.width_cm = Math.max(MIN_CM, Math.min(roomW - rs.x_cm, rs.width_cm + dx));
           exclR.depth_cm = Math.max(MIN_CM, Math.min(roomD - rs.y_cm, rs.depth_cm + dy));
         }
-        render(rvCvEl);
+        _renderActive();
       }
     });
 
@@ -1750,7 +1794,7 @@
         rvTool.drawStart = null;
         rvTool.mode = "idle";
         if (rvBtnAddExclEl) rvBtnAddExclEl.classList.remove("active");
-        rvCvEl.style.cursor = "";
+        _getActiveSvg().style.cursor = "";
         if (w_cm >= GRID_STEP_CM && h_cm >= GRID_STEP_CM) {
           if (rvTool.placingZoneKind === "transparent") {
             rvDslAppendTransparent(x_cm, y_cm, w_cm, h_cm);
@@ -1789,7 +1833,7 @@
         if (lwEl) lwEl.checked = true;
         // Commit: regenerate the whole DSL from current state (since a
         // corner drag may have shifted many content offsets) and re-apply.
-        var dslEl = document.getElementById("rvRoomDsl");
+        var dslEl = _getActiveDslEl();
         if (dslEl) {
           dslEl.value = _stateToDsl();
           rvApplyDslAsync();
@@ -1837,7 +1881,7 @@
         else if (e.key === "ArrowDown") exclK.y_cm = Math.min(maxYK, exclK.y_cm + step);
         else if (e.key === "ArrowUp") exclK.y_cm = Math.max(0, exclK.y_cm - step);
         rvDslReplaceExcl(idxK, exclK.x_cm, exclK.y_cm, exclK.width_cm, exclK.depth_cm);
-        render(rvCvEl);
+        _renderActive();
         return;
       }
 
@@ -1855,7 +1899,7 @@
           }
           rvTool.mode = "idle";
           rvTool.openingMove = null;
-          render(rvCvEl);
+          _renderActive();
           return;
         }
         // Cancel in-progress opening resize: restore original offset/width
@@ -1869,7 +1913,7 @@
           }
           rvTool.mode = "idle";
           rvTool.openingResize = null;
-          render(rvCvEl);
+          _renderActive();
           return;
         }
         // Cancel in-progress exclusion drag
@@ -1881,7 +1925,7 @@
           }
           rvTool.mode = "selected";
           rvTool.dragOffset = null;
-          render(rvCvEl);
+          _renderActive();
           return;
         }
         // Cancel in-progress transparent drag
@@ -1893,7 +1937,7 @@
           }
           rvTool.mode = "transpSelected";
           rvTool.dragOffset = null;
-          render(rvCvEl);
+          _renderActive();
           return;
         }
         if (rvTool.mode === "placing" || rvTool.mode === "drawing") {
@@ -1901,12 +1945,12 @@
           rvTool.mode = "idle";
           rvTool.drawStart = null;
           if (rvBtnAddExclEl) rvBtnAddExclEl.classList.remove("active");
-          rvCvEl.style.cursor = "";
+          _getActiveSvg().style.cursor = "";
         } else if (rvTool.mode === "selected") {
           rvTool.selectedIndex = -1;
           rvTool.mode = "idle";
           state.selectedExclusion = -1;
-          render(rvCvEl);
+          _renderActive();
         }
         return;
       }
@@ -1917,7 +1961,7 @@
         rvTool.selectedIndex = -1;
         rvTool.mode = "idle";
         state.selectedExclusion = -1;
-        render(rvCvEl);
+        _renderActive();
         return;
       }
 

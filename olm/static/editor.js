@@ -272,7 +272,7 @@ async function applyRoomDSL() {
   }
 }
 
-function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) {
+function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview, isPatternAmend) {
   // Windows — cyan line offset outward (or on wall in review mode)
   var wallThick = isReview ? 0 : 1.5;
   var winStroke = isReview ? 3 : 1.5;
@@ -435,8 +435,9 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
     // Seed déjà dessiné plus haut (indépendamment de la présence de hits).
   }
 
-  // Opening/window handles — only in Room amend mode (Phase A CRUD).
-  if (isReview && state.roomAmendMode) {
+  // Opening/window handles — in Room amend mode (Floor Review or Pattern editor).
+  var _inAmend = (isReview || isPatternAmend) && state.roomAmendMode;
+  if (_inAmend) {
     // zf = SVG units per CSS pixel (computed in _renderImpl, exposed here).
     var hzf = window._currentZf || 1;
     var handleR = 6 * hzf;       // ~6 px constant
@@ -588,7 +589,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
       '" width="' + zw + '" height="' + zh +
       '" fill="' + COLOR_GOOD + '" fill-opacity="0.25" stroke="' + COLOR_GOOD + '"' +
       ' stroke-width="0.5" vector-effect="non-scaling-stroke"/>' });
-    if (isReview && state.roomAmendMode) {
+    if (_inAmend) {
       if (zi === state.selectedTransparent) {
         elements.push({ z: 8, s: '<rect x="' + zx + '" y="' + zy +
           '" width="' + zw + '" height="' + zh +
@@ -609,12 +610,10 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview) 
               '" style="cursor:' + c.cur + ';"/>' });
           });
       }
-      if (isReview && state.roomAmendMode) {
-        elements.push({ z: 9, s: '<rect x="' + zx + '" y="' + zy +
-          '" width="' + zw + '" height="' + zh +
-          '" fill="transparent" data-transp="' + zi +
-          '" style="cursor:pointer;"/>' });
-      }
+      elements.push({ z: 9, s: '<rect x="' + zx + '" y="' + zy +
+        '" width="' + zw + '" height="' + zh +
+        '" fill="transparent" data-transp="' + zi +
+        '" style="cursor:pointer;"/>' });
     }
   });
 
@@ -1080,7 +1079,7 @@ function _renderImpl(targetSvg) {
   // Dragging any corner shifts the room AND translates all anchored content
   // (windows, doors, openings, exclusions) so they keep their absolute
   // position. See init_rvtool.js roomResize handlers.
-  if (isReview && state.roomAmendMode) {
+  if ((isReview || _peAmend) && state.roomAmendMode) {
     var rhs = 10 * zf;   // ~10 px constant visual size
     var rhsStroke = 1 * zf;
     var roomCorners = [
@@ -1133,7 +1132,10 @@ function _renderImpl(targetSvg) {
     dLabel + '</text>' });
 
   // Windows, doors, openings, exclusion zones
-  renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview);
+  var _peAmend = state.roomAmendMode &&
+    state.roomAmendMode.context === "pattern" && !isReview && !isDesign;
+  renderRoomElements(
+    elements, roomX, roomY, roomWPx, roomHPx, isReview, _peAmend);
 
   // Circulation — smoothed polylines, width proportional to traffic (z=0.2)
   if (hasBlocks && state.circVisible) {
