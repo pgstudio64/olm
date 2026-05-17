@@ -246,23 +246,33 @@ class TestMirrorPattern:
         m = mirror_pattern(p)
         assert m["name"] == "test_pat_MIR"
 
-    def test_sticks_e_o_swap(self):
-        """E sticks become O and vice versa (O/W are west aliases)."""
+    def test_sticks_e_w_swap(self):
+        """E sticks become W and vice versa. Legacy "O" is normalized to "W"."""
         p = _make_pattern([
             [
-                {"type": "BLOCK_1", "sticks": ["O"], "gap_cm": 0},
+                {"type": "BLOCK_1", "sticks": ["W"], "gap_cm": 0},
                 {"type": "BLOCK_1", "sticks": ["E"], "gap_cm": 100},
             ],
         ], room_width_cm=400)
         m = mirror_pattern(p)
-        # Block order is reversed in the mirror
         blocks = m["rows"][0]["blocks"]
-        # The former E block (last) is now first with stick O
-        # The former O block (first) is now last with stick E
         all_sticks = [b.get("sticks", []) for b in blocks]
         flat_sticks = [s for sticks in all_sticks for s in sticks]
         assert "E" in flat_sticks
-        assert "O" in flat_sticks
+        assert "W" in flat_sticks
+        # Legacy "O" in input is normalized to "W" in the mirror output
+        assert "O" not in flat_sticks
+
+    def test_sticks_legacy_o_normalized_to_w(self):
+        """A legacy pattern with stick "O" mirrors to canonical "W"... but
+        already-W input mirrors to "E", so this test starts from "O" in input."""
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "sticks": ["O"], "gap_cm": 0}],
+        ], room_width_cm=400)
+        m = mirror_pattern(p)
+        sticks_out = m["rows"][0]["blocks"][0].get("sticks", [])
+        # Legacy "O" -> "E" (since O is treated as a west alias)
+        assert sticks_out == ["E"]
 
     def test_ortho_r_becomes_l(self):
         """BLOCK_2_ORTHO_R becomes BLOCK_2_ORTHO_L and vice versa."""
@@ -411,8 +421,10 @@ class TestComputeDeskPositions:
         d = desks[0]
         assert d.x_cm == 10
         assert d.y_cm == 0
-        assert d.width_cm == DESK_W_CM
-        assert d.depth_cm == DESK_D_CM
+        # D-223: width_cm / depth_cm now reflect the desk extent in the EO/NS
+        # frame. BLOCK_1 at orient=0 occupies DESK_D_CM (EO) × DESK_W_CM (NS).
+        assert d.width_cm == DESK_D_CM
+        assert d.depth_cm == DESK_W_CM
 
     def test_bloc_4_face_has_4_desks(self):
         p = _make_pattern([
@@ -452,9 +464,10 @@ class TestComputeDeskPositions:
         desks = compute_desk_positions(p)
         assert len(desks) == 1
         d = desks[0]
-        # After 90-degree rotation, w and d are swapped
-        assert d.width_cm == DESK_D_CM
-        assert d.depth_cm == DESK_W_CM
+        # D-223: at orient=0 the desk extent is (DESK_D_CM, DESK_W_CM) along
+        # (EO, NS). After 90° CW rotation, swap to (DESK_W_CM, DESK_D_CM).
+        assert d.width_cm == DESK_W_CM
+        assert d.depth_cm == DESK_D_CM
 
 
 # ---------------------------------------------------------------------------

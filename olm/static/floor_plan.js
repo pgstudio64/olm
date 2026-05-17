@@ -434,7 +434,7 @@
     if (amendment) {
       var gradeClass = "fp-grade-" + (amendment.circulation_grade || "F");
       container.innerHTML =
-        '<div class="fp-candidate amended selected" data-fp-cand="0">' +
+        '<div class="fp-candidate amended selected" tabindex="-1" data-fp-cand="0">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;">' +
             '<span class="fp-c-name">' + amendment.pattern_name + '</span>' +
           '</div>' +
@@ -487,7 +487,7 @@
       var gradeClass = "fp-grade-" + (c.circulation_grade || "F");
       var classes = "fp-candidate";
       if (isBest) classes += " selected best";
-      return '<div class="' + classes + '" data-fp-cand="' + i + '">' +
+      return '<div class="' + classes + '" tabindex="-1" data-fp-cand="' + i + '">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
           '<span class="fp-c-name">' + c.pattern_name + '</span>' +
         '</div>' +
@@ -1062,7 +1062,11 @@
         if (nextIdx !== curIdx) {
           items[nextIdx].click();
           items[nextIdx].scrollIntoView({ block: "nearest" });
+          items[nextIdx].focus();
         }
+      }
+      else if (inDesign && e.key === "Enter") {
+        e.preventDefault();
       }
     });
 

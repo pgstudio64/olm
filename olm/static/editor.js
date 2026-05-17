@@ -1054,10 +1054,14 @@ function _renderImpl(targetSvg) {
       '" width="' + bw + '" height="' + bh +
       '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
 
-    // Lock icons — only in Pattern Editor (not in Review/Office/Amend views)
-    if (isReview || isDesign || state.amendMode) { /* skip locks */ }
+    // Lock visualization (D-220)
+    //  - PE (canvas), normal mode: 4-face cadenas with locked/unlocked state
+    //  - Office (rvCanvas/fpCanvas): short tick marker on each stick effectively set,
+    //    so the user can verify wall attachment without leaving review mode
+    //  - Amend Layout / Room Amend: hidden (no interaction with locks)
+    if (state.amendMode || state.roomAmendMode) { /* hidden in amend modes */ }
     else {
-    var lockSize = 24 * zf;  // ~24 CSS px constant
+    var lockSize = 24 * zf;  // PE cadenas size
     var lockInset = 7 * zf;  // offset towards block interior from outer edge
     var bSticks = b.sticks || [];
     // Outer edges of the full block footprint (desk + setback zones)
@@ -1077,13 +1081,33 @@ function _renderImpl(targetSvg) {
       { face: "E", touches: faceTouchesWall(ri, bi, "E"),
         cx: outerE - lockInset, cy: outerCy },
     ];
+    var isOffice = (isReview || isDesign);
     for (var lf = 0; lf < lockFaces.length; lf++) {
       var lk = lockFaces[lf];
       if (!lk.touches) continue;
       var locked = bSticks.indexOf(lk.face) >= 0;
+      if (isOffice) {
+        // Office: small rope-knot marker — same dark background as the PE
+        // cadenas, slightly smaller, knot oriented perpendicular to the wall.
+        if (!locked) continue;
+        var knotSize = 18 * zf;
+        var ksc = knotSize / 14;
+        var kx = lk.cx - knotSize / 2;
+        var ky = lk.cy - knotSize / 2;
+        var krot = (lk.face === "E" || lk.face === "W") ? 90 : 0;
+        elements.push({ z: 10, s:
+          '<g transform="translate(' + kx + ',' + ky + ') scale(' + ksc +
+          ') rotate(' + krot + ' 7 7)" pointer-events="none">' +
+          '<rect x="0" y="0" width="14" height="14" rx="3" fill="rgba(0,0,0,0.6)"/>' +
+          '<circle cx="7" cy="7" r="3" fill="none" stroke="#c8a800" stroke-width="1.6"/>' +
+          '<line x1="7" y1="1" x2="7" y2="4" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
+          '<line x1="7" y1="10" x2="7" y2="13" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
+          '</g>' });
+        continue;
+      }
+      // PE: cadenas icon (locked yellow, unlocked grey) + click hit-rect
       var lx = lk.cx - lockSize / 2;
       var ly = lk.cy - lockSize / 2;
-      // Shackle path: closed when locked, open when unlocked
       var shackle = locked
         ? 'M3,6 V4 a4,4 0 0,1 8,0 V6'
         : 'M3,6 V4 a4,4 0 0,1 8,0 V1';
@@ -1091,7 +1115,6 @@ function _renderImpl(targetSvg) {
       var sc = lockSize / 14;  // native SVG is 14 wide
       var lockAttrs = 'data-lock-face="' + lk.face +
         '" data-lock-row="' + ri + '" data-lock-block="' + bi + '"';
-      // Visual lock icon (z=10)
       elements.push({ z: 10, s:
         '<g transform="translate(' + lx + ',' + ly + ') scale(' + sc + ')" ' +
         'pointer-events="none">' +
@@ -1100,13 +1123,12 @@ function _renderImpl(targetSvg) {
         '<rect x="0" y="6" width="14" height="10" rx="2" fill="rgba(0,0,0,0.5)" stroke="' + lockColor + '" stroke-width="0.7"/>' +
         '<circle cx="7" cy="11" r="1.6" fill="' + lockColor + '"/>' +
         '</g>' });
-      // Hit rect for click (z=11, no transform, full lockSize)
       elements.push({ z: 11, s:
         '<rect x="' + lx + '" y="' + ly + '" width="' + lockSize + '" height="' + lockSize +
         '" fill="transparent" style="cursor:pointer" ' + lockAttrs + '/>' });
     }
-  } // end lock icons
-  } // end if not review/design
+  } // end lock visualization
+  } // end for blockPos pi loop
   // Compute totalW / totalH from block positions
   for (let pi = 0; pi < blockPos.length; pi++) {
     var bp = blockPos[pi];
@@ -2408,9 +2430,11 @@ function exitAmendUI() {
   // so peTabRoom is visible again when the click activates it)
   var roomTab = document.querySelector('[data-pe-tab="peTabRoom"]');
   if (roomTab) roomTab.click();
-  // Restore sub-tab bar
+  // Restore sub-tab bar and reset to Card view
   var subBar = document.querySelector("#tabLytCatalogue > .sub-tab-bar");
   if (subBar) subBar.style.display = "";
+  var cardBtn = document.querySelector('.sub-tab-btn[data-subtab="catCards"]');
+  if (cardBtn) cardBtn.click();
 }
 
 // IDs to disable in room-amend mode (layout controls + catalogue actions)

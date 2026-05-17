@@ -329,9 +329,9 @@ def _mirror_block(block: dict) -> dict:
     else:
         b["orientation"] = (180 - orient) % 360
 
-    # Swap sticks E <-> O (W is an alias of O in some cases)
+    # Swap sticks E <-> W. Legacy "O" (west alias) is normalized to "W".
     if "sticks" in b:
-        _STICK_MIRROR = {"E": "O", "O": "E", "W": "E", "N": "N", "S": "S"}
+        _STICK_MIRROR = {"E": "W", "W": "E", "O": "E", "N": "N", "S": "S"}
         b["sticks"] = [_STICK_MIRROR.get(s, s) for s in b["sticks"]]
 
     return b
@@ -789,50 +789,55 @@ class DeskPosition:
     block_type: str
 
 
-# Relative positions of desks within each block type at orientation 0°
-# Format: list[(dx, dy, desk_w, desk_d)] relative to the NW corner of the block
+# Relative positions of desks within each block type at orientation 0°.
+# Convention (D-223): (dx, dy, extent_eo, extent_ns) — position and extent of
+# the desk within the block's EO/NS frame, NW origin. DESK_D_CM is the desk's
+# narrow side (80, "depth"), DESK_W_CM the wide side (180, "width"). A standard
+# front-facing desk in BLOCK_1 (eo_cm=80, ns_cm=180) therefore has extent
+# (DESK_D_CM, DESK_W_CM) along (EO, NS). Frontend block_geometry.js uses the
+# same convention.
 _DESK_LAYOUTS: dict[str, list[tuple[int, int, int, int]]] = {
     "BLOCK_1": [
-        (0, 0, DESK_W_CM, DESK_D_CM),
+        (0, 0, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_2_FACE": [
-        (0, 0, DESK_W_CM, DESK_D_CM),
-        (DESK_W_CM, 0, DESK_W_CM, DESK_D_CM),
+        (0, 0, DESK_D_CM, DESK_W_CM),
+        (DESK_D_CM, 0, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_2_SIDE": [
-        (0, 0, DESK_W_CM, DESK_D_CM),
-        (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
+        (0, 0, DESK_D_CM, DESK_W_CM),
+        (0, DESK_W_CM, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_3_SIDE": [
-        (0, 0, DESK_W_CM, DESK_D_CM),
-        (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
-        (0, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
+        (0, 0, DESK_D_CM, DESK_W_CM),
+        (0, DESK_W_CM, DESK_D_CM, DESK_W_CM),
+        (0, 2 * DESK_W_CM, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_4_FACE": [
-        (0, 0, DESK_W_CM, DESK_D_CM),
-        (DESK_W_CM, 0, DESK_W_CM, DESK_D_CM),
-        (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
-        (DESK_W_CM, DESK_D_CM, DESK_W_CM, DESK_D_CM),
+        (0, 0, DESK_D_CM, DESK_W_CM),
+        (DESK_D_CM, 0, DESK_D_CM, DESK_W_CM),
+        (0, DESK_W_CM, DESK_D_CM, DESK_W_CM),
+        (DESK_D_CM, DESK_W_CM, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_6_FACE": [
-        (0, 0, DESK_W_CM, DESK_D_CM),
-        (DESK_W_CM, 0, DESK_W_CM, DESK_D_CM),
-        (0, DESK_D_CM, DESK_W_CM, DESK_D_CM),
-        (DESK_W_CM, DESK_D_CM, DESK_W_CM, DESK_D_CM),
-        (0, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
-        (DESK_W_CM, 2 * DESK_D_CM, DESK_W_CM, DESK_D_CM),
+        (0, 0, DESK_D_CM, DESK_W_CM),
+        (DESK_D_CM, 0, DESK_D_CM, DESK_W_CM),
+        (0, DESK_W_CM, DESK_D_CM, DESK_W_CM),
+        (DESK_D_CM, DESK_W_CM, DESK_D_CM, DESK_W_CM),
+        (0, 2 * DESK_W_CM, DESK_D_CM, DESK_W_CM),
+        (DESK_D_CM, 2 * DESK_W_CM, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_2_ORTHO_R": [
-        # desk1 (facing S): horizontal bar at top
-        (0, 0, DESK_D_CM, DESK_W_CM),
-        # desk2 (facing W): vertical bar at bottom-left
-        (0, DESK_W_CM, DESK_W_CM, DESK_D_CM),
+        # desk1 (facing S): horizontal bar at top, 180 EO × 80 NS
+        (0, 0, DESK_W_CM, DESK_D_CM),
+        # desk2 (facing W): vertical bar at bottom-left, 80 EO × 180 NS
+        (0, DESK_D_CM, DESK_D_CM, DESK_W_CM),
     ],
     "BLOCK_2_ORTHO_L": [
-        # desk1 (facing S): horizontal bar at top
-        (0, 0, DESK_D_CM, DESK_W_CM),
-        # desk2 (facing E): vertical bar at bottom-right
-        (DESK_D_CM - DESK_W_CM, DESK_W_CM, DESK_W_CM, DESK_D_CM),
+        # desk1 (facing S): horizontal bar at top, 180 EO × 80 NS
+        (0, 0, DESK_W_CM, DESK_D_CM),
+        # desk2 (facing E): vertical bar at bottom-right, 80 EO × 180 NS
+        (DESK_W_CM - DESK_D_CM, DESK_D_CM, DESK_D_CM, DESK_W_CM),
     ],
 }
 
