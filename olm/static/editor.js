@@ -1214,7 +1214,8 @@ function _renderImpl(targetSvg) {
       const overlapTop = Math.max(a.deskY, nearestRight.deskY);
       const overlapBot = Math.min(a.deskY + a.deskH, nearestRight.deskY + nearestRight.deskH);
       const ly = (overlapTop + overlapBot) / 2;
-      pushDistLabel(elements, lx, ly + 4 * zf, gapCm, COLOR_GAP_LABEL, zf);
+      pushDistLabelWithRule(elements, lx, ly + 4 * zf, gapCm,
+        "between_blocks", zf);
     }
 
     if (nearestBelow) {
@@ -1223,7 +1224,8 @@ function _renderImpl(targetSvg) {
       const overlapRight = Math.min(a.deskX + a.deskW, nearestBelow.deskX + nearestBelow.deskW);
       const lx = (overlapLeft + overlapRight) / 2;
       const ly = a.deskY + a.deskH + nearestBelowGap / 2;
-      pushDistLabel(elements, lx, ly + 4 * zf, gapCm, COLOR_GAP_LABEL, zf);
+      pushDistLabelWithRule(elements, lx, ly + 4 * zf, gapCm,
+        "between_blocks", zf);
     }
   }
 
@@ -1272,7 +1274,7 @@ function _renderImpl(targetSvg) {
         tx = dir.sign > 0 ? dir.blockEdge + dist / 2 : dir.wallEdge + dist / 2;
         ty = a.deskY + a.deskH / 2;
       }
-      pushDistLabel(elements, tx, ty + 4, dcm, COLOR_GAP_LABEL);
+      pushDistLabelWithRule(elements, tx, ty + 4, dcm, "block_wall");
     }
   }
 

@@ -531,6 +531,44 @@ function pushDistLabel(elements, x, y, valueCm, color, zf) {
     '" font-size="' + fontSize.toFixed(1) + '" font-weight="bold" font-family="monospace">' + valueCm + '</text>' });
 }
 
+// D-229 §2.7 — rule name + min for the violation sub-label.
+function _distanceRuleLabel(role) {
+  if (!CURRENT_SPACING) return null;
+  if (role === "between_blocks" || role === "block_wall") {
+    return "min " + CURRENT_SPACING.walking_margin_cm + " cm — Walking margin";
+  }
+  if (role === "between_rows") {
+    var m = CURRENT_SPACING.chair_clearance_cm + CURRENT_SPACING.walking_margin_cm;
+    return "min " + m + " cm — Passage behind one person";
+  }
+  return null;
+}
+
+// Render the value label, plus a sub-label (rule + min) below when the
+// gap is in violation (red). Used by editor.js call sites. Catalogue
+// cards skip the sub-label for space reasons.
+function pushDistLabelWithRule(elements, x, y, gapCm, role, zf) {
+  if (!zf) zf = window._currentZf || 1;
+  var color = distanceConformity(gapCm, role);
+  pushDistLabel(elements, x, y, gapCm, color, zf);
+  if (color !== "#c05858") return;
+  var subText = _distanceRuleLabel(role);
+  if (!subText) return;
+  var fontSize = 11 * zf;
+  var charW = 6.5 * zf, padX = 4 * zf, padY = 2 * zf;
+  var bgW = subText.length * charW + padX * 2;
+  var bgH = fontSize + padY * 2;
+  var subY = y + 6 * zf;
+  elements.push({ z: 6.9, s: '<rect x="' + (x - bgW / 2).toFixed(1) +
+    '" y="' + subY.toFixed(1) + '" width="' + bgW.toFixed(1) +
+    '" height="' + bgH.toFixed(1) + '" rx="' + (2 * zf).toFixed(1) +
+    '" fill="#0e0e0d" fill-opacity="0.75"/>' });
+  elements.push({ z: 7, s: '<text x="' + x.toFixed(1) + '" y="' +
+    (subY + padY + fontSize * 0.85).toFixed(1) +
+    '" text-anchor="middle" fill="#c05858" font-size="' +
+    fontSize.toFixed(1) + '" font-family="monospace">' + subText + '</text>' });
+}
+
 function smoothPath(pts) {
   // Douglas-Peucker simplification then straight lines between remaining points
   if (pts.length < 2) return "";

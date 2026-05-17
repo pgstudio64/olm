@@ -558,15 +558,17 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
       var lx = a.x + a.w + nearestRightGap / 2;
       var ovT = Math.max(a.y, nearestRight.y);
       var ovB = Math.min(a.y + a.h, nearestRight.y + nearestRight.h);
+      var rcol = distanceConformity(gcm, "between_blocks");
       elements.push({ z: 7, s: '<text x="' + lx.toFixed(1) + '" y="' + ((ovT + ovB) / 2 + labelFontSize * 0.35).toFixed(1) +
-        '" text-anchor="middle" fill="' + COLOR_GAP_LABEL + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm + '</text>' });
+        '" text-anchor="middle" fill="' + rcol + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm + '</text>' });
     }
     if (nearestBelow) {
       var gcm2 = Math.round(nearestBelowGap / scale);
       var ovL = Math.max(a.x, nearestBelow.x);
       var ovR = Math.min(a.x + a.w, nearestBelow.x + nearestBelow.w);
+      var bcol = distanceConformity(gcm2, "between_blocks");
       elements.push({ z: 7, s: '<text x="' + ((ovL + ovR) / 2).toFixed(1) + '" y="' + (a.y + a.h + nearestBelowGap / 2 + labelFontSize * 0.35).toFixed(1) +
-        '" text-anchor="middle" fill="' + COLOR_GAP_LABEL + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm2 + '</text>' });
+        '" text-anchor="middle" fill="' + bcol + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm2 + '</text>' });
     }
   }
 
@@ -574,7 +576,6 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
   // For each block x each direction, show distance to wall UNLESS
   // another block (desk overlap on perpendicular axis) is between this
   // block and the wall, or the distance is zero.
-  var wallColor = "#5090c0";
   for (var k = 0; k < blockRects.length; k++) {
     var br = blockRects[k];
     var wdirs = [
@@ -612,8 +613,9 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         tx = wd.sign > 0 ? wd.bEdge + dist / 2 : wd.wallEdge + dist / 2;
         ty = br.y + br.h / 2;
       }
+      var wcol = distanceConformity(dcm, "block_wall");
       elements.push({ z: 7, s: '<text x="' + tx.toFixed(1) + '" y="' + (ty + labelFontSize * 0.35).toFixed(1) +
-        '" text-anchor="middle" fill="' + wallColor + '" font-size="' + labelFontSize + '" font-family="monospace">' + dcm + '</text>' });
+        '" text-anchor="middle" fill="' + wcol + '" font-size="' + labelFontSize + '" font-family="monospace">' + dcm + '</text>' });
     }
   }
 
