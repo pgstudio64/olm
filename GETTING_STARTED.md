@@ -60,58 +60,28 @@ OLM/
     └── plans/            ← floor plan images (optional)
 ```
 
-### Minimal `project/config.json`
+### `project/config.json` (v0.5.20+ bundled template)
 
-Create the file `project\config.json` with this content:
+This release ships a ready-to-use `config.json` at the repo root. Move it into `project/`:
 
-```json
-{
-  "room_code": "14",
-  "standard_labels": {
-    "STANDARD_1": "Standard 1",
-    "STANDARD_2": "Standard 2"
-  },
-  "default_door_width_cm": 90,
-  "desk_width_cm": 180,
-  "desk_depth_cm": 80,
-  "grid_cell_cm": 10,
-  "matching": {
-    "w_density": 0.5,
-    "w_comfort": 0.5,
-    "min_desks_drop_ratio": 0.3
-  },
-  "spacing": {
-    "STANDARD_1": {
-      "chair_clearance_cm": 70,
-      "front_access_cm": 60,
-      "access_single_desk_cm": 100,
-      "passage_behind_one_row_cm": 160,
-      "passage_between_back_to_back_cm": 230,
-      "passage_cm": 90,
-      "door_exclusion_depth_cm": 180,
-      "desk_to_wall_cm": 20,
-      "max_island_size": 4,
-      "min_block_separation_cm": 90,
-      "main_corridor_cm": 140
-    },
-    "STANDARD_2": {
-      "chair_clearance_cm": 70,
-      "front_access_cm": 60,
-      "access_single_desk_cm": 90,
-      "passage_behind_one_row_cm": 120,
-      "passage_between_back_to_back_cm": 180,
-      "passage_cm": 90,
-      "door_exclusion_depth_cm": 180,
-      "desk_to_wall_cm": 10,
-      "max_island_size": 6,
-      "min_block_separation_cm": 90,
-      "main_corridor_cm": 140
-    }
-  }
-}
+```
+move config.json project\config.json
 ```
 
-You can rename the standards, change the values, and add more standards as needed. All values are in centimetres.
+The bundled file defines three standards (AFNOR, Kardham, Site) using the **D-229 spacing model** (6 parameters per standard):
+
+| Field | AFNOR | Kardham | Site | Unit |
+|---|---|---|---|---|
+| `chair_clearance_cm` | 70 | 70 | 60 | cm |
+| `walking_margin_cm` | 90 | 70 | 60 | cm |
+| `slip_in_margin_cm` | 30 | 20 | 20 | cm |
+| `main_corridor_cm` | 140 | 120 | 100 | cm |
+| `door_exclusion_depth_cm` | 180 | 180 | 120 | cm |
+| `max_island_size` | 4 | 6 | 6 | desks |
+
+You can rename the standards, change the values, and add more in the **Settings** panel after launch. All values are in centimetres. The four practical circulation distances (Access to a single desk, Passage behind one person, Passage between two persons, Passage between two desks) are **derived** from these primitives — see `docs/specs/CONSTRAINTS.md` § 2.3.
+
+**Migrating from a pre-v0.5.20 config.json?** The schema changed: the old `spacing` top-level key with 11 parameters per standard is replaced by `standards.<slot>.spacing` with 6 parameters. The simplest migration is to back up your old file then use the bundled `config.json`. Old field names (`front_access_cm`, `access_single_desk_cm`, `passage_behind_one_row_cm`, `passage_between_back_to_back_cm`, `passage_cm`, `desk_to_wall_cm`, `min_block_separation_cm`) are no longer recognized and silently ignored.
 
 ### Minimal `project/catalogue/patterns.json`
 

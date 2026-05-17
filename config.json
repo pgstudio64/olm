@@ -1,0 +1,79 @@
+{
+  "room_code": "14",
+  "default_door_width_cm": 90,
+  "desk_width_cm": 180,
+  "desk_depth_cm": 80,
+  "grid_cell_cm": 10,
+  "default_pattern_width_cm": 500,
+  "default_pattern_depth_cm": 500,
+  "default_pattern_door_position": "left",
+  "matching": {
+    "w_density": 0.5,
+    "w_comfort": 0.5,
+    "min_desks_drop_ratio": 0.3
+  },
+  "ingestion": {
+    "drawing_scale_text": "1 : 350",
+    "render_dpi": 300,
+    "scale_cm_per_px": 0.5,
+    "binarize_threshold": 110,
+    "pdf_render_dpi": 200,
+    "plans_dir": "project/plans",
+    "preprocessed_exterior_rgb": [
+      135,
+      206,
+      235
+    ],
+    "preprocessed_corridor_rgb": [
+      193,
+      247,
+      179
+    ],
+    "min_obstacle_width_cm": 30,
+    "max_pillar_size_cm": 50
+  },
+  "export": {
+    "formats": [
+      "json"
+    ]
+  },
+  "standards": {
+    "standard1": {
+      "label": "AFNOR",
+      "derogatory_label": "AFNOR ES-06: derogatory use",
+      "spacing": {
+        "chair_clearance_cm": 70,
+        "walking_margin_cm": 90,
+        "slip_in_margin_cm": 30,
+        "main_corridor_cm": 140,
+        "door_exclusion_depth_cm": 180,
+        "max_island_size": 4
+      }
+    },
+    "standard2": {
+      "label": "Kardham",
+      "derogatory_label": "",
+      "spacing": {
+        "chair_clearance_cm": 70,
+        "walking_margin_cm": 70,
+        "slip_in_margin_cm": 20,
+        "main_corridor_cm": 120,
+        "door_exclusion_depth_cm": 180,
+        "max_island_size": 6
+      }
+    },
+    "standard3": {
+      "label": "Site",
+      "derogatory_label": "",
+      "spacing": {
+        "chair_clearance_cm": 60,
+        "walking_margin_cm": 60,
+        "slip_in_margin_cm": 20,
+        "main_corridor_cm": 100,
+        "door_exclusion_depth_cm": 120,
+        "max_island_size": 6
+      }
+    }
+  },
+  "current_standard": "standard3"
+}

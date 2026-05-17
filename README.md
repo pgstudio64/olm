@@ -70,25 +70,37 @@ your-project/
 
 If `project/config.json` is absent, OLM starts with generic defaults (no spacing standards loaded — you must define your own).
 
+**Quickstart for v0.5.20+**: this release ships a ready-to-use `config.json` at the repo root with three standards pre-defined (AFNOR, Kardham, Site) following the D-229 spacing model (6 parameters per standard). Copy it into your `project/` directory:
+
+```bash
+mv config.json project/config.json
+```
+
+This bundled file is provided temporarily for migration convenience and may be removed in a future release.
+
 ## Spacing standards
 
-OLM supports multiple spacing standards, each defining 11 parameters:
+OLM supports multiple spacing standards, each defining 6 parameters (D-229 model, v0.5.19+):
 
 | Code | Parameter | Description |
 |------|-----------|-------------|
-| ES-01 | `chair_clearance_cm` | Chair clearance zone |
-| ES-02 | `front_access_cm` | Front access (sit/stand) |
-| ES-03 | `access_single_desk_cm` | Single desk against wall |
-| ES-04 | `passage_behind_one_row_cm` | Clearance behind one row |
-| ES-05 | `passage_between_back_to_back_cm` | Between back-to-back rows |
-| ES-06 | `passage_cm` | Inter-block passage |
-| ES-08 | `door_exclusion_depth_cm` | Clear zone in front of door |
-| ES-09 | `desk_to_wall_cm` | Lateral desk-to-wall distance |
-| ES-10 | `max_island_size` | Maximum block size (desks) |
-| ES-11 | `min_block_separation_cm` | Minimum block separation |
-| PS-04 | `main_corridor_cm` | Main corridor width |
+| ES-01 | `chair_clearance_cm` | Chair pushback zone (primitive) |
+| ES-02 | `walking_margin_cm` | Walking margin beyond chair (primitive) |
+| ES-03 | `slip_in_margin_cm` | Standing margin for isolated desk access (primitive) |
+| ES-04 | `main_corridor_cm` | Main corridor width |
+| ES-05 | `door_exclusion_depth_cm` | Clear zone in front of door |
+| ES-06 | `max_island_size` | Maximum block size (desks) |
 
-Standards are defined in `project/config.json` under the `spacing` key. You can create as many standards as needed.
+The four practical circulation distances are **derived** from these primitives, not stored:
+
+| Derived distance | Formula |
+|---|---|
+| Access to a single desk | `chair + slip_in` |
+| Passage behind one person | `chair + walking` |
+| Passage between two persons | `chair + walking + chair` |
+| Passage between two desks | `walking` |
+
+Decomposition mirrors AFNOR NF X35-102 figures 7-9. Standards are defined in `project/config.json` under the `standards` key (`standards.<slot>.spacing.<field>`). You can rename, edit, or add standards in the Settings panel.
 
 ## Architecture
 
