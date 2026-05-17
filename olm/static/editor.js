@@ -1482,7 +1482,7 @@ function _renderImpl(targetSvg) {
     var ovAngle = (window.canonicalIO && window.canonicalIO.canonAngle)
       ? window.canonicalIO.canonAngle(state.corridor_face_abs)
       : _canonicalAngle(state.corridor_face_abs);
-    if (ovAngle !== 0 && !isEditor) {
+    if (ovAngle !== 0 && (!isEditor || state.amendMode)) {
       var origRoom = state.roomAmendMode && state.roomAmendMode.originalRoom;
       var refWPx = origRoom ? origRoom.width_cm * SCALE : roomWPx;
       var refHPx = origRoom ? origRoom.depth_cm * SCALE : roomHPx;
