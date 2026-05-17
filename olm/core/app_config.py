@@ -37,6 +37,7 @@ _EMBEDDED_DEFAULTS: dict = {
     },
     "standards": {},
     "current_standard": "",
+    "circulation_visible": True,
 }
 
 

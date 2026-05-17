@@ -52,6 +52,16 @@ async function loadAppConfig() {
     var suffix = APP_CONFIG.dev_mode ? " [DEV]" : "";
     verEl.textContent = "v" + APP_CONFIG.olm_version + suffix;
   }
+  // D-229 §2.8: hydrate circulation toggle from config (default: visible)
+  if (typeof state !== "undefined") {
+    var circVal = APP_CONFIG.circulation_visible != null
+      ? APP_CONFIG.circulation_visible : true;
+    state.circVisible = circVal;
+    var cb1 = document.getElementById("circToggle");
+    var cb2 = document.getElementById("fpCircToggle");
+    if (cb1) cb1.checked = circVal;
+    if (cb2) cb2.checked = circVal;
+  }
   // Apply dev-mode class on body to reveal dev-only elements.
   if (APP_CONFIG.dev_mode) {
     document.body.classList.add("dev-mode");

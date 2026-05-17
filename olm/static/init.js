@@ -309,6 +309,7 @@ async function init() {
   document.getElementById("circToggle").addEventListener("change", function(e) {
     state.circVisible = e.target.checked;
     document.getElementById("fpCircToggle").checked = e.target.checked;
+    saveConfigField("circulation_visible", e.target.checked);
     render();
   });
   // Editor overlay toggle + opacity — sync across all tabs

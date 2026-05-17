@@ -115,7 +115,7 @@ let state = {
   selectedBlock: -1,
   selectedExclusion: -1,
   gridVisible: true,
-  circVisible: false,
+  circVisible: true,
   dirty: false,          // true when pattern has unsaved changes
   amendMode: null,       // { roomName, roomIdx, candidate } when adjusting a solution
   roomAmendMode: null,   // { roomName, originalRoom } when editing room geometry

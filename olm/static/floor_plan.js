@@ -883,6 +883,7 @@
     document.getElementById("fpCircToggle").addEventListener("change", function(e) {
       state.circVisible = e.target.checked;
       document.getElementById("circToggle").checked = e.target.checked;
+      saveConfigField("circulation_visible", e.target.checked);
       var room = fpCurrent();
       if (room && fpCurrentCandidate) {
         fpRenderSvg(room, fpCurrentCandidate);

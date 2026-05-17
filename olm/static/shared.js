@@ -494,30 +494,25 @@ function scoringHtml(sc) {
 function distanceConformity(gapCm, role) {
   // Returns color based on conformity to the active standard
   // role: "between_blocks" (ES-06/ES-11), "block_wall" (ES-09), "between_rows" (ES-05)
+  // D-229 §2.7: green > min, yellow = min (±TOL), red < min
+  var CONFORMITY_TOL_CM = 5;
   if (!CURRENT_SPACING) return COLOR_GAP_LABEL;
+  var minReq = 0;
   if (role === "between_blocks") {
-    var minSep = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;
-    if (gapCm >= minSep) return "#58c080";       // ok green
-    if (gapCm >= minSep * 0.8) return "#c8a050";  // warning
-    return "#c05858";                              // non-compliant
-  }
-  if (role === "block_wall") {
+    minReq = CURRENT_SPACING.walking_margin_cm;
+  } else if (role === "block_wall") {
     // ES-02: block-wall space serves as walking margin
-    var minPass = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;
-    if (gapCm >= minPass) return "#58c080";
-    if (gapCm >= minPass * 0.8) return "#c8a050";
-    return "#c05858";
-  }
-  if (role === "between_rows") {
+    minReq = CURRENT_SPACING.walking_margin_cm;
+  } else if (role === "between_rows") {
     // D-229: passage behind one person = chair + walking
-    var minPass = CURRENT_SPACING
-      ? CURRENT_SPACING.chair_clearance_cm + CURRENT_SPACING.walking_margin_cm
-      : 0;
-    if (gapCm >= minPass) return "#58c080";
-    if (gapCm >= minPass * 0.8) return "#c8a050";
-    return "#c05858";
+    minReq = CURRENT_SPACING.chair_clearance_cm
+      + CURRENT_SPACING.walking_margin_cm;
+  } else {
+    return COLOR_GAP_LABEL;
   }
-  return COLOR_GAP_LABEL;
+  if (gapCm > minReq + CONFORMITY_TOL_CM) return "#58c080";  // ok green
+  if (gapCm >= minReq - CONFORMITY_TOL_CM) return "#c8a050";  // at limit
+  return "#c05858";                                            // violation
 }
 
 function pushDistLabel(elements, x, y, valueCm, color, zf) {
