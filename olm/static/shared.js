@@ -1,10 +1,31 @@
 "use strict";
+
+function _hydrateBlockDefs(data) {
+  // D-229: backend sends candidate_cm=0 on all faces.
+  // Inject walking_margin as candidate on chair faces for visual rendering.
+  var blocks = data.blocks || data || {};
+  var walkingMargin = (data.constants && data.constants.WALKING_MARGIN_CM) || 90;
+  var names = Object.keys(blocks);
+  for (var i = 0; i < names.length; i++) {
+    var faces = blocks[names[i]].faces;
+    if (!faces) continue;
+    var dirs = ["north", "south", "east", "west"];
+    for (var d = 0; d < dirs.length; d++) {
+      var f = faces[dirs[d]];
+      if (f && f.non_superposable_cm > 0 && !f.candidate_cm) {
+        f.candidate_cm = walkingMargin;
+      }
+    }
+  }
+  return blocks;
+}
+
 async function loadBlockDefs() {
   try {
     var resp = await fetch("/api/blocks?standard=" + encodeURIComponent(state.standard));
     if (resp.ok) {
       var data = await resp.json();
-      BLOCK_DEFS = data.blocks || data || {};
+      BLOCK_DEFS = _hydrateBlockDefs(data);
       BLOCK_DEFS_BY_STD[state.standard] = BLOCK_DEFS;
     }
   } catch (e) {
@@ -19,7 +40,7 @@ async function loadAllBlockDefs() {
       var resp = await fetch("/api/blocks?standard=" + encodeURIComponent(stds[i]));
       if (resp.ok) {
         var data = await resp.json();
-        BLOCK_DEFS_BY_STD[stds[i]] = data.blocks || data || {};
+        BLOCK_DEFS_BY_STD[stds[i]] = _hydrateBlockDefs(data);
       }
     } catch (e) { /* ignore */ }
   }
@@ -286,7 +307,7 @@ function computeCirculationInfo() {
   // edges[r][c] = { traffic per outgoing direction, worst color }
   var traffic = [];
   for (var r = 0; r < rowsN; r++) { traffic[r] = []; for (var c = 0; c < cols; c++) traffic[r][c] = 0; }
-  var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 0;
+  var passage = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;
   var corridor = CURRENT_SPACING ? CURRENT_SPACING.main_corridor_cm : 0;
 
   // Store paths for polyline rendering
@@ -456,21 +477,23 @@ function distanceConformity(gapCm, role) {
   // role: "between_blocks" (ES-06/ES-11), "block_wall" (ES-09), "between_rows" (ES-05)
   if (!CURRENT_SPACING) return COLOR_GAP_LABEL;
   if (role === "between_blocks") {
-    var minSep = CURRENT_SPACING ? CURRENT_SPACING.min_block_separation_cm : 0;
+    var minSep = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;
     if (gapCm >= minSep) return "#58c080";       // ok green
     if (gapCm >= minSep * 0.8) return "#c8a050";  // warning
     return "#c05858";                              // non-compliant
   }
   if (role === "block_wall") {
-    // ES-06: block-wall space serves as passage
-    var minPass = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 0;
+    // ES-02: block-wall space serves as walking margin
+    var minPass = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;
     if (gapCm >= minPass) return "#58c080";
     if (gapCm >= minPass * 0.8) return "#c8a050";
     return "#c05858";
   }
   if (role === "between_rows") {
-    // ES-04: total desk-to-desk distance (includes 70cm chair setback + passage)
-    var minPass = CURRENT_SPACING ? CURRENT_SPACING.passage_behind_one_row_cm : 0;
+    // D-229: passage behind one person = chair + walking
+    var minPass = CURRENT_SPACING
+      ? CURRENT_SPACING.chair_clearance_cm + CURRENT_SPACING.walking_margin_cm
+      : 0;
     if (gapCm >= minPass) return "#58c080";
     if (gapCm >= minPass * 0.8) return "#c8a050";
     return "#c05858";
@@ -537,7 +560,7 @@ function circGrade(circ) {
   // A: above corridor (PS-04), B: above passage (ES-06), C: at passage,
   // D: below passage but >50%, F: critically below
   var minW = circ.minPassageCm;
-  var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 90;       // ES-06
+  var passage = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 90;  // ES-02
   var corridor = CURRENT_SPACING ? CURRENT_SPACING.main_corridor_cm : 140; // PS-04
   if (minW >= corridor) return { grade: "A", color: "#58c080" };
   if (minW > passage)   return { grade: "B", color: "#7ab060" };
@@ -548,7 +571,7 @@ function circGrade(circ) {
 
 function circColor(ratio, maxTraffic, passWidthCells) {
   var widthCm = passWidthCells * GRID_STEP_CM;
-  var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 0;       // ES-06
+  var passage = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;  // ES-02
   var corridor = CURRENT_SPACING ? CURRENT_SPACING.main_corridor_cm : 0; // PS-04
   if (widthCm < passage) return { fill: "#c05858", opacity: 0.50 };   // red — below ES-06
   if (widthCm < corridor && ratio > 0.3) return { fill: "#c8a050", opacity: 0.45 }; // amber — below PS-04 with traffic

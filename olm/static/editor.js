@@ -1374,7 +1374,7 @@ function _renderImpl(targetSvg) {
       var CIRC_COLORS = [COLOR_GOOD, COLOR_NEUTRAL, COLOR_DANGER];
       var STROKE_PER_DESK = 1.0;
       var MIN_STROKE = 1.5;
-      var passage = CURRENT_SPACING ? CURRENT_SPACING.passage_cm : 0;
+      var passage = CURRENT_SPACING ? CURRENT_SPACING.walking_margin_cm : 0;
       var corridorW = CURRENT_SPACING ? CURRENT_SPACING.main_corridor_cm : 0;
 
       // Color per edge: red/amber only on shared corridors (traffic > 1)
