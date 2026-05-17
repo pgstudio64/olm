@@ -330,8 +330,12 @@ async function init() {
   function onRoomChange() {
     var oldW = state.room_width_cm;
     var oldD = state.room_depth_cm;
-    var newW = parseInt(document.getElementById("roomWidth").value) || 300;
-    var newD = parseInt(document.getElementById("roomDepth").value) || 480;
+    var rawW = parseInt(document.getElementById("roomWidth").value) || 300;
+    var rawD = parseInt(document.getElementById("roomDepth").value) || 480;
+    var newW = Math.round(rawW / GRID_STEP_CM) * GRID_STEP_CM;
+    var newD = Math.round(rawD / GRID_STEP_CM) * GRID_STEP_CM;
+    document.getElementById("roomWidth").value = newW;
+    document.getElementById("roomDepth").value = newD;
     // Refuse shrink below the minimum required by current blocks.
     var mins = computeMinRoomDims();
     if (newW < mins.min_w || newD < mins.min_d) {
@@ -388,22 +392,22 @@ async function init() {
   document.getElementById("roomDepth").addEventListener("change", onRoomChange);
   document.getElementById("btnWidthMinus").addEventListener("click", function() {
     var el = document.getElementById("roomWidth");
-    el.value = Math.max(100, (parseInt(el.value) || 300) - 10);
+    el.value = Math.max(GRID_STEP_CM, (parseInt(el.value) || 300) - GRID_STEP_CM);
     onRoomChange();
   });
   document.getElementById("btnWidthPlus").addEventListener("click", function() {
     var el = document.getElementById("roomWidth");
-    el.value = (parseInt(el.value) || 300) + 10;
+    el.value = (parseInt(el.value) || 300) + GRID_STEP_CM;
     onRoomChange();
   });
   document.getElementById("btnDepthMinus").addEventListener("click", function() {
     var el = document.getElementById("roomDepth");
-    el.value = Math.max(100, (parseInt(el.value) || 480) - 10);
+    el.value = Math.max(GRID_STEP_CM, (parseInt(el.value) || 480) - GRID_STEP_CM);
     onRoomChange();
   });
   document.getElementById("btnDepthPlus").addEventListener("click", function() {
     var el = document.getElementById("roomDepth");
-    el.value = (parseInt(el.value) || 480) + 10;
+    el.value = (parseInt(el.value) || 480) + GRID_STEP_CM;
     onRoomChange();
   });
 

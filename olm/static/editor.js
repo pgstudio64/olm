@@ -2886,6 +2886,12 @@ function offsetSelectedBlockEO(deltaCm) {
   if (wouldDetachAnyStick("EO", deltaCm)) return;
   markDirty();
   b.gap_cm = (b.gap_cm || 0) + deltaCm;
+  // Compensate on the next block so it stays in place
+  var row = state.rows[state.selectedRow];
+  var nextIdx = state.selectedBlock + 1;
+  if (row && nextIdx < row.blocks.length) {
+    row.blocks[nextIdx].gap_cm = (row.blocks[nextIdx].gap_cm || 0) - deltaCm;
+  }
   render(); updateDSL();
 }
 

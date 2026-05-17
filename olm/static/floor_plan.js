@@ -830,23 +830,31 @@
 
     // Synthetic blank pattern sized to the room — used when no matching
     // candidate exists and the user clicks Add pattern / Amend layout.
+    function _snapFloor(v) { return Math.floor(v / GRID_STEP_CM) * GRID_STEP_CM; }
+    function _snapCeil(v) { return Math.ceil(v / GRID_STEP_CM) * GRID_STEP_CM; }
+    function _snapOpening(o) {
+      var s = Object.assign({}, o);
+      if (s.offset_cm != null) s.offset_cm = _snapFloor(s.offset_cm);
+      if (s.width_cm != null) s.width_cm = _snapCeil(s.width_cm);
+      return s;
+    }
     function _blankPatternFromRoom(room) {
       var openings = (room.openings || []).map(function (o) {
-        return Object.assign({}, o, { has_door: false });
+        return Object.assign(_snapOpening(o), { has_door: false });
       });
       (room.doors || []).forEach(function (d) {
         if (d && d.face) {
-          openings.push(Object.assign({}, d, { has_door: true }));
+          openings.push(Object.assign(_snapOpening(d), { has_door: true }));
         }
       });
       return {
         name: "",
         rows: [],
         row_gaps_cm: [],
-        room_width_cm: room.width_cm || 0,
-        room_depth_cm: room.depth_cm || 0,
+        room_width_cm: Math.floor((room.width_cm || 0) / GRID_STEP_CM) * GRID_STEP_CM,
+        room_depth_cm: Math.floor((room.depth_cm || 0) / GRID_STEP_CM) * GRID_STEP_CM,
         standard: "",
-        room_windows: room.windows || [],
+        room_windows: (room.windows || []).map(_snapOpening),
         room_openings: openings,
         room_exclusions: room.exclusion_zones || [],
       };
