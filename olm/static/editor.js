@@ -2367,13 +2367,11 @@ function enterAmendMode(room, candidate) {
   if (candidate.standard && BLOCK_DEFS_BY_STD[candidate.standard]) {
     BLOCK_DEFS = BLOCK_DEFS_BY_STD[candidate.standard];
   }
-  // Show editor content (inside Catalogue tab)
+  // Show editor content (inside Catalogue tab) — keep origin tab-btn highlighted
   document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
   document.getElementById("tabLytCatalogue").classList.add("active");
   document.querySelectorAll(".sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
   document.getElementById("subtabCatEditor").classList.add("active");
-  document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
-  document.querySelector('.tab-btn[data-tab="lytCatalogue"]').classList.add("active");
   // Hide sub-tab bar (Card view / Grid view / Pattern editor)
   document.querySelector("#tabLytCatalogue > .sub-tab-bar").style.display = "none";
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));

@@ -2,19 +2,38 @@
 
 function _hydrateBlockDefs(data) {
   // D-229: backend sends candidate_cm=0 on all faces.
-  // Inject walking_margin as candidate on chair faces for visual rendering.
+  // Inject walking_margin or slip_in based on chairs_per_face.
   var blocks = data.blocks || data || {};
   var walkingMargin = (data.constants && data.constants.WALKING_MARGIN_CM) || 90;
+  var slipIn = (data.constants && data.constants.SLIP_IN_MARGIN_CM) || 30;
+  var DIRS = ["north", "south", "east", "west"];
   var names = Object.keys(blocks);
   for (var i = 0; i < names.length; i++) {
-    var faces = blocks[names[i]].faces;
+    var blk = blocks[names[i]];
+    var faces = blk.faces;
     if (!faces) continue;
-    var dirs = ["north", "south", "east", "west"];
-    for (var d = 0; d < dirs.length; d++) {
-      var f = faces[dirs[d]];
-      if (f && f.non_superposable_cm > 0 && !f.candidate_cm) {
-        f.candidate_cm = walkingMargin;
+    // Identify chair faces and derive chairs_per_face
+    var chairFaces = [];
+    for (var d = 0; d < DIRS.length; d++) {
+      if (faces[DIRS[d]] && faces[DIRS[d]].non_superposable_cm > 0) {
+        chairFaces.push(DIRS[d]);
       }
+    }
+    if (chairFaces.length === 0) continue;
+    var nDesks = blk.n_desks || 1;
+    var chairsPerFace;
+    if (chairFaces.length === 1) {
+      chairsPerFace = nDesks;
+    } else if (chairFaces.length === 2) {
+      var s = chairFaces.sort().join("+");
+      var opposite = (s === "east+west" || s === "north+south");
+      chairsPerFace = opposite ? nDesks / 2 : 1;
+    } else {
+      chairsPerFace = Math.ceil(nDesks / chairFaces.length);
+    }
+    var cand = chairsPerFace >= 2 ? walkingMargin : slipIn;
+    for (var d = 0; d < chairFaces.length; d++) {
+      faces[chairFaces[d]].candidate_cm = cand;
     }
   }
   return blocks;

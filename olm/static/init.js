@@ -524,8 +524,9 @@ async function init() {
         }
       } // end _doSwitch
 
-      // Cancel amend mode when leaving Layout tabs (async)
-      if (!isLayoutTab) {
+      // Cancel amend mode when switching tabs (async).
+      // Also triggers on layout-tab clicks during amend mode.
+      if (state.amendMode || !isLayoutTab) {
         _cancelAmendIfActive().then(function(ok) {
           if (!ok) return;
           _saveEditorState();
