@@ -562,11 +562,23 @@ def _translate_pattern(
                     blocks[0].get("gap_cm", 0) + shift_x
                 )
 
-    # Translate feature offsets along the wall they sit on
+    # Translate feature offsets along the wall they sit on.
+    # Skip full-width features (offset=0, width=face_length) — they
+    # adapt to the new room via _revalidate_features instead.
+    room_w = pattern.get("room_width_cm", 0)
+    room_d = pattern.get("room_depth_cm", 0)
     for feature_key in ("room_openings", "room_windows"):
         for feat in pattern.get(feature_key, []):
             face = feat.get("face", "")
+            offset = feat.get("offset_cm", 0)
+            w = feat.get("width_cm", 0)
             if face in ("south", "north") and shift_x != 0:
-                feat["offset_cm"] = feat.get("offset_cm", 0) + shift_x
+                face_len = room_w
+                if offset == 0 and w == face_len:
+                    continue
+                feat["offset_cm"] = offset + shift_x
             elif face in ("east", "west") and shift_y != 0:
-                feat["offset_cm"] = feat.get("offset_cm", 0) + shift_y
+                face_len = room_d
+                if offset == 0 and w == face_len:
+                    continue
+                feat["offset_cm"] = offset + shift_y

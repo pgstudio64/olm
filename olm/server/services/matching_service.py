@@ -173,6 +173,7 @@ def floor_plan_match(data: dict) -> dict:
                 "min_passage_cm": score.min_passage_cm,
                 "worst_detour": score.worst_detour,
                 "largest_free_rect_m2": score.largest_free_rect_m2,
+                "oversize": score.oversize,
                 "desks": desk_list,
                 "pattern": score.adapted_pattern,
             }

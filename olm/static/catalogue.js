@@ -112,6 +112,7 @@ async function loadCatalogue() {
       document.getElementById("catalogueGrid").innerHTML =
         '<div style="color:var(--bad);padding:24px;">Render error: ' + renderErr.message + '</div>';
     }
+    if (window.peUpdateNavInfo) window.peUpdateNavInfo();
   } catch (err) {
     console.error("loadCatalogue error:", err);
     document.getElementById("catalogueGrid").innerHTML =
@@ -470,15 +471,17 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         var knotSize = 10;
         var knotInset = 4;
         var ksc = knotSize / 14;
+        // Center the knot ON the wall so one loop sits on the desk and
+        // the other loop sits outside the room.
         var knotFaces = [
           { face: "N", touches: (yBlockCm - zN === 0),
-            cx: outerCx, cy: outerN + knotInset, rot: 0 },
+            cx: outerCx, cy: outerN, rot: 0 },
           { face: "S", touches: (yBlockCm + g.ns + zS === roomHcm),
-            cx: outerCx, cy: outerS - knotInset, rot: 0 },
+            cx: outerCx, cy: outerS, rot: 0 },
           { face: "W", touches: (xBlockCm - zW === 0),
-            cx: outerW + knotInset, cy: outerCy, rot: 90 },
+            cx: outerW, cy: outerCy, rot: 90 },
           { face: "E", touches: (xBlockCm + g.eo + zE === roomWcm),
-            cx: outerE - knotInset, cy: outerCy, rot: 90 },
+            cx: outerE, cy: outerCy, rot: 90 },
         ];
         for (var kf = 0; kf < knotFaces.length; kf++) {
           var kk = knotFaces[kf];
@@ -490,9 +493,8 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
             '<g transform="translate(' + kx + ',' + ky + ') scale(' + ksc +
             ') rotate(' + kk.rot + ' 7 7)" pointer-events="none">' +
             '<rect x="0" y="0" width="14" height="14" rx="3" fill="rgba(0,0,0,0.6)"/>' +
-            '<circle cx="7" cy="7" r="3" fill="none" stroke="#c8a800" stroke-width="1.6"/>' +
-            '<line x1="7" y1="1" x2="7" y2="4" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
-            '<line x1="7" y1="10" x2="7" y2="13" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<path d="M 7 1 C 11 1 11 7 7 7 C 3 7 3 13 7 13 C 11 13 11 7 7 7 C 3 7 3 1 7 1 Z"' +
+            ' fill="none" stroke="#c8a800" stroke-width="1.4" stroke-linecap="round"/>' +
             '</g>' });
         }
       }
@@ -896,3 +898,56 @@ function initMatrixPanZoom() {
     }
   });
 }
+
+// --- Pattern Editor navigation (Prev / Next, width then depth ascending) ---
+
+function _peSortedPatternsForStandard() {
+  var std = window.getCatStandard ? window.getCatStandard() : "";
+  var list = (catalogueData || []).filter(function(p) {
+    return !std || p.standard === std;
+  });
+  list.sort(function(a, b) {
+    var aw = a.room_width_cm || 0;
+    var bw = b.room_width_cm || 0;
+    if (aw !== bw) return aw - bw;
+    var ad = a.room_depth_cm || 0;
+    var bd = b.room_depth_cm || 0;
+    if (ad !== bd) return ad - bd;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+  return list;
+}
+
+window.peUpdateNavInfo = function() {
+  var info = document.getElementById("peNavInfo");
+  var prev = document.getElementById("peBtnPrev");
+  var next = document.getElementById("peBtnNext");
+  if (!info || !prev || !next) return;
+  var list = _peSortedPatternsForStandard();
+  var name = (typeof state !== "undefined" && state.name) ? state.name : "";
+  var idx = list.findIndex(function(p) { return p.name === name; });
+  var total = list.length;
+  if (total === 0) {
+    info.textContent = "0 / 0";
+    prev.disabled = true;
+    next.disabled = true;
+    return;
+  }
+  if (idx < 0) {
+    info.textContent = "- / " + total;
+  } else {
+    info.textContent = (idx + 1) + " / " + total;
+  }
+  prev.disabled = (total < 2);
+  next.disabled = (total < 2);
+};
+
+window.peNavigate = function(direction) {
+  var list = _peSortedPatternsForStandard();
+  if (list.length === 0) return;
+  var name = (typeof state !== "undefined" && state.name) ? state.name : "";
+  var idx = list.findIndex(function(p) { return p.name === name; });
+  if (idx < 0) idx = 0;
+  else idx = (idx + direction + list.length) % list.length;
+  if (typeof loadPattern === "function") loadPattern(list[idx].name);
+};

@@ -540,35 +540,6 @@
   }
   .sub-tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
 
-  /* PE left-column segmented control (Room / Layout) */
-  .pe-left-tabs {
-    display: flex;
-    padding: 6px 8px 0;
-    gap: 0;
-  }
-  .pe-left-tab {
-    flex: 1;
-    padding: 4px 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-base);
-    text-align: center;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-dim);
-    letter-spacing: 0.03em;
-  }
-  .pe-left-tab:first-child { border-radius: 4px 0 0 4px; }
-  .pe-left-tab:last-child  { border-radius: 0 4px 4px 0; border-left: none; }
-  .pe-left-tab.active {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-    font-weight: bold;
-  }
-  .pe-left-tab:not(.active):hover { color: var(--text); }
-  .pe-left-pane { display: none; }
-  .pe-left-pane.active { display: block; }
   .sub-tab-content.active { display: flex; flex-direction: column; }
 
   .ol-header {
@@ -720,6 +691,7 @@
   .fp-candidate:hover { background: rgba(255,255,255,0.05); }
   .fp-candidate.best { border: 1px solid #58c080; border-radius: 4px; }
   .fp-candidate.amended { border: 1px solid #d4a04a; border-radius: 4px; }
+  .fp-candidate.fp-oversize { opacity: 0.45; }
   /* Edit mode indicator — shared by Amend layout, Adjust room, dirty editor */
   .edit-mode {
     background: rgba(200, 160, 80, 0.10) !important;
@@ -1142,7 +1114,6 @@
 
   /* D-215: Amend Layout dedicated mode — hide non-relevant PE controls */
   .amend-layout-mode #peTabRoom { display: none; }
-  .amend-layout-mode .pe-left-tabs { display: none; }
   .amend-layout-mode #peBtnAddDoor { display: none; }
   .amend-layout-mode #btnFit { display: none; }
   .amend-layout-mode #btnCompact { display: none; }

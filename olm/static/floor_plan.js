@@ -320,6 +320,52 @@
     return getCurrentStandard();
   }
 
+  // ── Selected solution panel ──────────────────────────────────────────
+  function _updateSelectedSolution(candidate, amendment) {
+    var container = document.getElementById("fpSelectedSolution");
+    if (!container) return;
+    var c = amendment || candidate;
+    if (!c) {
+      container.innerHTML =
+        '<div style="color:var(--text-dim);font-size:var(--fs-xs);' +
+        'padding:4px 0;">No selection</div>';
+      return;
+    }
+    var gradeClass = "fp-grade-" + (c.circulation_grade || "F");
+    var badge = "";
+    if (amendment && amendment.saved) badge = "Saved";
+    else if (amendment) badge = "Amended";
+    var badgeHtml = badge
+      ? '<span style="font-size:var(--fs-xs);color:var(--accent);">' +
+        badge + '</span>'
+      : '';
+    container.innerHTML =
+      '<div class="fp-candidate selected" tabindex="-1" style="border:1px solid ' +
+      'var(--accent);border-radius:4px;cursor:pointer;">' +
+        '<div style="display:flex;justify-content:space-between;' +
+        'align-items:center;">' +
+          '<span class="fp-c-name">' + c.pattern_name + '</span>' +
+          badgeHtml +
+        '</div>' +
+        '<div class="fp-c-stats">' +
+          c.n_desks + ' desks &middot; ' + c.m2_per_desk +
+          ' m&sup2;/d &middot; ' +
+          '<span class="fp-c-grade ' + gradeClass + '">' +
+          c.circulation_grade + '</span>' +
+          ' &middot; ' + getStdLabel(c.standard) +
+        '</div>' +
+      '</div>';
+    // Click → render this solution in SVG
+    container.querySelector(".fp-candidate").addEventListener("click",
+      function() {
+        var room = fpCurrent();
+        if (!room) return;
+        document.querySelectorAll("#fpCandidatesList .fp-candidate")
+          .forEach(function(el) { el.classList.remove("selected"); });
+        fpRenderSvg(room, c);
+      });
+  }
+
   // ── Render current room ────────────────────────────────────────────────
   window.fpRenderCurrent = fpRenderCurrent;
   function fpRenderCurrent() {
@@ -336,6 +382,8 @@
     // Update room list highlight in Design
     if (window.updateIngRoomList) window.updateIngRoomList();
 
+
+
     // Standard filter: always current_standard (no DOM radio to reset)
 
     // Action buttons always enabled. Handlers branch on candidate presence :
@@ -343,9 +391,21 @@
     // - Amend layout : with candidate → amend existing; without → empty room.
     document.getElementById("fpBtnEditPattern").disabled = false;
     document.getElementById("fpBtnAdjustLayout").disabled = false;
-    // Show Discard if amendment exists
-    var hasAmendment = !!fpAmendments[room.name];
-    document.getElementById("fpBtnDiscard").style.display = hasAmendment ? "" : "none";
+    // Show Discard if amendment exists, hide Save layout on room change
+    var amendment = fpAmendments[room.name];
+    var discardBtn = document.getElementById("fpBtnDiscard");
+    discardBtn.style.display = amendment ? "" : "none";
+    if (amendment && amendment.saved) {
+      discardBtn.textContent = "Revert save";
+      discardBtn.title = "Remove saved layout choice";
+    } else if (amendment) {
+      discardBtn.textContent = "Revert amendment";
+      discardBtn.title = "Revert to original matching result";
+    }
+    document.getElementById("fpBtnSaveLayout").style.display = "none";
+
+    // Selected solution panel
+    _updateSelectedSolution(null, amendment);
 
     // Navigation
     var roomLabel = room.name || "(unnamed)";
@@ -364,13 +424,19 @@
     // Candidates (sorted best first)
     fpRenderCandidates(room);
 
-    // Automatically select the first candidate in the list
-    var firstCand = document.querySelector("#fpCandidatesList .fp-candidate");
-    if (firstCand) {
-      firstCand.click();
+    // Auto-select: if a saved/amended solution exists, show it.
+    // Otherwise select the first candidate in the list.
+    var _amend = fpAmendments[room.name];
+    var selCard = document.querySelector("#fpSelectedSolution .fp-candidate");
+    if (_amend && selCard) {
+      selCard.click();
     } else {
-      // No candidates — render empty room (with overlay if active)
-      fpRenderEmptyRoom(room, document.getElementById("fpCanvas"));
+      var firstCand = document.querySelector("#fpCandidatesList .fp-candidate");
+      if (firstCand) {
+        firstCand.click();
+      } else {
+        fpRenderEmptyRoom(room, document.getElementById("fpCanvas"));
+      }
     }
   }
 
@@ -429,40 +495,13 @@
     var container = document.getElementById("fpCandidatesList");
     var stdFilter = fpGetStandardFilter();
 
-    // If amendment exists for this room, show only the amendment + Discard
-    var amendment = fpAmendments[room.name];
-    if (amendment) {
-      var gradeClass = "fp-grade-" + (amendment.circulation_grade || "F");
-      container.innerHTML =
-        '<div class="fp-candidate amended selected" tabindex="-1" data-fp-cand="0">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-            '<span class="fp-c-name">' + amendment.pattern_name + '</span>' +
-          '</div>' +
-          '<div class="fp-c-stats">' +
-            amendment.n_desks + ' desks &middot; ' + amendment.m2_per_desk + ' m&sup2;/d &middot; ' +
-            '<span class="fp-c-grade ' + gradeClass + '">' + amendment.circulation_grade + '</span>' +
-            ' &middot; ' + amendment.standard +
-          '</div>' +
-        '</div>';
-
-      // Wire click to render SVG
-      var candidates = [amendment];
-      container.querySelector(".fp-candidate").addEventListener("click", function(e) {
-        fpRenderSvg(room, amendment);
-        document.getElementById("fpBtnEditPattern").disabled = true;
-        document.getElementById("fpBtnAdjustLayout").disabled = false;
-      });
-
-      return;
-    }
-
+    // Candidate list: pure catalogue data, never affected by amendments.
     var candidates = room.all_candidates.slice();
 
     if (stdFilter) {
       candidates = candidates.filter(function(c) { return c.standard === stdFilter; });
     }
 
-    // Sort: n_desks desc, grade asc (A=best), passage min desc, m²/desk asc
     var gradeOrd = { A: 0, B: 1, C: 2, D: 3, F: 4 };
     function gradeVal(g) { return g in gradeOrd ? gradeOrd[g] : 5; }
     candidates.sort(function(a, b) {
@@ -471,7 +510,9 @@
       if (gd !== 0) return gd;
       var pd = (b.min_passage_cm || 0) - (a.min_passage_cm || 0);
       if (pd !== 0) return pd;
-      return (a.m2_per_desk || 99) - (b.m2_per_desk || 99);
+      var md = (a.m2_per_desk || 99) - (b.m2_per_desk || 99);
+      if (md !== 0) return md;
+      return (a.pattern_name || "").localeCompare(b.pattern_name || "");
     });
 
     if (!candidates.length) {
@@ -486,6 +527,7 @@
       }
       var gradeClass = "fp-grade-" + (c.circulation_grade || "F");
       var classes = "fp-candidate";
+      if (c.oversize) classes += " fp-oversize";
       if (isBest) classes += " selected best";
       return '<div class="' + classes + '" tabindex="-1" data-fp-cand="' + i + '">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
@@ -494,7 +536,7 @@
         '<div class="fp-c-stats">' +
           c.n_desks + ' desks &middot; ' + c.m2_per_desk + ' m&sup2;/d &middot; ' +
           '<span class="fp-c-grade ' + gradeClass + '">' + c.circulation_grade + '</span>' +
-          ' &middot; ' + c.standard +
+          ' &middot; ' + getStdLabel(c.standard) +
         '</div>' +
       '</div>';
     }).join("");
@@ -509,6 +551,7 @@
         fpRenderSvg(room, c);
         document.getElementById("fpBtnEditPattern").disabled = false;
         document.getElementById("fpBtnAdjustLayout").disabled = false;
+        document.getElementById("fpBtnSaveLayout").style.display = "";
       });
     });
   }
@@ -599,7 +642,7 @@
     document.getElementById("fpInfoDims").textContent = room.width_cm + " x " + room.depth_cm + " cm";
     document.getElementById("fpInfoArea").textContent = area;
     document.getElementById("fpInfoPattern").textContent = candidate.pattern_name || "-";
-    document.getElementById("fpInfoStandard").textContent = candidate.standard || "-";
+    document.getElementById("fpInfoStandard").textContent = getStdLabel(candidate.standard) || "-";
     document.getElementById("fpInfoDesks").textContent = candidate.n_desks || "-";
     document.getElementById("fpInfoM2").textContent = candidate.m2_per_desk ? candidate.m2_per_desk.toFixed(1) : "-";
     document.getElementById("fpInfoCirc").textContent = candidate.circulation_grade || "-";
@@ -1003,6 +1046,33 @@
       window.ingShowPlanView();
     });
 
+    document.getElementById("fpBtnSaveLayout").addEventListener("click", function() {
+      var room = fpCurrent();
+      if (!room || !fpCurrentCandidate) return;
+      var c = fpCurrentCandidate;
+      fpAmendments[room.name] = {
+        pattern_name: c.pattern_name,
+        standard: c.standard,
+        n_desks: c.n_desks,
+        m2_per_desk: c.m2_per_desk,
+        circulation_grade: c.circulation_grade,
+        connectivity_pct: c.connectivity_pct,
+        min_passage_cm: c.min_passage_cm,
+        worst_detour: c.worst_detour,
+        largest_free_rect_m2: c.largest_free_rect_m2,
+        desks: c.desks || [],
+        pattern: c.pattern,
+        saved: true,
+      };
+      document.getElementById("fpBtnSaveLayout").style.display = "none";
+      var discardBtn = document.getElementById("fpBtnDiscard");
+      discardBtn.style.display = "";
+      discardBtn.textContent = "Revert save";
+      discardBtn.title = "Remove saved layout choice";
+      _updateSelectedSolution(null, fpAmendments[room.name]);
+      setStatus("Layout saved for room \"" + room.name + "\".");
+    });
+
     document.getElementById("fpBtnDiscard").addEventListener("click", function() {
       var room = fpCurrent();
       if (room) {
@@ -1059,15 +1129,29 @@
       else if (e.key === "ArrowRight") { e.preventDefault(); fpGo(1); }
       else if (inDesign && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
         e.preventDefault();
+        var selCard = document.querySelector("#fpSelectedSolution .fp-candidate");
         var container = document.getElementById("fpCandidatesList");
-        var items = container.querySelectorAll(".fp-candidate");
-        if (!items.length) return;
-        var curIdx = -1;
-        items.forEach(function(el, i) { if (el.classList.contains("selected")) curIdx = i; });
+        var items = Array.from(container.querySelectorAll(".fp-candidate"));
+        // Build unified list: selected solution (index -1) + candidates
+        var selActive = selCard && !items.some(function(el) {
+          return el.classList.contains("selected");
+        });
+        var curIdx = selActive ? -1 : -2;
+        items.forEach(function(el, i) {
+          if (el.classList.contains("selected")) curIdx = i;
+        });
         var nextIdx = e.key === "ArrowUp" ? curIdx - 1 : curIdx + 1;
-        if (nextIdx < 0) nextIdx = 0;
+        // Clamp: -1 = selected solution (if exists), 0..n = candidates
+        var minIdx = selCard ? -1 : 0;
+        if (nextIdx < minIdx) nextIdx = minIdx;
         if (nextIdx >= items.length) nextIdx = items.length - 1;
-        if (nextIdx !== curIdx) {
+        if (nextIdx === curIdx) return;
+        if (nextIdx === -1 && selCard) {
+          // Activate selected solution
+          items.forEach(function(el) { el.classList.remove("selected"); });
+          selCard.click();
+          selCard.focus();
+        } else if (nextIdx >= 0 && nextIdx < items.length) {
           items[nextIdx].click();
           items[nextIdx].scrollIntoView({ block: "nearest" });
           items[nextIdx].focus();

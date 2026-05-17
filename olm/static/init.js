@@ -12,6 +12,7 @@ async function init() {
   renderFloorplanSettings();
   renderCatStandardFilter();
   renderFpStandardFilter();
+  state.standard = getCurrentStandard() || getStandards()[0] || "";
 
   // P1.4: All addEventListener calls in init() are session-life
   // (bound once at DOMContentLoaded, never re-bound). No dispose needed.
@@ -53,19 +54,18 @@ async function init() {
       callback();
     }
   }
-  // PE left-column segmented control (Room / Layout)
-  document.querySelectorAll(".pe-left-tab").forEach(function(tab) {
-    tab.addEventListener("click", function() {
-      document.querySelectorAll(".pe-left-tab").forEach(function(t) { t.classList.remove("active"); });
-      document.querySelectorAll(".pe-left-pane").forEach(function(p) { p.classList.remove("active"); });
-      tab.classList.add("active");
-      var pane = document.getElementById(tab.dataset.peTab);
-      if (pane) pane.classList.add("active");
-    });
-  });
+  // PE left-column: Room + Layout sections stacked (no tabs).
 
   document.getElementById("btnNew").addEventListener("click", function() {
     _guardPatternRoomAmend(resetState);
+  });
+  // "New pattern" from Card/Grid view → reset + switch to Editor sub-tab
+  ["btnNewPatternCard", "btnNewPatternGrid"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("click", function() {
+      resetState();
+      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+    });
   });
   document.getElementById("btnSave").addEventListener("click", save);
   document.getElementById("btnDuplicate").addEventListener("click", function() {
@@ -101,6 +101,9 @@ async function init() {
         exitAmendUI();
         document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
         fpRenderCurrent();
+      } else if (_preFitSnapshot) {
+        loadPatternFromData(_preFitSnapshot);
+        _preFitSnapshot = null;
       } else if (state._savedName) {
         loadPattern(state._savedName);
       } else {
@@ -772,7 +775,10 @@ async function init() {
   });
 
   // --- Fit to pattern (editor) ---
+  // Snapshot before Fit — allows Discard to revert
+  var _preFitSnapshot = null;
   document.getElementById("btnFit").addEventListener("click", function() {
+    _preFitSnapshot = JSON.parse(JSON.stringify(buildPatternPayload()));
     var payload = buildPatternPayload();
     fetch("/api/patterns/fit-inline", {
       method: "POST",
@@ -942,6 +948,8 @@ async function init() {
     var newStd = this.value;
     // Sync all 3 selectors
     setCatStandard(newStd);
+    // Persist across sessions
+    saveConfigField("current_standard", newStd);
     // Sync editor state.standard and reload block defs
     if (newStd && typeof state !== "undefined" && state.standard !== newStd) {
       state.standard = newStd;
@@ -954,10 +962,19 @@ async function init() {
       }
     }
     onCatalogueFilterChange();
+    if (window.peUpdateNavInfo) window.peUpdateNavInfo();
   }
   _CAT_STD_IDS.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener("change", _onCatStandardChange);
+  });
+  var _peBtnPrev = document.getElementById("peBtnPrev");
+  if (_peBtnPrev) _peBtnPrev.addEventListener("click", function() {
+    if (window.peNavigate) window.peNavigate(-1);
+  });
+  var _peBtnNext = document.getElementById("peBtnNext");
+  if (_peBtnNext) _peBtnNext.addEventListener("click", function() {
+    if (window.peNavigate) window.peNavigate(1);
   });
   document.getElementById("catFilterMinW").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMaxW").addEventListener("change", onCatalogueFilterChange);

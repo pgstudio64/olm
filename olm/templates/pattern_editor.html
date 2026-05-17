@@ -484,6 +484,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
             </td>
             <td class="nav-right">
+              <button class="btn" id="fpBtnSaveLayout" style="display:none;" title="Save the selected candidate as the layout for this room">Save layout</button>
               <button class="btn" id="fpBtnEditPattern" title="Open this pattern in the editor to add a variant to the catalogue" disabled>Add pattern</button>
               <button class="btn" id="fpBtnAdjustLayout" title="Amend layout in room" disabled>Amend layout</button>
               <button class="btn" id="fpBtnDiscard" style="display:none;" title="Revert to original matching result">Revert amendment</button>
@@ -520,6 +521,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div id="fpDesignRoomList" style="height:150px;min-height:60px;max-height:400px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);margin-bottom:var(--sp-sm);"></div>
         <div class="fp-standard-filter" id="fpStandardFilter">
           <!-- Populated dynamically by renderFpStandardFilter() -->
+        </div>
+        <div class="section-title">Selected solution</div>
+        <div id="fpSelectedSolution" style="min-height:28px;margin-bottom:8px;">
+          <div id="fpSelectedEmpty" style="color:var(--text-dim);font-size:var(--fs-xs);padding:4px 0;">No layout saved yet</div>
         </div>
         <div class="section-title">Candidate solutions</div>
         <div style="margin-bottom:4px;">
@@ -564,14 +569,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 
   <!-- LEFT COLUMN -->
   <div class="col" id="peLeftCol">
-    <div class="pe-left-tabs">
-      <button class="pe-left-tab active" data-pe-tab="peTabRoom">Room</button>
-      <button class="pe-left-tab" data-pe-tab="peTabLayout">Layout</button>
-    </div>
-    <div class="col-inner">
+    <div class="col-inner" style="overflow-y:auto;">
 
-      <!-- Room sub-tab -->
-      <div class="pe-left-pane active" id="peTabRoom">
+      <!-- Room section -->
+      <div id="peTabRoom">
         <div class="section-title">Room</div>
         <div class="room-config">
           <div class="room-dim-row">
@@ -593,7 +594,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
 
         <div class="section-title">Room definition</div>
-        <textarea id="dslRoom" rows="8" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:100px;margin-bottom:4px;"
+        <textarea id="dslRoom" rows="6" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:80px;margin-bottom:4px;"
           placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
         <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;">Apply</button>
         <div style="margin-bottom:8px;">
@@ -601,8 +602,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
       </div>
 
-      <!-- Layout sub-tab -->
-      <div class="pe-left-pane" id="peTabLayout">
+      <div style="height:28px;"></div>
+
+      <!-- Layout section -->
+      <div id="peTabLayout">
         <div class="section-title">Layout</div>
         <textarea id="dslText" rows="2" spellcheck="false" style="width:100%;margin-bottom:4px;"></textarea>
         <button class="btn" id="btnApplyDSL" style="width:100%;margin-bottom:4px;">Apply</button>
@@ -629,19 +632,29 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div class="fp-resize-handle" id="peLeftResize"></div>
   <!-- CENTER COLUMN -->
   <div class="col canvas-col">
-    <!-- Bar 1: Pattern identity -->
-    <div class="fp-nav ol-header" style="display:flex;align-items:center;gap:10px;padding:var(--sp-sm) var(--sp-lg);flex-wrap:nowrap;">
-      <span id="autoName">-</span>
-      <label style="font-size:11px;color:var(--text-dim);">Standard:
-        <select id="catFilterStandardEditor" title="Standard" style="font-size:11px;padding:2px 4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
-        </select>
-      </label>
-      <span style="flex:1;"></span>
-      <button class="btn" id="btnNew">New</button>
-      <button class="btn" id="btnDuplicate">Duplicate</button>
-      <button class="btn" id="btnDelete">Delete</button>
-      <button class="btn" id="btnSave" style="display:none;">Save pattern</button>
-      <button class="btn btn-cancel" id="btnAmendCancel" style="display:none;">Discard</button>
+    <!-- Bar 1: Pattern identity + navigation -->
+    <div class="fp-nav ol-header">
+      <table class="nav-layout"><tr>
+        <td class="nav-left">
+          <label style="font-size:11px;color:var(--text-dim);">Standard:
+            <select id="catFilterStandardEditor" title="Standard" style="font-size:11px;padding:2px 4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
+            </select>
+          </label>
+        </td>
+        <td class="nav-center">
+          <button class="btn" id="peBtnPrev" title="Previous pattern (width then depth ascending)">&larr; Prev</button>
+          <div class="fp-room-label" id="autoName">-</div>
+          <button class="btn" id="peBtnNext" title="Next pattern (width then depth ascending)">Next &rarr;</button>
+          <span class="fp-nav-info" id="peNavInfo">0 / 0</span>
+        </td>
+        <td class="nav-right">
+          <button class="btn" id="btnNew">New</button>
+          <button class="btn" id="btnDuplicate">Duplicate</button>
+          <button class="btn" id="btnDelete">Delete</button>
+          <button class="btn" id="btnSave" style="display:none;">Save pattern</button>
+          <button class="btn btn-cancel" id="btnAmendCancel" style="display:none;">Discard</button>
+        </td>
+      </tr></table>
     </div>
     <!-- Bar 2: Room + Layout tools -->
     <div class="canvas-toolbar">
@@ -745,6 +758,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <!-- Populated dynamically by renderCatStandardFilter() -->
         </select>
       </label>
+      <button class="btn" id="btnNewPatternCard" title="Create a new pattern in the editor">New pattern</button>
       <span class="cat-dim-filter" style="flex:1;"></span>
       <label class="cat-dim-filter" id="catLabelMinW">Width min:
         <input type="number" id="catFilterMinW" value="" min="0" step="10" style="width:60px;">
@@ -774,7 +788,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
       </div>
       <input type="file" id="catImportFile" accept=".json" style="display:none;">
-      <button class="view-toggle" id="btnFitAll" title="Fit all patterns to their minimum room">Fit all to pattern</button>
       <span id="catCount" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
     </div>
     <div id="catDefaultBanner" style="display:none;padding:8px 16px;background:var(--surface2);border:1px solid var(--accent);margin:4px 0;font-size:12px;">
@@ -795,6 +808,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <!-- Populated dynamically by renderCatStandardFilter() -->
         </select>
       </label>
+      <button class="btn" id="btnNewPatternGrid" title="Create a new pattern in the editor">New pattern</button>
       <span style="flex:1;"></span>
       <div style="position:relative;display:inline-block;">
         <button class="view-toggle" id="btnCatExportGrid" title="Export catalogue">&#x2B06; Export &#x25BE;</button>
@@ -811,7 +825,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
       </div>
       <input type="file" id="catImportFileGrid" accept=".json" style="display:none;">
-      <button class="view-toggle" id="btnFitAllGrid" title="Fit all patterns to their minimum room">Fit all to pattern</button>
       <span id="catCountGrid" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
       <span style="flex:1;"></span>
       <button class="view-toggle" id="btnMatrixZoomIn" title="Zoom in">+</button>

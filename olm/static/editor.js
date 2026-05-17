@@ -793,6 +793,7 @@ function computeMinRoomDims() {
  */
 function wouldDetachAnyStick(axis, deltaCm) {
   if (deltaCm === 0) return false;
+  if (state.amendMode) return false;
   var ri = state.selectedRow;
   var bi = state.selectedBlock;
   var b = state.rows[ri] && state.rows[ri].blocks[bi];
@@ -1087,21 +1088,26 @@ function _renderImpl(targetSvg) {
       if (!lk.touches) continue;
       var locked = bSticks.indexOf(lk.face) >= 0;
       if (isOffice) {
-        // Office: small rope-knot marker — same dark background as the PE
-        // cadenas, slightly smaller, knot oriented perpendicular to the wall.
+        // Office: small rope-knot marker — figure-8 centered ON the wall so
+        // one loop sits on the desk side and the other outside the room.
         if (!locked) continue;
         var knotSize = 18 * zf;
         var ksc = knotSize / 14;
-        var kx = lk.cx - knotSize / 2;
-        var ky = lk.cy - knotSize / 2;
+        var kcx = lk.cx, kcy = lk.cy;
+        if (lk.face === "N") kcy = outerN;
+        else if (lk.face === "S") kcy = outerS;
+        else if (lk.face === "W") kcx = outerW;
+        else if (lk.face === "E") kcx = outerE;
+        var kx = kcx - knotSize / 2;
+        var ky = kcy - knotSize / 2;
         var krot = (lk.face === "E" || lk.face === "W") ? 90 : 0;
         elements.push({ z: 10, s:
           '<g transform="translate(' + kx + ',' + ky + ') scale(' + ksc +
           ') rotate(' + krot + ' 7 7)" pointer-events="none">' +
           '<rect x="0" y="0" width="14" height="14" rx="3" fill="rgba(0,0,0,0.6)"/>' +
-          '<circle cx="7" cy="7" r="3" fill="none" stroke="#c8a800" stroke-width="1.6"/>' +
-          '<line x1="7" y1="1" x2="7" y2="4" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
-          '<line x1="7" y1="10" x2="7" y2="13" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
+          // Figure-8 knot: two stacked loops crossing at the centre (7,7)
+          '<path d="M 7 1 C 11 1 11 7 7 7 C 3 7 3 13 7 13 C 11 13 11 7 7 7 C 3 7 3 1 7 1 Z"' +
+          ' fill="none" stroke="#c8a800" stroke-width="1.4" stroke-linecap="round"/>' +
           '</g>' });
         continue;
       }
@@ -1921,7 +1927,6 @@ function addBlock(blockType) {
   updateRowList();
   updateDSL();
   zoomFit();
-  canonicalizeState();
 }
 
 function addRow(andRender) {
@@ -2191,7 +2196,7 @@ async function save() {
     var circInfo = computeCirculationInfo();
     var cg = circInfo ? circGrade(circInfo) : { grade: "F" };
     fpAmendments[amend.roomName] = {
-      pattern_name: amend.candidate.pattern_name + " (amended)",
+      pattern_name: amend.candidate.pattern_name.replace(/ \(amended\)$/, "") + " (amended)",
       standard: state.standard,
       n_desks: nd,
       m2_per_desk: nd > 0 ? +(roomArea / nd).toFixed(1) : 0,
@@ -2208,9 +2213,11 @@ async function save() {
     state.overlay = null;
     exitAmendUI();
     setStatus("Amendment saved for room \"" + amend.roomName + "\".");
-    // Switch back to Design
-    document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
-    fpRenderCurrent();
+    // Switch back to Design — use setTimeout to ensure exitAmendUI
+    // DOM changes (Card view click, sub-tab restore) are settled.
+    setTimeout(function() {
+      document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
+    }, 0);
     return;
   }
 
@@ -2294,6 +2301,7 @@ async function loadPattern(name) {
     updateDSL();
     clearDirty();
     setStatus("Pattern \"" + state.name + "\" loaded.");
+    if (window.peUpdateNavInfo) window.peUpdateNavInfo();
   } catch (err) {
     setStatus("Load error: " + err.message);
   }
@@ -2333,8 +2341,11 @@ function switchToEditorWithPattern(data) {
   exitAmendUI();
   exitRoomAmendUI();
   document.querySelector('.tab-btn[data-tab="lytCatalogue"]').click();
-  document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
-  loadPatternFromData(JSON.parse(JSON.stringify(data)));
+  // Force Editor sub-tab after any async side-effects from tab switch
+  setTimeout(function() {
+    document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+    loadPatternFromData(JSON.parse(JSON.stringify(data)));
+  }, 0);
 }
 
 // IDs to disable in amend mode (room controls + catalogue actions)
@@ -2345,10 +2356,12 @@ var AMEND_DISABLE_IDS = [
 ];
 
 function enterAmendMode(room, candidate) {
+  var baseName = (candidate.pattern_name || "")
+    .replace(/ \(amended\)$/, "");
   state.amendMode = {
     roomName: room.name,
     roomIdx: null,
-    candidate: candidate,
+    candidate: Object.assign({}, candidate, { pattern_name: baseName }),
   };
   // Switch BLOCK_DEFS to candidate's standard
   if (candidate.standard && BLOCK_DEFS_BY_STD[candidate.standard]) {
@@ -2402,9 +2415,6 @@ function enterAmendMode(room, candidate) {
 
   // D-215: dedicated amend-layout CSS mode — hide non-relevant controls
   document.body.classList.add("amend-layout-mode");
-  // Force Layout sub-tab active (Room tab hidden by CSS)
-  var layoutTab = document.querySelector('[data-pe-tab="peTabLayout"]');
-  if (layoutTab) layoutTab.click();
 
   // Visual cue: amend mode banner
   document.querySelector(".ol-header").classList.add("edit-mode");
@@ -2426,10 +2436,6 @@ function exitAmendUI() {
   document.querySelector(".ol-header").classList.remove("edit-mode");
   // D-215: remove dedicated amend-layout CSS mode
   document.body.classList.remove("amend-layout-mode");
-  // Restore Room sub-tab as default (must happen AFTER class removal
-  // so peTabRoom is visible again when the click activates it)
-  var roomTab = document.querySelector('[data-pe-tab="peTabRoom"]');
-  if (roomTab) roomTab.click();
   // Restore sub-tab bar and reset to Card view
   var subBar = document.querySelector("#tabLytCatalogue > .sub-tab-bar");
   if (subBar) subBar.style.display = "";
@@ -2871,10 +2877,30 @@ function rotateSelectedBlock() {
 }
 
 
+function _findBlockPos(ri, bi) {
+  var positions = computeBlockPositions();
+  for (var i = 0; i < positions.length; i++) {
+    if (positions[i].rowIdx === ri && positions[i].blockIdx === bi) return positions[i];
+  }
+  return null;
+}
+
 function offsetSelectedBlock(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
   if (wouldDetachAnyStick("NS", deltaCm)) return;
+  var pos = _findBlockPos(state.selectedRow, state.selectedBlock);
+  if (pos) {
+    var newY = pos.y_cm + deltaCm;
+    var southEdge = newY + pos.h_cm;
+    var step = GRID_STEP_CM;
+    if (deltaCm < 0 && newY > 0 && newY < step) {
+      deltaCm = -pos.y_cm;
+    } else if (deltaCm > 0 && southEdge < state.room_depth_cm
+               && state.room_depth_cm - southEdge < step) {
+      deltaCm = state.room_depth_cm - pos.h_cm - pos.y_cm;
+    }
+  }
   markDirty();
   b.offset_ns_cm = (b.offset_ns_cm || 0) + deltaCm;
   render(); updateDSL();
@@ -2884,6 +2910,18 @@ function offsetSelectedBlockEO(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
   if (wouldDetachAnyStick("EO", deltaCm)) return;
+  var pos = _findBlockPos(state.selectedRow, state.selectedBlock);
+  if (pos) {
+    var newX = pos.x_cm + deltaCm;
+    var eastEdge = newX + pos.w_cm;
+    var step = GRID_STEP_CM;
+    if (deltaCm < 0 && newX > 0 && newX < step) {
+      deltaCm = -pos.x_cm;
+    } else if (deltaCm > 0 && eastEdge < state.room_width_cm
+               && state.room_width_cm - eastEdge < step) {
+      deltaCm = state.room_width_cm - pos.w_cm - pos.x_cm;
+    }
+  }
   markDirty();
   b.gap_cm = (b.gap_cm || 0) + deltaCm;
   // Compensate on the next block so it stays in place

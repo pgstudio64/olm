@@ -65,6 +65,7 @@ class PatternCandidate:
     room_depth_cm: int
     standard: str
     n_desks: int
+    oversize: bool = False
 
 
 @dataclass
@@ -178,15 +179,19 @@ def effective_dimensions(room: RoomSpec) -> tuple[int, int]:
     return max(0, ew), max(0, ed)
 
 
-def _fits_in_room(pattern: dict, room: RoomSpec) -> bool:
+def _fits_in_room(pattern: dict, room: RoomSpec, margin: float = 0.0) -> bool:
     """Check whether the pattern footprint fits inside the target room.
 
     Uses effective dimensions (after peripheral exclusions).
+
+    Args:
+        margin: Fractional tolerance (0.0 = exact, 0.2 = 20% oversize).
     """
     pw = pattern.get("room_width_cm", 0)
     pd = pattern.get("room_depth_cm", 0)
     ew, ed = effective_dimensions(room)
-    return pw <= ew and pd <= ed
+    factor = 1.0 + margin
+    return pw <= ew * factor and pd <= ed * factor
 
 
 def _is_dominated(p: PatternCandidate, others: list[PatternCandidate]) -> bool:
@@ -246,12 +251,16 @@ def select_candidates(
     standards = [standard] if standard else list(ALL_CONFIGS.keys())
     results = []
 
+    from olm.core.matching_config import OVERSIZE_MARGIN
+
     for std in standards:
         fitting = []
+        oversize_extra = []
         for p in catalogue:
             if p.get("standard") != std:
                 continue
-            if not _fits_in_room(p, room):
+            exact = _fits_in_room(p, room)
+            if not exact and not _fits_in_room(p, room, OVERSIZE_MARGIN):
                 continue
             candidate = PatternCandidate(
                 pattern=p,
@@ -260,22 +269,28 @@ def select_candidates(
                 room_depth_cm=p["room_depth_cm"],
                 standard=std,
                 n_desks=count_desks(p),
+                oversize=not exact,
             )
-            fitting.append(candidate)
+            if exact:
+                fitting.append(candidate)
+            else:
+                oversize_extra.append(candidate)
 
         front = pareto_front(fitting)
         # Sort by desk count descending
         front.sort(key=lambda c: c.n_desks, reverse=True)
+        # Append oversize candidates after the Pareto front
+        oversize_extra.sort(key=lambda c: c.n_desks, reverse=True)
 
         results.append(SelectionResult(
             standard=std,
-            candidates=front,
-            all_fitting=fitting,
+            candidates=front + oversize_extra,
+            all_fitting=fitting + oversize_extra,
         ))
 
         logger.debug(
-            "Selection %s: %d patterns fit, %d on Pareto front",
-            std, len(fitting), len(front),
+            "Selection %s: %d fit, %d oversize, %d on Pareto front",
+            std, len(fitting), len(oversize_extra), len(front),
         )
 
     if standard:
@@ -1106,6 +1121,7 @@ class MatchScore:
     worst_detour: float
     largest_free_rect_m2: float
     adapted_pattern: dict
+    oversize: bool = False
 
 
 def _pattern_to_circulation_format(
@@ -1178,6 +1194,7 @@ def _pattern_to_circulation_format(
 
 def score_candidate(
     pattern: dict, room: RoomSpec, standard: str,
+    oversize: bool = False,
 ) -> MatchScore:
     """Compute the full score of an adapted candidate.
 
@@ -1219,6 +1236,7 @@ def score_candidate(
         worst_detour=circ.worst_detour_ratio,
         largest_free_rect_m2=free_rect_m2,
         adapted_pattern=pattern,
+        oversize=oversize,
     )
 
 
@@ -1413,7 +1431,9 @@ def match_room(
             cleaned, removed = remove_conflicting_desks(adapted, room)
 
             # Step 5: scoring
-            score = score_candidate(cleaned, room, std)
+            score = score_candidate(
+                cleaned, room, std, oversize=candidate.oversize,
+            )
             std_scores.append(score)
             all_scores.append(score)
 
