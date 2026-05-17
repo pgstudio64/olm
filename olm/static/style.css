@@ -624,6 +624,11 @@
     padding: 4px 16px; min-width: 80px; text-align: center;
   }
   .fp-nav-info { color: var(--text-dim); font-size: var(--fs-base); }
+  .fp-amend-tag {
+    font-size: 11px; font-weight: normal; color: var(--text-dim);
+    opacity: 0.8; margin-left: 6px; display: inline-flex;
+    align-items: center; white-space: nowrap;
+  }
 
   /* 3-column layout table for nav bars and canvas toolbars */
   .nav-layout { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -1145,3 +1150,6 @@
   .amend-layout-mode #btnCatSaveAsDefault { display: none; }
   .amend-layout-mode #stickCheckboxes { display: none; }
   .amend-layout-mode #stickCheckboxesTitle { display: none; }
+  .amend-layout-mode #peBtnPrev { display: none; }
+  .amend-layout-mode #peBtnNext { display: none; }
+  .amend-layout-mode #peNavInfo { display: none; }

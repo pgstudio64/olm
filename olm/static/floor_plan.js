@@ -218,21 +218,42 @@
   }
   window.updateFloorProperties = updateFloorProperties;
 
-  // Suffix appended to a room label when the user has amended its
-  // geometry (room.room_amended, set by fpRematchRoom) and/or its layout
-  // (fpAmendments[name], set by Amend Layout Save). Returns "":
-  // - "" if neither
-  // - " (Room amended)" if only geometry
-  // - " (Layout amended)" if only layout
-  // - " (Room & Layout amended)" if both
+  // Returns the amendment marker text (without leading space) when the
+  // user has amended the room's geometry (room.room_amended, set by
+  // fpRematchRoom) and/or its layout (fpAmendments[name], set by Amend
+  // Layout Save). Rendered as a separate badge by _setRoomLabel.
   function _amendmentSuffix(room) {
     if (!room) return "";
     var geo = !!room.room_amended;
     var lay = !!fpAmendments[room.name];
-    if (geo && lay) return " (Room & Layout amended)";
-    if (geo) return " (Room amended)";
-    if (lay) return " (Layout amended)";
+    if (geo && lay) return "Room & Layout amended";
+    if (geo) return "Room amended";
+    if (lay) return "Layout amended";
     return "";
+  }
+
+  // Sets the room label as a base name + optional small "amended" badge.
+  // The badge sits next to (not inside) the bold room-label box, so
+  // appending it does not force the label cell to widen.
+  function _setRoomLabel(elId, roomName, room) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = roomName;
+    // Sibling badge: insert (or remove) after the label box.
+    var badgeId = elId + "_amendBadge";
+    var existing = document.getElementById(badgeId);
+    var marker = _amendmentSuffix(room);
+    if (!marker) {
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      return;
+    }
+    if (!existing) {
+      existing = document.createElement("span");
+      existing.id = badgeId;
+      existing.className = "fp-amend-tag";
+      el.parentNode.insertBefore(existing, el.nextSibling);
+    }
+    existing.textContent = marker;
   }
 
   function rvRenderCurrent() {
@@ -241,7 +262,7 @@
 
     var room = fpCurrent();
     if (!room) {
-      document.getElementById("rvRoomLabel").textContent = "-";
+      _setRoomLabel("rvRoomLabel", "-", null);
       document.getElementById("rvNavInfo").textContent = "0 / 0";
       document.getElementById("rvCanvas").innerHTML = "";
       return;
@@ -267,8 +288,7 @@
     }
 
     // Navigation — same amendment-kinds label as Office view.
-    var _rvLabel = (roomData.name || "(unnamed)") + _amendmentSuffix(room);
-    document.getElementById("rvRoomLabel").textContent = _rvLabel;
+    _setRoomLabel("rvRoomLabel", roomData.name || "(unnamed)", room);
     document.getElementById("rvNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
 
@@ -371,7 +391,7 @@
   function fpRenderCurrent() {
     var room = fpCurrent();
     if (!room) {
-      document.getElementById("fpRoomLabel").textContent = "-";
+      _setRoomLabel("fpRoomLabel", "-", null);
       document.getElementById("fpNavInfo").textContent = "0 / 0";
       document.getElementById("fpCandidatesList").innerHTML =
         '<div class="fp-no-match">Load a room JSON file from the Input tab</div>';
@@ -408,11 +428,9 @@
     _updateSelectedSolution(null, amendment);
 
     // Navigation
-    var roomLabel = room.name || "(unnamed)";
     // Amendment kinds (room.room_amended = geometry, fpAmendments[name] = layout).
     // fpRoomAmendments is a canonical data cache, not a user-amendment signal.
-    roomLabel += _amendmentSuffix(room);
-    document.getElementById("fpRoomLabel").textContent = roomLabel;
+    _setRoomLabel("fpRoomLabel", room.name || "(unnamed)", room);
     document.getElementById("fpNavInfo").textContent =
       (fpData.currentIdx + 1) + " / " + fpRooms().length;
     // Reset candidate before re-render to avoid stale value leaking into
