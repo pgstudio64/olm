@@ -490,6 +490,15 @@ def _block_ns_extent(block: dict) -> int:
     return ns
 
 
+def _ns_intervals_overlap(b1: dict, b2: dict) -> bool:
+    """True if two blocks' NS intervals overlap (= cannot share an EO span)."""
+    y1 = b1.get("offset_ns_cm", 0)
+    y1e = y1 + _block_ns_extent(b1)
+    y2 = b2.get("offset_ns_cm", 0)
+    y2e = y2 + _block_ns_extent(b2)
+    return y1 < y2e and y2 < y1e
+
+
 def _adapt_row_eo(
     row: dict, orig_width: int, target_width: int,
 ) -> dict:
@@ -572,15 +581,29 @@ def _adapt_row_eo(
                 else:
                     new_x[i] = lx
 
-    # Recalculate gaps
+    # Recalculate gaps. D-224: allow a negative gap when block i shares its EO
+    # span with a previous block but does NOT overlap NS (single-row compressed
+    # pattern with offset_ns_cm). Without this, max(0, ...) corrupts the layout
+    # — the block is pushed by prev_right instead of staying at its target x.
     new_blocks = []
     prev_right = 0
     for i in range(len(blocks)):
-        gap = max(0, int(round(new_x[i] - prev_right)))
+        bi_x = int(round(new_x[i]))
+        bi_eo = positions[i][1]
+        raw_gap = bi_x - prev_right
+        if raw_gap < 0 and not any(
+            _ns_intervals_overlap(blocks[i], blocks[j])
+            and bi_x < int(round(new_x[j])) + positions[j][1]
+            and int(round(new_x[j])) < bi_x + bi_eo
+            for j in range(i)
+        ):
+            gap = raw_gap  # legitimate negative gap (no EO+NS collision)
+        else:
+            gap = max(0, raw_gap)
         nb = copy.deepcopy(blocks[i])
         nb["gap_cm"] = gap
         new_blocks.append(nb)
-        prev_right = int(round(new_x[i])) + positions[i][1]
+        prev_right = max(prev_right, bi_x + bi_eo)
 
     return {"blocks": new_blocks}
 
