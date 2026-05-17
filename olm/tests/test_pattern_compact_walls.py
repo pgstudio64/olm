@@ -402,3 +402,118 @@ class TestDoorExclusionAfterCompact:
         # So door exclusion extends y_max: WS01 y_max(180) + 120 = 300.
         # But bbox_y_max after compact is 360 (from WS3). 300 < 360 → no ext.
         assert pat["room_depth_cm"] == 360
+
+
+# ---------------------------------------------------------------------------
+# Test 9: Iterative catch — offset block caught by wall (D-218)
+# ---------------------------------------------------------------------------
+
+
+def _pattern_offset_east() -> dict:
+    """480x500 variant: WS02 offset 50 cm from east wall (gap=270).
+
+    Row 0: WS01 (orient 180, gap=0, sticks NW), WS02 (orient 0, gap=270, stick N)
+    Row 1: WS03 (orient 0, gap=400, offset_ns=-40, sticks SE)
+    WS03 touches east (400+80=480). WS02 does NOT (80+270+80=430 != 480).
+    Iterative compact must first catch WS02 then compress together.
+    """
+    return {
+        "name": "480x500_offset_east",
+        "rows": [
+            {"blocks": [
+                {"type": "BLOCK_1", "orientation": 180, "gap_cm": 0,
+                 "offset_ns_cm": 0, "sticks": ["N", "W"]},
+                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 270,
+                 "offset_ns_cm": 0, "sticks": ["N"]},
+            ]},
+            {"blocks": [
+                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 400,
+                 "offset_ns_cm": -40, "sticks": ["E", "S"]},
+            ]},
+        ],
+        "row_gaps_cm": [180],
+        "room_width_cm": 480,
+        "room_depth_cm": 500,
+        "standard": "standard3",
+        "room_windows": [
+            {"face": "north", "offset_cm": 0, "width_cm": 480, "origin": "auto"},
+        ],
+        "room_openings": [
+            {"face": "south", "hinge_side": "left", "offset_cm": 10,
+             "opens_inward": True, "origin": "manual", "width_cm": 90,
+             "has_door": True},
+        ],
+        "room_exclusions": [],
+    }
+
+
+class TestCompactEastCatchesOffsetBlock:
+    """D-218: Iterative catch-distance recovers slack from non-touching rows."""
+
+    def test_room_width_340_after_normalize(self):
+        """After full normalize_pattern, room_width must be 340."""
+        pat = _pattern_offset_east()
+        normalize_pattern(pat, STD3)
+        assert pat["room_width_cm"] == 340
+
+    def test_intermediate_gaps_after_compact(self):
+        """After compact_walls only (no normalize_intra/fit), check gap_cm."""
+        from olm.core.pattern_compact_walls import compact_walls
+        from olm.core.spacing_config import build_block_defs
+
+        pat = _pattern_offset_east()
+        block_defs = build_block_defs(STD3)
+        changes = compact_walls(pat, STD3)
+
+        # WS02 gap: 270 → 180 (reduced by 90)
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 180
+        # WS03 gap: 400 → 260 (reduced by 50 + 90 = 140)
+        assert pat["rows"][1]["blocks"][0]["gap_cm"] == 260
+        # East: iter1=1 + iter2=2 = 3. South: 1 row_gap reduced. Total=4.
+        assert changes == 4
+
+
+class TestCompactSouthUnaffectedByEastOffset:
+    """D-218: South compact result identical regardless of east offset."""
+
+    def test_room_depth_360(self):
+        """room_depth_cm must be 360 (same as base 480x500 case)."""
+        pat = _pattern_offset_east()
+        normalize_pattern(pat, STD3)
+        assert pat["room_depth_cm"] == 360
+
+
+# ---------------------------------------------------------------------------
+# Test 11: No block initially touching room_width (D-218 gate removal)
+# ---------------------------------------------------------------------------
+
+
+class TestCompactEastNoInitialTouching:
+    """D-218: Compact works even when no block initially touches room_width."""
+
+    def test_room_width_340(self):
+        """Iterative catch compresses all blocks without initial gate."""
+        pat = {
+            "name": "TEST_NO_INITIAL_TOUCHING",
+            "rows": [
+                {"blocks": [
+                    {"type": "BLOCK_1", "orientation": 180, "gap_cm": 0,
+                     "offset_ns_cm": 0, "sticks": ["N", "W"]},
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 230,
+                     "offset_ns_cm": 0, "sticks": ["N"]},
+                ]},
+                {"blocks": [
+                    {"type": "BLOCK_1", "orientation": 0, "gap_cm": 380,
+                     "offset_ns_cm": 0, "sticks": ["S"]},
+                ]},
+            ],
+            "row_gaps_cm": [180],
+            "room_width_cm": 500,
+            "room_depth_cm": 500,
+            "standard": "standard3",
+            "room_windows": [],
+            "room_openings": [],
+            "room_exclusions": [],
+        }
+        normalize_pattern(pat, STD3)
+        assert pat["room_width_cm"] == 340

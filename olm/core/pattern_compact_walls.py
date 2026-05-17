@@ -45,174 +45,130 @@ def compact_walls(pattern: dict, spacing: SpacingConfig) -> int:
 # ---------------------------------------------------------------------------
 
 
+_MAX_EAST_ITER = 100
+
+
 def _compact_east(
     pattern: dict,
     spacing: SpacingConfig,
     block_defs: dict[str, dict],
 ) -> int:
-    """Move east wall inward by reducing gap_cm of touching blocks.
+    """Move east wall inward using iterative catch-distance.
 
-    For each row, compute how much the east wall can move (margin).
-    Global delta = min margin across all rows.
-    Then reduce gap_cm of each touching block by delta.
-
-    Returns:
-        Number of gap_cm values modified.
-    """
-    room_width = pattern.get("room_width_cm", 0)
-    if room_width <= 0:
-        return 0
-
-    positions = compute_block_positions(pattern)
-    if not positions:
-        return 0
-
-    rows = pattern.get("rows", [])
-    desk_to_wall = spacing.desk_to_wall_cm
-
-    # Compute effective east edge for each block
-    block_east_edges: list[int] = []
-    for bp in positions:
-        fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-        eff_e = fc.east.total_cm if fc.east.total_cm > 0 else desk_to_wall
-        block_east_edges.append(bp.x_cm + bp.eo_cm + eff_e)
-
-    # Identify touching blocks (effective east edge == room_width)
-    touching_indices = [
-        i for i, edge in enumerate(block_east_edges)
-        if edge == room_width
-    ]
-
-    if not touching_indices:
-        return 0
-
-    # Compute margin per row (how much the east wall can move)
-    # For each row, the constraint comes from the gap between the last
-    # non-moving block and the first moving block in that row.
-    margins = _compute_east_margins(
-        pattern, positions, block_defs, spacing, touching_indices, room_width,
-    )
-
-    if not margins:
-        return 0
-
-    delta = min(margins)
-    if delta <= 0:
-        return 0
-
-    # Apply: reduce gap_cm of each touching block by delta
-    changes = 0
-    for idx in touching_indices:
-        bp = positions[idx]
-        row = rows[bp.row_idx]
-        block = row["blocks"][bp.block_idx]
-        old_gap = block.get("gap_cm", 0)
-        block["gap_cm"] = old_gap - delta
-        changes += 1
-
-    logger.debug("compact_east: delta=%d, %d blocks moved", delta, changes)
-    return changes
-
-
-def _compute_east_margins(
-    pattern: dict,
-    positions: list,
-    block_defs: dict[str, dict],
-    spacing: SpacingConfig,
-    touching_indices: list[int],
-    room_width: int,
-) -> list[int]:
-    """Compute per-row margin for east wall movement.
-
-    For each row:
-    - If no block touches east, margin = room_width - max_effective_east_edge.
-    - If a block touches east, margin = that block's gap_cm - min_gap.
-      Where min_gap depends on whether it's the first block (uses west face
-      zone as minimum offset) or has a predecessor (uses inter-block min gap).
+    The virtual east wall starts at max(eff_east_edge) across all blocks.
+    Each iteration, the wall advances toward blocks that are not yet
+    touching it (catch distance). Once a block is caught, it moves with
+    the wall on subsequent iterations. The loop terminates when no row
+    has recoverable slack.
 
     Returns:
-        List of margins (one per row). Empty if no rows.
+        Number of gap_cm values modified (cumulative across iterations).
     """
     rows = pattern.get("rows", [])
+    if not rows:
+        return 0
+
     desk_to_wall = spacing.desk_to_wall_cm
-    touching_set = set(touching_indices)
+    changes_total = 0
 
-    # Group positions by row
-    rows_positions: dict[int, list] = {}
-    for i, bp in enumerate(positions):
-        rows_positions.setdefault(bp.row_idx, []).append((i, bp))
+    for iteration in range(_MAX_EAST_ITER):
+        positions = compute_block_positions(pattern)
+        if not positions:
+            break
 
-    margins: list[int] = []
+        # Effective east edge per block
+        block_east_edges: list[int] = []
+        for bp in positions:
+            fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
+            eff_e = fc.east.total_cm if fc.east.total_cm > 0 else desk_to_wall
+            block_east_edges.append(bp.x_cm + bp.eo_cm + eff_e)
 
-    for ri in range(len(rows)):
-        row_bps = rows_positions.get(ri, [])
-        if not row_bps:
-            margins.append(room_width)
-            continue
+        # Virtual wall = max effective east edge
+        wall = max(block_east_edges)
+        if wall <= 0:
+            break
 
-        # Sort by x_cm within row
-        row_bps_sorted = sorted(row_bps, key=lambda t: t[1].x_cm)
+        # Touching = blocks whose eff east edge == wall
+        touching_set: set[int] = {
+            i for i, edge in enumerate(block_east_edges) if edge == wall
+        }
+        if not touching_set:
+            break
 
-        # Find touching blocks in this row
-        row_touching = [(i, bp) for i, bp in row_bps_sorted if i in touching_set]
+        # Group positions by row
+        rows_positions: dict[int, list[tuple[int, object]]] = {}
+        for i, bp in enumerate(positions):
+            rows_positions.setdefault(bp.row_idx, []).append((i, bp))
 
-        if not row_touching:
-            # No block touches east in this row — margin = distance from
-            # rightmost effective edge to the wall
-            max_edge = max(
-                bp.x_cm + bp.eo_cm + (
-                    get_face_zones(bp.block_type, bp.orientation, block_defs)
-                    .east.total_cm
-                    or desk_to_wall
-                )
-                for _, bp in row_bps_sorted
-            )
-            margins.append(room_width - max_edge)
-        else:
-            # The leftmost touching block determines the constraint.
-            # All touching blocks move together by delta, so the gap
-            # compression happens at the junction between the last
-            # non-touching block and the first touching block.
-            first_touching_idx, first_touching_bp = row_touching[0]
-            block_idx = first_touching_bp.block_idx
-            row_blocks = rows[ri]["blocks"]
-            block = row_blocks[block_idx]
+        # Compute margin per row
+        margins: list[int] = []
+        for ri, row_bps in rows_positions.items():
+            row_bps_sorted = sorted(row_bps, key=lambda t: t[1].x_cm)
 
-            if block_idx == 0:
-                # First block in row — min gap = west extreme face zone
-                fc = get_face_zones(
-                    first_touching_bp.block_type,
-                    first_touching_bp.orientation,
-                    block_defs,
-                )
-                eff_w = fc.west.total_cm if fc.west.total_cm > 0 else desk_to_wall
-                min_gap = eff_w
+            # Does this row have a touching block?
+            row_touching = [
+                (i, bp) for i, bp in row_bps_sorted if i in touching_set
+            ]
+
+            if not row_touching:
+                # Catch distance: wall - rightmost eff east edge of row
+                max_edge = max(block_east_edges[i] for i, _ in row_bps_sorted)
+                margins.append(wall - max_edge)
             else:
-                # Has a predecessor — min gap = prev.east + this.west
-                prev_bp = None
-                for _, bp in row_bps_sorted:
-                    if bp.block_idx == block_idx - 1:
-                        prev_bp = bp
-                        break
-                if prev_bp is None:
-                    margins.append(0)
-                    continue
+                # Slack of first touching block
+                first_idx, first_bp = row_touching[0]
+                block_idx = first_bp.block_idx
+                block = rows[ri]["blocks"][block_idx]
 
-                fc_prev = get_face_zones(
-                    prev_bp.block_type, prev_bp.orientation, block_defs,
-                )
-                fc_this = get_face_zones(
-                    first_touching_bp.block_type,
-                    first_touching_bp.orientation,
-                    block_defs,
-                )
-                min_gap = fc_prev.east.total_cm + fc_this.west.total_cm
+                if block_idx == 0:
+                    fc = get_face_zones(
+                        first_bp.block_type, first_bp.orientation, block_defs,
+                    )
+                    eff_w = (
+                        fc.west.total_cm if fc.west.total_cm > 0
+                        else desk_to_wall
+                    )
+                    min_gap = eff_w
+                else:
+                    prev_bp = None
+                    for _, bp in row_bps_sorted:
+                        if bp.block_idx == block_idx - 1:
+                            prev_bp = bp
+                            break
+                    if prev_bp is None:
+                        margins.append(0)
+                        continue
+                    fc_prev = get_face_zones(
+                        prev_bp.block_type, prev_bp.orientation, block_defs,
+                    )
+                    fc_this = get_face_zones(
+                        first_bp.block_type, first_bp.orientation, block_defs,
+                    )
+                    min_gap = fc_prev.east.total_cm + fc_this.west.total_cm
 
-            current_gap = block.get("gap_cm", 0)
-            margin = current_gap - min_gap
-            margins.append(max(0, margin))
+                current_gap = block.get("gap_cm", 0)
+                margins.append(max(0, current_gap - min_gap))
 
-    return margins
+        if not margins:
+            break
+
+        delta = min(margins)
+        if delta <= 0:
+            break
+
+        # Apply: reduce gap_cm of each touching block
+        for idx in touching_set:
+            bp = positions[idx]
+            block = rows[bp.row_idx]["blocks"][bp.block_idx]
+            block["gap_cm"] = block.get("gap_cm", 0) - delta
+            changes_total += 1
+
+        logger.debug(
+            "compact_east iter %d: wall=%d delta=%d touching=%d",
+            iteration, wall, delta, len(touching_set),
+        )
+
+    return changes_total
 
 
 # ---------------------------------------------------------------------------
@@ -246,20 +202,6 @@ def _compact_south(
     # Recompute positions after east compact (gap_cm may have changed)
     positions = compute_block_positions(pattern)
     if not positions:
-        return 0
-
-    desk_to_wall = spacing.desk_to_wall_cm
-
-    # Check if any block touches south wall
-    south_touching = False
-    for bp in positions:
-        fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-        eff_s = fc.south.total_cm if fc.south.total_cm > 0 else desk_to_wall
-        if bp.y_cm + bp.ns_cm + eff_s == room_depth:
-            south_touching = True
-            break
-
-    if not south_touching:
         return 0
 
     # Compute minimum row_gaps using D-216 pair-by-pair X projection

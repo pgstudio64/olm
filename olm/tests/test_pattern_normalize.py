@@ -185,10 +185,14 @@ class TestTwoBlocksIntraRowGap:
         assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
 
     def test_compress_gap_too_large(self):
-        """Gap 200 > required 100 (std1) -> compressed to 100."""
+        """Gap 200 > required 100 (std1) -> compressed to 100.
+
+        D-218: compact_east now handles this before normalize_intra,
+        so gaps_changed == 0 (compact did the work, intra is a no-op).
+        """
         pat = _pattern_two_blocks_one_row(gap_cm=200, standard="standard1")
         result = normalize_pattern(pat, STD1)
-        assert result.gaps_changed == 1
+        assert result.gaps_changed == 0
         assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
 
     def test_exact_gap_noop(self):

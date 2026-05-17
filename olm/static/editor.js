@@ -150,15 +150,16 @@ function clearDirty() {
 }
 
 function patternOverflowsRoom(p) {
-  // Check if block footprints exceed the room
+  // Check if block footprints exceed the room (mirrors computeBlockPositions logic)
   var rows = p.rows || [];
   var rowGaps = p.row_gaps_cm || [];
   var roomW = p.room_width_cm || 0;
   var roomD = p.room_depth_cm || 0;
   if (rows.length === 0 || roomW === 0) return false;
 
-  var maxRowEO = 0;
-  var totalNS = 0;
+  var maxX = 0;
+  var maxY = 0;
+  var y_cm = 0;
 
   for (var ri = 0; ri < rows.length; ri++) {
     var blocks = rows[ri].blocks || [];
@@ -168,18 +169,19 @@ function patternOverflowsRoom(p) {
       var b = blocks[bi];
       if (b.gap_cm) x += b.gap_cm;
       var g = getEffectiveGeom(b.type, b.orientation);
+      var blockBottom = y_cm + (b.offset_ns_cm || 0) + g.ns;
+      if (blockBottom > maxY) maxY = blockBottom;
       x += g.eo;
-      var nsWithOffset = g.ns + Math.abs(b.offset_ns_cm || 0);
-      if (nsWithOffset > rowMaxNS) rowMaxNS = nsWithOffset;
+      if (g.ns > rowMaxNS) rowMaxNS = g.ns;
     }
-    if (x > maxRowEO) maxRowEO = x;
-    totalNS += rowMaxNS;
+    if (x > maxX) maxX = x;
+    y_cm += rowMaxNS;
     if (ri < rows.length - 1) {
-      totalNS += (rowGaps[ri] || 0);
+      y_cm += (rowGaps[ri] || 0);
     }
   }
 
-  return maxRowEO > roomW || totalNS > roomD;
+  return maxX > roomW || maxY > roomD;
 }
 
 function computeAutoName() {
