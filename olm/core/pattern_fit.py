@@ -147,20 +147,19 @@ def _compute_min_room(
     _check_preconditions(pattern, positions, spacing, warnings)
 
     # Steps 2-4: collect all obstacle rectangles
-    desk_to_wall = spacing.desk_to_wall_cm
-
     x_mins: list[int] = []
     x_maxs: list[int] = []
     y_mins: list[int] = []
     y_maxs: list[int] = []
 
     # Workstation block footprints (body + face zones)
+    # D-229: faces without chairs can touch the wall (eff = 0).
     for bp in positions:
         fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-        eff_w = fc.west.total_cm if fc.west.total_cm > 0 else desk_to_wall
-        eff_e = fc.east.total_cm if fc.east.total_cm > 0 else desk_to_wall
-        eff_n = fc.north.total_cm if fc.north.total_cm > 0 else desk_to_wall
-        eff_s = fc.south.total_cm if fc.south.total_cm > 0 else desk_to_wall
+        eff_w = fc.west.total_cm
+        eff_e = fc.east.total_cm
+        eff_n = fc.north.total_cm
+        eff_s = fc.south.total_cm
 
         x_mins.append(bp.x_cm - eff_w)
         x_maxs.append(bp.x_cm + bp.eo_cm + eff_e)
@@ -315,7 +314,7 @@ def _check_preconditions(
                 f"max_island_size {spacing.max_island_size}"
             )
 
-    # Soft: min_block_separation within rows
+    # Soft: walking_margin between blocks within rows
     by_row: dict[int, list[BlockPosition]] = {}
     for bp in positions:
         by_row.setdefault(bp.row_idx, []).append(bp)
@@ -325,21 +324,21 @@ def _check_preconditions(
             a = sorted_bps[k]
             b = sorted_bps[k + 1]
             gap = b.x_cm - (a.x_cm + a.eo_cm)
-            if gap < spacing.min_block_separation_cm:
+            if gap < spacing.walking_margin_cm:
                 warnings.append(
                     f"Row {ri}: gap {gap} cm between blocks "
                     f"{a.block_idx} and {b.block_idx} < "
-                    f"min_block_separation "
-                    f"{spacing.min_block_separation_cm} cm"
+                    f"walking_margin "
+                    f"{spacing.walking_margin_cm} cm"
                 )
 
     # Soft: row gaps
     for i, gap in enumerate(pattern.get("row_gaps_cm", [])):
-        if gap < spacing.min_block_separation_cm:
+        if gap < spacing.walking_margin_cm:
             warnings.append(
                 f"Row gap {i}: {gap} cm < "
-                f"min_block_separation "
-                f"{spacing.min_block_separation_cm} cm"
+                f"walking_margin "
+                f"{spacing.walking_margin_cm} cm"
             )
 
 

@@ -68,7 +68,6 @@ def _compact_east(
     if not rows:
         return 0
 
-    desk_to_wall = spacing.desk_to_wall_cm
     changes_total = 0
 
     for iteration in range(_MAX_EAST_ITER):
@@ -77,10 +76,11 @@ def _compact_east(
             break
 
         # Effective east edge per block
+        # D-229: faces without chairs can touch the wall (eff = 0).
         block_east_edges: list[int] = []
         for bp in positions:
             fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-            eff_e = fc.east.total_cm if fc.east.total_cm > 0 else desk_to_wall
+            eff_e = fc.east.total_cm
             block_east_edges.append(bp.x_cm + bp.eo_cm + eff_e)
 
         # Virtual wall = max effective east edge
@@ -124,10 +124,7 @@ def _compact_east(
                     fc = get_face_zones(
                         first_bp.block_type, first_bp.orientation, block_defs,
                     )
-                    eff_w = (
-                        fc.west.total_cm if fc.west.total_cm > 0
-                        else desk_to_wall
-                    )
+                    eff_w = fc.west.total_cm
                     min_gap = eff_w
                 else:
                     prev_bp = None

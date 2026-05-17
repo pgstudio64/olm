@@ -4,7 +4,9 @@ Spacing standards are loaded dynamically from project/config.json via
 app_config. The generic core defines no built-in standards — they are
 business data provided by the project layer.
 
-Derived values (ES-04, ES-05) are computed from primitives.
+D-229: 6 parameters (3 atomic primitives + 3 independent).
+Derived distances (access single desk, passage behind one person, etc.)
+are computed on the fly, never stored.
 """
 from __future__ import annotations
 
@@ -32,31 +34,21 @@ class SpacingConfig:
     Attributes:
         name: Standard slot identifier (e.g. "standard1").
         chair_clearance_cm: ES-01 — Chair clearance zone.
-        front_access_cm: ES-02 — Front access (sit/stand).
-        access_single_desk_cm: ES-03 — Access for a single desk against a wall.
-        passage_behind_one_row_cm: ES-04 — Total depth desk-to-zone edge
-            (chair clearance + free passage).
-        passage_between_back_to_back_cm: ES-05 — Passage between two
-            back-to-back rows.
-        passage_cm: ES-06 — Passage between distinct blocks.
-        door_exclusion_depth_cm: ES-08 — Clear zone in front of a door.
-        desk_to_wall_cm: ES-09 — Lateral desk-to-wall distance.
-        max_island_size: ES-10 — Maximum block size (desks).
-        min_block_separation_cm: ES-11 — Minimum separation between blocks.
-        main_corridor_cm: PS-04 — Main corridor width.
+        walking_margin_cm: ES-02 — Walking margin beyond chair.
+        slip_in_margin_cm: ES-03 — Slip-in margin for single
+            desk access.
+        main_corridor_cm: ES-04 — Main corridor width.
+        door_exclusion_depth_cm: ES-05 — Clear zone in front
+            of a door.
+        max_island_size: ES-06 — Maximum block size (desks).
     """
     name: str
     chair_clearance_cm: int          # ES-01
-    front_access_cm: int             # ES-02
-    access_single_desk_cm: int       # ES-03
-    passage_behind_one_row_cm: int   # ES-04
-    passage_between_back_to_back_cm: int  # ES-05
-    passage_cm: int                  # ES-06
-    door_exclusion_depth_cm: int     # ES-08
-    desk_to_wall_cm: int             # ES-09
-    max_island_size: int             # ES-10
-    min_block_separation_cm: int     # ES-11
-    main_corridor_cm: int            # PS-04
+    walking_margin_cm: int           # ES-02
+    slip_in_margin_cm: int           # ES-03
+    main_corridor_cm: int            # ES-04
+    door_exclusion_depth_cm: int     # ES-05
+    max_island_size: int             # ES-06
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -144,15 +136,6 @@ _BASE_BLOCKS = [
     _pg.BLOCK_2_ORTHO_L, _pg.BLOCK_2_ORTHO_R,
 ]
 
-# Face-to-face blocks: E/W zones = chair + passage (ES-06)
-_FACE_TO_FACE_BLOCKS = {"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"}
-
-# Orthogonal blocks: chair + passage_single zones on the chair faces
-_ORTHO_BLOCKS: dict[str, set[str]] = {
-    "BLOCK_2_ORTHO_R": {"north", "east"},
-    "BLOCK_2_ORTHO_L": {"north", "west"},
-}
-
 # Block dimension formulas: (eo_factor_w, eo_factor_d, ns_factor_w, ns_factor_d)
 _BLOCK_DESK_FACTORS: dict[str, tuple[int, int, int, int]] = {
     "BLOCK_1":          (0, 1, 1, 0),
@@ -202,8 +185,9 @@ def _block_def_to_json(block: _pg.Block) -> dict:
 def build_block_defs(cfg: SpacingConfig) -> dict[str, dict]:
     """Build block definitions for a given standard.
 
-    Fixed zones (chair clearance) and circulation zones vary
-    according to the layout standard.
+    D-229: candidate_cm = 0 on all faces (circulation is pattern-level).
+    non_superposable_cm = cfg.chair_clearance_cm on chair faces
+    (faces where the module-level block has non_superposable_cm > 0).
 
     Args:
         cfg: Spacing configuration for the target standard.
@@ -212,35 +196,12 @@ def build_block_defs(cfg: SpacingConfig) -> dict[str, dict]:
         Dict mapping block name to its JSON definition (with faces).
     """
     chair = cfg.chair_clearance_cm
-    passage = cfg.passage_cm
-    passage_single = cfg.access_single_desk_cm - chair
-
     defs: dict[str, dict] = {}
     for block in _BASE_BLOCKS:
         d = _block_def_to_json(block)
-        if block.name in _FACE_TO_FACE_BLOCKS:
-            for face in ("east", "west"):
-                d["faces"][face] = {
-                    "non_superposable_cm": chair,
-                    "candidate_cm": passage,
-                }
-        elif block.name in _ORTHO_BLOCKS:
-            chair_faces = _ORTHO_BLOCKS[block.name]
-            for face in ("north", "south", "east", "west"):
-                if face in chair_faces:
-                    d["faces"][face] = {
-                        "non_superposable_cm": chair,
-                        "candidate_cm": passage_single,
-                    }
-                else:
-                    d["faces"][face] = {
-                        "non_superposable_cm": 0,
-                        "candidate_cm": 0,
-                    }
-        else:
-            d["faces"]["west"] = {
-                "non_superposable_cm": chair,
-                "candidate_cm": passage_single,
-            }
+        for face in ("north", "south", "east", "west"):
+            if d["faces"][face]["non_superposable_cm"] > 0:
+                d["faces"][face]["non_superposable_cm"] = chair
+            d["faces"][face]["candidate_cm"] = 0
         defs[block.name] = d
     return defs

@@ -18,42 +18,35 @@ from olm.core.spacing_config import SpacingConfig
 # ---------------------------------------------------------------------------
 
 _BASE = dict(
-    front_access_cm=60,
-    passage_behind_one_row_cm=160,
-    passage_between_back_to_back_cm=230,
     door_exclusion_depth_cm=180,
     max_island_size=4,
-    min_block_separation_cm=90,
     main_corridor_cm=140,
 )
 
-# Standard 1 (AFNOR): chair=70, passage=90, access_single=100, dtw=20
+# Standard 1 (AFNOR): chair=70, walking=90, slip_in=30
 STD1 = SpacingConfig(
     name="standard1",
     chair_clearance_cm=70,
-    passage_cm=90,
-    access_single_desk_cm=100,
-    desk_to_wall_cm=20,
+    walking_margin_cm=90,
+    slip_in_margin_cm=30,
     **_BASE,
 )
 
-# Standard 2 (Kardham): chair=70, passage=90, access_single=90, dtw=10
+# Standard 2 (Kardham): chair=70, walking=70, slip_in=20
 STD2 = SpacingConfig(
     name="standard2",
     chair_clearance_cm=70,
-    passage_cm=90,
-    access_single_desk_cm=90,
-    desk_to_wall_cm=10,
+    walking_margin_cm=70,
+    slip_in_margin_cm=20,
     **_BASE,
 )
 
-# Standard 3 (Site): chair=70, passage=90, access_single=90, dtw=0
+# Standard 3 (Site): chair=60, walking=60, slip_in=20
 STD3 = SpacingConfig(
     name="standard3",
-    chair_clearance_cm=70,
-    passage_cm=90,
-    access_single_desk_cm=90,
-    desk_to_wall_cm=0,
+    chair_clearance_cm=60,
+    walking_margin_cm=60,
+    slip_in_margin_cm=20,
     **_BASE,
 )
 
@@ -129,31 +122,28 @@ def _pattern_single_block(standard: str = "standard1") -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Expected gap values for reference
+# Expected gap values for reference (D-229: candidate_cm = 0 on all faces)
 # ---------------------------------------------------------------------------
 # BLOCK_1 at orientation 0:
-#   west = chair(70) + passage_single
+#   west = chair_clearance, candidate = 0
 #   east = absent (0)
 #   north/south = absent (0)
 #
-# For std1: passage_single = access_single(100) - chair(70) = 30
-#   => west.total = 70+30 = 100, east.total = 0
+# std1: chair=70 => west.total = 70, east = 0
+#   Gap between two BLOCK_1s = 0 + 70 = 70
 #
-# Gap between two BLOCK_1s in a row = east[left].total + west[right].total
-#   = 0 + 100 = 100 (std1)
+# std2: chair=70 => west.total = 70
+#   Gap = 0 + 70 = 70
 #
-# For std2: passage_single = 90-70 = 20
-#   => west.total = 70+20 = 90
-#   Gap = 0 + 90 = 90
-#
-# For std3: same as std2 = 90
+# std3: chair=60 => west.total = 60
+#   Gap = 0 + 60 = 60
 #
 # BLOCK_2_FACE at orientation 0:
-#   east/west = chair(70) + passage(90) = 160
+#   east/west = chair only => total = 70 (std1) / 70 (std2)
 #   north/south = absent (0)
 #
-# Gap BLOCK_2_FACE + BLOCK_1 = east_2F(160) + west_1(100) = 260 (std1)
-#   std2: 160 + 90 = 250
+# Gap BLOCK_2_FACE + BLOCK_1 = east_2F(70) + west_1(70) = 140 (std1)
+#   std2: 70 + 70 = 140
 #
 # Row gap BLOCK_1 over BLOCK_1:
 #   south[top].total=0, north[bottom].total=0 => row_gap = 0
@@ -178,14 +168,14 @@ class TestTwoBlocksIntraRowGap:
     """Cases 2-4: two BLOCK_1s in one row, gap expanded/compressed/exact."""
 
     def test_expand_gap_too_small(self):
-        """Gap 50 < required 100 (std1) -> expanded to 100."""
+        """Gap 50 < required 70 (std1, D-229) -> expanded to 70."""
         pat = _pattern_two_blocks_one_row(gap_cm=50, standard="standard1")
         result = normalize_pattern(pat, STD1)
         assert result.gaps_changed == 1
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
 
     def test_compress_gap_too_large(self):
-        """Gap 200 > required 100 (std1) -> compressed to 100.
+        """Gap 200 > required 70 (std1, D-229) -> compressed to 70.
 
         D-218: compact_east now handles this before normalize_intra,
         so gaps_changed == 0 (compact did the work, intra is a no-op).
@@ -193,14 +183,14 @@ class TestTwoBlocksIntraRowGap:
         pat = _pattern_two_blocks_one_row(gap_cm=200, standard="standard1")
         result = normalize_pattern(pat, STD1)
         assert result.gaps_changed == 0
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
 
     def test_exact_gap_noop(self):
-        """Gap already 100 = required (std1) -> no change."""
-        pat = _pattern_two_blocks_one_row(gap_cm=100, standard="standard1")
+        """Gap already 70 = required (std1, D-229) -> no change."""
+        pat = _pattern_two_blocks_one_row(gap_cm=70, standard="standard1")
         result = normalize_pattern(pat, STD1)
         assert result.gaps_changed == 0
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
 
 
 class TestInterRowGap:
@@ -301,24 +291,24 @@ class TestThreeStandards:
     def test_std1_gap(self):
         pat = _pattern_two_blocks_one_row(gap_cm=0, standard="standard1")
         normalize_pattern(pat, STD1)
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
 
     def test_std2_gap(self):
         pat = _pattern_two_blocks_one_row(gap_cm=0, standard="standard1")
         normalize_pattern(pat, STD2)
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 90
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
 
     def test_std3_gap(self):
         pat = _pattern_two_blocks_one_row(gap_cm=0, standard="standard1")
         normalize_pattern(pat, STD3)
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 90
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 60
 
 
 class TestMixedBlockTypes:
     """Case 12: different block types in the same row."""
 
     def test_block1_and_block2face(self):
-        """BLOCK_1 then BLOCK_2_FACE: gap = east_B1(0) + west_B2F(160)."""
+        """BLOCK_1 then BLOCK_2_FACE: gap = east_B1(0) + west_B2F(70)."""
         pat = _pattern_two_blocks_one_row(
             gap_cm=0,
             block1="BLOCK_1",
@@ -326,11 +316,11 @@ class TestMixedBlockTypes:
             standard="standard1",
         )
         normalize_pattern(pat, STD1)
-        # BLOCK_1 east=0, BLOCK_2_FACE west=160
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 160
+        # D-229: BLOCK_1 east=0, BLOCK_2_FACE west=70
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
 
     def test_block2face_and_block1(self):
-        """BLOCK_2_FACE then BLOCK_1: gap = east_B2F(160) + west_B1(100)."""
+        """BLOCK_2_FACE then BLOCK_1: gap = east_B2F(70) + west_B1(70)."""
         pat = _pattern_two_blocks_one_row(
             gap_cm=0,
             block1="BLOCK_2_FACE",
@@ -338,8 +328,8 @@ class TestMixedBlockTypes:
             standard="standard1",
         )
         normalize_pattern(pat, STD1)
-        # BLOCK_2_FACE east=160, BLOCK_1 west=100
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 260
+        # D-229: BLOCK_2_FACE east=70, BLOCK_1 west=70
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 140
 
 
 class TestMixedRowTypes:
@@ -374,15 +364,15 @@ class TestCrossStandardExpand:
     but insufficient for std3 if face zones differ."""
 
     def test_std1_to_std2_gap_change(self):
-        """std1 access_single=100 => west=100, std2 access_single=90 => west=90.
-        Two BLOCK_1s: gap should be 90 under std2 vs 100 under std1."""
+        """D-229: std1 chair=70 => west=70, std2 chair=70 => west=70.
+        Two BLOCK_1s: gap should be 70 under both."""
         pat = _pattern_two_blocks_one_row(
             gap_cm=100, standard="standard1",
         )
         normalize_pattern(pat, STD2)
-        # Under std2: west = 70 + (90-70) = 90, east = 0
-        # Required gap = 0 + 90 = 90
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 90
+        # Under std2: west = 70 (chair only), east = 0
+        # Required gap = 0 + 70 = 70
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
         assert pat["standard"] == "standard2"
 
 
@@ -390,13 +380,13 @@ class TestCrossStandardCompress:
     """Case 16: pattern in std3 (generous gaps), target std1 — compress."""
 
     def test_std3_to_std1(self):
-        """std3 west=90, std1 west=100. Gap at 90 needs expansion to 100."""
+        """D-229: std3 west=60, std1 west=70. Gap at 60 needs expansion to 70."""
         pat = _pattern_two_blocks_one_row(
-            gap_cm=90, standard="standard3",
+            gap_cm=60, standard="standard3",
         )
         normalize_pattern(pat, STD1)
-        # Under std1: west = 100, east = 0 => required = 100
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 100
+        # Under std1: west = 70 (chair only), east = 0 => required = 70
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 70
         assert pat["standard"] == "standard1"
 
 
@@ -433,22 +423,18 @@ class TestNormalizePatternCanonicalizes:
         result = normalize_pattern(pat, STD3)
         blocks = pat["rows"][0]["blocks"]
 
-        # After canonicalize: orient-180 first (x=0), orient-0 second (x=380)
-        # After intra-row normalize (STD3):
-        #   orient-180 BLOCK_1: west(orig) rotated to east -> east.total = 90
-        #   orient-0 BLOCK_1: west.total = 90
-        #   required_gap = 90 + 90 = 180
+        # After canonicalize: orient-180 first (x=0), orient-0 second
+        # D-229 STD3 (chair=60):
+        #   orient-180 BLOCK_1: east.total = 60 (chair only)
+        #   orient-0 BLOCK_1: west.total = 60
+        #   required_gap = 60 + 60 = 120
         assert blocks[0]["orientation"] == 180
         assert blocks[1]["orientation"] == 0
-        assert blocks[1]["gap_cm"] == 180
+        assert blocks[1]["gap_cm"] == 120
 
-        # Chairs INWARD: orient-180 has chair on east, orient-0 has chair
-        # on west -> they face each other. Verified by gap being 180 (not 0).
-
-        # Room dimensions: fit_room_to_pattern computes min room
-        # Block 0 at x=0 (eo=80), block 1 at x=0+80+180=260 (eo=80)
-        # Total EO = 260+80 = 340. With dtw=0 (Site), room width = 340.
-        assert pat["room_width_cm"] == 340
+        # Room: block0 x=0 (eo=80), block1 x=80+120=200 (eo=80)
+        # Total = 200+80 = 280. room_width = 280.
+        assert pat["room_width_cm"] == 280
 
 
 class TestInterRowOffset:
@@ -457,13 +443,8 @@ class TestInterRowOffset:
     def test_negative_offset_user_case(self):
         """480x500_Site_1: offset_ns_cm=-40 on row 1 block causes overlap.
 
-        After canonicalize, row 0 = [BLOCK_1 orient 180 gap=0, BLOCK_1 orient 0].
-        Row 1 = [BLOCK_1 orient 0 gap=400 offset_ns_cm=-40].
-        row_gaps_cm=[180] originally.
-
-        With STD3 (Site): after intra-row normalize, row 0 gap becomes 180
-        (east[180]=90 + west[0]=90). After inter-row normalize, row_gap[0]
-        must be >= 40 to prevent WS03 from overlapping WS02.
+        D-229 STD3 (chair=60): orient-180 E=60, orient-0 W=60.
+        Row 0 gap becomes 120 (60+60). row_gap[0] must be >= 40.
 
         Formula: pair_required = offset_ns[b] + ns[b] + south[b] - max_ns_upper
                                  - offset_ns[b'] + north[b']
@@ -560,20 +541,16 @@ class TestInterRowOffset:
         assert "-200" in extreme_warnings[0]
 
     def test_combined_offset_face_zones(self):
-        """Combination: offset_ns_cm + active south face zone on upper block.
+        """Combination: offset_ns_cm + active north face zone on lower block.
 
-        Row 0: BLOCK_1 orient 90 at gap=0. At orient 90, N/S faces are active
-        (original W/E become N/S after rotation). south_zone = old east = 0,
-        north_zone = old west = chair+passage = 90 (STD3).
-        Actually at orient 90: new_south = old_east = absent(0),
-        new_north = old_west = 90. ns = eo_orig = 80.
-        offset_ns_cm = +30.
-        max_ns_upper = 80 (orient 90: ns = eo_orig = 80).
+        D-229 STD3 (chair=60): BLOCK_1 orient 90:
+        new_north = old_west = chair(60). new_south = old_east = 0.
+        ns = eo_orig = 80. max_ns_upper = 80.
 
-        Row 1: BLOCK_1 orient 90, offset_ns_cm = 0.
-        north_zone = old_west = 90.
+        Row 0: offset_ns_cm = +30.
+        Row 1: offset_ns_cm = 0, north_zone = 60.
 
-        pair_required = 30 + 80 + 0 - 80 - 0 + 90 = 120.
+        pair_required = 30 + 80 + 0 - 80 - 0 + 60 = 90.
         """
         pat = {
             "name": "COMBINED",
@@ -600,7 +577,7 @@ class TestInterRowOffset:
             "room_exclusions": [],
         }
         result = normalize_pattern(pat, STD3)
-        assert pat["row_gaps_cm"][0] == 120
+        assert pat["row_gaps_cm"][0] == 90
 
     def test_3_rows_independent(self):
         """3 rows, 2 row_gaps: each gap computed independently.

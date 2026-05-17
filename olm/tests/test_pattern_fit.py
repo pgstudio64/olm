@@ -21,20 +21,15 @@ from olm.core.spacing_config import SpacingConfig
 
 
 def _spacing(**overrides) -> SpacingConfig:
-    """Build a SpacingConfig with sensible defaults."""
+    """Build a SpacingConfig with sensible defaults (D-229)."""
     defaults = {
         "name": "test_std",
         "chair_clearance_cm": 70,
-        "front_access_cm": 120,
-        "access_single_desk_cm": 100,
-        "passage_behind_one_row_cm": 160,
-        "passage_between_back_to_back_cm": 140,
-        "passage_cm": 90,
-        "door_exclusion_depth_cm": 180,
-        "desk_to_wall_cm": 20,
-        "max_island_size": 6,
-        "min_block_separation_cm": 90,
+        "walking_margin_cm": 90,
+        "slip_in_margin_cm": 30,
         "main_corridor_cm": 160,
+        "door_exclusion_depth_cm": 180,
+        "max_island_size": 6,
     }
     defaults.update(overrides)
     return SpacingConfig(**defaults)
@@ -85,22 +80,19 @@ class TestFitShrinksOversizeRoom:
 
     def test_shrinks(self):
         # BLOCK_4_FACE: eo=160, ns=360 at orientation 0.
-        # With default spacing (chair=70, passage=90), E/W faces have
-        # non_superposable=70 + candidate=90 = 160 cm each.
-        # N/S faces are absent -> desk_to_wall=20 cm.
-        # Expected width = 160 (west zone) + 160 (block eo) + 160 (east zone)
-        #                = 480 -> snap = 480
-        # Expected depth = 20 (north d2w) + 360 (block ns) + 20 (south d2w)
-        #                = 400 -> snap = 400
+        # D-229: E/W faces have non_superposable=70, candidate=0.
+        # N/S faces absent -> 0 (no desk_to_wall).
+        # Expected width = 70 + 160 + 70 = 300
+        # Expected depth = 0 + 360 + 0 = 360
         pat = _pattern(room_w=800, room_d=600)
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
 
         assert result.direction == "shrink"
-        assert result.new_width == 480
-        assert result.new_depth == 400
-        assert pat["room_width_cm"] == 480
-        assert pat["room_depth_cm"] == 400
+        assert result.new_width == 300
+        assert result.new_depth == 360
+        assert pat["room_width_cm"] == 300
+        assert pat["room_depth_cm"] == 360
 
 
 class TestFitExpandsUndersizeRoom:
@@ -190,8 +182,8 @@ class TestFitClipsOversizeWindow:
 
     def test_clips_window(self):
         # BLOCK_1: eo=80, ns=180 at orientation 0.
-        # With spacing desk_to_wall=20, west face zone = 100 (70+30).
-        # Min width = 100 (west) + 80 (eo) + 20 (east d2w) = 200 -> snap 200.
+        # D-229: west face zone = 70 (chair only).
+        # Min width = 70 (west) + 80 (eo) + 0 (east) = 150.
         # Window of 500 on north face at offset 0 forces width to 500.
         # But after fit, window of 500 > min 200.
         # To test clipping, we need a window whose offset+width > the
@@ -311,12 +303,11 @@ class TestDoorExclusionSouth:
             openings=[_door_opening("south", offset_cm=0, width_cm=90)],
         )
         sp = _spacing()
-        # Block footprint: x=[-160, 320], y=[-20, 380].
-        # Door only adds x=[0, 90] — already inside block range.
-        # depth = 380-(-20) = 400 (same as without door).
+        # D-229: x=[-70, 230], y=[0, 360].
+        # Door only adds x=[0, 90] — inside block range.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_depth == 400
-        assert result.new_width == 480
+        assert result.new_depth == 360
+        assert result.new_width == 300
 
 
 class TestDoorExclusionNorth:
@@ -331,10 +322,9 @@ class TestDoorExclusionNorth:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door rect at y=[0, 180]. Block footprint y=[-20, 380].
-        # Block already extends past door rect. bbox unchanged.
-        # depth = 380-(-20) = 400.
-        assert result.new_depth == 400
+        # D-229: Block footprint y=[0, 360]. Door rect y=[0, 180].
+        # Block extends past door rect. bbox unchanged. depth=360.
+        assert result.new_depth == 360
 
 
 class TestDoorExclusionEast:
@@ -349,10 +339,10 @@ class TestDoorExclusionEast:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door only adds y=[0, 360] — already inside block range.
-        # width = 320-(-160) = 480 (same as without door).
-        assert result.new_width == 480
-        assert result.new_depth == 400
+        # D-229: Door y=[0,360] inside block range [0,360].
+        # width = 230-(-70) = 300.
+        assert result.new_width == 300
+        assert result.new_depth == 360
 
 
 class TestDoorExclusionWest:
@@ -367,10 +357,10 @@ class TestDoorExclusionWest:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door rect at x=[0, 180]. Block footprint x=[-160, 320].
-        # Block extends past door rect. bbox unchanged.
-        # width = 320-(-160) = 480.
-        assert result.new_width == 480
+        # D-229: Block footprint x=[-70, 230].
+        # Door rect x=[0,180] inside block range.
+        # width = 230-(-70) = 300.
+        assert result.new_width == 300
 
 
 class TestOpeningWithoutDoor:
@@ -388,9 +378,9 @@ class TestOpeningWithoutDoor:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Same as without any door: 480x400
-        assert result.new_width == 480
-        assert result.new_depth == 400
+        # Same as without any door: 300x360 (D-229)
+        assert result.new_width == 300
+        assert result.new_depth == 360
 
 
 class TestNoDoorRegression:
@@ -400,18 +390,18 @@ class TestNoDoorRegression:
         pat = _pattern(room_w=800, room_d=600)
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 480
-        assert result.new_depth == 400
+        assert result.new_width == 300
+        assert result.new_depth == 360
 
 
 class TestDoorAtCorner:
     """Case 13: door at offset=0 (corner) with block at x=0."""
 
     def test_corner_door(self):
-        # BLOCK_1 at x=0: eo=80, west zone=100, east zone=20
-        # Door south at offset=0, width=90.
-        # Door adds x=[0, 90] — inside block range [-100, 100].
-        # No change vs no-door case: 200x220.
+        # D-229: BLOCK_1 at x=0: eo=80, west zone=70, east=0.
+        # x=[-70, 80]. Door south at offset=0, width=90.
+        # Door adds x=[0, 90] — extends x_max to 90.
+        # width = 90-(-70) = 160 -> snap 160. depth = 180.
         pat = _pattern(
             block_type="BLOCK_1",
             room_w=800,
@@ -420,8 +410,8 @@ class TestDoorAtCorner:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 200
-        assert result.new_depth == 220
+        assert result.new_width == 160
+        assert result.new_depth == 180
 
 
 class TestDoorFullWidth:
@@ -459,22 +449,19 @@ class TestMultipleDoorsOnSameFace:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door 1 adds x=[0, 90], door 2 adds x=[200, 290].
-        # Both inside block range [-160, 320]. No width change.
-        # Depth not constrained by south doors (parallel axis).
-        assert result.new_width == 480
-        assert result.new_depth == 400
+        # D-229: block range [-70, 230]. Door2 x=[200,290] extends
+        # x_max to 290. width = 290-(-70) = 360 -> snap 360.
+        assert result.new_width == 360
+        assert result.new_depth == 360
 
 
 class TestDoorNoBlockInBand:
     """Case 16: door on a face with no block in the door's band."""
 
     def test_door_far_from_blocks(self):
-        # BLOCK_1 at x=0 (effective x range [-100, 100]).
+        # D-229: BLOCK_1 at x=0 (effective x range [-70, 80]).
         # Door south at offset=500, width=90.
-        # Door rect: x=[500, 590], y=[620, 800].
-        # Door rect extends bbox: x_max = max(100, 590) = 590.
-        # width = 590-(-100) = 690. depth = 800-(-20) = 820.
+        # Door extends x_max to 590. width = 590-(-70) = 660.
         pat = _pattern(
             block_type="BLOCK_1",
             room_w=800,
@@ -483,9 +470,8 @@ class TestDoorNoBlockInBand:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door rect widens and deepens the room.
         assert result.new_width >= 590
-        assert result.new_depth >= 220
+        assert result.new_depth >= 180
 
 
 class TestDoorRectWithGap:
@@ -498,10 +484,10 @@ class TestDoorRectWithGap:
     """
 
     def test_door_rect_preserves_width(self):
-        # BLOCK_1: eo=80, ns=180. west zone=100, east zone=20 (d2w).
-        # At gap_cm=220: x_cm=220. bx=[120, 320].
-        # Door rect south: x=[0, 90], y=[120, 300].
-        # bbox_x_min = min(120, 0) = 0. width = 320-0 = 320.
+        # D-229: BLOCK_1 west=70, east=0.
+        # At gap_cm=220: x_cm=220. eff x=[150, 300].
+        # Door rect south: x=[0, 90].
+        # bbox_x_min = min(150, 0) = 0. width = 300-0 = 300.
         pat = _pattern(
             block_type="BLOCK_1",
             room_w=300,
@@ -511,9 +497,8 @@ class TestDoorRectWithGap:
         pat["rows"][0]["blocks"][0]["gap_cm"] = 220
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door rect prevents over-shrink: width >= 320.
-        assert result.new_width >= 310, (
-            f"Expected width >= 310 but got {result.new_width}"
+        assert result.new_width >= 300, (
+            f"Expected width >= 300 but got {result.new_width}"
         )
 
 
@@ -525,11 +510,9 @@ class TestDoorRectBetweenBlocks:
     """
 
     def test_door_rect_between_blocks(self):
-        # Block 1 at x=0: bx=[-100, 100].
-        # Block 2 at x=480: bx=[380, 580].
-        # Door rect south: x=[200, 290], y=[620, 800].
-        # bbox: x=[-100, 580], y=[-20, 800].
-        # depth = 800-(-20) = 820.
+        # D-229: Block 1 at x=0: bx=[-70, 80].
+        # Block 2 at x=480: bx=[480, 560].
+        # Door rect south: x=[200, 290].
         pat = _pattern(
             block_type="BLOCK_1",
             room_w=800,
@@ -539,14 +522,13 @@ class TestDoorRectBetweenBlocks:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Door rect at y=[620,800] extends depth beyond block-only 220.
-        assert result.new_depth >= 220
+        assert result.new_depth >= 180
 
 
 class TestDoorMinFace:
     """Case 19: door wider than computed face — face forced to door width.
 
-    BLOCK_1 alone gives width=200 (100+80+20).  A south door of
+    D-229: BLOCK_1 alone gives width=150 (70+80+0). A south door of
     width=250 must force the room width to at least 250.
     """
 

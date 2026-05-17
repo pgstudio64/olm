@@ -26,7 +26,7 @@ def test_spacing_fields():
     for name, cfg in ALL_CONFIGS.items():
         assert cfg.name == name
         assert cfg.chair_clearance_cm > 0
-        assert cfg.passage_cm > 0
+        assert cfg.walking_margin_cm > 0
         assert cfg.door_exclusion_depth_cm > 0
         assert cfg.main_corridor_cm > 0
 

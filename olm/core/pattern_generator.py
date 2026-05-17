@@ -13,8 +13,8 @@ from olm.core.app_config import (
 DESK_W_CM: int = _cfg_get("desk_width_cm", 180)   # desk width
 DESK_D_CM: int = _cfg_get("desk_depth_cm", 80)    # desk depth
 CHAIR_CLEARANCE_CM = 70   # ES-01 chair clearance — fixed non-overlappable zone
-PASSAGE_CM = 90           # ES-06 minimum circulation zone — mandatory, extensible
-PASSAGE_SINGLE_CM = 30    # ES-03 minimum circulation zone for single desk access
+WALKING_MARGIN_CM = 90    # ES-02 walking margin beyond chair (AFNOR bootstrap)
+SLIP_IN_MARGIN_CM = 30    # ES-03 slip-in margin for single desk access
 
 # Note: the `candidate_cm` field is kept for compatibility but designates a
 # minimum circulation zone (mandatory, extensible but not reducible). The old
@@ -49,14 +49,9 @@ class FaceZone:
         return cls(0, 0)
 
     @classmethod
-    def circulation_only(cls) -> "FaceZone":
-        """Minimum circulation zone only — 90 cm (ES-06)."""
-        return cls(0, PASSAGE_CM)
-
-    @classmethod
-    def chair_and_circulation(cls) -> "FaceZone":
-        """Fixed zone (70 cm) + minimum circulation zone (90 cm)."""
-        return cls(CHAIR_CLEARANCE_CM, PASSAGE_CM)
+    def chair_only(cls) -> "FaceZone":
+        """Chair clearance only — no candidate zone (D-229)."""
+        return cls(CHAIR_CLEARANCE_CM, 0)
 
 
 @dataclass
@@ -92,12 +87,9 @@ class Pattern:
     orientation: int = 0  # 0, 90, 180 ou 270
 
 
-# Block faces — fixed zone (chair clearance) + minimum circulation zone:
-# - N/S (front/back of desks): no chair -> absent
-# - E/W face-to-face blocks: ES-04 = 70 + 90 = 160 cm (passage behind occupied desk)
-# - E/W single/side-by-side blocks: ES-03 = 70 + 30 = 100 cm (single desk access)
-_FACE_CHAIR_PASSAGE = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_CM)         # 70 + 90 = 160 cm
-_FACE_CHAIR_ACCESS = FaceZone(CHAIR_CLEARANCE_CM, PASSAGE_SINGLE_CM)   # 70 + 30 = 100 cm
+# D-229: block-level faces carry only chair clearance. Circulation is
+# resolved at pattern level based on adjacency (see CONSTRAINTS.md §2.6).
+_FACE_CHAIR_ONLY = FaceZone.chair_only()  # 70 + 0 = 70 cm
 
 BLOCK_2_FACE = Block(
     name="BLOCK_2_FACE",
@@ -107,8 +99,8 @@ BLOCK_2_FACE = Block(
     faces=FaceCandidates(
         north=FaceZone.absent(),
         south=FaceZone.absent(),
-        east=_FACE_CHAIR_PASSAGE,    # ES-04 : 70 + 90 = 160 cm
-        west=_FACE_CHAIR_PASSAGE,
+        east=_FACE_CHAIR_ONLY,    # chair clearance only (D-229)
+        west=_FACE_CHAIR_ONLY,
     ),
     symmetric_180=True,
 )
@@ -122,7 +114,7 @@ BLOCK_1 = Block(
         north=FaceZone.absent(),
         south=FaceZone.absent(),
         east=FaceZone.absent(),
-        west=_FACE_CHAIR_ACCESS,     # ES-03 : 70 + 30 = 100 cm
+        west=_FACE_CHAIR_ONLY,     # chair clearance only (D-229)
     ),
 )
 
@@ -135,7 +127,7 @@ BLOCK_2_SIDE = Block(
         north=FaceZone.absent(),
         south=FaceZone.absent(),
         east=FaceZone.absent(),
-        west=_FACE_CHAIR_ACCESS,     # ES-03 : 70 + 30 = 100 cm
+        west=_FACE_CHAIR_ONLY,     # chair clearance only (D-229)
     ),
 )
 
@@ -148,7 +140,7 @@ BLOCK_3_SIDE = Block(
         north=FaceZone.absent(),
         south=FaceZone.absent(),
         east=FaceZone.absent(),
-        west=_FACE_CHAIR_ACCESS,     # ES-03 : 70 + 30 = 100 cm
+        west=_FACE_CHAIR_ONLY,     # chair clearance only (D-229)
     ),
 )
 
@@ -160,8 +152,8 @@ BLOCK_4_FACE = Block(
     faces=FaceCandidates(
         north=FaceZone.absent(),
         south=FaceZone.absent(),
-        east=_FACE_CHAIR_PASSAGE,    # ES-04 : 70 + 90 = 160 cm
-        west=_FACE_CHAIR_PASSAGE,
+        east=_FACE_CHAIR_ONLY,    # chair clearance only (D-229)
+        west=_FACE_CHAIR_ONLY,
     ),
     symmetric_180=True,
 )
@@ -174,8 +166,8 @@ BLOCK_6_FACE = Block(
     faces=FaceCandidates(
         north=FaceZone.absent(),
         south=FaceZone.absent(),
-        east=_FACE_CHAIR_PASSAGE,    # ES-04 : 70 + 90 = 160 cm
-        west=_FACE_CHAIR_PASSAGE,
+        east=_FACE_CHAIR_ONLY,    # chair clearance only (D-229)
+        west=_FACE_CHAIR_ONLY,
     ),
     symmetric_180=True,
     derogatory=True,
@@ -198,14 +190,14 @@ BLOCK_2_ORTHO_R = Block(
     ns_cm=DESK_D_CM + DESK_W_CM,  # 260 cm (80+180)
     n_desks=2,
     faces=FaceCandidates(
-        north=_FACE_CHAIR_ACCESS,    # ES-03 : chaise desk1
+        north=_FACE_CHAIR_ONLY,    # chaise desk1 (D-229)
         south=FaceZone.absent(),
-        east=_FACE_CHAIR_ACCESS,     # ES-03 : chaise desk2
+        east=_FACE_CHAIR_ONLY,     # chaise desk2 (D-229)
         west=FaceZone.absent(),
     ),
 )
 
-# BLOCK_2_ORTHO_L: mirror — L at bottom-right (desk1 faces south, desk2 faces east)
+# BLOCK_2_ORTHO_L: mirror — L at bottom-right
 #   +--------180cm---------+
 #   |   Desk1 (facing S)    | 80cm
 #   +----------------+------+
@@ -221,10 +213,10 @@ BLOCK_2_ORTHO_L = Block(
     ns_cm=DESK_D_CM + DESK_W_CM,  # 260 cm (80+180)
     n_desks=2,
     faces=FaceCandidates(
-        north=_FACE_CHAIR_ACCESS,    # ES-03 : chaise desk1
+        north=_FACE_CHAIR_ONLY,    # chaise desk1 (D-229)
         south=FaceZone.absent(),
         east=FaceZone.absent(),
-        west=_FACE_CHAIR_ACCESS,     # ES-03 : chaise desk2
+        west=_FACE_CHAIR_ONLY,     # chaise desk2 (D-229)
     ),
 )
 
@@ -239,7 +231,7 @@ class DoubleRowPattern:
     physical_ns_cm: int    # 2 x DESK_D_CM
     total_eo_cm: int
     total_ns_cm: int       # see decomposition below
-    central_corridor_cm: int  # always CHAIR_CLEARANCE_CM x 2 + PASSAGE_CM
+    central_corridor_cm: int  # inter-row walking margin (AFNOR bootstrap)
     orientation: int = 0  # 0, 90, 180 ou 270
 
 
@@ -312,14 +304,14 @@ def compose_double_row(
     north = compose_row(north_blocks, name + "_N")
     south = compose_row(south_blocks, name + "_S")
 
-    inter_row_passage = PASSAGE_CM  # ES-06 = 90 cm
+    inter_row_passage = WALKING_MARGIN_CM  # ES-02 walking margin
 
     total_ns = (
-        PASSAGE_CM          # north candidate zone
+        WALKING_MARGIN_CM   # north candidate zone
         + DESK_D_CM         # north row desks
         + inter_row_passage # inter-row passage
         + DESK_D_CM         # south row desks
-        + PASSAGE_CM        # south candidate zone
+        + WALKING_MARGIN_CM # south candidate zone
     )
 
     return DoubleRowPattern(
@@ -699,7 +691,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     dw      = cm(DESK_W_CM)             # 40 px  (80 cm)
     dh      = cm(DESK_D_CM)             # 90 px  (180 cm)
     deb_px  = cm(CHAIR_CLEARANCE_CM)    # 35 px  (70 cm)
-    cand_px = cm(PASSAGE_CM)            # 45 px  (90 cm)
+    cand_px = cm(WALKING_MARGIN_CM)            # 45 px  (90 cm)
 
     # EO footprint of desks (widest row)
     eo_n = cm(sum(b.eo_cm for b in pattern.north_row.blocks))
@@ -884,9 +876,9 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
 
     # Blue N (north candidate), blue inter-row corridor, blue S (south candidate)
     for yy, lbl in [
-        (y_blue_n, f"north circ. candidate — {PASSAGE_CM} cm"),
-        (y_corr,   f"inter-row corridor ES-06 — {PASSAGE_CM} cm"),
-        (y_blue_s, f"south circ. candidate — {PASSAGE_CM} cm"),
+        (y_blue_n, f"north circ. candidate — {WALKING_MARGIN_CM} cm"),
+        (y_corr,   f"inter-row corridor ES-06 — {WALKING_MARGIN_CM} cm"),
+        (y_blue_s, f"south circ. candidate — {WALKING_MARGIN_CM} cm"),
     ]:
         draw_zone_candidate(x_bl_w, yy, full_w, cand_px, "")
         out(f'<text x="{x_dsk + eo_w/2:.1f}" y="{yy + cand_px/2 + 4:.1f}" '
@@ -994,7 +986,7 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
     # === EO dimensions at top ===
     ay = y0 - 4
 
-    dim_arrow(x_bl_w, ay, x_or_w, ay, f"{PASSAGE_CM}", horiz=True)
+    dim_arrow(x_bl_w, ay, x_or_w, ay, f"{WALKING_MARGIN_CM}", horiz=True)
     dim_arrow(x_or_w, ay, x_dsk,  ay, f"{CHAIR_CLEARANCE_CM}", horiz=True)
     x_cur = x_dsk
     for block in pattern.north_row.blocks:
@@ -1005,15 +997,15 @@ def render_pattern_svg(pattern: DoubleRowPattern, path: str) -> None:
             f'font-size="8" fill="{TEXT_DIM}">{block.name}</text>')
         x_cur += bw_px
     dim_arrow(x_or_e, ay, x_bl_e, ay, f"{CHAIR_CLEARANCE_CM}", horiz=True)
-    dim_arrow(x_bl_e, ay, x_end,  ay, f"{PASSAGE_CM}", horiz=True)
+    dim_arrow(x_bl_e, ay, x_end,  ay, f"{WALKING_MARGIN_CM}", horiz=True)
 
     # === NS dimensions on the right ===
     ax = x_end + 14
-    dim_arrow(ax, y_blue_n, ax, y_desk_n, f"{PASSAGE_CM} cm")
+    dim_arrow(ax, y_blue_n, ax, y_desk_n, f"{WALKING_MARGIN_CM} cm")
     dim_arrow(ax, y_desk_n, ax, y_corr,   f"{DESK_D_CM} cm")
-    dim_arrow(ax, y_corr,   ax, y_desk_s, f"{PASSAGE_CM} cm")
+    dim_arrow(ax, y_corr,   ax, y_desk_s, f"{WALKING_MARGIN_CM} cm")
     dim_arrow(ax, y_desk_s, ax, y_blue_s, f"{DESK_D_CM} cm")
-    dim_arrow(ax, y_blue_s, ax, y_bottom, f"{PASSAGE_CM} cm")
+    dim_arrow(ax, y_blue_s, ax, y_bottom, f"{WALKING_MARGIN_CM} cm")
 
     # === door label + derogatory note ===
     cx_content = x_dsk + eo_w / 2
@@ -1085,7 +1077,7 @@ def render_block_svg(block: Block, path: str) -> None:
         return v * scale
 
     deb_px  = cm(CHAIR_CLEARANCE_CM)   # 35 px
-    cand_px = cm(PASSAGE_CM)            # 45 px
+    cand_px = cm(WALKING_MARGIN_CM)            # 45 px
     dw      = cm(DESK_W_CM)             # 40 px
     dh      = cm(DESK_D_CM)             # 90 px
     eo_w    = cm(block.eo_cm)
@@ -1190,14 +1182,14 @@ def render_block_svg(block: Block, path: str) -> None:
     out(f'<text x="{cx_title:.0f}" y="38" text-anchor="middle" '
         f'font-family="sans-serif" font-size="10" fill="{TEXT_DIM}">'
         f'EO {block.eo_cm} cm x NS {block.ns_cm} cm'
-        f' · clearance {CHAIR_CLEARANCE_CM} cm · passage {PASSAGE_CM} cm</text>')
+        f' · clearance {CHAIR_CLEARANCE_CM} cm · passage {WALKING_MARGIN_CM} cm</text>')
 
     # === background zones ===
     # Blue NS north and south — full width (including orange)
     draw_zone_candidate(x_or_w, y_pass_n, full_w, cand_px,
-                        f"north circ. candidate — {PASSAGE_CM} cm")
+                        f"north circ. candidate — {WALKING_MARGIN_CM} cm")
     draw_zone_candidate(x_or_w, y_pass_s, full_w, cand_px,
-                        f"south circ. candidate — {PASSAGE_CM} cm")
+                        f"south circ. candidate — {WALKING_MARGIN_CM} cm")
 
     # Orange EO — physical NS height only (y_desk -> y_pass_s)
     draw_zone_orange(x_or_w, y_desk, deb_px, dh,
@@ -1252,9 +1244,9 @@ def render_block_svg(block: Block, path: str) -> None:
 
     # === NS dimensions on the right ===
     ax = x_end + 14
-    dim_arrow(ax, y_pass_n, ax, y_desk,   f"{PASSAGE_CM} cm")
+    dim_arrow(ax, y_pass_n, ax, y_desk,   f"{WALKING_MARGIN_CM} cm")
     dim_arrow(ax, y_desk,   ax, y_pass_s, f"{block.ns_cm} cm")
-    dim_arrow(ax, y_pass_s, ax, y_bottom, f"{PASSAGE_CM} cm")
+    dim_arrow(ax, y_pass_s, ax, y_bottom, f"{WALKING_MARGIN_CM} cm")
 
     # door label
     out(f'<text x="{cx_title:.1f}" y="{y_bottom + 14:.1f}" '

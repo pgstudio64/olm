@@ -282,9 +282,8 @@ def get_blocks(standard: str | None = None) -> dict:
             "DESK_W_CM": pg.DESK_W_CM,
             "DESK_D_CM": pg.DESK_D_CM,
             "CHAIR_CLEARANCE_CM": cfg.chair_clearance_cm,
-            "PASSAGE_CM": cfg.passage_cm,
-            "PASSAGE_SINGLE_CM": cfg.access_single_desk_cm
-            - cfg.chair_clearance_cm,
+            "WALKING_MARGIN_CM": cfg.walking_margin_cm,
+            "SLIP_IN_MARGIN_CM": cfg.slip_in_margin_cm,
         },
     }
 

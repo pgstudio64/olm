@@ -12,8 +12,8 @@ from olm.core.pattern_generator import (
     DESK_W_CM,
     DOUBLE_ROW_PATTERNS,
     DOUBLE_ROW_PATTERNS_ALL,
-    PASSAGE_CM,
-    PASSAGE_SINGLE_CM,
+    WALKING_MARGIN_CM,
+    SLIP_IN_MARGIN_CM,
     PATTERNS,
     PATTERNS_ALL,
     FaceZone,
@@ -26,15 +26,15 @@ from olm.core.pattern_generator import (
 )
 
 
-def test_bloc_1_passage_30cm():
-    """BLOCK_1: single-desk access passage = 30 cm (ES-03), not 90 cm."""
+def test_bloc_1_chair_only():
+    """BLOCK_1: chair clearance only on west face (D-229)."""
     assert BLOCK_1.eo_cm == DESK_D_CM
     assert BLOCK_1.ns_cm == DESK_W_CM
     assert BLOCK_1.n_desks == 1
-    # W: chair clearance 70 cm + passage 30 cm = 100 cm
+    # W: chair clearance only, candidate=0
     assert BLOCK_1.faces.west.non_superposable_cm == CHAIR_CLEARANCE_CM
-    assert BLOCK_1.faces.west.candidate_cm == PASSAGE_SINGLE_CM
-    assert BLOCK_1.faces.west.total_cm == 100
+    assert BLOCK_1.faces.west.candidate_cm == 0
+    assert BLOCK_1.faces.west.total_cm == CHAIR_CLEARANCE_CM
     # E: absent (screen side)
     assert BLOCK_1.faces.east == FaceZone.absent()
 
@@ -42,10 +42,10 @@ def test_bloc_1_passage_30cm():
 def test_bloc_2_face_dimensions():
     assert BLOCK_2_FACE.eo_cm == 160
     assert BLOCK_2_FACE.ns_cm == 180
-    # E/W: fixed zone (70 cm) + min. circulation zone (90 cm) = 160 cm (ES-04)
+    # E/W: chair clearance only, candidate=0 (D-229)
     assert BLOCK_2_FACE.faces.east.non_superposable_cm == CHAIR_CLEARANCE_CM
-    assert BLOCK_2_FACE.faces.east.candidate_cm == PASSAGE_CM
-    assert BLOCK_2_FACE.faces.west.total_cm == CHAIR_CLEARANCE_CM + PASSAGE_CM
+    assert BLOCK_2_FACE.faces.east.candidate_cm == 0
+    assert BLOCK_2_FACE.faces.west.total_cm == CHAIR_CLEARANCE_CM
     # N/S: absent (no chair)
     assert BLOCK_2_FACE.faces.north == FaceZone.absent()
     assert BLOCK_2_FACE.faces.south == FaceZone.absent()
@@ -55,18 +55,18 @@ def test_single_bloc4_pattern():
     p = compose_row([BLOCK_4_FACE], "test")
     assert p.physical_eo_cm == DESK_D_CM * 2
     assert p.physical_ns_cm == DESK_W_CM * 2
-    # EO total = west(70+90) + 160 + east(70+90) = 480
-    assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_D_CM * 2
+    # EO total = west(70) + 160 + east(70) = 300 (D-229: candidate=0)
+    assert p.total_eo_cm == CHAIR_CLEARANCE_CM * 2 + DESK_D_CM * 2
     # NS total = north(0) + 360 + south(0) = 360 (N/S absent)
     assert p.total_ns_cm == DESK_W_CM * 2
 
 
 def test_b6_b2f_pattern():
     p = compose_row([BLOCK_6_FACE, BLOCK_2_FACE], "test")
-    assert p.physical_eo_cm == DESK_D_CM * 2 + DESK_D_CM * 2   # BLOCK_6_FACE.eo + BLOCK_2_FACE.eo
+    assert p.physical_eo_cm == DESK_D_CM * 2 + DESK_D_CM * 2
     assert p.n_desks == 8
-    # EO total = west_B6(70+90) + 320 + east_B2F(70+90) = 640
-    assert p.total_eo_cm == (CHAIR_CLEARANCE_CM + PASSAGE_CM) * 2 + DESK_D_CM * 4
+    # EO total = west(70) + 320 + east(70) = 460 (D-229)
+    assert p.total_eo_cm == CHAIR_CLEARANCE_CM * 2 + DESK_D_CM * 4
 
 
 
@@ -77,26 +77,36 @@ def test_bloc6_derogatory():
 
 def test_double_row_ns_total():
     p = compose_double_row([BLOCK_4_FACE], [BLOCK_4_FACE], "test")
-    # passage(90) + desk_depth(80) + corridor(90) + desk_depth(80) + passage(90) = 430
-    assert p.total_ns_cm == 2 * PASSAGE_CM + 2 * DESK_D_CM + p.central_corridor_cm
+    # walking(90) + desk(80) + corridor(90) + desk(80) + walking(90) = 430
+    assert p.total_ns_cm == (
+        2 * WALKING_MARGIN_CM + 2 * DESK_D_CM + p.central_corridor_cm
+    )
 
 
 def test_double_row_central_corridor():
     p = compose_double_row([BLOCK_4_FACE], [BLOCK_4_FACE], "test")
-    # ES-06 inter-block passage = 90 cm
+    # ES-02 inter-row walking margin = 90 cm
     assert p.central_corridor_cm == 90
 
 
 def test_double_row_desks():
-    p = compose_double_row([BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE, BLOCK_2_FACE], "test")
+    p = compose_double_row(
+        [BLOCK_4_FACE, BLOCK_2_FACE],
+        [BLOCK_4_FACE, BLOCK_2_FACE],
+        "test",
+    )
     assert p.n_desks == 12
 
 
 def test_double_row_eo_asymmetric():
-    # north row wider than south → total_eo = max
-    p = compose_double_row([BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE], "test")
+    # north row wider than south -> total_eo = max
+    p = compose_double_row(
+        [BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE], "test",
+    )
     assert p.total_eo_cm == compose_double_row(
-        [BLOCK_4_FACE, BLOCK_2_FACE], [BLOCK_4_FACE, BLOCK_2_FACE], "ref"
+        [BLOCK_4_FACE, BLOCK_2_FACE],
+        [BLOCK_4_FACE, BLOCK_2_FACE],
+        "ref",
     ).north_row.total_eo_cm
 
 
@@ -131,36 +141,39 @@ def test_rotate_pattern_90_dimensions():
     assert r.orientation == 90
     assert r.physical_eo_cm == p.physical_ns_cm   # DESK_W_CM * 2 = 360
     assert r.physical_ns_cm == p.physical_eo_cm   # DESK_D_CM * 2 = 160
-    # After 90° CW rotation: W←N(absent), E←S(absent), N←W(70+90), S←E(70+90)
+    # After 90 CW: W<-N(absent), E<-S(absent), N<-W(70), S<-E(70)
     # total_eo = west(0) + 360 + east(0) = 360
     assert r.total_eo_cm == DESK_W_CM * 2
-    # total_ns = north.candidate_cm(90) + 160 + south.candidate_cm(90) = 340
-    assert r.total_ns_cm == PASSAGE_CM * 2 + DESK_D_CM * 2
+    # total_ns = north.candidate(0) + 160 + south.candidate(0) = 160
+    # D-229: candidate_cm=0, so total_ns = physical only
+    assert r.total_ns_cm == DESK_D_CM * 2
 
 
 def test_mirror_double_row_asymmetric():
-    p = compose_double_row([BLOCK_4_FACE], [BLOCK_4_FACE, BLOCK_2_FACE], "P_B4_B4B2F")
+    p = compose_double_row(
+        [BLOCK_4_FACE], [BLOCK_4_FACE, BLOCK_2_FACE], "P_B4_B4B2F",
+    )
     m = mirror_double_row(p)
     assert m is not None
     assert m.name == "P_B4_B4B2F__MIRROR"
-    assert [b.name for b in m.north_row.blocks] == ["BLOCK_4_FACE", "BLOCK_2_FACE"]
+    assert [b.name for b in m.north_row.blocks] == [
+        "BLOCK_4_FACE", "BLOCK_2_FACE",
+    ]
     assert [b.name for b in m.south_row.blocks] == ["BLOCK_4_FACE"]
 
 
 def test_mirror_double_row_symmetric():
-    p = compose_double_row([BLOCK_4_FACE], [BLOCK_4_FACE], "P_B4_B4")
+    p = compose_double_row(
+        [BLOCK_4_FACE], [BLOCK_4_FACE], "P_B4_B4",
+    )
     assert mirror_double_row(p) is None
 
 
 def test_patterns_all_count():
     assert len(PATTERNS_ALL) == len(PATTERNS) * 2
-    # P_B4_B4 symmetric → no mirror
-    # P_B4_B4B2F asymmetric → 1 mirror
-    # P_B4B2F_B4B2F symmetric → no mirror
-    # P_B2F_B2F symmetric → no mirror
-    # P_B2F_B4 asymmetric → 1 mirror
-    # P_B4B2F_B4 asymmetric → 1 mirror
-    assert len(DOUBLE_ROW_PATTERNS_ALL) == len(DOUBLE_ROW_PATTERNS) * 2 + 3
+    assert len(DOUBLE_ROW_PATTERNS_ALL) == (
+        len(DOUBLE_ROW_PATTERNS) * 2 + 3
+    )
 
 
 def test_render_svg_dark_background():
