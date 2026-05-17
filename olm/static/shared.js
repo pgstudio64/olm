@@ -136,10 +136,13 @@ function computeCirculationInfo() {
     if (ri < state.rows.length - 1) yRow += state.row_gaps_cm[ri] || 0;
   }
 
-  // Door cell: center of each door
+  // Entry cells: center of each door AND each open bay (D-225).
+  // An opening with has_door=false is a legitimate entry point too — same
+  // role as a door for circulation, even more so (no swinging arc).
+  // Without this, a room with only openings fell back to "middle of south
+  // wall" and the circulation paths looked random.
   var doorCells = [];
-  // D-122 P4 : doors dans state.room_doors séparément.
-  (state.room_doors || []).forEach(function(d) {
+  function _addEntryCell(d) {
     var midCm = d.offset_cm + d.width_cm / 2;
     var dr, dc;
     if (d.face === "north") { dr = 0; dc = Math.floor(midCm / cellCm); }
@@ -151,7 +154,9 @@ function computeCirculationInfo() {
     dc = Math.max(0, Math.min(cols - 1, dc));
     var fc = findNearestFreeCell(grid, dr, dc, cols, rowsN);
     if (fc) doorCells.push(fc);
-  });
+  }
+  (state.room_doors || []).forEach(_addEntryCell);
+  (state.room_openings || []).forEach(_addEntryCell);
   if (doorCells.length === 0) {
     var midC = Math.floor(cols / 2);
     var fc = findNearestFreeCell(grid, rowsN - 1, midC, cols, rowsN);

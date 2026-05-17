@@ -445,6 +445,58 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
       // Desks via shared renderBlockDesks (z=4,5,6)
       globalDeskIndex += renderBlockDesks(elements, bx, by, b.type, b.orientation, scale, globalDeskIndex);
 
+      // Lock nœud markers (D-221 / D-226). Show a small rope-knot on each
+      // face where a stick is set AND the block actually touches the wall.
+      var bSticks = b.sticks || [];
+      if (bSticks.length > 0) {
+        var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
+        function _zoneCm(faceObj) {
+          if (isOrtho || !faceObj) return 0;
+          return (faceObj.non_superposable_cm || 0) + (faceObj.candidate_cm || 0);
+        }
+        var xBlockCm = (bx - offsetX) / scale;
+        var yBlockCm = (by - offsetY) / scale;
+        var zN = _zoneCm(f.north);
+        var zS = _zoneCm(f.south);
+        var zW = _zoneCm(f.west);
+        var zE = _zoneCm(f.east);
+        var outerN = by - zN * scale;
+        var outerS = by + bh + zS * scale;
+        var outerW = bx - zW * scale;
+        var outerE = bx + bw + zE * scale;
+        var outerCx = (outerW + outerE) / 2;
+        var outerCy = (outerN + outerS) / 2;
+        // Fixed knot size in SVG units (mini view); editor uses 18*zf.
+        var knotSize = 10;
+        var knotInset = 4;
+        var ksc = knotSize / 14;
+        var knotFaces = [
+          { face: "N", touches: (yBlockCm - zN === 0),
+            cx: outerCx, cy: outerN + knotInset, rot: 0 },
+          { face: "S", touches: (yBlockCm + g.ns + zS === roomHcm),
+            cx: outerCx, cy: outerS - knotInset, rot: 0 },
+          { face: "W", touches: (xBlockCm - zW === 0),
+            cx: outerW + knotInset, cy: outerCy, rot: 90 },
+          { face: "E", touches: (xBlockCm + g.eo + zE === roomWcm),
+            cx: outerE - knotInset, cy: outerCy, rot: 90 },
+        ];
+        for (var kf = 0; kf < knotFaces.length; kf++) {
+          var kk = knotFaces[kf];
+          if (!kk.touches) continue;
+          if (bSticks.indexOf(kk.face) < 0) continue;
+          var kx = kk.cx - knotSize / 2;
+          var ky = kk.cy - knotSize / 2;
+          elements.push({ z: 10, s:
+            '<g transform="translate(' + kx + ',' + ky + ') scale(' + ksc +
+            ') rotate(' + kk.rot + ' 7 7)" pointer-events="none">' +
+            '<rect x="0" y="0" width="14" height="14" rx="3" fill="rgba(0,0,0,0.6)"/>' +
+            '<circle cx="7" cy="7" r="3" fill="none" stroke="#c8a800" stroke-width="1.6"/>' +
+            '<line x1="7" y1="1" x2="7" y2="4" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<line x1="7" y1="10" x2="7" y2="13" stroke="#c8a800" stroke-width="1.6" stroke-linecap="round"/>' +
+            '</g>' });
+        }
+      }
+
       xBlock += bw;
       if (g.ns > rowMaxNS) rowMaxNS = g.ns;
     }
