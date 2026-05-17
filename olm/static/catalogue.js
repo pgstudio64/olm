@@ -3,11 +3,10 @@
 
 let catalogueData = [];
 
-// IDs of the 3 synchronized Standard selectors (Editor, Card, Grid)
+// IDs of the 2 synchronized Standard selectors (Catalogue, Editor)
 var _CAT_STD_IDS = [
-  "catFilterStandard",        // Card (historical ID, keeps retrocompat)
+  "catFilterStandard",
   "catFilterStandardEditor",
-  "catFilterStandardGrid",
 ];
 
 /**
@@ -75,6 +74,24 @@ function _wireCatDelegation() {
   var svg = document.getElementById("matrixSvg");
   if (svg) {
     svg.addEventListener("click", function(e) {
+      // Delete button in matrix
+      var delEl = e.target.closest("[data-matrix-delete]");
+      if (delEl) {
+        e.stopPropagation();
+        var name = delEl.dataset.matrixDelete;
+        if (!name) return;
+        confirmModal("Delete \"" + name + "\" from catalogue?").then(function(ok) {
+          if (!ok) return;
+          fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" })
+            .then(function(resp) {
+              if (!resp.ok) throw new Error("Delete failed");
+              loadCatalogue();
+            })
+            .catch(function(err) { setStatus("Delete error: " + err.message); });
+        });
+        return;
+      }
+      // Pattern click (load in editor)
       var el = e.target.closest("[data-matrix-pattern]");
       if (!el) return;
       e.stopPropagation();
@@ -92,18 +109,14 @@ async function loadCatalogue() {
     if (!resp.ok) throw new Error(await resp.text());
     var data = await resp.json();
     catalogueData = data.patterns || [];
-    // First-launch banners (Card + Grid): show when empty + default available
-    ["catDefaultBanner", "catDefaultBannerGrid"].forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el) el.style.display = data.default_available ? "block" : "none";
-    });
-    // Save-as-default buttons (Card + Grid): visible only in --dev mode
-    ["btnCatSaveAsDefault", "btnCatSaveAsDefaultGrid"].forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el && typeof APP_CONFIG !== "undefined") {
-        el.style.display = APP_CONFIG.dev_mode ? "block" : "none";
-      }
-    });
+    // First-launch banner: show when empty + default available
+    var bannerEl = document.getElementById("catDefaultBanner");
+    if (bannerEl) bannerEl.style.display = data.default_available ? "block" : "none";
+    // Save-as-default button: visible only in --dev mode
+    var saveDefEl = document.getElementById("btnCatSaveAsDefault");
+    if (saveDefEl && typeof APP_CONFIG !== "undefined") {
+      saveDefEl.style.display = APP_CONFIG.dev_mode ? "block" : "none";
+    }
     try {
       renderCatalogue();
       renderMatrixView();
@@ -133,10 +146,8 @@ function renderCatalogue() {
     return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
   });
 
-  ["catCount", "catCountGrid"].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = filtered.length + " pattern(s)";
-  });
+  var countEl = document.getElementById("catCount");
+  if (countEl) countEl.textContent = filtered.length + " pattern(s)";
 
   if (filtered.length === 0) {
     grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:24px;">No patterns.</div>';
@@ -195,6 +206,7 @@ function renderCatalogue() {
 // ========== MATRIX VIEW ==========
 
 let matrixViewBox = { x: 0, y: 0, w: 1000, h: 800 };
+let matrixFullExtent = null;  // stored after render for zoom-out limit
 let matrixPanning = false;
 let matrixPanStart = { x: 0, y: 0 };
 // Metadata for fixed rulers
@@ -297,10 +309,10 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
   var roomW = roomWcm * scale;
   var roomH = roomHcm * scale;
 
-  // Room background (z=0.05)
+  // Room background (z=0.05) — slightly lighter than block zones for contrast
   elements.push({ z: 0.05, s: '<rect x="' + offsetX + '" y="' + offsetY +
     '" width="' + roomW + '" height="' + roomH +
-    '" fill="' + COLOR_CAND_FILL + '" stroke="#4a4640" stroke-width="1"/>' });
+    '" fill="#1a1a1a" stroke="#4a4640" stroke-width="1"/>' });
 
   // Room dimension labels (z=10)
   elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 3) +
@@ -492,9 +504,12 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
           elements.push({ z: 10, s:
             '<g transform="translate(' + kx + ',' + ky + ') scale(' + ksc +
             ') rotate(' + kk.rot + ' 7 7)" pointer-events="none">' +
-            '<rect x="0" y="0" width="14" height="14" rx="3" fill="rgba(0,0,0,0.6)"/>' +
-            '<path d="M 7 1 C 11 1 11 7 7 7 C 3 7 3 13 7 13 C 11 13 11 7 7 7 C 3 7 3 1 7 1 Z"' +
-            ' fill="none" stroke="#c8a800" stroke-width="1.4" stroke-linecap="round"/>' +
+            '<rect x="-2" y="-1" width="18" height="19" rx="3" fill="rgba(0,0,0,0.6)"/>' +
+            '<path d="M3,6 V4 a4,4 0 0,1 8,0 V6" fill="none" stroke="#c8a800"' +
+            ' stroke-width="1.8" stroke-linecap="round"/>' +
+            '<rect x="0" y="6" width="14" height="10" rx="2"' +
+            ' fill="rgba(0,0,0,0.5)" stroke="#c8a800" stroke-width="0.7"/>' +
+            '<circle cx="7" cy="11" r="1.6" fill="#c8a800"/>' +
             '</g>' });
         }
       }
@@ -690,10 +705,8 @@ function updateMatrixRulers() {
 function renderMatrixView() {
   var filtered = getFilteredPatterns();
   var svg = document.getElementById("matrixSvg");
-  ["catCount", "catCountGrid"].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = filtered.length + " pattern(s)";
-  });
+  var countEl = document.getElementById("catCount");
+  if (countEl) countEl.textContent = filtered.length + " pattern(s)";
 
   if (filtered.length === 0) {
     svg.innerHTML = '<text x="50" y="40" fill="#6e6a62" font-size="12" font-family="monospace">No patterns.</text>';
@@ -735,6 +748,7 @@ function renderMatrixView() {
   // Grid dimensions
   var CELL_SCALE = 0.5;      // same scale as editor (SCALE=0.5)
   var CELL_PAD = 20;          // padding around each room
+  var CELL_PAD_TOP = 14;      // extra top margin (room for delete button)
   var CELL_GAP = 8;           // spacing between patterns in the same cell
   var LABEL_W = 60;           // space for depth labels (left)
   var LABEL_H = 30;           // space for width labels (top)
@@ -749,7 +763,7 @@ function renderMatrixView() {
     return maxCount * (w * CELL_SCALE) + (maxCount - 1) * CELL_GAP + CELL_PAD * 2;
   });
   var CARTOUCHE_H = 24;  // space for 2 scoring lines below the room
-  var rowHeights = depths.map(function(d) { return d * CELL_SCALE + CELL_PAD * 2 + CARTOUCHE_H; });
+  var rowHeights = depths.map(function(d) { return d * CELL_SCALE + CELL_PAD * 2 + CELL_PAD_TOP + CARTOUCHE_H; });
 
   var totalW = MARGIN + LABEL_W + colWidths.reduce(function(a, b) { return a + b; }, 0) + MARGIN;
   var totalH = MARGIN + LABEL_H + rowHeights.reduce(function(a, b) { return a + b; }, 0) + MARGIN;
@@ -797,13 +811,21 @@ function renderMatrixView() {
         parts.push('<g clip-path="url(#' + cellId + ')">');
         for (var pi = 0; pi < patterns.length; pi++) {
           var pieceX = cx + CELL_PAD + pi * (pieceW + CELL_GAP);
-          var pieceY = cy + CELL_PAD;
+          var pieceY = cy + CELL_PAD + CELL_PAD_TOP;
           parts.push(renderPatternMiniSvg(patterns[pi], CELL_SCALE, pieceX, pieceY));
           // Transparent clickable zone to open in editor
           parts.push('<rect x="' + pieceX + '" y="' + pieceY +
             '" width="' + pieceW + '" height="' + pieceH +
             '" fill="transparent" style="cursor:pointer;" data-matrix-pattern="' +
             (patterns[pi].name || "") + '"/>');
+          // Delete button (above top-right corner, outside the pattern)
+          var delX = pieceX + pieceW;
+          var delY = pieceY - 3;
+          parts.push('<text x="' + delX + '" y="' + delY +
+            '" text-anchor="end" font-size="16" font-weight="bold"' +
+            ' font-family="sans-serif"' +
+            ' fill="#6e6a62" style="cursor:pointer;" data-matrix-delete="' +
+            (patterns[pi].name || "") + '">\u00d7</text>');
         }
         parts.push('</g>');
       } else {
@@ -818,11 +840,26 @@ function renderMatrixView() {
 
   // Initial viewBox = show everything
   matrixViewBox = { x: 0, y: 0, w: totalW, h: totalH };
+  matrixFullExtent = { w: totalW, h: totalH };
   svg.innerHTML = parts.join("\n");
   applyMatrixViewBox();
 
   // Event delegation handles matrix-pattern clicks (P1.4)
   _wireCatDelegation();
+}
+
+// Zoom limits: min ~one room (300 SVG units), max = full matrix
+var MATRIX_ZOOM_MIN_W = 250;
+
+function _matrixClampZoom(newW, newH) {
+  var svg = document.getElementById("matrixSvg");
+  var vb = svg.getAttribute("viewBox");
+  // Max = initial full extent (stored after renderMatrixView)
+  var maxW = matrixFullExtent ? matrixFullExtent.w : 2000;
+  var maxH = matrixFullExtent ? matrixFullExtent.h : 2000;
+  if (newW < MATRIX_ZOOM_MIN_W) return null;
+  if (newW > maxW || newH > maxH) return null;
+  return { w: newW, h: newH };
 }
 
 function matrixZoom(e) {
@@ -831,24 +868,33 @@ function matrixZoom(e) {
   var rect = svg.getBoundingClientRect();
   var mx = (e.clientX - rect.left) / rect.width;
   var my = (e.clientY - rect.top) / rect.height;
-  var factor = e.deltaY > 0 ? 1.15 : 0.87;
+  // Pinch (ctrlKey) sends fine deltaY — use proportional factor
+  var factor;
+  if (e.ctrlKey) {
+    factor = 1 + Math.min(Math.abs(e.deltaY), 10) * 0.02 * (e.deltaY > 0 ? 1 : -1);
+  } else {
+    factor = e.deltaY > 0 ? 1.15 : 0.87;
+  }
   var newW = matrixViewBox.w * factor;
   var newH = matrixViewBox.h * factor;
-  matrixViewBox.x += (matrixViewBox.w - newW) * mx;
-  matrixViewBox.y += (matrixViewBox.h - newH) * my;
-  matrixViewBox.w = newW;
-  matrixViewBox.h = newH;
+  var clamped = _matrixClampZoom(newW, newH);
+  if (!clamped) return;
+  matrixViewBox.x += (matrixViewBox.w - clamped.w) * mx;
+  matrixViewBox.y += (matrixViewBox.h - clamped.h) * my;
+  matrixViewBox.w = clamped.w;
+  matrixViewBox.h = clamped.h;
   applyMatrixViewBox();
 }
 
 function matrixZoomBy(factor) {
-  var svg = document.getElementById("matrixSvg");
   var newW = matrixViewBox.w * factor;
   var newH = matrixViewBox.h * factor;
-  matrixViewBox.x += (matrixViewBox.w - newW) / 2;
-  matrixViewBox.y += (matrixViewBox.h - newH) / 2;
-  matrixViewBox.w = newW;
-  matrixViewBox.h = newH;
+  var clamped = _matrixClampZoom(newW, newH);
+  if (!clamped) return;
+  matrixViewBox.x += (matrixViewBox.w - clamped.w) / 2;
+  matrixViewBox.y += (matrixViewBox.h - clamped.h) / 2;
+  matrixViewBox.w = clamped.w;
+  matrixViewBox.h = clamped.h;
   applyMatrixViewBox();
 }
 
@@ -862,7 +908,10 @@ function initMatrixPanZoom() {
   var svg = document.getElementById("matrixSvg");
 
   // Session-life: all pan/zoom listeners bound once at init
-  container.addEventListener("wheel", function(e) { e.preventDefault(); }, { passive: false });
+  container.addEventListener("wheel", function(e) {
+    e.preventDefault();
+    matrixZoom(e);
+  }, { passive: false });
 
   svg.addEventListener("mousedown", function(e) {
     if (e.target.closest("[data-matrix-pattern]")) return;

@@ -194,7 +194,7 @@ function renderCatStandardFilter() {
     html += '<option value="' + s + '"' + selected + '>' +
       getStdLabel(s) + '</option>';
   });
-  // Populate all 3 synchronized selectors
+  // Populate synchronized selectors (Catalogue + Editor)
   _CAT_STD_IDS.forEach(function(id) {
     var sel = document.getElementById(id);
     if (sel) sel.innerHTML = html;

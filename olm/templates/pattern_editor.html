@@ -558,8 +558,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <!-- TAB: CATALOGUE -->
 <div class="tab-content" id="tabLytCatalogue">
   <div class="sub-tab-bar">
-    <button class="sub-tab-btn active" data-subtab="catCards">Card view</button>
-    <button class="sub-tab-btn" data-subtab="catGrid">Grid view</button>
+    <button class="sub-tab-btn active" data-subtab="catalogue">Catalogue</button>
     <button class="sub-tab-btn" data-subtab="catEditor">Pattern editor</button>
   </div>
 
@@ -750,28 +749,19 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 </div><!-- /subtabCatEditor -->
 
 <!-- SUB-TAB: CARD VIEW -->
-<div class="sub-tab-content active" id="subtabCatCards">
+<div class="sub-tab-content active" id="subtabCatalogue">
   <div style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
     <div class="catalogue-toolbar">
+      <span class="cat-view-pill">
+        <button class="cat-view-btn active" data-cat-view="cards" title="Card view">Cards</button>
+        <button class="cat-view-btn" data-cat-view="grid" title="Grid view">Grid</button>
+      </span>
       <label style="margin-left:8px;">Standard:
         <select id="catFilterStandard">
           <!-- Populated dynamically by renderCatStandardFilter() -->
         </select>
       </label>
-      <button class="btn" id="btnNewPatternCard" title="Create a new pattern in the editor">New pattern</button>
-      <span class="cat-dim-filter" style="flex:1;"></span>
-      <label class="cat-dim-filter" id="catLabelMinW">Width min:
-        <input type="number" id="catFilterMinW" value="" min="0" step="10" style="width:60px;">
-      </label>
-      <label class="cat-dim-filter" id="catLabelMaxW">Width max:
-        <input type="number" id="catFilterMaxW" value="" min="0" step="10" style="width:60px;">
-      </label>
-      <label class="cat-dim-filter" id="catLabelMinD">Depth min:
-        <input type="number" id="catFilterMinD" value="" min="0" step="10" style="width:60px;">
-      </label>
-      <label class="cat-dim-filter" id="catLabelMaxD">Depth max:
-        <input type="number" id="catFilterMaxD" value="" min="0" step="10" style="width:60px;">
-      </label>
+      <button class="btn" id="btnNewPattern" title="Create a new pattern in the editor">New pattern</button>
       <span style="flex:1;"></span>
       <div style="position:relative;display:inline-block;">
         <button class="view-toggle" id="btnCatExport" title="Export catalogue">&#x2B06; Export &#x25BE;</button>
@@ -790,58 +780,41 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <input type="file" id="catImportFile" accept=".json" style="display:none;">
       <span id="catCount" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
     </div>
+    <div class="catalogue-toolbar" id="catBar2">
+      <label class="cat-dim-filter" id="catLabelMinW">Width min:
+        <input type="number" id="catFilterMinW" value="" min="0" step="10" style="width:60px;">
+      </label>
+      <label class="cat-dim-filter" id="catLabelMaxW">Width max:
+        <input type="number" id="catFilterMaxW" value="" min="0" step="10" style="width:60px;">
+      </label>
+      <label class="cat-dim-filter" id="catLabelMinD">Depth min:
+        <input type="number" id="catFilterMinD" value="" min="0" step="10" style="width:60px;">
+      </label>
+      <label class="cat-dim-filter" id="catLabelMaxD">Depth max:
+        <input type="number" id="catFilterMaxD" value="" min="0" step="10" style="width:60px;">
+      </label>
+      <span style="flex:1;"></span>
+      <span id="catGridZoom" style="display:none;">
+        <button class="view-toggle" id="btnMatrixZoomOut" title="Zoom out">&#8722;</button>
+        <button class="view-toggle" id="btnMatrixZoomFit" title="Fit all">&#8861;</button>
+        <button class="view-toggle" id="btnMatrixZoomIn" title="Zoom in">+</button>
+      </span>
+      <span style="flex:1;"></span>
+    </div>
     <div id="catDefaultBanner" style="display:none;padding:8px 16px;background:var(--surface2);border:1px solid var(--accent);margin:4px 0;font-size:12px;">
       Catalogue is empty. <button class="btn" id="btnCatLoadDefault" style="font-size:11px;padding:2px 8px;">Import default catalogue</button>
     </div>
     <div class="catalogue-grid" id="catalogueGrid">
       <div style="color:var(--text-dim);font-size:12px;padding:24px;">Loading catalogue...</div>
     </div>
-  </div>
-</div><!-- /subtabCatCards -->
-
-<!-- SUB-TAB: GRID VIEW -->
-<div class="sub-tab-content" id="subtabCatGrid">
-  <div style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
-    <div class="catalogue-toolbar">
-      <label style="margin-left:8px;">Standard:
-        <select id="catFilterStandardGrid">
-          <!-- Populated dynamically by renderCatStandardFilter() -->
-        </select>
-      </label>
-      <button class="btn" id="btnNewPatternGrid" title="Create a new pattern in the editor">New pattern</button>
-      <span style="flex:1;"></span>
-      <div style="position:relative;display:inline-block;">
-        <button class="view-toggle" id="btnCatExportGrid" title="Export catalogue">&#x2B06; Export &#x25BE;</button>
-        <div id="catExportMenuGrid" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:220px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
-          <button class="btn" id="btnCatExportFileGrid" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to file (.json)</button>
-          <button class="btn" id="btnCatSaveAsDefaultGrid" style="display:none;width:100%;text-align:left;border:none;padding:4px 12px;">Save as default catalogue</button>
-        </div>
-      </div>
-      <div style="position:relative;display:inline-block;">
-        <button class="view-toggle" id="btnCatImportGrid" title="Import patterns">&#x2B07; Import &#x25BE;</button>
-        <div id="catImportMenuGrid" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:240px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
-          <button class="btn" id="btnCatImportFileGrid" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">From file...</button>
-          <button class="btn" id="btnCatImportDefaultGrid" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Default catalogue</button>
-        </div>
-      </div>
-      <input type="file" id="catImportFileGrid" accept=".json" style="display:none;">
-      <span id="catCountGrid" style="color:var(--text-dim);font-size:10px;">0 pattern(s)</span>
-      <span style="flex:1;"></span>
-      <button class="view-toggle" id="btnMatrixZoomIn" title="Zoom in">+</button>
-      <button class="view-toggle" id="btnMatrixZoomOut" title="Zoom out">&#8722;</button>
-      <button class="view-toggle" id="btnMatrixZoomFit" title="Fit all">&#8861;</button>
-    </div>
-    <div id="catDefaultBannerGrid" style="display:none;padding:8px 16px;background:var(--surface2);border:1px solid var(--accent);margin:4px 0;font-size:12px;">
-      Catalogue is empty. <button class="btn" id="btnCatLoadDefaultGrid" style="font-size:11px;padding:2px 8px;">Import default catalogue</button>
-    </div>
-    <div class="matrix-container" id="matrixContainer">
+    <div class="matrix-container" id="matrixContainer" style="display:none;">
       <div class="matrix-ruler-top" id="matrixRulerTop"></div>
       <div class="matrix-ruler-left" id="matrixRulerLeft"></div>
       <div class="matrix-ruler-corner" id="matrixRulerCorner"></div>
       <svg id="matrixSvg" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
   </div>
-</div><!-- /subtabCatGrid -->
+</div><!-- /subtabCatalogue -->
 
 
 </div><!-- /tabLytCatalogue -->

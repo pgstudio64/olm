@@ -124,9 +124,7 @@
   #eraseMenu .btn:hover,
   #exportMenu .btn:hover,
   #catExportMenu .btn:hover,
-  #catImportMenu .btn:hover,
-  #catExportMenuGrid .btn:hover,
-  #catImportMenuGrid .btn:hover { background: var(--border); }
+  #catImportMenu .btn:hover { background: var(--border); }
 
   #deskCount {
     margin-left: auto;
@@ -887,6 +885,30 @@
   .view-toggle:hover { border-color: var(--accent); color: var(--text); }
   .view-toggle.active { border-color: var(--accent); color: var(--accent); }
 
+  /* Catalogue view pill selector */
+  .cat-view-pill {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .cat-view-btn {
+    background: var(--surface);
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: var(--fs-md);
+    padding: 5px 14px;
+    cursor: pointer;
+  }
+  .cat-view-btn:last-child { border-right: none; }
+  .cat-view-btn:hover { color: var(--text); }
+  .cat-view-btn.active {
+    background: var(--accent);
+    color: var(--surface);
+  }
+
   /* Zoom rectangle selection */
   .zoom-rect {
     fill: rgba(80, 144, 192, 0.12);
@@ -1121,6 +1143,5 @@
   .amend-layout-mode #btnDuplicate { display: none; }
   .amend-layout-mode #btnDelete { display: none; }
   .amend-layout-mode #btnCatSaveAsDefault { display: none; }
-  .amend-layout-mode #btnCatSaveAsDefaultGrid { display: none; }
   .amend-layout-mode #stickCheckboxes { display: none; }
   .amend-layout-mode #stickCheckboxesTitle { display: none; }

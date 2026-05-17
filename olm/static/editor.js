@@ -2436,11 +2436,11 @@ function exitAmendUI() {
   document.querySelector(".ol-header").classList.remove("edit-mode");
   // D-215: remove dedicated amend-layout CSS mode
   document.body.classList.remove("amend-layout-mode");
-  // Restore sub-tab bar and reset to Card view
+  // Restore sub-tab bar and reset to Catalogue view
   var subBar = document.querySelector("#tabLytCatalogue > .sub-tab-bar");
   if (subBar) subBar.style.display = "";
-  var cardBtn = document.querySelector('.sub-tab-btn[data-subtab="catCards"]');
-  if (cardBtn) cardBtn.click();
+  var catBtn = document.querySelector('.sub-tab-btn[data-subtab="catalogue"]');
+  if (catBtn) catBtn.click();
 }
 
 // IDs to disable in room-amend mode (layout controls + catalogue actions)

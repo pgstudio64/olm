@@ -59,13 +59,11 @@ async function init() {
   document.getElementById("btnNew").addEventListener("click", function() {
     _guardPatternRoomAmend(resetState);
   });
-  // "New pattern" from Card/Grid view → reset + switch to Editor sub-tab
-  ["btnNewPatternCard", "btnNewPatternGrid"].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.addEventListener("click", function() {
-      resetState();
-      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
-    });
+  // "New pattern" from Catalogue view → reset + switch to Editor sub-tab
+  var btnNewPat = document.getElementById("btnNewPattern");
+  if (btnNewPat) btnNewPat.addEventListener("click", function() {
+    resetState();
+    document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
   });
   document.getElementById("btnSave").addEventListener("click", save);
   document.getElementById("btnDuplicate").addEventListener("click", function() {
@@ -341,7 +339,9 @@ async function init() {
     document.getElementById("roomDepth").value = newD;
     // Refuse shrink below the minimum required by current blocks.
     var mins = computeMinRoomDims();
-    if (newW < mins.min_w || newD < mins.min_d) {
+    var shrinkingW = newW < oldW && newW < mins.min_w;
+    var shrinkingD = newD < oldD && newD < mins.min_d;
+    if (shrinkingW || shrinkingD) {
       document.getElementById("roomWidth").value = oldW;
       document.getElementById("roomDepth").value = oldD;
       setStatus("Minimum room size: " + mins.min_w + " x " + mins.min_d + " cm");
@@ -549,8 +549,7 @@ async function init() {
         parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
         var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
         if (subtab) subtab.classList.add("active");
-        if (btn.dataset.subtab === "catCards") loadCatalogue();
-        if (btn.dataset.subtab === "catGrid") { loadCatalogue(); renderMatrixView(); }
+        if (btn.dataset.subtab === "catalogue") { loadCatalogue(); _refreshCatView(); }
       }
       // Guard: pattern room amend active — confirm discard
       if (state.roomAmendMode && state.roomAmendMode.context === "pattern"
@@ -573,7 +572,34 @@ async function init() {
       _doSubSwitch();
     });
   });
-  // Initial description
+
+  // Catalogue view pill (Cards / Grid)
+  var _catViewMode = "cards";
+  function _refreshCatView() {
+    var cardsEl = document.getElementById("catalogueGrid");
+    var gridEl = document.getElementById("matrixContainer");
+    var zoomEl = document.getElementById("catGridZoom");
+    if (_catViewMode === "cards") {
+      if (cardsEl) cardsEl.style.display = "";
+      if (gridEl) gridEl.style.display = "none";
+      if (zoomEl) zoomEl.style.display = "none";
+    } else {
+      if (cardsEl) cardsEl.style.display = "none";
+      if (gridEl) gridEl.style.display = "";
+      if (zoomEl) zoomEl.style.display = "";
+      renderMatrixView();
+    }
+  }
+  document.querySelectorAll(".cat-view-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      document.querySelectorAll(".cat-view-btn").forEach(function(b) {
+        b.classList.remove("active");
+      });
+      btn.classList.add("active");
+      _catViewMode = btn.dataset.catView;
+      _refreshCatView();
+    });
+  });
 
   // Matrix pan/zoom
   initMatrixPanZoom();
@@ -581,12 +607,11 @@ async function init() {
   document.getElementById("btnMatrixZoomOut").addEventListener("click", function() { matrixZoomBy(1.25); });
   document.getElementById("btnMatrixZoomFit").addEventListener("click", matrixZoomFit);
 
-  // Catalogue import/export — dropdown menus (Card + Grid instances)
-  // Paired IDs: [Card, Grid] for each duplicated element
-  var _EXPORT_BTN   = ["btnCatExport", "btnCatExportGrid"];
-  var _EXPORT_MENU  = ["catExportMenu", "catExportMenuGrid"];
-  var _IMPORT_BTN   = ["btnCatImport", "btnCatImportGrid"];
-  var _IMPORT_MENU  = ["catImportMenu", "catImportMenuGrid"];
+  // Catalogue import/export — dropdown menus
+  var _EXPORT_BTN   = ["btnCatExport"];
+  var _EXPORT_MENU  = ["catExportMenu"];
+  var _IMPORT_BTN   = ["btnCatImport"];
+  var _IMPORT_MENU  = ["catImportMenu"];
   var _ALL_MENUS    = _EXPORT_MENU.concat(_IMPORT_MENU);
 
   function _hideAllCatMenus() {
@@ -627,8 +652,8 @@ async function init() {
       loadCatalogue();
       var activeBtn = document.querySelector('.sub-tab-btn.active');
       if (activeBtn && activeBtn.dataset.subtab === "catEditor") {
-        var cardBtn = document.querySelector('.sub-tab-btn[data-subtab="catCards"]');
-        if (cardBtn) cardBtn.click();
+        var catBtn = document.querySelector('.sub-tab-btn[data-subtab="catalogue"]');
+        if (catBtn) catBtn.click();
       }
     });
   }
@@ -668,7 +693,7 @@ async function init() {
     _hideAllCatMenus();
     var label = _catStdLabel();
     var stdVal = getCatStandard();
-    confirmModal("Save current " + label + " patterns as the default catalogue?\n\nThis OVERWRITES the entire default \u2014 patterns from other standards (if any) will be lost.\nThe default ships with the application via GitHub.").then(function(ok) {
+    confirmModal("Save current " + label + " patterns as the default catalogue?\n\nThis OVERWRITES the entire default \u2014 patterns from other standards (if any) will be lost.").then(function(ok) {
       if (!ok) return;
       fetch("/api/catalogue/save-as-default", {
         method: "POST",
@@ -730,48 +755,43 @@ async function init() {
   });
 
   // -- Export actions --
-  _bindPair(["btnCatExportFile", "btnCatExportFileGrid"], _catExportFile);
-  _bindPair(["btnCatSaveAsDefault", "btnCatSaveAsDefaultGrid"], _catSaveAsDefault);
+  _bindPair(["btnCatExportFile"], _catExportFile);
+  _bindPair(["btnCatSaveAsDefault"], _catSaveAsDefault);
 
-  // -- Import from file (2 entries: Card + Grid) --
-  _bindPair(["btnCatImportFile", "btnCatImportFileGrid"], function() {
-    var pickerId = this.id.endsWith("Grid") ? "catImportFileGrid" : "catImportFile";
-    _catImportFromFile(pickerId);
+  // -- Import from file --
+  _bindPair(["btnCatImportFile"], function() {
+    _catImportFromFile("catImportFile");
   });
 
-  // -- File picker change (both Card + Grid pickers) --
-  ["catImportFile", "catImportFileGrid"].forEach(function(pickerId) {
-    document.getElementById(pickerId).addEventListener("change", function(e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        var data;
-        try { data = JSON.parse(ev.target.result); } catch(err) {
-          alertModal("Invalid JSON: " + err.message); return;
-        }
-        if (!data.patterns || !Array.isArray(data.patterns)) {
-          alertModal("Invalid format: 'patterns' key expected"); return;
-        }
-        _catDoFileImport(data);
-      };
-      reader.readAsText(file);
-      e.target.value = "";
-    });
+  // -- File picker change --
+  document.getElementById("catImportFile").addEventListener("change", function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var data;
+      try { data = JSON.parse(ev.target.result); } catch(err) {
+        alertModal("Invalid JSON: " + err.message); return;
+      }
+      if (!data.patterns || !Array.isArray(data.patterns)) {
+        alertModal("Invalid format: 'patterns' key expected"); return;
+      }
+      _catDoFileImport(data);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   });
 
-  // -- Import default (2 entries: Card + Grid) --
-  _bindPair(["btnCatImportDefault", "btnCatImportDefaultGrid"], function() {
+  // -- Import default --
+  _bindPair(["btnCatImportDefault"], function() {
     _catImportDefault();
   });
 
-  // -- First-launch banners (Card + Grid) --
-  _bindPair(["btnCatLoadDefault", "btnCatLoadDefaultGrid"], function() {
+  // -- First-launch banner --
+  _bindPair(["btnCatLoadDefault"], function() {
     _catSendImport("/api/catalogue/import-default", {});
-    ["catDefaultBanner", "catDefaultBannerGrid"].forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el) el.style.display = "none";
-    });
+    var el = document.getElementById("catDefaultBanner");
+    if (el) el.style.display = "none";
   });
 
   // --- Fit to pattern (editor) ---
@@ -936,7 +956,7 @@ async function init() {
     renderCatalogue();
     renderMatrixView();
   }
-  // Standard change handler — shared by all 3 synchronized selectors
+  // Standard change handler — shared by synchronized selectors
   function _onCatStandardChange() {
     // Guard: if pattern room amend is active, block standard change
     if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
@@ -946,7 +966,6 @@ async function init() {
       return;
     }
     var newStd = this.value;
-    // Sync all 3 selectors
     setCatStandard(newStd);
     // Persist across sessions
     saveConfigField("current_standard", newStd);
