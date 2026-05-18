@@ -157,6 +157,7 @@ def floor_plan_match(data: dict) -> dict:
                 {
                     "x_cm": d.x_cm, "y_cm": d.y_cm,
                     "width_cm": d.width_cm, "depth_cm": d.depth_cm,
+                    "chair_side": d.chair_side,
                     "removed": (d.row_idx, d.block_idx, d.desk_idx)
                                in removed_set,
                 }
@@ -174,6 +175,13 @@ def floor_plan_match(data: dict) -> dict:
                 "worst_detour": score.worst_detour,
                 "largest_free_rect_m2": score.largest_free_rect_m2,
                 "oversize": score.oversize,
+                "dim_circulation": score.dim_circulation,
+                "dim_light": score.dim_light,
+                "dim_back_door": score.dim_back_door,
+                "dim_face_wall": score.dim_face_wall,
+                "dim_distance": score.dim_distance,
+                "composite_score": score.composite_score,
+                "room_grade": score.room_grade,
                 "desks": desk_list,
                 "pattern": score.adapted_pattern,
             }

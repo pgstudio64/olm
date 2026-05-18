@@ -154,6 +154,11 @@ _SCREEN_FILL = (0, 0, 0, 255)
 _LABEL_COLOR = (0, 0, 0, 255)
 _WHITE = [255, 255, 255, 255]
 
+# Chair seat geometry (mirror of olm/static/block_constants.js CHAIR_W_CM).
+# The chair is drawn as a semicircle of seat-width diameter centered on
+# the chair side of the desk.
+_CHAIR_SEAT_WIDTH_CM = 65
+
 # Screen geometry — mirrors olm/static/block_svg.js.
 # Black thin bar on the desk side opposite to the chair, length ratio of
 # the perpendicular desk dimension. Inset from desk edge so the screen
@@ -275,8 +280,9 @@ def _draw_room_desks(
         cs_canon = desk.get("chair_side", "W")
         cs_abs = _decanon_chair_side(cs_canon, cf_abs)
 
-        # Chair arc (semicircle on the chair side)
-        arc_r_px = (desk["depth_cm"] / 2) / scale
+        # Chair arc (semicircle on the chair side).
+        # Radius = half the chair-seat width, NOT the desk depth.
+        arc_r_px = (_CHAIR_SEAT_WIDTH_CM / 2) / scale
         if cs_abs == "W":
             cx, cy = x1, (y1 + y2) / 2
         elif cs_abs == "E":

@@ -5,7 +5,7 @@ Pipeline (7 steps):
     2. East-West mirror
     3. Stick clamping + homothety
     4. Individual desk removal in forbidden zones
-    5. Scoring (circulation + comfort)
+    5. Scoring (circulation + comfort + multi-dim grade D-238)
     6. Best selection per standard
     7. Residual free rectangle
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass
 
@@ -820,6 +821,7 @@ class DeskPosition:
         width_cm: EO dimension of the desk.
         depth_cm: NS dimension of the desk.
         block_type: Parent block type.
+        chair_side: Direction the chair faces ("N", "E", "S", "W").
     """
     row_idx: int
     block_idx: int
@@ -829,6 +831,7 @@ class DeskPosition:
     width_cm: int
     depth_cm: int
     block_type: str
+    chair_side: str = ""
 
 
 # Relative positions of desks within each block type at orientation 0°.
@@ -882,6 +885,39 @@ _DESK_LAYOUTS: dict[str, list[tuple[int, int, int, int]]] = {
         (DESK_W_CM - DESK_D_CM, DESK_D_CM, DESK_D_CM, DESK_W_CM),
     ],
 }
+
+# Chair side per desk within each block type at orientation 0°.
+# Convention: same ordering as _DESK_LAYOUTS.
+# "W" = chair on west side, person's back faces west.
+# Aligned with frontend block_geometry.js chairSide.
+_DESK_CHAIR_SIDES: dict[str, list[str]] = {
+    "BLOCK_1": ["W"],
+    "BLOCK_2_FACE": ["W", "E"],
+    "BLOCK_2_SIDE": ["W", "W"],
+    "BLOCK_3_SIDE": ["W", "W", "W"],
+    "BLOCK_4_FACE": ["W", "E", "W", "E"],
+    "BLOCK_6_FACE": ["W", "E", "W", "E", "W", "E"],
+    "BLOCK_2_ORTHO_R": ["N", "E"],
+    "BLOCK_2_ORTHO_L": ["N", "W"],
+}
+
+_CHAIR_SIDE_ROTATE_CW = {"N": "E", "E": "S", "S": "W", "W": "N"}
+
+
+def _rotate_chair_side(side: str, degrees: int) -> str:
+    """Clockwise rotation of a chair side direction.
+
+    Args:
+        side: Chair side at orientation 0° ("N", "E", "S", "W").
+        degrees: Rotation in degrees (0, 90, 180, 270).
+
+    Returns:
+        Rotated chair side.
+    """
+    steps = (degrees // 90) % 4
+    for _ in range(steps):
+        side = _CHAIR_SIDE_ROTATE_CW[side]
+    return side
 
 
 def _rotate_desk_layout(
@@ -977,6 +1013,7 @@ def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
 
     for bp in block_positions:
         desk_layout = _DESK_LAYOUTS.get(bp.block_type, [])
+        chair_sides = _DESK_CHAIR_SIDES.get(bp.block_type, [])
         eo_0, ns_0, _ = _BLOCK_REGISTRY.get(bp.block_type, (0, 0, 0))
 
         for di, (dx, dy, dw, dd) in enumerate(desk_layout):
@@ -984,6 +1021,9 @@ def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
                 dx, dy, dw, dd = _rotate_desk_layout(
                     dx, dy, dw, dd, eo_0, ns_0, bp.orientation,
                 )
+            cs = chair_sides[di] if di < len(chair_sides) else "W"
+            if bp.orientation != 0:
+                cs = _rotate_chair_side(cs, bp.orientation)
             desks.append(DeskPosition(
                 row_idx=bp.row_idx,
                 block_idx=bp.block_idx,
@@ -993,6 +1033,7 @@ def compute_desk_positions(pattern: dict) -> list[DeskPosition]:
                 width_cm=dw,
                 depth_cm=dd,
                 block_type=bp.block_type,
+                chair_side=cs,
             ))
 
     return desks
@@ -1188,12 +1229,21 @@ class MatchScore:
         standard: Layout standard.
         n_desks: Number of desks after removal.
         m2_per_desk: Area per desk (m²).
-        circulation_grade: Circulation grade (A-F).
+        circulation_grade: Circulation grade (A-F) from Dijkstra analysis.
         connectivity_pct: Connectivity percentage.
         min_passage_cm: Minimum passage found (cm).
         worst_detour: Worst detour ratio.
         largest_free_rect_m2: Largest free rectangle (m²).
         adapted_pattern: Adapted JSON pattern.
+        oversize: Whether pattern is oversize for the room.
+        dim_circulation: D-238 dimension 1 — circulation [0,1].
+        dim_light: D-238 dimension 2 — window proximity [0,1] or None.
+        dim_back_door: D-238 dimension 3 — back-to-door [0,1] or None.
+        dim_face_wall: D-238 dimension 4 — face-wall [0,1] or None.
+        dim_distance: D-238 dimension 5 — inter-desk distance [0,1] or None.
+            v1: always None (computed frontend-side, not replicated yet).
+        composite_score: Weighted average of active dimensions.
+        room_grade: Composite letter grade (A-F).
     """
     pattern_name: str
     standard: str
@@ -1206,6 +1256,199 @@ class MatchScore:
     largest_free_rect_m2: float
     adapted_pattern: dict
     oversize: bool = False
+    dim_circulation: float | None = None
+    dim_light: float | None = None
+    dim_back_door: float | None = None
+    dim_face_wall: float | None = None
+    dim_distance: float | None = None
+    composite_score: float = 0.0
+    room_grade: str = "F"
+
+
+# ---------------------------------------------------------------------------
+# D-238 — Multi-dimensional grade
+# ---------------------------------------------------------------------------
+
+# Circulation grade → dimension [0, 1]
+_GRADE_TO_DIM: dict[str, float] = {
+    "A": 1.0, "B": 0.8, "C": 0.6, "D": 0.4, "E": 0.2, "F": 0.0,
+}
+
+# In canonical model, corridor is always south
+_CANONICAL_CORRIDOR_FACE = "south"
+
+_OPPOSITE_FACE = {
+    "north": "south", "south": "north",
+    "east": "west", "west": "east",
+    "N": "S", "S": "N", "E": "W", "W": "E",
+}
+
+# D-238 composite thresholds
+_GRADE_THRESHOLDS: list[tuple[str, float]] = [
+    ("A", 0.90), ("B", 0.75), ("C", 0.60), ("D", 0.45), ("E", 0.30),
+]
+
+# D-238 dimension-specific thresholds (cm)
+_LIGHT_PROXIMITY_CM = 200
+_BACK_DOOR_DISTANCE_CM = 300
+
+
+def _desk_center(desk: DeskPosition) -> tuple[float, float]:
+    """Centre of a desk in cm."""
+    return desk.x_cm + desk.width_cm / 2, desk.y_cm + desk.depth_cm / 2
+
+
+def _opening_center(
+    opening, room: RoomSpec,
+) -> tuple[float, float]:
+    """Centre of an opening on the room wall in cm."""
+    face = opening.face.value if hasattr(opening.face, "value") else opening.face
+    if face in ("north", "south"):
+        cx = opening.offset_cm + opening.width_cm / 2
+        cy = 0.0 if face == "north" else float(room.depth_cm)
+    else:
+        cx = 0.0 if face == "west" else float(room.width_cm)
+        cy = opening.offset_cm + opening.width_cm / 2
+    return cx, cy
+
+
+def _window_center(
+    window, room: RoomSpec,
+) -> tuple[float, float]:
+    """Centre of a window on the room wall in cm."""
+    face = window.face.value if hasattr(window.face, "value") else window.face
+    if face in ("north", "south"):
+        cx = window.offset_cm + window.width_cm / 2
+        cy = 0.0 if face == "north" else float(room.depth_cm)
+    else:
+        cx = 0.0 if face == "west" else float(room.width_cm)
+        cy = window.offset_cm + window.width_cm / 2
+    return cx, cy
+
+
+def _compute_dim_light(
+    active_desks: list[DeskPosition], room: RoomSpec,
+) -> float | None:
+    """Dimension 2 — window proximity.
+
+    Ratio of desks whose centre is within _LIGHT_PROXIMITY_CM of
+    the nearest window centre. Returns None if the room has no windows.
+    """
+    if not room.windows:
+        return None
+    if not active_desks:
+        return None
+    win_centers = [_window_center(w, room) for w in room.windows]
+    count = 0
+    for desk in active_desks:
+        dx, dy = _desk_center(desk)
+        min_dist = min(
+            math.hypot(dx - wx, dy - wy) for wx, wy in win_centers
+        )
+        if min_dist <= _LIGHT_PROXIMITY_CM:
+            count += 1
+    return count / len(active_desks)
+
+
+def _compute_dim_back_door(
+    active_desks: list[DeskPosition], room: RoomSpec,
+) -> float | None:
+    """Dimension 3 — back to corridor door.
+
+    Ratio of desks that do NOT have their back facing a corridor door
+    within _BACK_DOOR_DISTANCE_CM. Returns None if no corridor door exists.
+
+    In canonical model, corridor = south. A desk with chair_side == "S"
+    has the person's back facing south (= towards corridor door).
+    """
+    corridor_doors = [
+        o for o in room.openings
+        if (o.face.value if hasattr(o.face, "value") else o.face)
+        == _CANONICAL_CORRIDOR_FACE
+    ]
+    if not corridor_doors:
+        return None
+    if not active_desks:
+        return None
+
+    door_centers = [_opening_center(d, room) for d in corridor_doors]
+    chair_to_face = {"N": "north", "S": "south", "E": "east", "W": "west"}
+
+    bad_count = 0
+    for desk in active_desks:
+        cs_face = chair_to_face.get(desk.chair_side, "")
+        if cs_face != _CANONICAL_CORRIDOR_FACE:
+            continue
+        dx, dy = _desk_center(desk)
+        min_dist = min(
+            math.hypot(dx - ox, dy - oy) for ox, oy in door_centers
+        )
+        if min_dist <= _BACK_DOOR_DISTANCE_CM:
+            bad_count += 1
+
+    return (len(active_desks) - bad_count) / len(active_desks)
+
+
+def _compute_dim_face_wall(
+    active_desks: list[DeskPosition],
+    room: RoomSpec,
+    walking_margin_cm: int,
+) -> float | None:
+    """Dimension 4 — face wall.
+
+    Ratio of desks that do NOT have a wall in front of their screen
+    within walking_margin_cm. Screen side = opposite of chair_side.
+    """
+    if not active_desks:
+        return None
+
+    bad_count = 0
+    for desk in active_desks:
+        screen_side = _OPPOSITE_FACE.get(desk.chair_side, "")
+        if screen_side == "E":
+            dist = room.width_cm - (desk.x_cm + desk.width_cm)
+        elif screen_side == "W":
+            dist = desk.x_cm
+        elif screen_side == "N":
+            dist = desk.y_cm
+        elif screen_side == "S":
+            dist = room.depth_cm - (desk.y_cm + desk.depth_cm)
+        else:
+            continue
+        if dist <= walking_margin_cm:
+            bad_count += 1
+
+    return (len(active_desks) - bad_count) / len(active_desks)
+
+
+def _compute_composite_and_grade(
+    dims: dict[str, float | None],
+    weights: dict[str, float],
+) -> tuple[float, str]:
+    """Compute composite score and letter grade.
+
+    Args:
+        dims: Dimension name → value (None = N/A, excluded).
+        weights: Dimension name → weight.
+
+    Returns:
+        (composite_score, grade_letter).
+    """
+    num = 0.0
+    den = 0.0
+    for name, val in dims.items():
+        if val is None:
+            continue
+        w = weights.get(name, 1.0)
+        num += w * val
+        den += w
+
+    composite = round(num / den, 2) if den > 0 else 0.0
+
+    for letter, threshold in _GRADE_THRESHOLDS:
+        if composite >= threshold:
+            return composite, letter
+    return composite, "F"
 
 
 def _pattern_to_circulation_format(
@@ -1288,7 +1531,7 @@ def score_candidate(
         standard: Layout standard.
 
     Returns:
-        MatchScore with all indicators.
+        MatchScore with all indicators including D-238 multi-dim grade.
     """
     from olm.core.circulation_analysis import analyse as circ_analyse
 
@@ -1309,6 +1552,48 @@ def score_candidate(
     # Residual free rectangle
     free_rect_m2 = largest_free_rectangle_m2(pattern, room)
 
+    # D-238 — Multi-dimensional grade
+    # Active desks (excluding removed)
+    all_desks = compute_desk_positions(pattern)
+    removed_set = {
+        (rd["row"], rd["block"], rd["desk"])
+        for rd in pattern.get("_removed_desks", [])
+    }
+    active_desks = [
+        d for d in all_desks
+        if (d.row_idx, d.block_idx, d.desk_idx) not in removed_set
+    ]
+
+    dim_circulation = _GRADE_TO_DIM.get(circ.grade, 0.0)
+    dim_light = _compute_dim_light(active_desks, room)
+    dim_back_door = _compute_dim_back_door(active_desks, room)
+
+    walking_margin = cfg.walking_margin_cm if cfg else 90
+    dim_face_wall = _compute_dim_face_wall(
+        active_desks, room, walking_margin,
+    )
+    # v1: dim_distance not computed backend-side (D-238 limitation)
+    dim_distance = None
+
+    # Composite grade
+    from olm.core.app_config import get_matching
+    matching = get_matching()
+    dim_weights = {
+        "circulation": matching.get("w_comfort", 1.0),
+        "light": matching.get("w_light", 1.0),
+        "back_door": matching.get("w_back_door", 1.0),
+        "face_wall": matching.get("w_face_wall", 1.0),
+        "distance": matching.get("w_distance", 1.0),
+    }
+    dims = {
+        "circulation": dim_circulation,
+        "light": dim_light,
+        "back_door": dim_back_door,
+        "face_wall": dim_face_wall,
+        "distance": dim_distance,
+    }
+    composite, room_grade = _compute_composite_and_grade(dims, dim_weights)
+
     return MatchScore(
         pattern_name=pattern.get("name", "?"),
         standard=standard,
@@ -1321,6 +1606,13 @@ def score_candidate(
         largest_free_rect_m2=free_rect_m2,
         adapted_pattern=pattern,
         oversize=oversize,
+        dim_circulation=dim_circulation,
+        dim_light=dim_light,
+        dim_back_door=dim_back_door,
+        dim_face_wall=dim_face_wall,
+        dim_distance=dim_distance,
+        composite_score=composite,
+        room_grade=room_grade,
     )
 
 
@@ -1329,30 +1621,13 @@ def score_candidate(
 # ---------------------------------------------------------------------------
 
 def _score_key(s: MatchScore) -> float:
-    """Composite score for best candidate selection.
+    """Sort key for best candidate selection.
 
-    Combines density and comfort using weights from config.json.
-    Lower score = better candidate (used with min()).
-
-    Density (0-1): normalised by n_desks (more = better).
-    Comfort (0-1): derived from circulation grade (A=1, F=0).
+    D-238: density only (m²/desk descending = less dense = better).
+    The multi-dimensional grade informs but does not drive sorting.
+    Lower key = better candidate (used with min()).
     """
-    from olm.core.app_config import get_matching
-
-    matching = get_matching()
-    w_density = matching.get("w_density", 0.5)
-    w_comfort = matching.get("w_comfort", 0.5)
-
-    # Normalise density: n_desks in [0, 1], inverted so min() works
-    # Use 1/n_desks as proxy (more desks = better)
-    density_score = 1.0 / max(s.n_desks, 1)
-
-    # Normalise comfort: grade A=0, B=0.25, C=0.5, D=0.75, F=1.0
-    grade_to_score = {"A": 0.0, "B": 0.25, "C": 0.5, "D": 0.75, "F": 1.0}
-    comfort_score = grade_to_score.get(s.circulation_grade, 1.0)
-
-    # Composite score (lower = better)
-    return w_density * density_score + w_comfort * comfort_score
+    return -s.m2_per_desk
 
 
 def select_best(scores: list[MatchScore]) -> MatchScore | None:
@@ -1503,15 +1778,24 @@ def match_room(
             by_standard[std] = None
             continue
 
-        # Step 2: mirrors + deduplication
+        # Step 2: mirrors + adapt + dedupe on adapted layout.
+        # D-236: two catalogue patterns of different sizes can converge
+        # to the SAME adapted layout in a given target room. The
+        # fingerprint must therefore be computed on the adapted pattern,
+        # not the original — otherwise visual duplicates slip through.
         with_mirrors = generate_mirrors(sel.candidates)
-        with_mirrors = dedupe_by_fingerprint(with_mirrors)
+        seen_fps: set[tuple] = set()
+        deduped_pairs: list[tuple[PatternCandidate, dict]] = []
+        for candidate in with_mirrors:
+            adapted = adapt_to_room(candidate.pattern, room)
+            fp = _pattern_fingerprint(adapted)
+            if fp in seen_fps:
+                continue
+            seen_fps.add(fp)
+            deduped_pairs.append((candidate, adapted))
 
         std_scores: list[MatchScore] = []
-        for candidate in with_mirrors:
-            # Step 3: adaptation
-            adapted = adapt_to_room(candidate.pattern, room)
-
+        for candidate, adapted in deduped_pairs:
             # Step 4: remove desks in forbidden zones
             cleaned, removed = remove_conflicting_desks(adapted, room)
 

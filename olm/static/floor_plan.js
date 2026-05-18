@@ -238,8 +238,12 @@
   function _setRoomLabel(elId, roomName, room) {
     var el = document.getElementById(elId);
     if (!el) return;
-    el.textContent = roomName;
-    // Sibling badge: insert (or remove) after the label box.
+    // Inner text span if present (preserves the chevron sibling),
+    // else fall back to the label element itself.
+    var textEl = document.getElementById(elId + "Text") || el;
+    textEl.textContent = roomName;
+    // Amend badge: place INSIDE the label box (between the text span
+    // and the chevron) so it stays visually attached to the room name.
     var badgeId = elId + "_amendBadge";
     var existing = document.getElementById(badgeId);
     var marker = _amendmentSuffix(room);
@@ -251,7 +255,12 @@
       existing = document.createElement("span");
       existing.id = badgeId;
       existing.className = "fp-amend-tag";
-      el.parentNode.insertBefore(existing, el.nextSibling);
+      // Insert right after the text span (before the chevron, if any).
+      if (textEl !== el && textEl.parentNode === el) {
+        el.insertBefore(existing, textEl.nextSibling);
+      } else {
+        el.appendChild(existing);
+      }
     }
     existing.textContent = marker;
   }
@@ -351,7 +360,8 @@
         'padding:4px 0;">No selection</div>';
       return;
     }
-    var gradeClass = "fp-grade-" + (c.circulation_grade || "F");
+    var rg = c.room_grade || c.circulation_grade || "F";
+    var gradeClass = "fp-grade-" + rg;
     var badge = "";
     if (amendment && amendment.saved) badge = "Saved";
     else if (amendment) badge = "Amended";
@@ -371,7 +381,7 @@
           c.n_desks + ' desks &middot; ' + c.m2_per_desk +
           ' m&sup2;/d &middot; ' +
           '<span class="fp-c-grade ' + gradeClass + '">' +
-          c.circulation_grade + '</span>' +
+          rg + '</span>' +
           ' &middot; ' + getStdLabel(c.standard) +
         '</div>' +
       '</div>';
@@ -520,11 +530,11 @@
       candidates = candidates.filter(function(c) { return c.standard === stdFilter; });
     }
 
-    var gradeOrd = { A: 0, B: 1, C: 2, D: 3, F: 4 };
-    function gradeVal(g) { return g in gradeOrd ? gradeOrd[g] : 5; }
+    var gradeOrd = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
+    function gradeVal(g) { return g in gradeOrd ? gradeOrd[g] : 6; }
     candidates.sort(function(a, b) {
       if (b.n_desks !== a.n_desks) return b.n_desks - a.n_desks;
-      var gd = gradeVal(a.circulation_grade) - gradeVal(b.circulation_grade);
+      var gd = gradeVal(a.room_grade || a.circulation_grade) - gradeVal(b.room_grade || b.circulation_grade);
       if (gd !== 0) return gd;
       var pd = (b.min_passage_cm || 0) - (a.min_passage_cm || 0);
       if (pd !== 0) return pd;
@@ -543,7 +553,8 @@
       for (var std in room.by_standard) {
         if (room.by_standard[std] === c.pattern_name && c.standard === std) isBest = true;
       }
-      var gradeClass = "fp-grade-" + (c.circulation_grade || "F");
+      var rg = c.room_grade || c.circulation_grade || "F";
+      var gradeClass = "fp-grade-" + rg;
       var classes = "fp-candidate";
       if (c.oversize) classes += " fp-oversize";
       if (isBest) classes += " selected best";
@@ -553,7 +564,7 @@
         '</div>' +
         '<div class="fp-c-stats">' +
           c.n_desks + ' desks &middot; ' + c.m2_per_desk + ' m&sup2;/d &middot; ' +
-          '<span class="fp-c-grade ' + gradeClass + '">' + c.circulation_grade + '</span>' +
+          '<span class="fp-c-grade ' + gradeClass + '">' + rg + '</span>' +
         '</div>' +
       '</div>';
     }).join("");
@@ -652,6 +663,25 @@
     fpUpdateInfo(room, candidate);
   }
 
+  function _fmtDim(v) { return v == null ? "n/a" : v.toFixed(2); }
+
+  function _gradeTooltip(c) {
+    var rg = c.room_grade || c.circulation_grade || "F";
+    var cs = c.composite_score != null ? c.composite_score.toFixed(2) : "?";
+    var lines = [
+      "Grade " + rg + " \u2014 composite " + cs,
+      "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "Circulation : " + _fmtDim(c.dim_circulation),
+      "Lumi\u00e8re     : " + _fmtDim(c.dim_light),
+      "Dos \u00e0 porte : " + _fmtDim(c.dim_back_door),
+      "Face mur    : " + _fmtDim(c.dim_face_wall),
+      "Distance    : " + _fmtDim(c.dim_distance),
+      "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "A \u2265 0.90 \u00b7 B \u2265 0.75 \u00b7 C \u2265 0.60 \u00b7 D \u2265 0.45 \u00b7 E \u2265 0.30",
+    ];
+    return lines.join("\n");
+  }
+
   function fpUpdateInfo(room, candidate) {
     var area = (room.width_cm * room.depth_cm / 10000).toFixed(1);
     document.getElementById("fpInfoDims").textContent = room.width_cm + " x " + room.depth_cm + " cm";
@@ -660,7 +690,10 @@
     document.getElementById("fpInfoStandard").textContent = getStdLabel(candidate.standard) || "-";
     document.getElementById("fpInfoDesks").textContent = candidate.n_desks || "-";
     document.getElementById("fpInfoM2").textContent = candidate.m2_per_desk ? candidate.m2_per_desk.toFixed(1) : "-";
-    document.getElementById("fpInfoCirc").textContent = candidate.circulation_grade || "-";
+    var gradeEl = document.getElementById("fpInfoCirc");
+    var rg = candidate.room_grade || candidate.circulation_grade || "-";
+    gradeEl.textContent = rg;
+    gradeEl.title = _gradeTooltip(candidate);
     document.getElementById("fpInfoPassage").textContent = candidate.min_passage_cm ? candidate.min_passage_cm + " cm" : "-";
 
     // Workstation list
@@ -737,7 +770,7 @@
   function fpExport() {
     if (!fpRooms().length) { alertModal("No results to export"); return; }
 
-    var gradeOrd = { A: 0, B: 1, C: 2, D: 3, F: 4 };
+    var gradeOrd = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
     var exportData = {
       exported_at: new Date().toISOString(),
       n_rooms: fpRooms().length,
@@ -766,6 +799,8 @@
               n_desks: best.n_desks,
               m2_per_desk: best.m2_per_desk,
               circulation_grade: best.circulation_grade,
+              room_grade: best.room_grade,
+              composite_score: best.composite_score,
               connectivity_pct: best.connectivity_pct,
               min_passage_cm: best.min_passage_cm,
               worst_detour: best.worst_detour,
@@ -782,6 +817,8 @@
             n_desks: c.n_desks,
             m2_per_desk: c.m2_per_desk,
             circulation_grade: c.circulation_grade,
+            room_grade: c.room_grade,
+            composite_score: c.composite_score,
             connectivity_pct: c.connectivity_pct,
             min_passage_cm: c.min_passage_cm,
             worst_detour: c.worst_detour,
@@ -1072,6 +1109,13 @@
         n_desks: c.n_desks,
         m2_per_desk: c.m2_per_desk,
         circulation_grade: c.circulation_grade,
+        room_grade: c.room_grade,
+        composite_score: c.composite_score,
+        dim_circulation: c.dim_circulation,
+        dim_light: c.dim_light,
+        dim_back_door: c.dim_back_door,
+        dim_face_wall: c.dim_face_wall,
+        dim_distance: c.dim_distance,
         connectivity_pct: c.connectivity_pct,
         min_passage_cm: c.min_passage_cm,
         worst_detour: c.worst_detour,

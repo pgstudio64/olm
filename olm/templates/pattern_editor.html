@@ -40,7 +40,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </div>
       <div id="hdrPlanPopup" style="display:none;position:absolute;top:calc(100% + 2px);right:0;min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
         <input type="text" id="hdrPlanSearch" placeholder="Filter plans..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
-        <div id="hdrPlanList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+        <div id="hdrPlanList" style="max-height:220px;overflow-y:auto;font-size:13px;"></div>
       </div>
     </div>
     <span id="hdrActiveStandard" style="color:var(--text-dim);font-size:11px;position:relative;top:2px;"></span>
@@ -382,11 +382,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <td class="nav-center">
                 <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
                 <div id="rvRoomSelector" style="position:relative;display:inline-flex;align-items:center;">
-                  <div class="fp-room-label" id="rvRoomLabel" style="cursor:pointer;" title="Click to select room">-</div>
-                  <span style="color:var(--text-dim);font-size:9px;margin-left:4px;cursor:pointer;">&#9660;</span>
+                  <div class="fp-room-label" id="rvRoomLabel" style="cursor:pointer;" title="Click to select room"><span id="rvRoomLabelText">-</span><span style="color:var(--text-dim);font-size:9px;margin-left:6px;">&#9660;</span></div>
                   <div id="rvRoomPopup" style="display:none;position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
                     <input type="text" id="rvRoomSearch" placeholder="Filter rooms..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
-                    <div id="rvRoomPopupList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+                    <div id="rvRoomPopupList" style="max-height:220px;overflow-y:auto;font-size:13px;"></div>
                   </div>
                 </div>
                 <button class="btn" id="rvBtnNext" title="Next room">Next &rarr;</button>
@@ -481,11 +480,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             <td class="nav-center">
               <button class="btn" id="fpBtnPrev" title="Previous room">&larr; Prev</button>
               <div id="fpRoomSelector" style="position:relative;display:inline-flex;align-items:center;">
-                <div class="fp-room-label" id="fpRoomLabel" style="cursor:pointer;" title="Click to select room">-</div>
-                <span style="color:var(--text-dim);font-size:9px;margin-left:4px;cursor:pointer;">&#9660;</span>
+                <div class="fp-room-label" id="fpRoomLabel" style="cursor:pointer;" title="Click to select room"><span id="fpRoomLabelText">-</span><span style="color:var(--text-dim);font-size:9px;margin-left:6px;">&#9660;</span></div>
                 <div id="fpRoomPopup" style="display:none;position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
                   <input type="text" id="fpRoomSearch" placeholder="Filter rooms..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
-                  <div id="fpRoomPopupList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+                  <div id="fpRoomPopupList" style="max-height:220px;overflow-y:auto;font-size:13px;"></div>
                 </div>
               </div>
               <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
@@ -549,11 +547,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <table>
           <tr><td>Desks</td><td id="fpInfoDesks">-</td></tr>
           <tr><td>Area/desk (m²)</td><td id="fpInfoM2">-</td></tr>
-          <tr><td>Circulation</td><td id="fpInfoCirc">-</td></tr>
+          <tr><td>Grade</td><td id="fpInfoCirc" style="cursor:help;">-</td></tr>
           <tr><td>Min passage</td><td id="fpInfoPassage">-</td></tr>
         </table>
         <div class="section-title">Workstations</div>
-        <div id="fpDeskList" style="flex:1;overflow-y:auto;font-size:11px;"></div>
+        <div id="fpDeskList" style="flex:1;overflow-y:auto;font-size:13px;"></div>
       </div>
     </div>
 </div><!-- /tabLytDesign -->

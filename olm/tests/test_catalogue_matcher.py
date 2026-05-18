@@ -1,11 +1,17 @@
-"""Tests for catalogue_matcher — 7-step matching pipeline."""
+"""Tests for catalogue_matcher — 7-step matching pipeline + D-238 grade."""
 from __future__ import annotations
 
 import pytest
 
 from olm.core.catalogue_matcher import (
+    MatchScore,
     PatternCandidate,
     SelectionResult,
+    _compute_composite_and_grade,
+    _compute_dim_back_door,
+    _compute_dim_face_wall,
+    _compute_dim_light,
+    _GRADE_TO_DIM,
     adapt_dimensions,
     adapt_to_room,
     compact_catalogue_names,
@@ -19,10 +25,18 @@ from olm.core.catalogue_matcher import (
     mirror_pattern,
     pareto_front,
     remove_conflicting_desks,
+    score_candidate,
     select_candidates,
 )
 from olm.core.pattern_generator import DESK_D_CM, DESK_W_CM
-from olm.core.room_model import ExclusionZone, RoomSpec
+from olm.core.room_model import (
+    ExclusionZone,
+    Face,
+    HingeSide,
+    OpeningSpec,
+    RoomSpec,
+    WindowSpec,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -828,3 +842,267 @@ class TestDedupeByFingerprint:
         result = dedupe_by_fingerprint(candidates)
         assert len(result) == 1
         assert result[0].name == "solo"
+
+
+# ---------------------------------------------------------------------------
+# 12. D-238 — Multi-dimensional grade
+# ---------------------------------------------------------------------------
+
+class TestChairSide:
+    """Verifies chair_side is computed for each desk."""
+
+    def test_block_1_chair_side_west(self):
+        """BLOCK_1 at 0° has chair on west side."""
+        p = _make_pattern([[{"type": "BLOCK_1", "gap_cm": 10}]])
+        desks = compute_desk_positions(p)
+        assert len(desks) == 1
+        assert desks[0].chair_side == "W"
+
+    def test_block_2_face_chair_sides(self):
+        """BLOCK_2_FACE has desks with W and E chair sides."""
+        p = _make_pattern([[{"type": "BLOCK_2_FACE", "gap_cm": 0}]])
+        desks = compute_desk_positions(p)
+        assert len(desks) == 2
+        assert desks[0].chair_side == "W"
+        assert desks[1].chair_side == "E"
+
+    def test_block_1_rotated_90(self):
+        """BLOCK_1 at 90° rotates chair from W to N."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "orientation": 90, "gap_cm": 0}]],
+        )
+        desks = compute_desk_positions(p)
+        assert desks[0].chair_side == "N"
+
+    def test_block_2_ortho_r(self):
+        """BLOCK_2_ORTHO_R at 0°: desk0 chair N, desk1 chair E."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_2_ORTHO_R", "gap_cm": 0}]],
+            room_width_cm=500, room_depth_cm=500,
+        )
+        desks = compute_desk_positions(p)
+        assert len(desks) == 2
+        assert desks[0].chair_side == "N"
+        assert desks[1].chair_side == "E"
+
+
+class TestDimCirculation:
+    """Verifies dimension 1 — circulation grade mapping."""
+
+    def test_grade_a_maps_to_1(self):
+        assert _GRADE_TO_DIM["A"] == 1.0
+
+    def test_grade_f_maps_to_0(self):
+        assert _GRADE_TO_DIM["F"] == 0.0
+
+    def test_grade_e_maps_to_02(self):
+        assert _GRADE_TO_DIM["E"] == 0.2
+
+
+class TestDimLight:
+    """Verifies dimension 2 — window proximity."""
+
+    def test_no_windows_returns_none(self):
+        """Room without windows → N/A."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        desks = compute_desk_positions(p)
+        room = RoomSpec(width_cm=400, depth_cm=400)
+        assert _compute_dim_light(desks, room) is None
+
+    def test_desk_near_window(self):
+        """Desk within 200 cm of a north window → ratio 1.0."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        desks = compute_desk_positions(p)
+        # Window on north face near the desk
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            windows=[WindowSpec(face=Face.NORTH, offset_cm=0, width_cm=100)],
+        )
+        result = _compute_dim_light(desks, room)
+        assert result == 1.0
+
+    def test_desk_far_from_window(self):
+        """Desk more than 200 cm from window → ratio 0.0."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=800, room_depth_cm=800,
+        )
+        desks = compute_desk_positions(p)
+        # Window on south face, far from desk at (10, 0)
+        room = RoomSpec(
+            width_cm=800, depth_cm=800,
+            windows=[WindowSpec(face=Face.SOUTH, offset_cm=700, width_cm=50)],
+        )
+        result = _compute_dim_light(desks, room)
+        assert result == 0.0
+
+
+class TestDimBackDoor:
+    """Verifies dimension 3 — back to corridor door."""
+
+    def test_no_corridor_door_returns_none(self):
+        """No opening on south face → N/A."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        desks = compute_desk_positions(p)
+        room = RoomSpec(width_cm=400, depth_cm=400)
+        assert _compute_dim_back_door(desks, room) is None
+
+    def test_door_not_behind(self):
+        """BLOCK_1 chair=W, corridor door=south → not behind → 1.0."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        desks = compute_desk_positions(p)
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(
+                face=Face.SOUTH, offset_cm=10, width_cm=90,
+            )],
+        )
+        result = _compute_dim_back_door(desks, room)
+        assert result == 1.0  # chair=W, door=south → no back-to-door
+
+    def test_door_behind_desk(self):
+        """BLOCK_1 rotated 270° has chair=S → back faces south door."""
+        # 270° CW from W: W→N→E→S. Chair=S = back faces south.
+        # Room 400x300, desk center ≈ (100, 40), door center ≈ (100, 300).
+        # Distance ≈ 260 cm ≤ 300 threshold → detected.
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "orientation": 270, "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=300,
+        )
+        desks = compute_desk_positions(p)
+        assert desks[0].chair_side == "S"
+        room = RoomSpec(
+            width_cm=400, depth_cm=300,
+            openings=[OpeningSpec(
+                face=Face.SOUTH, offset_cm=50, width_cm=100,
+            )],
+        )
+        result = _compute_dim_back_door(desks, room)
+        assert result == 0.0  # back faces south door
+
+
+class TestDimFaceWall:
+    """Verifies dimension 4 — face wall."""
+
+    def test_desk_screen_faces_wall(self):
+        """BLOCK_1 chair=W → screen=E. Desk at x=310 in 400-wide room.
+        Distance to east wall = 400 - (310+80) = 10. If walking_margin ≥ 10 → bad."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 310}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        desks = compute_desk_positions(p)
+        room = RoomSpec(width_cm=400, depth_cm=400)
+        result = _compute_dim_face_wall(desks, room, walking_margin_cm=90)
+        assert result == 0.0  # screen 10 cm from wall ≤ 90
+
+    def test_desk_screen_far_from_wall(self):
+        """BLOCK_1 at gap=10 in 400-wide room.
+        Screen side E, distance = 400 - (10+80) = 310 > 90."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        desks = compute_desk_positions(p)
+        room = RoomSpec(width_cm=400, depth_cm=400)
+        result = _compute_dim_face_wall(desks, room, walking_margin_cm=90)
+        assert result == 1.0
+
+
+class TestCompositeAndGrade:
+    """Verifies composite score and letter grade."""
+
+    def test_all_dimensions_perfect(self):
+        """All dims at 1.0 → composite 1.0, grade A."""
+        dims = {
+            "circulation": 1.0,
+            "light": 1.0,
+            "back_door": 1.0,
+            "face_wall": 1.0,
+            "distance": None,
+        }
+        weights = {
+            "circulation": 1.0, "light": 1.0,
+            "back_door": 1.0, "face_wall": 1.0, "distance": 1.0,
+        }
+        composite, grade = _compute_composite_and_grade(dims, weights)
+        assert composite == 1.0
+        assert grade == "A"
+
+    def test_na_excluded_from_denominator(self):
+        """N/A dimensions are excluded from the weighted average."""
+        dims = {
+            "circulation": 0.8,
+            "light": None,
+            "back_door": None,
+            "face_wall": None,
+            "distance": None,
+        }
+        weights = {
+            "circulation": 1.0, "light": 1.0,
+            "back_door": 1.0, "face_wall": 1.0, "distance": 1.0,
+        }
+        composite, grade = _compute_composite_and_grade(dims, weights)
+        assert composite == 0.8
+        assert grade == "B"
+
+    def test_grade_thresholds(self):
+        """Verify each grade threshold boundary."""
+        w = {"x": 1.0}
+        assert _compute_composite_and_grade({"x": 0.95}, w)[1] == "A"
+        assert _compute_composite_and_grade({"x": 0.90}, w)[1] == "A"
+        assert _compute_composite_and_grade({"x": 0.89}, w)[1] == "B"
+        assert _compute_composite_and_grade({"x": 0.75}, w)[1] == "B"
+        assert _compute_composite_and_grade({"x": 0.74}, w)[1] == "C"
+        assert _compute_composite_and_grade({"x": 0.60}, w)[1] == "C"
+        assert _compute_composite_and_grade({"x": 0.59}, w)[1] == "D"
+        assert _compute_composite_and_grade({"x": 0.45}, w)[1] == "D"
+        assert _compute_composite_and_grade({"x": 0.44}, w)[1] == "E"
+        assert _compute_composite_and_grade({"x": 0.30}, w)[1] == "E"
+        assert _compute_composite_and_grade({"x": 0.29}, w)[1] == "F"
+
+    def test_weighted_average(self):
+        """Composite respects weights."""
+        dims = {"circulation": 1.0, "light": 0.0}
+        weights = {"circulation": 3.0, "light": 1.0}
+        composite, _ = _compute_composite_and_grade(dims, weights)
+        assert composite == 0.75  # (3*1.0 + 1*0.0) / 4
+
+
+class TestScoreCandidateGrade:
+    """Verifies score_candidate produces D-238 grade fields."""
+
+    def test_score_has_grade_fields(self):
+        """score_candidate must populate all D-238 fields."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 10}]],
+            room_width_cm=400, room_depth_cm=400,
+        )
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(
+                face=Face.SOUTH, offset_cm=100, width_cm=90,
+            )],
+            windows=[WindowSpec(face=Face.NORTH, offset_cm=0, width_cm=200)],
+        )
+        p["_n_desks_after_removal"] = 1
+        score = score_candidate(p, room, "standard1")
+        assert score.dim_circulation is not None
+        assert score.dim_light is not None
+        assert score.dim_back_door is not None
+        assert score.dim_face_wall is not None
+        assert score.dim_distance is None  # v1 limitation
+        assert score.composite_score >= 0
+        assert score.room_grade in ("A", "B", "C", "D", "E", "F")

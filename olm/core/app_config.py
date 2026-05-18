@@ -33,6 +33,10 @@ _EMBEDDED_DEFAULTS: dict = {
     "matching": {
         "w_density": 0.5,
         "w_comfort": 0.5,
+        "w_light": 1.0,
+        "w_back_door": 1.0,
+        "w_face_wall": 1.0,
+        "w_distance": 1.0,
         "min_desks_drop_ratio": 0.30,
     },
     "standards": {},

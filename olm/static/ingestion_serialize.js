@@ -397,14 +397,15 @@
       alertModal('Scale not available.');
       return;
     }
+    // D-237: only export rooms with an explicitly saved layout. Previous
+    // fallback to all_candidates[0] caused every room to ship its first
+    // matcher candidate, even those the user never confirmed.
     var fpAmendments = window.fpAmendments || {};
     var rooms = fpData.rooms.map(function (r) {
-      var raw = fpAmendments[r.name]
-        || (r.all_candidates && r.all_candidates[0])
-        || null;
+      var saved = fpAmendments[r.name];
       var candidate = null;
-      if (raw) {
-        candidate = JSON.parse(JSON.stringify(raw));
+      if (saved && saved.saved) {
+        candidate = JSON.parse(JSON.stringify(saved));
         if (candidate.desks && candidate.desks.length && candidate.pattern) {
           _enrichDesksWithChairSide(candidate);
         }
@@ -415,7 +416,7 @@
         depth_cm: r.depth_cm,
         bbox_px: r.bbox_px,
         corridor_face_abs: r.corridor_face_abs || '',
-        is_amended: !!fpAmendments[r.name],
+        is_amended: !!(saved && saved.saved),
         candidate: candidate,
       };
     });

@@ -1,10 +1,12 @@
 "use strict";
 
 function _hydrateBlockDefs(data) {
-  // D-229: backend sends candidate_cm=0 on all faces.
-  // Inject walking_margin or slip_in based on chairs_per_face.
+  // D-235: gray circulation band around chair faces = slip-in margin only.
+  // (Previously walking_margin for >=2 chairs per face — too aggressive
+  // without Dijkstra integration. Slip-in is the conservative default;
+  // walking margin only matters when the gap is actually a passage,
+  // which D-235 leaves to the user's judgement via amber coloring.)
   var blocks = data.blocks || data || {};
-  var walkingMargin = (data.constants && data.constants.WALKING_MARGIN_CM) || 90;
   var slipIn = (data.constants && data.constants.SLIP_IN_MARGIN_CM) || 30;
   var DIRS = ["north", "south", "east", "west"];
   var names = Object.keys(blocks);
@@ -12,28 +14,11 @@ function _hydrateBlockDefs(data) {
     var blk = blocks[names[i]];
     var faces = blk.faces;
     if (!faces) continue;
-    // Identify chair faces and derive chairs_per_face
-    var chairFaces = [];
     for (var d = 0; d < DIRS.length; d++) {
-      if (faces[DIRS[d]] && faces[DIRS[d]].non_superposable_cm > 0) {
-        chairFaces.push(DIRS[d]);
+      var f = faces[DIRS[d]];
+      if (f && f.non_superposable_cm > 0) {
+        f.candidate_cm = slipIn;
       }
-    }
-    if (chairFaces.length === 0) continue;
-    var nDesks = blk.n_desks || 1;
-    var chairsPerFace;
-    if (chairFaces.length === 1) {
-      chairsPerFace = nDesks;
-    } else if (chairFaces.length === 2) {
-      var s = chairFaces.sort().join("+");
-      var opposite = (s === "east+west" || s === "north+south");
-      chairsPerFace = opposite ? nDesks / 2 : 1;
-    } else {
-      chairsPerFace = Math.ceil(nDesks / chairFaces.length);
-    }
-    var cand = chairsPerFace >= 2 ? walkingMargin : slipIn;
-    for (var d = 0; d < chairFaces.length; d++) {
-      faces[chairFaces[d]].candidate_cm = cand;
     }
   }
   return blocks;
@@ -534,11 +519,12 @@ function _pushGapSubLabels(elements, x, y, gap, zf) {
   if (!zf) zf = window._currentZf || 1;
   var isViolation = (gap.color === "#c05858");
   var isWarning = (gap.color === "#c8a050");
-  if (!isViolation && !isWarning) return;
-  var subColor = isViolation ? "#c05858" : "#c8a050";
+  if (isWarning) return;
+  var subColor = isViolation ? "#c05858" : "#58c080";
   // Line 1: "free X — min Y (Rule)"
-  var line1 = "free " + gap.freeSpaceCm + " \u2014 min "
-    + gap.minReqCm + " (" + gap.ruleName + ")";
+  var line1 = isViolation
+    ? "min " + gap.minReqCm + " cm \u2014 " + gap.ruleName
+    : "free " + gap.freeSpaceCm + " cm";
   var fontSize = 11 * zf;
   var charW = 6.5 * zf, padX = 4 * zf, padY = 2 * zf;
   var bgW = line1.length * charW + padX * 2;
@@ -552,29 +538,23 @@ function _pushGapSubLabels(elements, x, y, gap, zf) {
     (subY + padY + fontSize * 0.85).toFixed(1) +
     '" text-anchor="middle" fill="' + subColor + '" font-size="' +
     fontSize.toFixed(1) + '" font-family="monospace">' + line1 + '</text>' });
-  // Line 2: chair note (if applicable)
-  if (!gap.chairNote) return;
-  var sub2Y = subY + bgH + 2 * zf;
-  var bgW2 = gap.chairNote.length * charW + padX * 2;
-  var bgH2 = fontSize + padY * 2;
-  elements.push({ z: 6.9, s: '<rect x="' + (x - bgW2 / 2).toFixed(1) +
-    '" y="' + sub2Y.toFixed(1) + '" width="' + bgW2.toFixed(1) +
-    '" height="' + bgH2.toFixed(1) + '" rx="' + (2 * zf).toFixed(1) +
-    '" fill="#0e0e0d" fill-opacity="0.75"/>' });
-  elements.push({ z: 7, s: '<text x="' + x.toFixed(1) + '" y="' +
-    (sub2Y + padY + fontSize * 0.85).toFixed(1) +
-    '" text-anchor="middle" fill="' + subColor + '" font-size="' +
-    fontSize.toFixed(1) + '" font-family="monospace">' +
-    gap.chairNote + '</text>' });
 }
 
 // D-233: render distance label with gap analysis sub-labels.
 // faceA/faceB: effective face objects (null = wall).
 function pushDistLabelWithGap(elements, x, y, rawCm, faceA, faceB, zf) {
+  // D-234: distance coloring and sub-labels follow the circulation
+  // toggle (state.circVisible). When OFF, render neutral distances
+  // with no sub-label — coloring belongs with the circulation analysis.
+  var circOn = (typeof state !== "undefined") ? state.circVisible !== false : true;
+  if (!circOn) {
+    pushDistLabel(elements, x, y, rawCm, undefined, zf);
+    return;
+  }
   var gap = analyzeGap(rawCm, faceA, faceB, CURRENT_SPACING,
                        _gapOptsForCurrentPattern());
   pushDistLabel(elements, x, y, rawCm, gap.color, zf);
-  _pushGapSubLabels(elements, x, y, gap, zf);
+  // D-235: no sub-label. The colored value is the only signal.
 }
 
 function smoothPath(pts) {
