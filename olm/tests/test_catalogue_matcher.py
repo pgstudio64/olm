@@ -11,7 +11,9 @@ from olm.core.catalogue_matcher import (
     compact_catalogue_names,
     compute_desk_positions,
     count_desks,
+    dedupe_by_fingerprint,
     generate_auto_name,
+    generate_mirrors,
     largest_free_rectangle_m2,
     load_catalogue,
     mirror_pattern,
@@ -709,3 +711,120 @@ class TestCompactCatalogueNames:
         compact_catalogue_names(patterns)
         names = [p["name"] for p in patterns]
         assert names == ["310x480_AFNOR_1", "310x480_AFNOR_2"]
+
+
+# ---------------------------------------------------------------------------
+# 11. dedupe_by_fingerprint
+# ---------------------------------------------------------------------------
+
+def _candidate_from_pattern(
+    pattern: dict,
+    name: str | None = None,
+    standard: str = "standard1",
+) -> PatternCandidate:
+    """Build a PatternCandidate from a JSON pattern."""
+    return PatternCandidate(
+        pattern=pattern,
+        name=name or pattern["name"],
+        room_width_cm=pattern["room_width_cm"],
+        room_depth_cm=pattern["room_depth_cm"],
+        standard=standard,
+        n_desks=count_desks(pattern),
+    )
+
+
+class TestDedupeByFingerprint:
+    """Verifies structural deduplication of candidates."""
+
+    def test_symmetric_mirror_deduped(self):
+        """BLOCK_4_FACE alone (symmetric_180): mirror is identical → 1 result."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_4_FACE", "gap_cm": 70}]],
+            name="sym",
+            room_width_cm=300,
+            room_depth_cm=400,
+        )
+        orig = _candidate_from_pattern(p)
+        candidates = generate_mirrors([orig])
+        assert len(candidates) == 2
+        result = dedupe_by_fingerprint(candidates)
+        assert len(result) == 1
+        assert result[0].name == "sym"
+
+    def test_asymmetric_mirror_kept(self):
+        """BLOCK_1 + BLOCK_2_FACE in one row (asymmetric): both kept."""
+        p = _make_pattern(
+            [[
+                {"type": "BLOCK_1", "gap_cm": 0, "sticks": ["W"]},
+                {"type": "BLOCK_2_FACE", "gap_cm": 50, "sticks": ["E"]},
+            ]],
+            name="asym",
+            room_width_cm=400,
+            room_depth_cm=400,
+        )
+        orig = _candidate_from_pattern(p)
+        candidates = generate_mirrors([orig])
+        assert len(candidates) == 2
+        result = dedupe_by_fingerprint(candidates)
+        assert len(result) == 2
+
+    def test_two_independent_patterns_same_layout_deduped(self):
+        """Two catalogue patterns with identical block layout → 1 result."""
+        p1 = _make_pattern(
+            [[{"type": "BLOCK_4_FACE", "gap_cm": 50}]],
+            name="pat_A",
+            room_width_cm=300,
+            room_depth_cm=400,
+        )
+        p2 = _make_pattern(
+            [[{"type": "BLOCK_4_FACE", "gap_cm": 50}]],
+            name="pat_B",
+            room_width_cm=300,
+            room_depth_cm=400,
+        )
+        c1 = _candidate_from_pattern(p1)
+        c2 = _candidate_from_pattern(p2)
+        result = dedupe_by_fingerprint([c1, c2])
+        assert len(result) == 1
+        assert result[0].name == "pat_A"
+
+    def test_different_layouts_all_kept(self):
+        """Patterns with different block layouts are all preserved."""
+        p1 = _make_pattern(
+            [[{"type": "BLOCK_4_FACE", "gap_cm": 50}]],
+            name="A",
+            room_width_cm=400,
+            room_depth_cm=400,
+        )
+        p2 = _make_pattern(
+            [[{"type": "BLOCK_4_FACE", "gap_cm": 100}]],
+            name="B",
+            room_width_cm=400,
+            room_depth_cm=400,
+        )
+        p3 = _make_pattern(
+            [[{"type": "BLOCK_2_FACE", "gap_cm": 50}]],
+            name="C",
+            room_width_cm=400,
+            room_depth_cm=400,
+        )
+        candidates = [
+            _candidate_from_pattern(p1),
+            _candidate_from_pattern(p2),
+            _candidate_from_pattern(p3),
+        ]
+        result = dedupe_by_fingerprint(candidates)
+        assert len(result) == 3
+
+    def test_single_candidate_no_regression(self):
+        """A single candidate passes through unchanged."""
+        p = _make_pattern(
+            [[{"type": "BLOCK_1", "gap_cm": 0}]],
+            name="solo",
+            room_width_cm=300,
+            room_depth_cm=300,
+        )
+        candidates = [_candidate_from_pattern(p)]
+        result = dedupe_by_fingerprint(candidates)
+        assert len(result) == 1
+        assert result[0].name == "solo"

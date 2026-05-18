@@ -106,6 +106,10 @@ def tiny_plan_png(tmp_path) -> str:
 @pytest.fixture()
 def monkeypatch_catalogue(monkeypatch):
     """Remplace le catalogue par un pattern minimal."""
+    # Block positioned so its west chair clearance stays inside the room
+    # (gap_cm=70 = chair_clearance_cm; foots block at x=70, west zone
+    # ends at x=0). Door at x=[100,190] sits between the block east edge
+    # and the east wall, so no pushback on south wall.
     fake_catalogue = [
         {
             "name": "300x480_TEST_1",
@@ -113,7 +117,7 @@ def monkeypatch_catalogue(monkeypatch):
                 {"blocks": []},
                 {"blocks": [
                     {"type": "BLOCK_1", "orientation": 0,
-                     "offset_ns_cm": -180, "gap_cm": 20},
+                     "offset_ns_cm": -180, "gap_cm": 70},
                 ]},
             ],
             "row_gaps_cm": [180],

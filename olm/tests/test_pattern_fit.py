@@ -10,7 +10,9 @@ from olm.core.pattern_fit import (
     SNAP_CM,
     FitResult,
     PatternStructurallyInvalid,
+    compute_pattern_footprint,
     fit_room_to_pattern,
+    is_pattern_valid,
 )
 from olm.core.spacing_config import SpacingConfig
 
@@ -290,12 +292,10 @@ def _door_opening(
 
 
 class TestDoorExclusionSouth:
-    """Case 7: south door constrains X axis only."""
+    """South door becomes a 2D obstacle: blocks in the door's lateral
+    range must clear ``door_exclusion_depth_cm`` from the south wall."""
 
-    def test_south_door_constrains_x_not_depth(self):
-        """BLOCK_4_FACE at origin with door on south face.
-        Door constrains X=[0, 90] but does not extend depth
-        (door moves with the south wall)."""
+    def test_south_door_pushes_depth_for_block_in_band(self):
         pat = _pattern(
             block_type="BLOCK_4_FACE",
             room_w=800,
@@ -303,15 +303,15 @@ class TestDoorExclusionSouth:
             openings=[_door_opening("south", offset_cm=0, width_cm=90)],
         )
         sp = _spacing()
-        # D-229: x=[-70, 230], y=[0, 360].
-        # Door only adds x=[0, 90] — inside block range.
+        # Block: x=[-70, 230], y=[0, 360]. Door lat=[0,90] overlaps block
+        # lat → south wall pushed: y_max = 360 + 0 + 180 = 540.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_depth == 360
         assert result.new_width == 300
+        assert result.new_depth == 540
 
 
 class TestDoorExclusionNorth:
-    """Case 8: door on north face — door rect included in bbox."""
+    """North door pushes the north wall away from blocks in its band."""
 
     def test_door_rect_north(self):
         pat = _pattern(
@@ -321,16 +321,17 @@ class TestDoorExclusionNorth:
             openings=[_door_opening("north", offset_cm=0, width_cm=360)],
         )
         sp = _spacing()
+        # Block lat [-70,230] overlaps door [0,360]: y_min = -180.
+        # Width: x_max = max(block 230, door 360) = 360.
         result = fit_room_to_pattern(pat, sp)
-        # D-229: Block footprint y=[0, 360]. Door rect y=[0, 180].
-        # Block extends past door rect. bbox unchanged. depth=360.
-        assert result.new_depth == 360
+        assert result.new_width == 430
+        assert result.new_depth == 540
 
 
 class TestDoorExclusionEast:
-    """Case 9: east door constrains Y axis only."""
+    """East door pushes the east wall away from blocks in its band."""
 
-    def test_east_door_constrains_y_not_width(self):
+    def test_east_door_pushes_width_for_block_in_band(self):
         pat = _pattern(
             block_type="BLOCK_4_FACE",
             room_w=800,
@@ -338,15 +339,15 @@ class TestDoorExclusionEast:
             openings=[_door_opening("east", offset_cm=0, width_cm=360)],
         )
         sp = _spacing()
+        # Block lat (y) [0,360] overlaps door [0,360]: x_max pushed to
+        # 0 + 160 + 70 + 180 = 410. Width = 410 - (-70) = 480.
         result = fit_room_to_pattern(pat, sp)
-        # D-229: Door y=[0,360] inside block range [0,360].
-        # width = 230-(-70) = 300.
-        assert result.new_width == 300
+        assert result.new_width == 480
         assert result.new_depth == 360
 
 
 class TestDoorExclusionWest:
-    """Case 10: door on west face — door rect included in bbox."""
+    """West door pushes the west wall away from blocks in its band."""
 
     def test_door_rect_west(self):
         pat = _pattern(
@@ -356,11 +357,10 @@ class TestDoorExclusionWest:
             openings=[_door_opening("west", offset_cm=0, width_cm=360)],
         )
         sp = _spacing()
+        # Block lat (y) [0,360] overlaps door [0,360]: x_min pushed to
+        # 0 - 70 - 180 = -250. Width = 230 - (-250) = 480.
         result = fit_room_to_pattern(pat, sp)
-        # D-229: Block footprint x=[-70, 230].
-        # Door rect x=[0,180] inside block range.
-        # width = 230-(-70) = 300.
-        assert result.new_width == 300
+        assert result.new_width == 480
 
 
 class TestOpeningWithoutDoor:
@@ -395,13 +395,11 @@ class TestNoDoorRegression:
 
 
 class TestDoorAtCorner:
-    """Case 13: door at offset=0 (corner) with block at x=0."""
+    """Door at offset=0 (corner) with block at x=0: south wall pushed."""
 
     def test_corner_door(self):
-        # D-229: BLOCK_1 at x=0: eo=80, west zone=70, east=0.
-        # x=[-70, 80]. Door south at offset=0, width=90.
-        # Door adds x=[0, 90] — extends x_max to 90.
-        # width = 90-(-70) = 160 -> snap 160. depth = 180.
+        # BLOCK_1 x=[-70,80] y=[0,180]. Door south [0,90] overlaps block
+        # → y_max pushed to 0+180+0+180 = 360. Width = max(80,90)-(-70)=160.
         pat = _pattern(
             block_type="BLOCK_1",
             room_w=800,
@@ -411,7 +409,7 @@ class TestDoorAtCorner:
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
         assert result.new_width == 160
-        assert result.new_depth == 180
+        assert result.new_depth == 360
 
 
 class TestDoorFullWidth:
@@ -448,11 +446,11 @@ class TestMultipleDoorsOnSameFace:
             ],
         )
         sp = _spacing()
+        # Block lat [-70,230] overlaps both door bands. Both push y_max
+        # to 540 (same value). Width: door2 [200,290] extends x_max to 290.
         result = fit_room_to_pattern(pat, sp)
-        # D-229: block range [-70, 230]. Door2 x=[200,290] extends
-        # x_max to 290. width = 290-(-70) = 360 -> snap 360.
         assert result.new_width == 360
-        assert result.new_depth == 360
+        assert result.new_depth == 540
 
 
 class TestDoorNoBlockInBand:
@@ -545,3 +543,68 @@ class TestDoorMinFace:
         assert result.new_width >= 250, (
             f"Expected width >= 250 but got {result.new_width}"
         )
+
+
+class TestComputePatternFootprintPure:
+    """The pure footprint function does not mutate the pattern and
+    returns the raw bbox (no snap, no translation)."""
+
+    def test_returns_raw_bbox(self):
+        pat = _pattern(block_type="BLOCK_4_FACE", room_w=800, room_d=800)
+        sp = _spacing()
+        snapshot = copy.deepcopy(pat)
+        x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
+        # BLOCK_4_FACE: body 160x360, west/east chair=70.
+        assert (x_min, x_max, y_min, y_max) == (-70, 230, 0, 360)
+        # Pure: no mutation.
+        assert pat == snapshot
+
+    def test_door_pushback_in_footprint(self):
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800, room_d=800,
+            openings=[_door_opening("south", offset_cm=0, width_cm=90)],
+        )
+        sp = _spacing()
+        x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
+        # South door overlaps block lat → y_max = 360 + 180 = 540.
+        assert y_max == 540
+
+
+class TestIsPatternValid:
+    """is_pattern_valid: footprint must fit inside room dimensions."""
+
+    def test_valid_when_room_covers_footprint(self):
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=300, room_d=300,
+        )
+        # Shift block east so chair zone stays inside the room.
+        pat["rows"][0]["blocks"][0]["gap_cm"] = 70
+        assert is_pattern_valid(pat, _spacing())
+
+    def test_invalid_when_chair_extends_past_wall(self):
+        # BLOCK_1 at gap_cm=0: chair extends to x=-70, outside the room.
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=300, room_d=300,
+        )
+        assert not is_pattern_valid(pat, _spacing())
+
+    def test_invalid_when_door_pushback_overflows(self):
+        # South door pushes y_max by 180. Room must be at least 360.
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=300, room_d=200,  # depth too small
+            openings=[_door_opening("south", offset_cm=80, width_cm=90)],
+        )
+        pat["rows"][0]["blocks"][0]["gap_cm"] = 70
+        assert not is_pattern_valid(pat, _spacing())
+
+    def test_invalid_on_structural_overlap(self):
+        pat = _pattern(
+            block_type="BLOCK_1",
+            room_w=500, room_d=500,
+            extra_blocks=[{"type": "BLOCK_1", "gap_cm": -40}],
+        )
+        assert not is_pattern_valid(pat, _spacing())

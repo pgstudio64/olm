@@ -4,7 +4,7 @@
 // ========================================================================
 //
 // Extracted from init.js. Two independent drag handles that let the user
-// resize the left panel in Floor (fpLeftInfoCol) and Room (rvRoomSidebar).
+// resize the left panel in Floor (fpLeftInfoCol) and Office (fpDesignSidebar).
 // Widths are persisted in localStorage.
 // ========================================================================
 
@@ -52,18 +52,12 @@
       });
     })();
 
-    // ---- Room + Office tabs: shared left-sidebar width ----
-    // Deux panneaux (rvRoomSidebar en Room, fpDesignSidebar en Office) qui
-    // partagent la même largeur via localStorage pour éviter le décalage du
-    // canvas au switch entre les onglets. Deux handles, une seule largeur.
+    // ---- Office tab: left-sidebar resize handle ----
     (function () {
       var MIN_W = 180, MAX_W = 350;
       var KEY = "leftPanelWidthShared";
-      var panels = [
-        document.getElementById("rvRoomSidebar"),
-        document.getElementById("fpDesignSidebar"),
-      ].filter(Boolean);
-      if (!panels.length) return;
+      var panel = document.getElementById("fpDesignSidebar");
+      if (!panel) return;
 
       var currentW = 170;
       var saved = parseInt(localStorage.getItem(KEY), 10);
@@ -71,38 +65,33 @@
 
       function applyWidth(w) {
         currentW = Math.min(MAX_W, Math.max(MIN_W, w));
-        panels.forEach(function (p) { p.style.width = currentW + "px"; });
+        panel.style.width = currentW + "px";
       }
       applyWidth(currentW);
 
-      function bindHandle(handleId) {
-        var handle = document.getElementById(handleId);
-        if (!handle) return;
-        var dragging = false, startX = 0, startW = 0;
-        handle.addEventListener("mousedown", function (e) {
-          if (e.button !== 0) return;
-          dragging = true;
-          startX = e.clientX;
-          startW = currentW;
-          handle.classList.add("active");
-          document.body.style.cursor = "col-resize";
-          e.preventDefault();
-        });
-        document.addEventListener("mousemove", function (e) {
-          if (!dragging) return;
-          applyWidth(startW + (e.clientX - startX));
-        });
-        document.addEventListener("mouseup", function () {
-          if (!dragging) return;
-          dragging = false;
-          handle.classList.remove("active");
-          document.body.style.cursor = "";
-          localStorage.setItem(KEY, String(currentW));
-        });
-      }
-
-      bindHandle("rvLeftResize");
-      bindHandle("fpDesignLeftResize");
+      var handle = document.getElementById("fpDesignLeftResize");
+      if (!handle) return;
+      var dragging = false, startX = 0, startW = 0;
+      handle.addEventListener("mousedown", function (e) {
+        if (e.button !== 0) return;
+        dragging = true;
+        startX = e.clientX;
+        startW = currentW;
+        handle.classList.add("active");
+        document.body.style.cursor = "col-resize";
+        e.preventDefault();
+      });
+      document.addEventListener("mousemove", function (e) {
+        if (!dragging) return;
+        applyWidth(startW + (e.clientX - startX));
+      });
+      document.addEventListener("mouseup", function () {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove("active");
+        document.body.style.cursor = "";
+        localStorage.setItem(KEY, String(currentW));
+      });
     })();
 
     // ---- Room + Office: shared right info-col width ----

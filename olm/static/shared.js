@@ -491,28 +491,25 @@ function scoringHtml(sc) {
     ' · min passage ' + sc.minPassageCm + ' cm</span>';
 }
 
-function distanceConformity(gapCm, role) {
-  // Returns color based on conformity to the active standard
-  // role: "between_blocks" (ES-06/ES-11), "block_wall" (ES-09), "between_rows" (ES-05)
-  // D-229 §2.7: green > min, yellow = min (±TOL), red < min
-  var CONFORMITY_TOL_CM = 5;
-  if (!CURRENT_SPACING) return COLOR_GAP_LABEL;
-  var minReq = 0;
-  if (role === "between_blocks") {
-    minReq = CURRENT_SPACING.walking_margin_cm;
-  } else if (role === "block_wall") {
-    // ES-02: block-wall space serves as walking margin
-    minReq = CURRENT_SPACING.walking_margin_cm;
-  } else if (role === "between_rows") {
-    // D-229: passage behind one person = chair + walking
-    minReq = CURRENT_SPACING.chair_clearance_cm
-      + CURRENT_SPACING.walking_margin_cm;
-  } else {
-    return COLOR_GAP_LABEL;
+// D-233: legacy wrapper — catalogue cards still call this for color-only.
+function distanceConformity(gapCm, faceA, faceB) {
+  var result = analyzeGap(gapCm, faceA, faceB, CURRENT_SPACING,
+                          _gapOptsForCurrentPattern());
+  return result.color;
+}
+
+// D-233 heuristic without Dijkstra: when the active pattern contains
+// exactly one workstation, every gap is a dead-end access (slip-in
+// margin) rather than a passage (walking margin). Conservative for
+// multi-desk patterns: fall back to walking until full Dijkstra is
+// wired in PE.
+function _gapOptsForCurrentPattern() {
+  if (typeof totalDesks === "function") {
+    try {
+      if (totalDesks() === 1) return { isDeadEnd: true };
+    } catch (e) { /* state not ready */ }
   }
-  if (gapCm > minReq + CONFORMITY_TOL_CM) return "#58c080";  // ok green
-  if (gapCm >= minReq - CONFORMITY_TOL_CM) return "#c8a050";  // at limit
-  return "#c05858";                                            // violation
+  return undefined;
 }
 
 function pushDistLabel(elements, x, y, valueCm, color, zf) {
@@ -531,32 +528,20 @@ function pushDistLabel(elements, x, y, valueCm, color, zf) {
     '" font-size="' + fontSize.toFixed(1) + '" font-weight="bold" font-family="monospace">' + valueCm + '</text>' });
 }
 
-// D-229 §2.7 — rule name + min for the violation sub-label.
-function _distanceRuleLabel(role) {
-  if (!CURRENT_SPACING) return null;
-  if (role === "between_blocks" || role === "block_wall") {
-    return "min " + CURRENT_SPACING.walking_margin_cm + " cm — Walking margin";
-  }
-  if (role === "between_rows") {
-    var m = CURRENT_SPACING.chair_clearance_cm + CURRENT_SPACING.walking_margin_cm;
-    return "min " + m + " cm — Passage behind one person";
-  }
-  return null;
-}
-
-// Render the value label, plus a sub-label (rule + min) below when the
-// gap is in violation (red). Used by editor.js call sites. Catalogue
-// cards skip the sub-label for space reasons.
-function pushDistLabelWithRule(elements, x, y, gapCm, role, zf) {
+// D-233: sub-label with free space, min required, and chair note.
+// Shown only in yellow/red. Used by editor.js (PE).
+function _pushGapSubLabels(elements, x, y, gap, zf) {
   if (!zf) zf = window._currentZf || 1;
-  var color = distanceConformity(gapCm, role);
-  pushDistLabel(elements, x, y, gapCm, color, zf);
-  if (color !== "#c05858") return;
-  var subText = _distanceRuleLabel(role);
-  if (!subText) return;
+  var isViolation = (gap.color === "#c05858");
+  var isWarning = (gap.color === "#c8a050");
+  if (!isViolation && !isWarning) return;
+  var subColor = isViolation ? "#c05858" : "#c8a050";
+  // Line 1: "free X — min Y (Rule)"
+  var line1 = "free " + gap.freeSpaceCm + " \u2014 min "
+    + gap.minReqCm + " (" + gap.ruleName + ")";
   var fontSize = 11 * zf;
   var charW = 6.5 * zf, padX = 4 * zf, padY = 2 * zf;
-  var bgW = subText.length * charW + padX * 2;
+  var bgW = line1.length * charW + padX * 2;
   var bgH = fontSize + padY * 2;
   var subY = y + 6 * zf;
   elements.push({ z: 6.9, s: '<rect x="' + (x - bgW / 2).toFixed(1) +
@@ -565,8 +550,31 @@ function pushDistLabelWithRule(elements, x, y, gapCm, role, zf) {
     '" fill="#0e0e0d" fill-opacity="0.75"/>' });
   elements.push({ z: 7, s: '<text x="' + x.toFixed(1) + '" y="' +
     (subY + padY + fontSize * 0.85).toFixed(1) +
-    '" text-anchor="middle" fill="#c05858" font-size="' +
-    fontSize.toFixed(1) + '" font-family="monospace">' + subText + '</text>' });
+    '" text-anchor="middle" fill="' + subColor + '" font-size="' +
+    fontSize.toFixed(1) + '" font-family="monospace">' + line1 + '</text>' });
+  // Line 2: chair note (if applicable)
+  if (!gap.chairNote) return;
+  var sub2Y = subY + bgH + 2 * zf;
+  var bgW2 = gap.chairNote.length * charW + padX * 2;
+  var bgH2 = fontSize + padY * 2;
+  elements.push({ z: 6.9, s: '<rect x="' + (x - bgW2 / 2).toFixed(1) +
+    '" y="' + sub2Y.toFixed(1) + '" width="' + bgW2.toFixed(1) +
+    '" height="' + bgH2.toFixed(1) + '" rx="' + (2 * zf).toFixed(1) +
+    '" fill="#0e0e0d" fill-opacity="0.75"/>' });
+  elements.push({ z: 7, s: '<text x="' + x.toFixed(1) + '" y="' +
+    (sub2Y + padY + fontSize * 0.85).toFixed(1) +
+    '" text-anchor="middle" fill="' + subColor + '" font-size="' +
+    fontSize.toFixed(1) + '" font-family="monospace">' +
+    gap.chairNote + '</text>' });
+}
+
+// D-233: render distance label with gap analysis sub-labels.
+// faceA/faceB: effective face objects (null = wall).
+function pushDistLabelWithGap(elements, x, y, rawCm, faceA, faceB, zf) {
+  var gap = analyzeGap(rawCm, faceA, faceB, CURRENT_SPACING,
+                       _gapOptsForCurrentPattern());
+  pushDistLabel(elements, x, y, rawCm, gap.color, zf);
+  _pushGapSubLabels(elements, x, y, gap, zf);
 }
 
 function smoothPath(pts) {

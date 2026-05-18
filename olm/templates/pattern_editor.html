@@ -43,6 +43,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div id="hdrPlanList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
       </div>
     </div>
+    <span id="hdrActiveStandard" style="color:var(--text-dim);font-size:11px;position:relative;top:2px;"></span>
     <div id="planActions" style="display:flex;gap:8px;align-items:center;">
       <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
       <div id="exportWrapper" style="display:none;position:relative;flex-shrink:0;">
@@ -370,13 +371,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <!-- TAB: REVIEW -->
 <div class="tab-content" id="tabFpReview">
     <div class="fp-container">
-      <!-- Left panel: room list (navigation) -->
-      <div class="fp-sidebar" id="rvRoomSidebar" style="width:170px;min-width:120px;max-width:350px;border-left:none;border-right:none;">
-        <div class="section-title">Room list</div>
-        <div id="rvRoomList" style="height:370px;min-height:80px;max-height:800px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);margin-bottom:var(--sp-sm);"></div>
-      </div>
-      <div class="fp-resize-handle" id="rvLeftResize"></div>
-
       <!-- Main area: room SVG -->
       <div class="fp-main">
         <div id="ingRoomView" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
@@ -387,7 +381,14 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               </td>
               <td class="nav-center">
                 <button class="btn" id="rvBtnPrev" title="Previous room">&larr; Prev</button>
-                <div class="fp-room-label" id="rvRoomLabel">-</div>
+                <div id="rvRoomSelector" style="position:relative;display:inline-flex;align-items:center;">
+                  <div class="fp-room-label" id="rvRoomLabel" style="cursor:pointer;" title="Click to select room">-</div>
+                  <span style="color:var(--text-dim);font-size:9px;margin-left:4px;cursor:pointer;">&#9660;</span>
+                  <div id="rvRoomPopup" style="display:none;position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
+                    <input type="text" id="rvRoomSearch" placeholder="Filter rooms..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
+                    <div id="rvRoomPopupList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+                  </div>
+                </div>
                 <button class="btn" id="rvBtnNext" title="Next room">Next &rarr;</button>
                 <span class="fp-nav-info" id="rvNavInfo">0 / 0</span>
               </td>
@@ -479,7 +480,14 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
             <td class="nav-left"></td>
             <td class="nav-center">
               <button class="btn" id="fpBtnPrev" title="Previous room">&larr; Prev</button>
-              <div class="fp-room-label" id="fpRoomLabel">-</div>
+              <div id="fpRoomSelector" style="position:relative;display:inline-flex;align-items:center;">
+                <div class="fp-room-label" id="fpRoomLabel" style="cursor:pointer;" title="Click to select room">-</div>
+                <span style="color:var(--text-dim);font-size:9px;margin-left:4px;cursor:pointer;">&#9660;</span>
+                <div id="fpRoomPopup" style="display:none;position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);min-width:240px;z-index:100;background:var(--surface);border:1px solid var(--border);">
+                  <input type="text" id="fpRoomSearch" placeholder="Filter rooms..." style="width:100%;font-size:11px;padding:4px;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);box-sizing:border-box;">
+                  <div id="fpRoomPopupList" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+                </div>
+              </div>
               <button class="btn" id="fpBtnNext" title="Next room">Next &rarr;</button>
               <span class="fp-nav-info" id="fpNavInfo">0 / 0</span>
             </td>
@@ -517,11 +525,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
       </div>
       <div class="fp-sidebar" id="fpDesignSidebar" style="width:170px;min-width:120px;max-width:350px;">
-        <div class="section-title">Room list</div>
-        <div id="fpDesignRoomList" style="height:150px;min-height:60px;max-height:400px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);margin-bottom:var(--sp-sm);"></div>
-        <div class="fp-standard-filter" id="fpStandardFilter">
-          <!-- Populated dynamically by renderFpStandardFilter() -->
-        </div>
         <div class="section-title">Selected solution</div>
         <div id="fpSelectedSolution" style="min-height:28px;margin-bottom:8px;">
           <div id="fpSelectedEmpty" style="color:var(--text-dim);font-size:var(--fs-xs);padding:4px 0;">No layout saved yet</div>
@@ -558,7 +561,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <!-- TAB: CATALOGUE -->
 <div class="tab-content" id="tabLytCatalogue">
   <div class="sub-tab-bar">
-    <button class="sub-tab-btn active" data-subtab="catalogue">Catalogue</button>
+    <button class="sub-tab-btn active" data-subtab="catalogue">Patterns</button>
     <button class="sub-tab-btn" data-subtab="catEditor">Pattern editor</button>
   </div>
 
@@ -593,7 +596,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         </div>
 
         <div class="section-title">Room definition</div>
-        <textarea id="dslRoom" rows="6" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:80px;margin-bottom:4px;"
+        <textarea id="dslRoom" rows="3" spellcheck="false" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 8px;resize:vertical;min-height:40px;margin-bottom:4px;"
           placeholder="ROOM 400x500&#10;WINDOW N&#10;DOOR S 0 90 INT L&#10;OPENING E 100 150&#10;EXCLUSION 200 100 80 60"></textarea>
         <button class="btn" id="btnApplyRoomDSL" style="width:100%;margin-bottom:4px;">Apply</button>
         <div style="margin-bottom:8px;">
@@ -606,14 +609,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       <!-- Layout section -->
       <div id="peTabLayout">
         <div class="section-title">Layout</div>
-        <textarea id="dslText" rows="2" spellcheck="false" style="width:100%;margin-bottom:4px;"></textarea>
+        <textarea id="dslText" rows="3" spellcheck="false" style="width:100%;margin-bottom:4px;resize:vertical;"></textarea>
         <button class="btn" id="btnApplyDSL" style="width:100%;margin-bottom:4px;">Apply</button>
         <div style="margin-bottom:8px;">
           <span id="dslLayoutHelpToggle" class="help-link">Syntax help</span>
         </div>
-
-        <div class="section-title">Blocks</div>
-        <div id="blockPalette"></div>
 
         <div class="section-title">Rows</div>
         <div id="rowList"></div>
@@ -623,6 +623,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <input type="number" id="gapIntra" value="180" min="0" step="10" style="width:60px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:var(--fs-base);padding:3px 4px;text-align:right;">
           <span style="color:var(--text-dim);font-size:var(--fs-sm);">cm</span>
         </div>
+
+        <div class="section-title">Blocks</div>
+        <div id="blockPalette"></div>
       </div>
 
     </div>
@@ -635,10 +638,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="fp-nav ol-header">
       <table class="nav-layout"><tr>
         <td class="nav-left">
-          <label style="font-size:11px;color:var(--text-dim);">Standard:
-            <select id="catFilterStandardEditor" title="Standard" style="font-size:11px;padding:2px 4px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
-            </select>
-          </label>
         </td>
         <td class="nav-center">
           <button class="btn" id="peBtnPrev" title="Previous pattern (width then depth ascending)">&larr; Prev</button>
@@ -753,14 +752,9 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
   <div style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
     <div class="catalogue-toolbar">
       <span class="cat-view-pill">
-        <button class="cat-view-btn active" data-cat-view="cards" title="Card view">Cards</button>
-        <button class="cat-view-btn" data-cat-view="grid" title="Grid view">Grid</button>
+        <button class="cat-view-btn active" data-cat-view="cards" title="Card view">Card view</button>
+        <button class="cat-view-btn" data-cat-view="grid" title="Grid view">Grid view</button>
       </span>
-      <label style="margin-left:8px;">Standard:
-        <select id="catFilterStandard">
-          <!-- Populated dynamically by renderCatStandardFilter() -->
-        </select>
-      </label>
       <button class="btn" id="btnNewPattern" title="Create a new pattern in the editor">New pattern</button>
       <span style="flex:1;"></span>
       <div style="position:relative;display:inline-block;">
@@ -826,6 +820,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <script src="/static/block_constants.js?v={{ v }}"></script>
 <script src="/static/block_geometry.js?v={{ v }}"></script>
 <script src="/static/block_svg.js?v={{ v }}"></script>
+<script src="/static/distance_rules.js?v={{ v }}"></script>
 <script src="/static/render_shared.js?v={{ v }}"></script>
 <script src="/static/editor.js?v={{ v }}"></script>
 <script src="/static/shared.js?v={{ v }}"></script>

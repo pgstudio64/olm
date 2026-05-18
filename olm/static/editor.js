@@ -100,6 +100,15 @@ let BLOCK_DEFS_BY_STD = {};
 let SPACING_CONFIGS = {};
 let CURRENT_SPACING = null;
 
+// D-233: single source for activating a standard. Keeps state.standard
+// and CURRENT_SPACING in sync so distance coloring (analyzeGap) always
+// uses the right thresholds. Call this instead of writing state.standard
+// directly.
+function setActiveStandard(std) {
+  state.standard = std || "";
+  CURRENT_SPACING = (state.standard && SPACING_CONFIGS[state.standard]) || null;
+}
+
 let state = {
   name: "P_NEW",
   rows: [],
@@ -149,45 +158,135 @@ function clearDirty() {
   }
 }
 
-function patternOverflowsRoom(p) {
-  // Check if block footprints exceed the room (mirrors computeBlockPositions logic)
+// JS twin of olm.core.pattern_fit.compute_pattern_footprint.
+// Returns {xMin, xMax, yMin, yMax} including block bodies, face zones
+// (blue chair clearance + grey circulation) and door swing areas as
+// 2D obstacles. Uses BLOCK_DEFS_BY_STD/SPACING_CONFIGS for the
+// pattern's standard so a multi-standard catalogue is handled cleanly.
+function computePatternFootprint(p) {
   var rows = p.rows || [];
   var rowGaps = p.row_gaps_cm || [];
+  if (rows.length === 0) {
+    return { xMin: 0, xMax: 0, yMin: 0, yMax: 0 };
+  }
+  var std = p.standard;
+  var prevDefs = BLOCK_DEFS;
+  if (std && BLOCK_DEFS_BY_STD[std]) BLOCK_DEFS = BLOCK_DEFS_BY_STD[std];
+  try {
+    var positions = [];
+    var y_cm = 0;
+    for (var ri = 0; ri < rows.length; ri++) {
+      var blocks = rows[ri].blocks || [];
+      var x_cm = 0;
+      var rowMaxNS = 0;
+      for (var bi = 0; bi < blocks.length; bi++) {
+        var b = blocks[bi];
+        if (b.gap_cm) x_cm += b.gap_cm;
+        var g = getEffectiveGeom(b.type, b.orientation);
+        var f = g.faces || {};
+        var fw = (f.west && (f.west.non_superposable_cm || 0) + (f.west.candidate_cm || 0)) || 0;
+        var fe = (f.east && (f.east.non_superposable_cm || 0) + (f.east.candidate_cm || 0)) || 0;
+        var fn = (f.north && (f.north.non_superposable_cm || 0) + (f.north.candidate_cm || 0)) || 0;
+        var fs = (f.south && (f.south.non_superposable_cm || 0) + (f.south.candidate_cm || 0)) || 0;
+        positions.push({
+          x: x_cm, y: y_cm + (b.offset_ns_cm || 0),
+          w: g.eo, h: g.ns,
+          fw: fw, fe: fe, fn: fn, fs: fs
+        });
+        x_cm += g.eo;
+        if (g.ns > rowMaxNS) rowMaxNS = g.ns;
+      }
+      y_cm += rowMaxNS;
+      if (ri < rows.length - 1) y_cm += (rowGaps[ri] || 0);
+    }
+
+    var xMin = 0, xMax = 0, yMin = 0, yMax = 0;
+    for (var i = 0; i < positions.length; i++) {
+      var pos = positions[i];
+      var pxMin = pos.x - pos.fw;
+      var pxMax = pos.x + pos.w + pos.fe;
+      var pyMin = pos.y - pos.fn;
+      var pyMax = pos.y + pos.h + pos.fs;
+      if (i === 0) { xMin = pxMin; xMax = pxMax; yMin = pyMin; yMax = pyMax; }
+      else {
+        if (pxMin < xMin) xMin = pxMin;
+        if (pxMax > xMax) xMax = pxMax;
+        if (pyMin < yMin) yMin = pyMin;
+        if (pyMax > yMax) yMax = pyMax;
+      }
+    }
+
+    var spacing = (std && SPACING_CONFIGS) ? SPACING_CONFIGS[std] : null;
+    var excl = spacing ? (spacing.door_exclusion_depth_cm || 0) : 0;
+    if (excl > 0) {
+      var openings = p.room_openings || [];
+      for (var oi = 0; oi < openings.length; oi++) {
+        var o = openings[oi];
+        if (!o.has_door) continue;
+        var face = o.face;
+        var dLo = o.offset_cm || 0;
+        var dHi = dLo + (o.width_cm || 0);
+        if (face === "south" || face === "north") {
+          if (dLo < xMin) xMin = dLo;
+          if (dHi > xMax) xMax = dHi;
+        } else if (face === "east" || face === "west") {
+          if (dLo < yMin) yMin = dLo;
+          if (dHi > yMax) yMax = dHi;
+        }
+        for (var j = 0; j < positions.length; j++) {
+          var bp = positions[j];
+          if (face === "south" || face === "north") {
+            var bLo = bp.x - bp.fw;
+            var bHi = bp.x + bp.w + bp.fe;
+            if (bHi <= dLo || bLo >= dHi) continue;
+            if (face === "south") {
+              var v = bp.y + bp.h + bp.fs + excl;
+              if (v > yMax) yMax = v;
+            } else {
+              var v2 = bp.y - bp.fn - excl;
+              if (v2 < yMin) yMin = v2;
+            }
+          } else {
+            var bLo2 = bp.y - bp.fn;
+            var bHi2 = bp.y + bp.h + bp.fs;
+            if (bHi2 <= dLo || bLo2 >= dHi) continue;
+            if (face === "east") {
+              var v3 = bp.x + bp.w + bp.fe + excl;
+              if (v3 > xMax) xMax = v3;
+            } else {
+              var v4 = bp.x - bp.fw - excl;
+              if (v4 < xMin) xMin = v4;
+            }
+          }
+        }
+      }
+    }
+    return { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax };
+  } finally {
+    BLOCK_DEFS = prevDefs;
+  }
+}
+
+function patternOverflowsRoom(p) {
   var roomW = p.room_width_cm || 0;
   var roomD = p.room_depth_cm || 0;
-  if (rows.length === 0 || roomW === 0) return false;
-
-  var maxX = 0;
-  var maxY = 0;
-  var y_cm = 0;
-
-  for (var ri = 0; ri < rows.length; ri++) {
-    var blocks = rows[ri].blocks || [];
-    var x = 0;
-    var rowMaxNS = 0;
-    for (var bi = 0; bi < blocks.length; bi++) {
-      var b = blocks[bi];
-      if (b.gap_cm) x += b.gap_cm;
-      var g = getEffectiveGeom(b.type, b.orientation);
-      var blockBottom = y_cm + (b.offset_ns_cm || 0) + g.ns;
-      if (blockBottom > maxY) maxY = blockBottom;
-      x += g.eo;
-      if (g.ns > rowMaxNS) rowMaxNS = g.ns;
-    }
-    if (x > maxX) maxX = x;
-    y_cm += rowMaxNS;
-    if (ri < rows.length - 1) {
-      y_cm += (rowGaps[ri] || 0);
-    }
-  }
-
-  return maxX > roomW || maxY > roomD;
+  if (roomW <= 0 || roomD <= 0) return false;
+  var fp = computePatternFootprint(p);
+  return fp.xMin < 0 || fp.yMin < 0 || fp.xMax > roomW || fp.yMax > roomD;
 }
 
 function computeAutoName() {
   const w = state.room_width_cm;
   const d = state.room_depth_cm;
   return w + "x" + d + "_" + getStdLabel(state.standard);
+}
+
+// Replace the leading WxD prefix in a pattern name with new dimensions.
+// Custom names that do not follow the WxD_... convention are left alone.
+function renameAfterFit(oldName, newW, newD) {
+  if (!oldName) return oldName;
+  const m = oldName.match(/^\d+x\d+(.*)$/);
+  return m ? (newW + "x" + newD + m[1]) : oldName;
 }
 
 function updateAutoName() {
@@ -761,29 +860,6 @@ function faceTouchesWall(rowIdx, blockIdx, face) {
 }
 
 /**
- * Compute minimum room dimensions to fit current blocks without overlap.
- * Width: max over rows of sum of block widths (gap=0 between every pair).
- * Depth: sum of max NS extent per row (row_gaps=0).
- */
-function computeMinRoomDims() {
-  var min_w = 0;
-  var min_d = 0;
-  for (var ri = 0; ri < state.rows.length; ri++) {
-    var row = state.rows[ri];
-    var rowW = 0;
-    var rowMaxNS = 0;
-    for (var bi = 0; bi < row.blocks.length; bi++) {
-      var g = getEffectiveGeom(row.blocks[bi].type, row.blocks[bi].orientation);
-      rowW += g.eo;
-      if (g.ns > rowMaxNS) rowMaxNS = g.ns;
-    }
-    if (rowW > min_w) min_w = rowW;
-    min_d += rowMaxNS;
-  }
-  return { min_w: min_w, min_d: min_d };
-}
-
-/**
  * Check if a movement would detach any locked block from its wall.
  * Simulates the move, recomputes positions, and checks all sticks.
  *
@@ -850,8 +926,6 @@ function computePatternDims() {
 
   let maxRowEO = 0;
   const rowNS = [];
-  let maxWest = 0;
-  let maxEast = 0;
 
   for (const row of state.rows) {
     let x = 0;
@@ -859,14 +933,9 @@ function computePatternDims() {
     for (const b of row.blocks) {
       if (b.gap_cm) x += b.gap_cm;
       const g = getEffectiveGeom(b.type, b.orientation);
-      const f = g.faces;
       x += g.eo;
       const nsWithOffset = g.ns + Math.abs(b.offset_ns_cm || 0);
       if (nsWithOffset > maxNS) maxNS = nsWithOffset;
-      const we = (f.west ? ((f.west.non_superposable_cm || 0) + (f.west.candidate_cm || 0)) : 0);
-      const ee = (f.east ? ((f.east.non_superposable_cm || 0) + (f.east.candidate_cm || 0)) : 0);
-      if (we > maxWest) maxWest = we;
-      if (ee > maxEast) maxEast = ee;
     }
     if (x > maxRowEO) maxRowEO = x;
     rowNS.push(maxNS);
@@ -880,11 +949,31 @@ function computePatternDims() {
     }
   }
 
+  // Total emprise = footprint including face zones (blue + grey) and
+  // door swing areas. Single source of truth: computePatternFootprint
+  // (JS twin of olm.core.pattern_fit.compute_pattern_footprint).
+  // PE state splits doors from non-door openings (D-122 P4) — recombine
+  // them in the opening shape the footprint function expects.
+  const combinedOpenings = (state.room_openings || []).concat(
+    (state.room_doors || []).map(function(d) {
+      return {
+        face: d.face, offset_cm: d.offset_cm, width_cm: d.width_cm,
+        has_door: true,
+      };
+    })
+  );
+  const fp = computePatternFootprint({
+    rows: state.rows,
+    row_gaps_cm: state.row_gaps_cm,
+    room_openings: combinedOpenings,
+    standard: state.standard,
+  });
+
   return {
     eoBlocks: maxRowEO,
     nsBlocks: nsBlocks,
-    eoTotal: maxWest + maxRowEO + maxEast,
-    nsTotal: nsBlocks,
+    eoTotal: fp.xMax - fp.xMin,
+    nsTotal: fp.yMax - fp.yMin,
   };
 }
 
@@ -1166,7 +1255,8 @@ function _renderImpl(targetSvg) {
       allBlocks.push({
         x: bp.x, y: bp.y, w: bp.w, h: bp.h,
         deskX: bp.x, deskY: bp.y, deskW: bp.w, deskH: bp.h,
-        vizX: bp.x - wZ, vizY: bp.y - nZ, vizW: bp.w + wZ + eZ, vizH: bp.h + nZ + sZ
+        vizX: bp.x - wZ, vizY: bp.y - nZ, vizW: bp.w + wZ + eZ, vizH: bp.h + nZ + sZ,
+        faces: ff,  // D-233: effective faces for gap analysis
       });
     }
   }
@@ -1214,8 +1304,10 @@ function _renderImpl(targetSvg) {
       const overlapTop = Math.max(a.deskY, nearestRight.deskY);
       const overlapBot = Math.min(a.deskY + a.deskH, nearestRight.deskY + nearestRight.deskH);
       const ly = (overlapTop + overlapBot) / 2;
-      pushDistLabelWithRule(elements, lx, ly + 4 * zf, gapCm,
-        "between_blocks", zf);
+      // D-233: A's east face vs B's west face
+      pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm,
+        getFacingFace(a.faces, "east"),
+        getFacingFace(nearestRight.faces, "west"), zf);
     }
 
     if (nearestBelow) {
@@ -1224,8 +1316,10 @@ function _renderImpl(targetSvg) {
       const overlapRight = Math.min(a.deskX + a.deskW, nearestBelow.deskX + nearestBelow.deskW);
       const lx = (overlapLeft + overlapRight) / 2;
       const ly = a.deskY + a.deskH + nearestBelowGap / 2;
-      pushDistLabelWithRule(elements, lx, ly + 4 * zf, gapCm,
-        "between_blocks", zf);
+      // D-233: A's south face vs B's north face
+      pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm,
+        getFacingFace(a.faces, "south"),
+        getFacingFace(nearestBelow.faces, "north"), zf);
     }
   }
 
@@ -1239,10 +1333,10 @@ function _renderImpl(targetSvg) {
   for (let i = 0; i < allBlocks.length; i++) {
     const a = allBlocks[i];
     const dirs = [
-      { axis: "y", sign: -1, wallEdge: MARGIN,     blockEdge: a.deskY,            vizCross: "vizX", vizCrossSize: "vizW" },
-      { axis: "y", sign:  1, wallEdge: roomBottom,  blockEdge: a.deskY + a.deskH,  vizCross: "vizX", vizCrossSize: "vizW" },
-      { axis: "x", sign: -1, wallEdge: MARGIN,     blockEdge: a.deskX,            vizCross: "vizY", vizCrossSize: "vizH" },
-      { axis: "x", sign:  1, wallEdge: roomRight,  blockEdge: a.deskX + a.deskW,  vizCross: "vizY", vizCrossSize: "vizH" },
+      { axis: "y", sign: -1, wallEdge: MARGIN,     blockEdge: a.deskY,            vizCross: "vizX", vizCrossSize: "vizW", face: "north" },
+      { axis: "y", sign:  1, wallEdge: roomBottom,  blockEdge: a.deskY + a.deskH,  vizCross: "vizX", vizCrossSize: "vizW", face: "south" },
+      { axis: "x", sign: -1, wallEdge: MARGIN,     blockEdge: a.deskX,            vizCross: "vizY", vizCrossSize: "vizH", face: "west" },
+      { axis: "x", sign:  1, wallEdge: roomRight,  blockEdge: a.deskX + a.deskW,  vizCross: "vizY", vizCrossSize: "vizH", face: "east" },
     ];
     for (const dir of dirs) {
       const dist = dir.sign > 0 ? dir.wallEdge - dir.blockEdge : dir.blockEdge - dir.wallEdge;
@@ -1274,7 +1368,9 @@ function _renderImpl(targetSvg) {
         tx = dir.sign > 0 ? dir.blockEdge + dist / 2 : dir.wallEdge + dist / 2;
         ty = a.deskY + a.deskH / 2;
       }
-      pushDistLabelWithRule(elements, tx, ty + 4, dcm, "block_wall");
+      // D-233: block face vs wall (null = wall side)
+      pushDistLabelWithGap(elements, tx, ty + 4, dcm,
+        getFacingFace(a.faces, dir.face), null);
     }
   }
 
@@ -2280,7 +2376,7 @@ async function loadPattern(name) {
     state.row_gaps_cm = data.row_gaps_cm || [];
     state.room_width_cm = data.room_width_cm || 300;
     state.room_depth_cm = data.room_depth_cm || 480;
-    state.standard = data.standard || getStandards()[0] || "";
+    setActiveStandard(data.standard || getStandards()[0] || "");
     state.room_windows = data.room_windows || [];
     _splitOpeningsIntoState(data.room_openings);
     state.room_exclusions = data.room_exclusions || [];
@@ -2291,8 +2387,6 @@ async function loadPattern(name) {
     state.corridor_face_abs = "";
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
-    // Sync all Standard selectors to the pattern's standard
-    setCatStandard(state.standard);
     // Use the actual catalogue name (with auto-generated suffix)
     state.name = data.name || computeAutoName();
     state._savedName = state.name;
@@ -2315,7 +2409,7 @@ function loadPatternFromData(data) {
   state.row_gaps_cm = data.row_gaps_cm || [];
   state.room_width_cm = data.room_width_cm || 300;
   state.room_depth_cm = data.room_depth_cm || 480;
-  state.standard = data.standard || getStandards()[0] || "";
+  setActiveStandard(data.standard || getStandards()[0] || "");
   state.room_windows = data.room_windows || [];
   _splitOpeningsIntoState(data.room_openings);
   state.room_exclusions = data.room_exclusions || [];
@@ -2324,8 +2418,6 @@ function loadPatternFromData(data) {
   state._savedName = data.name || null;
   document.getElementById("roomWidth").value = state.room_width_cm;
   document.getElementById("roomDepth").value = state.room_depth_cm;
-  // Sync all Standard selectors to the pattern's standard
-  setCatStandard(state.standard);
   updateAutoName();
   updateRowList();
   render();
@@ -2403,12 +2495,6 @@ function enterAmendMode(room, candidate) {
     var el = document.getElementById(id);
     if (el) { el.disabled = true; el.style.opacity = "0.4"; }
   });
-  // Disable all standard selectors during amend
-  _CAT_STD_IDS.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) { el.disabled = true; el.style.opacity = "0.4"; }
-  });
-
   // Replace Save label, show Discard
   document.getElementById("btnSave").textContent = "Save amendment";
   document.getElementById("btnAmendCancel").style.display = "";
@@ -2424,10 +2510,6 @@ function enterAmendMode(room, candidate) {
 
 function exitAmendUI() {
   AMEND_DISABLE_IDS.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) { el.disabled = false; el.style.opacity = ""; }
-  });
-  _CAT_STD_IDS.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) { el.disabled = false; el.style.opacity = ""; }
   });
@@ -2735,7 +2817,7 @@ function resetState() {
   state.room_depth_cm = defD;
   document.getElementById("roomWidth").value = defW;
   document.getElementById("roomDepth").value = defD;
-  state.standard = getCatStandard() || getStandards()[0] || "";
+  setActiveStandard(getCurrentStandard() || getStandards()[0] || "");
   state.room_windows = [{ face: "north", offset_cm: 0, width_cm: defW }];
   // D-122 P4 : openings séparé de doors dans le state.
   state.room_openings = [];
@@ -2885,20 +2967,38 @@ function _findBlockPos(ri, bi) {
   return null;
 }
 
+// Snap a movement delta so that off-grid positions return to the grid
+// on the first step (in either direction), keeping wall-snap symmetric:
+// approaching a wall lands on the wall (off-grid), the next step (forward
+// or backward) snaps back to the grid instead of stepping a full step
+// from the off-grid position.
+function _snapStep(currentCm, deltaCm, step) {
+  var rem = ((currentCm % step) + step) % step;
+  if (rem === 0) return deltaCm;
+  if (deltaCm > 0) return step - rem;       // forward to next grid line
+  if (deltaCm < 0) return -rem;             // backward to previous grid
+  return deltaCm;
+}
+
 function offsetSelectedBlock(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
   if (wouldDetachAnyStick("NS", deltaCm)) return;
   var pos = _findBlockPos(state.selectedRow, state.selectedBlock);
   if (pos) {
-    var newY = pos.y_cm + deltaCm;
-    var southEdge = newY + pos.h_cm;
     var step = GRID_STEP_CM;
-    if (deltaCm < 0 && newY > 0 && newY < step) {
-      deltaCm = -pos.y_cm;
-    } else if (deltaCm > 0 && southEdge < state.room_depth_cm
-               && state.room_depth_cm - southEdge < step) {
-      deltaCm = state.room_depth_cm - pos.h_cm - pos.y_cm;
+    var snapped = _snapStep(pos.y_cm, deltaCm, step);
+    if (snapped !== deltaCm) {
+      deltaCm = snapped;
+    } else {
+      var newY = pos.y_cm + deltaCm;
+      var southEdge = newY + pos.h_cm;
+      if (deltaCm < 0 && newY > 0 && newY < step) {
+        deltaCm = -pos.y_cm;
+      } else if (deltaCm > 0 && southEdge < state.room_depth_cm
+                 && state.room_depth_cm - southEdge < step) {
+        deltaCm = state.room_depth_cm - pos.h_cm - pos.y_cm;
+      }
     }
   }
   markDirty();
@@ -2912,14 +3012,19 @@ function offsetSelectedBlockEO(deltaCm) {
   if (wouldDetachAnyStick("EO", deltaCm)) return;
   var pos = _findBlockPos(state.selectedRow, state.selectedBlock);
   if (pos) {
-    var newX = pos.x_cm + deltaCm;
-    var eastEdge = newX + pos.w_cm;
     var step = GRID_STEP_CM;
-    if (deltaCm < 0 && newX > 0 && newX < step) {
-      deltaCm = -pos.x_cm;
-    } else if (deltaCm > 0 && eastEdge < state.room_width_cm
-               && state.room_width_cm - eastEdge < step) {
-      deltaCm = state.room_width_cm - pos.w_cm - pos.x_cm;
+    var snapped = _snapStep(pos.x_cm, deltaCm, step);
+    if (snapped !== deltaCm) {
+      deltaCm = snapped;
+    } else {
+      var newX = pos.x_cm + deltaCm;
+      var eastEdge = newX + pos.w_cm;
+      if (deltaCm < 0 && newX > 0 && newX < step) {
+        deltaCm = -pos.x_cm;
+      } else if (deltaCm > 0 && eastEdge < state.room_width_cm
+                 && state.room_width_cm - eastEdge < step) {
+        deltaCm = state.room_width_cm - pos.w_cm - pos.x_cm;
+      }
     }
   }
   markDirty();

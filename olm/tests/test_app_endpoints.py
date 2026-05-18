@@ -1213,11 +1213,16 @@ class TestDoorSeedsRoundTrip:
 
 
 def _make_importable_pattern(name: str, standard: str = "standard1") -> dict:
-    """Build a minimal valid pattern for import tests."""
+    """Build a minimal valid pattern for import tests.
+
+    gap_cm=70 = chair_clearance_cm: pushes the block east so its west
+    chair zone (70cm) ends exactly at x=0, keeping the footprint inside
+    the 500x500 room.
+    """
     return {
         "name": name,
         "rows": [{"blocks": [
-            {"type": "BLOCK_1", "orientation": 0, "gap_cm": 0},
+            {"type": "BLOCK_1", "orientation": 0, "gap_cm": 70},
         ]}],
         "row_gaps_cm": [],
         "room_width_cm": 500,
@@ -1520,3 +1525,34 @@ class TestCanonicalizeInline:
             content_type="application/json",
         )
         assert resp.status_code == 400
+
+
+# ====================================================================
+# 11. GET /api/blocks — D-233: MAIN_CORRIDOR_THRESHOLD exposed
+# ====================================================================
+
+class TestApiBlocks:
+    """Tests pour GET /api/blocks."""
+
+    def test_returns_constants(self, client):
+        """Blocks endpoint returns constants including threshold."""
+        resp = client.get("/api/blocks")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "constants" in data
+        c = data["constants"]
+        assert "DESK_W_CM" in c
+        assert "CHAIR_CLEARANCE_CM" in c
+        assert "WALKING_MARGIN_CM" in c
+        assert "SLIP_IN_MARGIN_CM" in c
+        assert "MAIN_CORRIDOR_THRESHOLD" in c
+        assert c["MAIN_CORRIDOR_THRESHOLD"] == 6
+
+    def test_returns_blocks(self, client):
+        """Blocks endpoint returns block definitions."""
+        resp = client.get("/api/blocks")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "blocks" in data
+        assert len(data["blocks"]) >= 1
+        assert "standard" in data

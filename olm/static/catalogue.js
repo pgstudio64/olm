@@ -3,32 +3,6 @@
 
 let catalogueData = [];
 
-// IDs of the 2 synchronized Standard selectors (Catalogue, Editor)
-var _CAT_STD_IDS = [
-  "catFilterStandard",
-  "catFilterStandardEditor",
-];
-
-/**
- * Read the current catalogue standard (any of the 3 selectors).
- */
-window.getCatStandard = function() {
-  for (var i = 0; i < _CAT_STD_IDS.length; i++) {
-    var el = document.getElementById(_CAT_STD_IDS[i]);
-    if (el && el.value) return el.value;
-  }
-  return "";
-};
-
-/**
- * Write the same value to all 3 Standard selectors.
- */
-window.setCatStandard = function(val) {
-  _CAT_STD_IDS.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.value = val;
-  });
-};
 
 // --- Event delegation (P1.4) ---
 // Single click handler on #catalogueGrid dispatches card-click and card-delete.
@@ -214,7 +188,7 @@ let matrixMeta = { widths: [], depths: [], colXs: [], rowYs: [], colWidths: [], 
 
 
 function getFilteredPatterns() {
-  var stdFilter = getCatStandard();
+  var stdFilter = getCurrentStandard();
   var minW = parseInt(document.getElementById("catFilterMinW").value) || 0;
   var maxW = parseInt(document.getElementById("catFilterMaxW").value) || Infinity;
   var minD = parseInt(document.getElementById("catFilterMinD").value) || 0;
@@ -441,7 +415,7 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
       var by = yRow + offsetNS;
       var bw = g.eo * scale;
       var bh = g.ns * scale;
-      blockRects.push({ x: bx, y: by, w: bw, h: bh });
+      blockRects.push({ x: bx, y: by, w: bw, h: bh, faces: f });
 
       // Circulation zones per face (via shared renderBlockZones)
       renderBlockZones(elements, bx, by, bw, bh, b.type, b.orientation, f, scale, 0.3);
@@ -558,7 +532,10 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
       var lx = a.x + a.w + nearestRightGap / 2;
       var ovT = Math.max(a.y, nearestRight.y);
       var ovB = Math.min(a.y + a.h, nearestRight.y + nearestRight.h);
-      var rcol = distanceConformity(gcm, "between_blocks");
+      // D-233: A's east face vs B's west face
+      var rcol = distanceConformity(gcm,
+        getFacingFace(a.faces, "east"),
+        getFacingFace(nearestRight.faces, "west"));
       elements.push({ z: 7, s: '<text x="' + lx.toFixed(1) + '" y="' + ((ovT + ovB) / 2 + labelFontSize * 0.35).toFixed(1) +
         '" text-anchor="middle" fill="' + rcol + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm + '</text>' });
     }
@@ -566,7 +543,10 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
       var gcm2 = Math.round(nearestBelowGap / scale);
       var ovL = Math.max(a.x, nearestBelow.x);
       var ovR = Math.min(a.x + a.w, nearestBelow.x + nearestBelow.w);
-      var bcol = distanceConformity(gcm2, "between_blocks");
+      // D-233: A's south face vs B's north face
+      var bcol = distanceConformity(gcm2,
+        getFacingFace(a.faces, "south"),
+        getFacingFace(nearestBelow.faces, "north"));
       elements.push({ z: 7, s: '<text x="' + ((ovL + ovR) / 2).toFixed(1) + '" y="' + (a.y + a.h + nearestBelowGap / 2 + labelFontSize * 0.35).toFixed(1) +
         '" text-anchor="middle" fill="' + bcol + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm2 + '</text>' });
     }
@@ -579,10 +559,10 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
   for (var k = 0; k < blockRects.length; k++) {
     var br = blockRects[k];
     var wdirs = [
-      { axis: "y", sign: -1, wallEdge: offsetY, bEdge: br.y, cross: "x", cSize: "w" },
-      { axis: "y", sign:  1, wallEdge: offsetY + roomH, bEdge: br.y + br.h, cross: "x", cSize: "w" },
-      { axis: "x", sign: -1, wallEdge: offsetX, bEdge: br.x, cross: "y", cSize: "h" },
-      { axis: "x", sign:  1, wallEdge: offsetX + roomW, bEdge: br.x + br.w, cross: "y", cSize: "h" }
+      { axis: "y", sign: -1, wallEdge: offsetY, bEdge: br.y, cross: "x", cSize: "w", face: "north" },
+      { axis: "y", sign:  1, wallEdge: offsetY + roomH, bEdge: br.y + br.h, cross: "x", cSize: "w", face: "south" },
+      { axis: "x", sign: -1, wallEdge: offsetX, bEdge: br.x, cross: "y", cSize: "h", face: "west" },
+      { axis: "x", sign:  1, wallEdge: offsetX + roomW, bEdge: br.x + br.w, cross: "y", cSize: "h", face: "east" }
     ];
     for (var dd = 0; dd < wdirs.length; dd++) {
       var wd = wdirs[dd];
@@ -613,7 +593,9 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
         tx = wd.sign > 0 ? wd.bEdge + dist / 2 : wd.wallEdge + dist / 2;
         ty = br.y + br.h / 2;
       }
-      var wcol = distanceConformity(dcm, "block_wall");
+      // D-233: block face vs wall (null = wall)
+      var wcol = distanceConformity(dcm,
+        getFacingFace(br.faces, wd.face), null);
       elements.push({ z: 7, s: '<text x="' + tx.toFixed(1) + '" y="' + (ty + labelFontSize * 0.35).toFixed(1) +
         '" text-anchor="middle" fill="' + wcol + '" font-size="' + labelFontSize + '" font-family="monospace">' + dcm + '</text>' });
     }
@@ -953,7 +935,7 @@ function initMatrixPanZoom() {
 // --- Pattern Editor navigation (Prev / Next, width then depth ascending) ---
 
 function _peSortedPatternsForStandard() {
-  var std = window.getCatStandard ? window.getCatStandard() : "";
+  var std = typeof getCurrentStandard === "function" ? getCurrentStandard() : "";
   var list = (catalogueData || []).filter(function(p) {
     return !std || p.standard === std;
   });

@@ -45,3 +45,27 @@ def test_from_dict_ignores_extra_keys():
     d["unknown_field"] = 999
     restored = SpacingConfig.from_dict(d)
     assert not hasattr(restored, "unknown_field")
+
+
+def test_main_corridor_threshold_default():
+    """D-233: main_corridor_threshold defaults to 6."""
+    cfg = get_default()
+    assert cfg.main_corridor_threshold == 6
+
+
+def test_main_corridor_threshold_in_dict():
+    """D-233: main_corridor_threshold survives to_dict/from_dict."""
+    cfg = get_default()
+    d = cfg.to_dict()
+    assert "main_corridor_threshold" in d
+    assert d["main_corridor_threshold"] == 6
+    restored = SpacingConfig.from_dict(d)
+    assert restored.main_corridor_threshold == 6
+
+
+def test_main_corridor_threshold_missing_in_source():
+    """D-233: from_dict works when source dict lacks the field (uses default)."""
+    d = get_default().to_dict()
+    del d["main_corridor_threshold"]
+    restored = SpacingConfig.from_dict(d)
+    assert restored.main_corridor_threshold == 6

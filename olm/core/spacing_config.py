@@ -41,6 +41,8 @@ class SpacingConfig:
         door_exclusion_depth_cm: ES-05 — Clear zone in front
             of a door.
         max_island_size: ES-06 — Maximum block size (desks).
+        main_corridor_threshold: D-233 — Number of desks
+            served by a gap to qualify as main corridor.
     """
     name: str
     chair_clearance_cm: int          # ES-01
@@ -49,6 +51,7 @@ class SpacingConfig:
     main_corridor_cm: int            # ES-04
     door_exclusion_depth_cm: int     # ES-05
     max_island_size: int             # ES-06
+    main_corridor_threshold: int = 6  # D-233
 
     def to_dict(self) -> dict:
         return asdict(self)

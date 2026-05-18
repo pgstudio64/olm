@@ -378,39 +378,35 @@ def save_as_default_catalogue(
             f"in the private catalogue"
         )
 
-    # Structural checks via pattern_fit
-    from olm.core.catalogue_matcher import compute_block_positions
-    from olm.core.pattern_fit import _rects_overlap
+    # Validity check: footprint (body + face zones + door swing area)
+    # must fit within room dimensions. Uses the single source of truth
+    # in pattern_fit so PE, matcher and save-as-default share one rule.
+    from olm.core.pattern_fit import (
+        compute_pattern_footprint,
+        is_pattern_valid,
+        PatternStructurallyInvalid,
+    )
+    from olm.core.spacing_config import ALL_CONFIGS
 
+    target_spacing = ALL_CONFIGS.get(target_actual)
     for pat in patterns:
         name = pat.get("name", "?")
-        positions = compute_block_positions(pat)
-        room_w = pat.get("room_width_cm", 0)
-        room_d = pat.get("room_depth_cm", 0)
-
-        for i in range(len(positions)):
-            for j in range(i + 1, len(positions)):
-                a, b = positions[i], positions[j]
-                if _rects_overlap(
-                    a.x_cm, a.y_cm, a.eo_cm, a.ns_cm,
-                    b.x_cm, b.y_cm, b.eo_cm, b.ns_cm,
-                ):
-                    raise ValueError(
-                        f"Pattern '{name}': blocks "
-                        f"({a.row_idx},{a.block_idx}) and "
-                        f"({b.row_idx},{b.block_idx}) overlap"
-                    )
-
-        for bp in positions:
-            if (bp.x_cm < 0 or bp.y_cm < 0
-                    or bp.x_cm + bp.eo_cm > room_w
-                    or bp.y_cm + bp.ns_cm > room_d):
-                raise ValueError(
-                    f"Pattern '{name}': block "
-                    f"({bp.row_idx},{bp.block_idx}) "
-                    f"{bp.block_type} exceeds room bounds "
-                    f"({room_w}x{room_d} cm)"
-                )
+        if target_spacing is None:
+            continue
+        try:
+            x_min, x_max, y_min, y_max = compute_pattern_footprint(
+                pat, target_spacing,
+            )
+        except PatternStructurallyInvalid as e:
+            raise ValueError(f"Pattern '{name}': {e}") from e
+        if not is_pattern_valid(pat, target_spacing):
+            room_w = pat.get("room_width_cm", 0)
+            room_d = pat.get("room_depth_cm", 0)
+            raise ValueError(
+                f"Pattern '{name}': footprint "
+                f"x=[{x_min},{x_max}] y=[{y_min},{y_max}] "
+                f"does not fit in room {room_w}x{room_d} cm"
+            )
 
     # Overwrite the entire default (no merge — the default is mono-standard)
     default_dir = os.path.dirname(DEFAULT_CATALOGUE_PATH)

@@ -554,7 +554,6 @@
         '<div class="fp-c-stats">' +
           c.n_desks + ' desks &middot; ' + c.m2_per_desk + ' m&sup2;/d &middot; ' +
           '<span class="fp-c-grade ' + gradeClass + '">' + c.circulation_grade + '</span>' +
-          ' &middot; ' + getStdLabel(c.standard) +
         '</div>' +
       '</div>';
     }).join("");
@@ -600,7 +599,7 @@
     state.row_gaps_cm = pat.row_gaps_cm || [];
     state.room_width_cm = pat.room_width_cm;
     state.room_depth_cm = pat.room_depth_cm;
-    state.standard = pat.standard || candidate.standard || getStandards()[0] || "";
+    setActiveStandard(pat.standard || candidate.standard || getStandards()[0] || "");
     state.room_windows = pat.room_windows || [];
     // D-122 P4 : pattern catalogue stocke openings combiné → split.
     _splitOpeningsIntoState(pat.room_openings);
@@ -613,8 +612,6 @@
 
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;
-    // Sync all Standard selectors to the pattern's standard
-    if (state.standard) setCatStandard(state.standard);
     document.getElementById("autoName").textContent = state.name;
 
     // Inject floor plan overlay if visible

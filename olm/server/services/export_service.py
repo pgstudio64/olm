@@ -8,7 +8,6 @@ recomputed from the pattern via ``compute_desk_positions``.
 from __future__ import annotations
 
 import csv
-import io
 import logging
 import os
 
@@ -16,7 +15,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from olm.core.catalogue_matcher import compute_desk_positions
-from olm.core.pattern_generator import CHAIR_CLEARANCE_CM
 from olm.server.services.config_service import (
     PROJECT_ROOT,
     get_corridor_rgb,
@@ -152,9 +150,18 @@ _DESK_OUTLINE = (0, 0, 0, 255)
 _DESK_FILL = (255, 255, 255, 255)
 _DESK_STROKE_WIDTH = 2
 _CHAIR_ARC_OUTLINE = (0, 0, 0, 255)
-_CHAIR_CLEARANCE_OUTLINE = (180, 180, 180, 255)
+_SCREEN_FILL = (0, 0, 0, 255)
 _LABEL_COLOR = (0, 0, 0, 255)
 _WHITE = [255, 255, 255, 255]
+
+# Screen geometry — mirrors olm/static/block_svg.js.
+# Black thin bar on the desk side opposite to the chair, length ratio of
+# the perpendicular desk dimension. Inset from desk edge so the screen
+# sits visually inside the desk.
+_SCREEN_THICK_PX = 3
+_SCREEN_LEN_RATIO = 0.55
+_SCREEN_INSET_PX = 3
+_OPPOSITE_SIDE = {"W": "E", "E": "W", "N": "S", "S": "N"}
 
 # PIL arc angles (CW from 3 o'clock) for each absolute chair side.
 _ARC_ANGLES: dict[str, tuple[int, int]] = {
@@ -284,20 +291,30 @@ def _draw_room_desks(
         draw.arc(arc_bbox, angles[0], angles[1],
                  fill=_CHAIR_ARC_OUTLINE, width=1)
 
-        # Chair clearance rectangle
-        cl_px = CHAIR_CLEARANCE_CM / scale
-        if cs_abs == "W":
-            draw.rectangle([x1 - cl_px, y1, x1, y2],
-                           outline=_CHAIR_CLEARANCE_OUTLINE, width=1)
-        elif cs_abs == "E":
-            draw.rectangle([x2, y1, x2 + cl_px, y2],
-                           outline=_CHAIR_CLEARANCE_OUTLINE, width=1)
-        elif cs_abs == "N":
-            draw.rectangle([x1, y1 - cl_px, x2, y1],
-                           outline=_CHAIR_CLEARANCE_OUTLINE, width=1)
+        # Screen — thin black bar on the desk side opposite the chair
+        scr_side = _OPPOSITE_SIDE.get(cs_abs, "E")
+        desk_w_px = x2 - x1
+        desk_h_px = y2 - y1
+        if scr_side in ("W", "E"):
+            scr_h = desk_h_px * _SCREEN_LEN_RATIO
+            scr_y1 = (y1 + y2) / 2 - scr_h / 2
+            scr_y2 = scr_y1 + scr_h
+            if scr_side == "W":
+                scr_x1 = x1 + _SCREEN_INSET_PX
+            else:
+                scr_x1 = x2 - _SCREEN_INSET_PX - _SCREEN_THICK_PX
+            scr_x2 = scr_x1 + _SCREEN_THICK_PX
         else:
-            draw.rectangle([x1, y2, x2, y2 + cl_px],
-                           outline=_CHAIR_CLEARANCE_OUTLINE, width=1)
+            scr_w = desk_w_px * _SCREEN_LEN_RATIO
+            scr_x1 = (x1 + x2) / 2 - scr_w / 2
+            scr_x2 = scr_x1 + scr_w
+            if scr_side == "N":
+                scr_y1 = y1 + _SCREEN_INSET_PX
+            else:
+                scr_y1 = y2 - _SCREEN_INSET_PX - _SCREEN_THICK_PX
+            scr_y2 = scr_y1 + _SCREEN_THICK_PX
+        draw.rectangle([scr_x1, scr_y1, scr_x2, scr_y2],
+                       fill=_SCREEN_FILL)
 
         # Label centered in desk
         label = f"{room['name']}.{desk_local_idx}"
@@ -395,19 +412,12 @@ def export_plan(
         plan_path = os.path.join(output_dir, f"{plan_id}.png")
         img.save(plan_path, "PNG")
     else:
+        # Pillow's PDF writer embeds the image with proper compression
+        # (JPEG for RGB, FlateDecode for RGBA) — file size stays close
+        # to the PNG. pymupdf's insert_image used to re-encode the image
+        # as raw flate-compressed RGB, blowing the file up 30-80x.
         plan_path = os.path.join(output_dir, f"{plan_id}.pdf")
-        import fitz  # type: ignore[import-untyped]
-        buf = io.BytesIO()
-        img.save(buf, "PNG")
-        png_data = buf.getvalue()
-        doc = fitz.open()
-        page = doc.new_page(width=img.width, height=img.height)
-        page.insert_image(
-            fitz.Rect(0, 0, img.width, img.height),
-            stream=png_data,
-        )
-        doc.save(plan_path)
-        doc.close()
+        img.save(plan_path, "PDF", resolution=100.0)
 
     csv_path = os.path.join(output_dir, f"{plan_id}.csv")
     write_csv(rooms_payload, csv_path)

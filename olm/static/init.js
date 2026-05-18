@@ -10,9 +10,8 @@ async function init() {
   renderGeneralSettings();
   initSettingsTabs();
   renderFloorplanSettings();
-  renderCatStandardFilter();
-  renderFpStandardFilter();
-  state.standard = getCurrentStandard() || getStandards()[0] || "";
+  updateActiveStandardBadge();
+  setActiveStandard(getCurrentStandard() || getStandards()[0] || "");
 
   // P1.4: All addEventListener calls in init() are session-life
   // (bound once at DOMContentLoaded, never re-bound). No dispose needed.
@@ -338,16 +337,6 @@ async function init() {
     var newD = Math.round(rawD / GRID_STEP_CM) * GRID_STEP_CM;
     document.getElementById("roomWidth").value = newW;
     document.getElementById("roomDepth").value = newD;
-    // Refuse shrink below the minimum required by current blocks.
-    var mins = computeMinRoomDims();
-    var shrinkingW = newW < oldW && newW < mins.min_w;
-    var shrinkingD = newD < oldD && newD < mins.min_d;
-    if (shrinkingW || shrinkingD) {
-      document.getElementById("roomWidth").value = oldW;
-      document.getElementById("roomDepth").value = oldD;
-      setStatus("Minimum room size: " + mins.min_w + " x " + mins.min_d + " cm");
-      return;
-    }
     markDirty();
     state.room_width_cm = newW;
     state.room_depth_cm = newD;
@@ -415,7 +404,7 @@ async function init() {
     onRoomChange();
   });
 
-  // Standard: controlled by catFilterStandard (common toolbar, D-208)
+  // Standard: controlled by Settings radio (D-208 + D-230)
 
   // Editor state save/restore (no DOM movement — each view has its own canvas)
   var _editorSnapshot = null;
@@ -635,12 +624,12 @@ async function init() {
   }
 
   function _catStdLabel() {
-    var v = getCatStandard();
+    var v = getCurrentStandard();
     return (typeof getStdLabel === "function" && v) ? getStdLabel(v) : v;
   }
 
   function _catSendImport(url, body) {
-    var stdVal = getCatStandard();
+    var stdVal = getCurrentStandard();
     if (stdVal) body.target_standard = stdVal;
     fetch(url, {
       method: "POST",
@@ -694,7 +683,7 @@ async function init() {
   function _catSaveAsDefault() {
     _hideAllCatMenus();
     var label = _catStdLabel();
-    var stdVal = getCatStandard();
+    var stdVal = getCurrentStandard();
     confirmModal("Save current " + label + " patterns as the default catalogue?\n\nThis OVERWRITES the entire default \u2014 patterns from other standards (if any) will be lost.").then(function(ok) {
       if (!ok) return;
       fetch("/api/catalogue/save-as-default", {
@@ -821,6 +810,8 @@ async function init() {
         state.room_depth_cm = d.new_depth;
         document.getElementById("roomWidth").value = d.new_width;
         document.getElementById("roomDepth").value = d.new_depth;
+        state.name = renameAfterFit(state.name, d.new_width, d.new_depth);
+        _safeText("autoName", state.name);
         // Apply updated block positions and features from backend
         if (d.rows) {
           state.rows = d.rows;
@@ -877,6 +868,8 @@ async function init() {
         state.room_depth_cm = d.new_depth;
         document.getElementById("roomWidth").value = d.new_width;
         document.getElementById("roomDepth").value = d.new_depth;
+        state.name = renameAfterFit(state.name, d.new_width, d.new_depth);
+        _safeText("autoName", state.name);
         if (d.rows) {
           state.rows = d.rows;
           state.row_gaps_cm = d.row_gaps_cm || [];
@@ -958,37 +951,6 @@ async function init() {
     renderCatalogue();
     renderMatrixView();
   }
-  // Standard change handler — shared by synchronized selectors
-  function _onCatStandardChange() {
-    // Guard: if pattern room amend is active, block standard change
-    if (state.roomAmendMode && state.roomAmendMode.context === "pattern") {
-      // Revert selector to current standard
-      setCatStandard(state.standard);
-      alertModal("Save or discard room changes before changing standard.");
-      return;
-    }
-    var newStd = this.value;
-    setCatStandard(newStd);
-    // Persist across sessions
-    saveConfigField("current_standard", newStd);
-    // Sync editor state.standard and reload block defs
-    if (newStd && typeof state !== "undefined" && state.standard !== newStd) {
-      state.standard = newStd;
-      markDirty();
-      if (typeof loadBlockDefs === "function") {
-        loadBlockDefs().then(function() {
-          if (typeof render === "function") render();
-          if (typeof updateAutoName === "function") updateAutoName();
-        });
-      }
-    }
-    onCatalogueFilterChange();
-    if (window.peUpdateNavInfo) window.peUpdateNavInfo();
-  }
-  _CAT_STD_IDS.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.addEventListener("change", _onCatStandardChange);
-  });
   var _peBtnPrev = document.getElementById("peBtnPrev");
   if (_peBtnPrev) _peBtnPrev.addEventListener("click", function() {
     if (window.peNavigate) window.peNavigate(-1);
@@ -1276,7 +1238,7 @@ async function init() {
     var rvCanvas = document.getElementById("rvCanvas");
     if (rvCanvas) rvCanvas.innerHTML = "";
     // Clear Review room list and labels
-    var rvList = document.getElementById("rvRoomList");
+    var rvList = document.getElementById("rvRoomPopupList");
     if (rvList) rvList.innerHTML = "";
     var rvLabel = document.getElementById("rvRoomLabel");
     if (rvLabel) rvLabel.textContent = "-";

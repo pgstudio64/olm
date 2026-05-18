@@ -178,33 +178,15 @@ function renderSpacingSettings() {
   }
 }
 
-// renderEditorStandardRadios() removed — standard now controlled
-// by catFilterStandard in the common toolbar (D-208).
+// Standard controlled by Settings radio only (D-230).
+// Badge in header updated by updateActiveStandardBadge().
 
-function renderCatStandardFilter() {
-  var current = getCurrentStandard();
-  var html = '';
-  getStandards().forEach(function(s) {
-    var selected = (s === current) ? ' selected' : '';
-    html += '<option value="' + s + '"' + selected + '>' +
-      getStdLabel(s) + '</option>';
-  });
-  // Populate synchronized selectors (Catalogue + Editor)
-  _CAT_STD_IDS.forEach(function(id) {
-    var sel = document.getElementById(id);
-    if (sel) sel.innerHTML = html;
-  });
-}
-
-function renderFpStandardFilter() {
-  // Office shows only the current standard — no filter needed.
-  // Display a badge with the current standard label.
-  var container = document.getElementById("fpStandardFilter");
-  if (!container) return;
+function updateActiveStandardBadge() {
+  var el = document.getElementById("hdrActiveStandard");
+  if (!el) return;
   var current = getCurrentStandard();
   var label = getStdLabel(current);
-  container.innerHTML = '<span style="font-size:11px;color:var(--accent);">' +
-    'Current standard: ' + label + '</span>';
+  el.textContent = label ? "Standard: " + label : "";
 }
 
 function renderGeneralSettings() {
@@ -300,8 +282,7 @@ function renderGeneralSettings() {
         }).then(function() {
           return loadAppConfig();
         }).then(function() {
-          renderFpStandardFilter();
-          renderCatStandardFilter();
+          updateActiveStandardBadge();
           renderSpacingSettings();
         });
       });
@@ -318,8 +299,14 @@ function renderGeneralSettings() {
           if (!resp.ok) throw new Error("Failed");
           return loadAppConfig();
         }).then(function() {
-          renderFpStandardFilter();
-          renderCatStandardFilter();
+          updateActiveStandardBadge();
+          if (typeof setActiveStandard === "function") setActiveStandard(slot);
+          if (typeof loadBlockDefs === "function") {
+            loadBlockDefs().then(function() {
+              if (typeof render === "function") render();
+              if (typeof updateAutoName === "function") updateAutoName();
+            });
+          }
           if (typeof loadCatalogue === "function") loadCatalogue();
           if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
         });

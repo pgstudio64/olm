@@ -12,7 +12,7 @@
   // Eliminates re-binding on renderIngestion / _wireRoomListEl / _renderPlanList.
   // Two scopes, both session-life (bound once, dispatched by data-attributes):
   //   ingestionRender : merge checkboxes + bbox body/handle on #ingSvg
-  //   roomRender      : room-list clicks on ingRoomList/rvRoomList/fpDesignRoomList
+  //   roomRender      : room-list clicks on ingRoomList/rvRoomPopupList/fpRoomPopupList
   //                     + plan-list clicks on #hdrPlanList
   var _ingDelegationWired = false;
 
@@ -100,11 +100,11 @@
     }
 
     // --- roomRender: room-list delegation (3 containers) ---
-    ['ingRoomList', 'rvRoomList', 'fpDesignRoomList'].forEach(function(listId) {
+    ['ingRoomList', 'rvRoomPopupList', 'fpRoomPopupList'].forEach(function(listId) {
       var listEl = document.getElementById(listId);
       if (!listEl) return;
-      var context = listId === 'rvRoomList' ? 'review'
-                  : listId === 'fpDesignRoomList' ? 'design' : 'import';
+      var context = listId === 'rvRoomPopupList' ? 'review'
+                  : listId === 'fpRoomPopupList' ? 'design' : 'import';
       listEl.addEventListener('click', function(e) {
         // Delete button
         var delEl = e.target.closest('[data-ing-del]');
@@ -132,10 +132,12 @@
             if (window.fpRenderCurrent) window.fpRenderCurrent();
             if (window.rvRenderCurrent) window.rvRenderCurrent();
             updateIngRoomList();
+            _closeRoomPopup('fp');
           } else if (context === 'import') {
             if (window.ingShowRoomView) window.ingShowRoomView();
           } else {
             if (window.ingShowRoomView) window.ingShowRoomView();
+            _closeRoomPopup('rv');
           }
         } else {
           // "All" — back to plan view
@@ -605,6 +607,49 @@
     pop.style.display = 'none';
   }
 
+  // --- Room selector popups (rv = Review, fp = Office) ---
+  function _openRoomPopup(prefix) {
+    var pop = document.getElementById(prefix + 'RoomPopup');
+    if (!pop || pop.style.display !== 'none') return;
+    pop.style.display = '';
+    var searchEl = document.getElementById(prefix + 'RoomSearch');
+    if (searchEl) { searchEl.value = ''; searchEl.focus(); }
+    _filterRoomPopup(prefix);
+  }
+  function _closeRoomPopup(prefix) {
+    var pop = document.getElementById(prefix + 'RoomPopup');
+    if (!pop || pop.style.display === 'none') return;
+    pop.style.display = 'none';
+  }
+  function _filterRoomPopup(prefix) {
+    var searchEl = document.getElementById(prefix + 'RoomSearch');
+    var listEl = document.getElementById(prefix + 'RoomPopupList');
+    if (!listEl) return;
+    var filter = (searchEl && searchEl.value || '').toLowerCase().trim();
+    var items = listEl.querySelectorAll('[data-ing-room]');
+    var anyVisible = false;
+    items.forEach(function(span) {
+      var name = (span.dataset.ingRoom || '').toLowerCase();
+      var match = !filter || name.indexOf(filter) !== -1;
+      var row = span.closest('div');
+      if (row) row.style.display = match ? '' : 'none';
+      if (match) anyVisible = true;
+    });
+    var emptyEl = listEl.querySelector('.room-popup-empty');
+    if (!anyVisible && filter) {
+      if (!emptyEl) {
+        emptyEl = document.createElement('div');
+        emptyEl.className = 'room-popup-empty';
+        emptyEl.style.cssText = 'padding:6px;color:var(--text-dim);font-size:11px;';
+        emptyEl.textContent = 'Aucune pi\u00e8ce';
+        listEl.appendChild(emptyEl);
+      }
+      emptyEl.style.display = '';
+    } else if (emptyEl) {
+      emptyEl.style.display = 'none';
+    }
+  }
+
   function _renderPlanList() {
     var listEl = document.getElementById('hdrPlanList');
     if (!listEl) return;
@@ -984,8 +1029,8 @@
     html = '<div style="padding:2px 4px;cursor:pointer;' + allActive +
       '" data-ing-room="">&#9664; All (' + rooms.length + ')</div>' + html;
     _wireRoomListEl(document.getElementById('ingRoomList'), html, 'import');
-    _wireRoomListEl(document.getElementById('rvRoomList'), html, 'review');
-    _wireRoomListEl(document.getElementById('fpDesignRoomList'), html, 'design');
+    _wireRoomListEl(document.getElementById('rvRoomPopupList'), html, 'review');
+    _wireRoomListEl(document.getElementById('fpRoomPopupList'), html, 'design');
   }
 
   function _wireRoomListEl(listEl, html, context) {
@@ -2147,14 +2192,41 @@
         else _closePlanPopup();
       });
     }
-    // Click outside closes popup
+    // --- Room selector popups wiring (Review + Office) ---
+    ['rv', 'fp'].forEach(function(prefix) {
+      var selectorEl = document.getElementById(prefix + 'RoomSelector');
+      if (!selectorEl) return;
+      selectorEl.addEventListener('click', function(e) {
+        if (e.target.closest('#' + prefix + 'RoomPopup')) return;
+        e.stopPropagation();
+        var pop = document.getElementById(prefix + 'RoomPopup');
+        if (pop && pop.style.display === 'none') _openRoomPopup(prefix);
+        else _closeRoomPopup(prefix);
+      });
+      var searchEl = document.getElementById(prefix + 'RoomSearch');
+      if (searchEl) {
+        searchEl.addEventListener('input', function() {
+          _filterRoomPopup(prefix);
+        });
+      }
+    });
+
+    // Click outside closes all popups
     document.addEventListener('click', function (e) {
       var sel = document.getElementById('hdrPlanSelector');
       if (sel && !sel.contains(e.target)) _closePlanPopup();
+      var rvSel = document.getElementById('rvRoomSelector');
+      if (rvSel && !rvSel.contains(e.target)) _closeRoomPopup('rv');
+      var fpSel = document.getElementById('fpRoomSelector');
+      if (fpSel && !fpSel.contains(e.target)) _closeRoomPopup('fp');
     });
-    // Escape pour fermer la popup.
+    // Escape pour fermer les popups.
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') _closePlanPopup();
+      if (e.key === 'Escape') {
+        _closePlanPopup();
+        _closeRoomPopup('rv');
+        _closeRoomPopup('fp');
+      }
     });
     window._ingSetSelectedPlan = _setSelectedPlan;
     window._ingGetSelectedPlan = _getSelectedPlan;

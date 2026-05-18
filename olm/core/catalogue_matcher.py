@@ -252,12 +252,16 @@ def select_candidates(
     results = []
 
     from olm.core.matching_config import OVERSIZE_MARGIN
+    from olm.core.pattern_fit import is_pattern_valid
 
     for std in standards:
+        spacing = ALL_CONFIGS.get(std)
         fitting = []
         oversize_extra = []
         for p in catalogue:
             if p.get("standard") != std:
+                continue
+            if spacing is not None and not is_pattern_valid(p, spacing):
                 continue
             exact = _fits_in_room(p, room)
             if not exact and not _fits_in_room(p, room, OVERSIZE_MARGIN):
@@ -1064,6 +1068,86 @@ def remove_conflicting_desks(
     return result, removed
 
 
+_SYMMETRIC_180_TYPES: frozenset[str] = frozenset(
+    b.name for b in (
+        BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE,
+        BLOCK_4_FACE, BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
+    )
+    if b.symmetric_180
+)
+
+
+def _normalize_orientation(block_type: str, orientation: int) -> int:
+    """Normalize block orientation for fingerprint comparison.
+
+    Symmetric-180 blocks are reduced modulo 180; others modulo 360.
+
+    Args:
+        block_type: Block type name.
+        orientation: Raw orientation in degrees.
+
+    Returns:
+        Normalized orientation.
+    """
+    if block_type in _SYMMETRIC_180_TYPES:
+        return orientation % 180
+    return orientation % 360
+
+
+def _pattern_fingerprint(pattern: dict) -> tuple:
+    """Compute a structural fingerprint for a pattern.
+
+    The fingerprint captures what the user will see on screen (block layout
+    and room dimensions), independent of pattern name or WS labels.
+    Openings, windows and exclusions are excluded because they are replaced
+    by the target room's geometry during adaptation.
+
+    Args:
+        pattern: JSON pattern (catalogue format).
+
+    Returns:
+        Hashable tuple suitable for deduplication.
+    """
+    blocks = compute_block_positions(pattern)
+    block_tuples = sorted(
+        (
+            bp.block_type,
+            bp.x_cm,
+            bp.y_cm,
+            _normalize_orientation(bp.block_type, bp.orientation),
+        )
+        for bp in blocks
+    )
+    return (
+        pattern.get("room_width_cm", 0),
+        pattern.get("room_depth_cm", 0),
+        tuple(block_tuples),
+    )
+
+
+def dedupe_by_fingerprint(
+    candidates: list[PatternCandidate],
+) -> list[PatternCandidate]:
+    """Remove duplicate candidates that share the same structural fingerprint.
+
+    Preserves the original order: first encountered candidate wins.
+
+    Args:
+        candidates: List of pattern candidates (may include mirrors).
+
+    Returns:
+        Deduplicated list.
+    """
+    seen: set[tuple] = set()
+    result: list[PatternCandidate] = []
+    for c in candidates:
+        fp = _pattern_fingerprint(c.pattern)
+        if fp not in seen:
+            seen.add(fp)
+            result.append(c)
+    return result
+
+
 def generate_mirrors(
     candidates: list[PatternCandidate],
 ) -> list[PatternCandidate]:
@@ -1419,8 +1503,9 @@ def match_room(
             by_standard[std] = None
             continue
 
-        # Step 2: mirrors
+        # Step 2: mirrors + deduplication
         with_mirrors = generate_mirrors(sel.candidates)
+        with_mirrors = dedupe_by_fingerprint(with_mirrors)
 
         std_scores: list[MatchScore] = []
         for candidate in with_mirrors:

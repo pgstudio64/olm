@@ -118,22 +118,110 @@ def _determine_direction(
     return "shrink"
 
 
+def compute_pattern_footprint(
+    pattern: dict,
+    spacing: SpacingConfig,
+) -> tuple[int, int, int, int]:
+    """Compute the raw bounding box of all pattern obstacles.
+
+    Pure function — does not mutate the pattern, does not snap, does
+    not translate. Returns the bbox in the pattern's own coordinate
+    system (may include negative values when face zones extend west/
+    north beyond the block body).
+
+    Single source of truth for the pattern footprint, used by:
+    - ``fit_room_to_pattern`` (computes min room, then snaps + translates)
+    - ``is_pattern_valid`` (checks footprint fits in room_width/depth)
+    - frontend mirror function (PE info panel, overflow indicator)
+
+    The bbox includes:
+    - block bodies
+    - face zones (chair clearance + circulation) on all 4 sides
+    - door swing areas as 2D obstacles (perpendicular pushback for
+      every block that overlaps the door laterally)
+
+    Args:
+        pattern: Catalogue pattern dict.
+        spacing: Spacing config for the pattern's standard.
+
+    Returns:
+        (x_min, x_max, y_min, y_max) in cm.
+
+    Raises:
+        PatternStructurallyInvalid: blocks physically overlap.
+    """
+    block_defs = build_block_defs(spacing)
+    positions = compute_block_positions(pattern)
+
+    if not positions:
+        rw = pattern.get("room_width_cm", 0)
+        rd = pattern.get("room_depth_cm", 0)
+        return 0, rw, 0, rd
+
+    # Block footprints (body + face zones).
+    # D-229: faces without chairs can touch the wall (eff = 0).
+    x_mins: list[int] = []
+    x_maxs: list[int] = []
+    y_mins: list[int] = []
+    y_maxs: list[int] = []
+    for bp in positions:
+        fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
+        x_mins.append(bp.x_cm - fc.west.total_cm)
+        x_maxs.append(bp.x_cm + bp.eo_cm + fc.east.total_cm)
+        y_mins.append(bp.y_cm - fc.north.total_cm)
+        y_maxs.append(bp.y_cm + bp.ns_cm + fc.south.total_cm)
+
+    # Door swing areas as 2D obstacles.
+    _apply_door_obstacles(
+        pattern, spacing, positions, block_defs,
+        x_mins, x_maxs, y_mins, y_maxs,
+    )
+
+    return min(x_mins), max(x_maxs), min(y_mins), max(y_maxs)
+
+
+def is_pattern_valid(
+    pattern: dict,
+    spacing: SpacingConfig,
+) -> bool:
+    """Return True if the pattern's footprint fits in its declared room.
+
+    A pattern is invalid when its true footprint (body + face zones +
+    door swing areas) exceeds ``room_width_cm`` × ``room_depth_cm`` —
+    either because the bbox is wider/deeper than the room, or because
+    the bbox extends into negative coordinates (block placed past the
+    NW corner). Also invalid when blocks physically overlap.
+
+    Used by the Office matcher (filters invalid patterns out of the
+    candidate set) and by ``save_as_default`` (refuses to publish an
+    invalid catalogue).
+    """
+    rw = pattern.get("room_width_cm", 0)
+    rd = pattern.get("room_depth_cm", 0)
+    if rw <= 0 or rd <= 0:
+        return False
+    try:
+        x_min, x_max, y_min, y_max = compute_pattern_footprint(
+            pattern, spacing,
+        )
+    except PatternStructurallyInvalid:
+        return False
+    return x_min >= 0 and y_min >= 0 and x_max <= rw and y_max <= rd
+
+
 def _compute_min_room(
     pattern: dict,
     spacing: SpacingConfig,
 ) -> tuple[int, int, list[str]]:
     """Compute minimum room dimensions for a pattern.
 
-    Collects all obstacle rectangles (workstation footprints and door
-    exclusion zones), computes the tightest bounding box, then snaps
-    to grid.  May mutate pattern DSL coordinates (offset_ns_cm, gap_cm,
-    door offsets) to translate into the positive quadrant.
+    Delegates the obstacle bbox to ``compute_pattern_footprint``, then
+    snaps to grid and translates the pattern into the positive quadrant.
 
     Returns:
         (width_cm, depth_cm, warnings)
     """
     warnings: list[str] = []
-    block_defs = build_block_defs(spacing)
     positions = compute_block_positions(pattern)
 
     if not positions:
@@ -143,39 +231,11 @@ def _compute_min_room(
             warnings,
         )
 
-    # Step 1: preconditions
     _check_preconditions(pattern, positions, spacing, warnings)
 
-    # Steps 2-4: collect all obstacle rectangles
-    x_mins: list[int] = []
-    x_maxs: list[int] = []
-    y_mins: list[int] = []
-    y_maxs: list[int] = []
-
-    # Workstation block footprints (body + face zones)
-    # D-229: faces without chairs can touch the wall (eff = 0).
-    for bp in positions:
-        fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-        eff_w = fc.west.total_cm
-        eff_e = fc.east.total_cm
-        eff_n = fc.north.total_cm
-        eff_s = fc.south.total_cm
-
-        x_mins.append(bp.x_cm - eff_w)
-        x_maxs.append(bp.x_cm + bp.eo_cm + eff_e)
-        y_mins.append(bp.y_cm - eff_n)
-        y_maxs.append(bp.y_cm + bp.ns_cm + eff_s)
-
-    # Door exclusion zone rectangles (same coordinate system as blocks)
-    _collect_door_exclusion_rects(
-        pattern, spacing, x_mins, x_maxs, y_mins, y_maxs,
+    bbox_x_min, bbox_x_max, bbox_y_min, bbox_y_max = (
+        compute_pattern_footprint(pattern, spacing)
     )
-
-    bbox_x_min = min(x_mins)
-    bbox_x_max = max(x_maxs)
-    bbox_y_min = min(y_mins)
-    bbox_y_max = max(y_maxs)
-
     width = bbox_x_max - bbox_x_min
     depth = bbox_y_max - bbox_y_min
 
@@ -185,7 +245,6 @@ def _compute_min_room(
     )
     warnings.extend(feat_warns)
 
-    # Snap
     width = math.ceil(width / SNAP_CM) * SNAP_CM
     depth = math.ceil(depth / SNAP_CM) * SNAP_CM
 
@@ -198,28 +257,35 @@ def _compute_min_room(
     return width, depth, warnings
 
 
-def _collect_door_exclusion_rects(
+def _apply_door_obstacles(
     pattern: dict,
     spacing: SpacingConfig,
+    positions: list[BlockPosition],
+    block_defs: dict[str, dict],
     x_mins: list[int],
     x_maxs: list[int],
     y_mins: list[int],
     y_maxs: list[int],
 ) -> None:
-    """Add door exclusion zone footprints to the obstacle lists.
+    """Add door swing areas as 2D obstacles to the bbox lists.
 
-    Only constrains the axis PERPENDICULAR to the door's wall:
-    - South/North doors: constrain X (offset → offset + width).
-    - East/West doors: constrain Y (offset → offset + width).
+    Two effects per door:
 
-    The axis parallel to the door face (depth from the wall) is NOT
-    constrained because the door moves with its wall when the room
-    shrinks or expands.
+    1. **Lateral fit on wall**: the door's lateral span (offset →
+       offset + width) is appended to the bbox along the wall axis,
+       ensuring the room is wide/deep enough to host the door.
+
+    2. **Perpendicular pushback**: for every block (body + face zones)
+       whose lateral footprint overlaps the door's lateral span, the
+       wall is pushed away from the block by ``excl_depth`` cm so the
+       block cannot sit inside the door swing area.
 
     Args:
         pattern: Catalogue pattern.
         spacing: Spacing config (provides door_exclusion_depth_cm).
-        x_mins..y_maxs: Obstacle extent lists (mutated in place).
+        positions: Block positions in the pattern.
+        block_defs: Block defs for the pattern's standard.
+        x_mins..y_maxs: Bbox extent lists (mutated in place).
     """
     excl_depth = spacing.door_exclusion_depth_cm
     if excl_depth <= 0:
@@ -228,17 +294,51 @@ def _collect_door_exclusion_rects(
     for feat in pattern.get("room_openings", []):
         if not feat.get("has_door", False):
             continue
-
         face = feat.get("face", "")
-        offset = feat.get("offset_cm", 0)
-        w = feat.get("width_cm", 0)
+        do = feat.get("offset_cm", 0)
+        dw = feat.get("width_cm", 0)
+        d_lo = do
+        d_hi = do + dw
 
+        # 1. Lateral extent on wall
         if face in ("south", "north"):
-            x_mins.append(offset)
-            x_maxs.append(offset + w)
+            x_mins.append(d_lo)
+            x_maxs.append(d_hi)
         elif face in ("east", "west"):
-            y_mins.append(offset)
-            y_maxs.append(offset + w)
+            y_mins.append(d_lo)
+            y_maxs.append(d_hi)
+
+        # 2. Perpendicular pushback for blocks in door's lateral range
+        for bp in positions:
+            fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
+            if face in ("south", "north"):
+                bp_lat_lo = bp.x_cm - fc.west.total_cm
+                bp_lat_hi = bp.x_cm + bp.eo_cm + fc.east.total_cm
+                if bp_lat_hi <= d_lo or bp_lat_lo >= d_hi:
+                    continue
+                if face == "south":
+                    y_maxs.append(
+                        bp.y_cm + bp.ns_cm + fc.south.total_cm
+                        + excl_depth
+                    )
+                else:
+                    y_mins.append(
+                        bp.y_cm - fc.north.total_cm - excl_depth
+                    )
+            else:
+                bp_lat_lo = bp.y_cm - fc.north.total_cm
+                bp_lat_hi = bp.y_cm + bp.ns_cm + fc.south.total_cm
+                if bp_lat_hi <= d_lo or bp_lat_lo >= d_hi:
+                    continue
+                if face == "east":
+                    x_maxs.append(
+                        bp.x_cm + bp.eo_cm + fc.east.total_cm
+                        + excl_depth
+                    )
+                else:
+                    x_mins.append(
+                        bp.x_cm - fc.west.total_cm - excl_depth
+                    )
 
 
 def get_face_zones(
