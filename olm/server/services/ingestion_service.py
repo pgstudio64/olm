@@ -513,6 +513,15 @@ def import_preprocessed(
         window_mode=window_mode,
     )
 
+    # D-245: re-attach saved_layout from source JSON to extracted rooms.
+    rooms_raw = json_data.get("rooms") or {}
+    if isinstance(rooms_raw, dict):
+        for room in rooms:
+            name = room.get("name", "")
+            src = rooms_raw.get(name) or {}
+            if isinstance(src.get("saved_layout"), dict):
+                room["saved_layout"] = src["saved_layout"]
+
     # Image size
     page_w = int(json_data.get("page_width_px") or 0)
     page_h = int(json_data.get("page_height_px") or 0)

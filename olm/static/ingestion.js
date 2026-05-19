@@ -930,6 +930,10 @@
         _showPlanLoadedUI(planId);
         if (status) status.textContent = ingState.rooms.length + ' rooms — scale ' +
           ingState.scale + ' cm/px';
+        // D-245: clear layout amendments from previous plan (fresh OCR).
+        var _fpAmOcr = window.fpAmendments;
+        Object.keys(_fpAmOcr).forEach(function (k) { delete _fpAmOcr[k]; });
+
         renderIngestion();
         populateRoomsJson();
         updateIngRoomList();
@@ -1020,9 +1024,16 @@
       var dims = (r.width_cm > 0 && r.depth_cm > 0)
         ? r.width_cm + 'x' + r.depth_cm : '';
       var manualTag = r.manual ? ' <span style="font-size:9px;color:var(--accent2,#c8a050);">M</span>' : '';
+      // D-245: checkmark for rooms with a saved/amended layout.
+      var _layoutAmend = (window.fpAmendments || {})[r.name];
+      var layoutTag = _layoutAmend
+        ? ' <span class="room-saved-mark" title="' +
+          (_layoutAmend.saved ? 'Layout saved' : 'Layout amended') +
+          '">' + (_layoutAmend.saved ? '\u2713' : '\u270E') + '</span>'
+        : '';
       html += '<div style="display:flex;align-items:center;gap:4px;padding:2px 4px 2px 4px;margin-right:16px;' + active +
         '"><span style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-ing-room="' + r.name + '">' +
-        r.name + manualTag + ' <span style="font-size:10px;color:var(--text-dim);">' + dims + '</span></span>' +
+        r.name + manualTag + layoutTag + ' <span style="font-size:10px;color:var(--text-dim);">' + dims + '</span></span>' +
         '<span class="room-del" data-ing-del="' + r.name +
         '" title="Delete room" style="cursor:pointer;color:var(--bad);padding:0 6px;font-size:14px;font-weight:bold;flex-shrink:0;">&times;</span></div>';
     });
@@ -2640,6 +2651,18 @@
         // Chemins bruts serveur (pour /api/room/reanalyze qui lit le PNG -SD).
         ingState.planPath = data.overlay_path || data.image_path || "";
         ingState.planPathEnhanced = data.enhanced_path || ingState.planPath;
+
+        // D-245: restore saved layouts from JSON v3 before matching.
+        // Sequence: reset fpAmendments (fresh plan) then populate from
+        // saved_layout fields. Must happen BEFORE fpLoadAndMatch so that
+        // fpRenderCurrent sees the amendments.
+        var _fpAm = window.fpAmendments;
+        Object.keys(_fpAm).forEach(function (k) { delete _fpAm[k]; });
+        ingState.rooms.forEach(function (r) {
+          if (r.saved_layout && typeof r.saved_layout === 'object') {
+            _fpAm[r.name] = JSON.parse(JSON.stringify(r.saved_layout));
+          }
+        });
 
         renderIngestion();
         populateRoomsJson();

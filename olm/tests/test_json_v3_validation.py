@@ -269,3 +269,34 @@ class TestDoorSeedsSchema:
             {"face": "south", "offset_px": 10, "width_px": 27},
         ]
         validate_plan(plan)
+
+
+# -- D-245 saved_layout tests -----------------------------------------------
+
+
+class TestSavedLayout:
+    """D-245: saved_layout optional field in room."""
+
+    def test_saved_layout_valid(self):
+        """Room with saved_layout object passes validation."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["saved_layout"] = {
+            "pattern_name": "WS02_NS",
+            "standard": "comfortable",
+            "n_desks": 4,
+            "saved": True,
+        }
+        validate_plan(plan)
+
+    def test_saved_layout_absent_ok(self):
+        """Room without saved_layout passes (retrocompat)."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        assert "saved_layout" not in plan["rooms"]["101"]
+        validate_plan(plan)
+
+    def test_saved_layout_non_object_fails(self):
+        """saved_layout must be an object, not a string."""
+        plan = copy.deepcopy(_MINIMAL_PLAN)
+        plan["rooms"]["101"]["saved_layout"] = "invalid"
+        with pytest.raises(ValueError, match="saved_layout"):
+            validate_plan(plan)

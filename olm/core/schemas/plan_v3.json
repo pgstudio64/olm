@@ -219,7 +219,11 @@
           "type": "array",
           "items": { "$ref": "#/$defs/exclusion_zone" }
         },
-        "walls_user_edited": { "type": "boolean" }
+        "walls_user_edited": { "type": "boolean" },
+        "saved_layout": {
+          "type": "object",
+          "description": "Persisted layout amendment (D-245). Optional, restored at reload."
+        }
       },
       "additionalProperties": true
     }

@@ -237,6 +237,12 @@
           return out;
         });
       }
+      // D-245: persist layout amendment (saved or amended) for reload.
+      var _amend = (window.fpAmendments || {})[roomId];
+      if (_amend) {
+        roomObj.saved_layout = JSON.parse(JSON.stringify(_amend));
+      }
+
       roomsDict[roomId] = roomObj;
     });
 

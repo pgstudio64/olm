@@ -594,6 +594,8 @@
     text-align: right;
   }
   .room-dim-row input[type=number]:focus { outline: none; border-color: var(--accent); }
+  /* D-245: saved/amended layout marker in room sidebar */
+  .room-saved-mark { font-size: 11px; color: #6ab06a; margin-left: 2px; }
   .standard-row {
     display: flex;
     gap: var(--sp-sm);
