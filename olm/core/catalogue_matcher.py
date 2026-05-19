@@ -180,19 +180,37 @@ def effective_dimensions(room: RoomSpec) -> tuple[int, int]:
     return max(0, ew), max(0, ed)
 
 
-def _fits_in_room(pattern: dict, room: RoomSpec, margin: float = 0.0) -> bool:
-    """Check whether the pattern footprint fits inside the target room.
+def _fits_in_room(
+    pattern: dict,
+    room: RoomSpec,
+    spacing: "SpacingConfig | None" = None,
+) -> bool:
+    """Check whether the pattern's real footprint fits the target room.
 
-    Uses effective dimensions (after peripheral exclusions).
+    D-242: uses ``compute_pattern_footprint`` (real emprise including
+    face zones and door obstacles) instead of declared room dimensions.
+    Compares footprint width/depth to effective room dimensions.
 
     Args:
-        margin: Fractional tolerance (0.0 = exact, 0.2 = 20% oversize).
+        spacing: Spacing config for the pattern's standard. If None,
+            falls back to declared room dimensions.
     """
+    ew, ed = effective_dimensions(room)
+    if spacing is not None:
+        from olm.core.pattern_fit import compute_pattern_footprint
+        try:
+            x_min, x_max, y_min, y_max = compute_pattern_footprint(
+                pattern, spacing,
+            )
+        except Exception:
+            return False
+        fp_w = x_max - x_min
+        fp_d = y_max - y_min
+        return fp_w <= ew and fp_d <= ed
+    # Fallback: declared dimensions
     pw = pattern.get("room_width_cm", 0)
     pd = pattern.get("room_depth_cm", 0)
-    ew, ed = effective_dimensions(room)
-    factor = 1.0 + margin
-    return pw <= ew * factor and pd <= ed * factor
+    return pw <= ew and pd <= ed
 
 
 def _is_dominated(p: PatternCandidate, others: list[PatternCandidate]) -> bool:
@@ -252,9 +270,6 @@ def select_candidates(
     standards = [standard] if standard else list(ALL_CONFIGS.keys())
     results = []
 
-    from olm.core.matching_config import OVERSIZE_MARGIN
-    from olm.core.pattern_fit import is_pattern_valid
-
     for std in standards:
         spacing = ALL_CONFIGS.get(std)
         fitting = []
@@ -262,11 +277,9 @@ def select_candidates(
         for p in catalogue:
             if p.get("standard") != std:
                 continue
-            if spacing is not None and not is_pattern_valid(p, spacing):
-                continue
-            exact = _fits_in_room(p, room)
-            if not exact and not _fits_in_room(p, room, OVERSIZE_MARGIN):
-                continue
+            # D-242: no hard filter — all patterns of the target standard
+            # are proposed. Oversize classification uses real footprint.
+            exact = _fits_in_room(p, room, spacing)
             candidate = PatternCandidate(
                 pattern=p,
                 name=p["name"],

@@ -18,6 +18,8 @@
  */
 function classifyGapSide(faceInfo) {
   if (!faceInfo) return { type: "wall", chairClearanceCm: 0 };
+  // D-241: internal face = chair in void, no outer clearance
+  if (faceInfo.internal) return { type: "other", chairClearanceCm: 0 };
   var nsup = faceInfo.non_superposable_cm || 0;
   if (nsup > 0) return { type: "chair", chairClearanceCm: nsup };
   return { type: "other", chairClearanceCm: 0 };

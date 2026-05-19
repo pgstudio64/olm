@@ -30,18 +30,28 @@ class FaceZone:
     - candidate_cm: minimum circulation zone, mandatory and extensible
       but not reducible. Scoring/rebalancing may increase it.
 
+    D-241: internal=True means the chair sits inside the block's void
+    (e.g. ORTHO L-shape) and does NOT extend the outer footprint.
+
     Attributes:
         non_superposable_cm: Thickness of the fixed zone (chair clearance).
         candidate_cm: Thickness of the minimum circulation zone.
+        internal: True if the chair zone is inside the block bbox.
     """
 
     non_superposable_cm: int = 0
     candidate_cm: int = 0
+    internal: bool = False
 
     @property
     def total_cm(self) -> int:
         """Total thickness (fixed zone + minimum circulation zone)."""
         return self.non_superposable_cm + self.candidate_cm
+
+    @property
+    def outer_cm(self) -> int:
+        """Outer footprint contribution (0 if internal, total_cm otherwise)."""
+        return 0 if self.internal else self.total_cm
 
     @classmethod
     def absent(cls) -> "FaceZone":
@@ -52,6 +62,11 @@ class FaceZone:
     def chair_only(cls) -> "FaceZone":
         """Chair clearance only — no candidate zone (D-229)."""
         return cls(CHAIR_CLEARANCE_CM, 0)
+
+    @classmethod
+    def chair_internal(cls) -> "FaceZone":
+        """Chair in internal void — no outer footprint (D-241)."""
+        return cls(CHAIR_CLEARANCE_CM, 0, internal=True)
 
 
 @dataclass
@@ -190,9 +205,9 @@ BLOCK_2_ORTHO_R = Block(
     ns_cm=DESK_D_CM + DESK_W_CM,  # 260 cm (80+180)
     n_desks=2,
     faces=FaceCandidates(
-        north=_FACE_CHAIR_ONLY,    # chaise desk1 (D-229)
+        north=_FACE_CHAIR_ONLY,        # chaise desk1 (D-229)
         south=FaceZone.absent(),
-        east=_FACE_CHAIR_ONLY,     # chaise desk2 (D-229)
+        east=FaceZone.chair_internal(),  # D-241: chaise desk2 dans le void
         west=FaceZone.absent(),
     ),
 )
@@ -213,10 +228,10 @@ BLOCK_2_ORTHO_L = Block(
     ns_cm=DESK_D_CM + DESK_W_CM,  # 260 cm (80+180)
     n_desks=2,
     faces=FaceCandidates(
-        north=_FACE_CHAIR_ONLY,    # chaise desk1 (D-229)
+        north=_FACE_CHAIR_ONLY,        # chaise desk1 (D-229)
         south=FaceZone.absent(),
         east=FaceZone.absent(),
-        west=_FACE_CHAIR_ONLY,     # chaise desk2 (D-229)
+        west=FaceZone.chair_internal(),  # D-241: chaise desk2 dans le void
     ),
 )
 

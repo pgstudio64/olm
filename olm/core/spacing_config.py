@@ -174,13 +174,17 @@ def _block_def_to_json(block: _pg.Block) -> dict:
         "derogatory": block.derogatory,
         "faces": {
             "north": {"non_superposable_cm": block.faces.north.non_superposable_cm,
-                       "candidate_cm": block.faces.north.candidate_cm},
+                       "candidate_cm": block.faces.north.candidate_cm,
+                       "internal": block.faces.north.internal},
             "south": {"non_superposable_cm": block.faces.south.non_superposable_cm,
-                       "candidate_cm": block.faces.south.candidate_cm},
+                       "candidate_cm": block.faces.south.candidate_cm,
+                       "internal": block.faces.south.internal},
             "east":  {"non_superposable_cm": block.faces.east.non_superposable_cm,
-                       "candidate_cm": block.faces.east.candidate_cm},
+                       "candidate_cm": block.faces.east.candidate_cm,
+                       "internal": block.faces.east.internal},
             "west":  {"non_superposable_cm": block.faces.west.non_superposable_cm,
-                       "candidate_cm": block.faces.west.candidate_cm},
+                       "candidate_cm": block.faces.west.candidate_cm,
+                       "internal": block.faces.west.internal},
         },
     }
 

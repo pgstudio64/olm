@@ -205,14 +205,15 @@ class TestSelectCandidates:
     def catalogue(self):
         return load_catalogue()
 
-    def test_small_room_no_candidates(self, catalogue):
-        """Room too small: no candidate fits."""
+    def test_small_room_all_oversize(self, catalogue):
+        """Room too small: all candidates are oversize (D-242)."""
         if not catalogue:
             pytest.skip("Empty catalogue")
         tiny = RoomSpec(width_cm=50, depth_cm=50)
         results = select_candidates(catalogue, tiny)
         for sel in results:
-            assert len(sel.candidates) == 0
+            for c in sel.candidates:
+                assert c.oversize, f"{c.name} should be oversize for 50x50"
 
     def test_large_room_has_candidates(self, catalogue):
         """Room large enough: at least one candidate fits."""
@@ -241,6 +242,40 @@ class TestSelectCandidates:
         for sel in results:
             for c in sel.candidates:
                 assert c in sel.all_fitting
+
+    def test_no_hard_filter_all_proposed(self, catalogue):
+        """D-242: all patterns of a standard are proposed (no hard filter)."""
+        if not catalogue:
+            pytest.skip("Empty catalogue")
+        # Count patterns per standard in catalogue
+        from collections import Counter
+        std_counts = Counter(p.get("standard") for p in catalogue)
+        # For a tiny room, all patterns should appear (as oversize)
+        tiny = RoomSpec(width_cm=50, depth_cm=50)
+        results = select_candidates(catalogue, tiny)
+        for sel in results:
+            n_cat = std_counts.get(sel.standard, 0)
+            assert len(sel.candidates) == n_cat, (
+                f"Standard {sel.standard}: expected {n_cat} candidates, "
+                f"got {len(sel.candidates)}"
+            )
+
+    def test_fitting_before_oversize_in_candidates(self, catalogue):
+        """D-242: fitting candidates come before oversize in the list."""
+        if not catalogue:
+            pytest.skip("Empty catalogue")
+        room = RoomSpec(width_cm=600, depth_cm=500)
+        results = select_candidates(catalogue, room)
+        for sel in results:
+            saw_oversize = False
+            for c in sel.candidates:
+                if c.oversize:
+                    saw_oversize = True
+                elif saw_oversize:
+                    pytest.fail(
+                        f"Fitting candidate {c.name} appears after "
+                        f"oversize in {sel.standard}"
+                    )
 
 
 # ---------------------------------------------------------------------------

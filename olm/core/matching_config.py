@@ -19,8 +19,4 @@ MIN_DESKS_DROP_RATIO: float = (
     _matching.get("min_desks_drop_ratio", 0.30) if isinstance(_matching, dict) else 0.30
 )
 
-# Oversize margin: accept patterns up to (1 + ratio) × room dimensions.
-# These candidates are flagged oversize=True and shown greyed out.
-OVERSIZE_MARGIN: float = (
-    _matching.get("oversize_margin", 0.20) if isinstance(_matching, dict) else 0.20
-)
+# D-242: OVERSIZE_MARGIN removed — no hard filter, all patterns proposed.

@@ -80,7 +80,7 @@ def _compact_east(
         block_east_edges: list[int] = []
         for bp in positions:
             fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-            eff_e = fc.east.total_cm
+            eff_e = fc.east.outer_cm
             block_east_edges.append(bp.x_cm + bp.eo_cm + eff_e)
 
         # Virtual wall = max effective east edge
@@ -124,7 +124,7 @@ def _compact_east(
                     fc = get_face_zones(
                         first_bp.block_type, first_bp.orientation, block_defs,
                     )
-                    eff_w = fc.west.total_cm
+                    eff_w = fc.west.outer_cm
                     min_gap = eff_w
                 else:
                     prev_bp = None
@@ -141,7 +141,7 @@ def _compact_east(
                     fc_this = get_face_zones(
                         first_bp.block_type, first_bp.orientation, block_defs,
                     )
-                    min_gap = fc_prev.east.total_cm + fc_this.west.total_cm
+                    min_gap = fc_prev.east.outer_cm + fc_this.west.outer_cm
 
                 current_gap = block.get("gap_cm", 0)
                 margins.append(max(0, current_gap - min_gap))
@@ -275,9 +275,9 @@ def _compute_min_row_gaps(
             offset_ns_upper = block_upper.get("offset_ns_cm", 0)
 
             # Effective X footprint (body + EW face zones, no dtw)
-            x_min_upper = bp_upper.x_cm - fc_upper.west.total_cm
+            x_min_upper = bp_upper.x_cm - fc_upper.west.outer_cm
             x_max_upper = (
-                bp_upper.x_cm + bp_upper.eo_cm + fc_upper.east.total_cm
+                bp_upper.x_cm + bp_upper.eo_cm + fc_upper.east.outer_cm
             )
 
             for bp_lower in lower_positions:
@@ -288,9 +288,9 @@ def _compute_min_row_gaps(
                 offset_ns_lower = block_lower.get("offset_ns_cm", 0)
 
                 # Effective X footprint
-                x_min_lower = bp_lower.x_cm - fc_lower.west.total_cm
+                x_min_lower = bp_lower.x_cm - fc_lower.west.outer_cm
                 x_max_lower = (
-                    bp_lower.x_cm + bp_lower.eo_cm + fc_lower.east.total_cm
+                    bp_lower.x_cm + bp_lower.eo_cm + fc_lower.east.outer_cm
                 )
 
                 # X overlap check
@@ -302,10 +302,10 @@ def _compute_min_row_gaps(
                 # Vertical constraint
                 pair_required = (
                     offset_ns_upper + bp_upper.ns_cm
-                    + fc_upper.south.total_cm
+                    + fc_upper.south.outer_cm
                     - max_ns_upper
                     - offset_ns_lower
-                    + fc_lower.north.total_cm
+                    + fc_lower.north.outer_cm
                 )
                 max_required = max(max_required, pair_required)
 

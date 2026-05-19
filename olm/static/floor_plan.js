@@ -533,6 +533,10 @@
     var gradeOrd = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
     function gradeVal(g) { return g in gradeOrd ? gradeOrd[g] : 6; }
     candidates.sort(function(a, b) {
+      // D-242: fitting before oversize
+      var oa = a.oversize ? 1 : 0;
+      var ob = b.oversize ? 1 : 0;
+      if (oa !== ob) return oa - ob;
       if (b.n_desks !== a.n_desks) return b.n_desks - a.n_desks;
       var gd = gradeVal(a.room_grade || a.circulation_grade) - gradeVal(b.room_grade || b.circulation_grade);
       if (gd !== 0) return gd;

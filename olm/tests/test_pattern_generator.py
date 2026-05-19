@@ -5,6 +5,8 @@ import tempfile
 from olm.core.pattern_generator import (
     BLOCK_1,
     BLOCK_2_FACE,
+    BLOCK_2_ORTHO_L,
+    BLOCK_2_ORTHO_R,
     BLOCK_4_FACE,
     BLOCK_6_FACE,
     CHAIR_CLEARANCE_CM,
@@ -188,3 +190,47 @@ def test_render_svg_dark_background():
     assert "1a1a1a" in content      # screen (OLO visual standard)
     assert "door" in content         # south door label
     os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# D-241: FaceZone internal flag
+# ---------------------------------------------------------------------------
+
+
+def test_face_zone_internal_outer_cm():
+    """internal=True → outer_cm=0, total_cm unchanged."""
+    fz = FaceZone(70, 0, internal=True)
+    assert fz.total_cm == 70
+    assert fz.outer_cm == 0
+
+
+def test_face_zone_external_outer_cm():
+    """internal=False (default) → outer_cm == total_cm."""
+    fz = FaceZone(70, 0)
+    assert not fz.internal
+    assert fz.outer_cm == fz.total_cm == 70
+
+
+def test_face_zone_chair_internal_classmethod():
+    """chair_internal() → correct values."""
+    fz = FaceZone.chair_internal()
+    assert fz.non_superposable_cm == CHAIR_CLEARANCE_CM
+    assert fz.candidate_cm == 0
+    assert fz.internal is True
+    assert fz.outer_cm == 0
+
+
+def test_ortho_r_east_internal():
+    """ORTHO_R: east face is internal (chair in void)."""
+    assert BLOCK_2_ORTHO_R.faces.east.internal is True
+    assert BLOCK_2_ORTHO_R.faces.east.outer_cm == 0
+    assert BLOCK_2_ORTHO_R.faces.north.internal is False
+    assert BLOCK_2_ORTHO_R.faces.north.outer_cm == CHAIR_CLEARANCE_CM
+
+
+def test_ortho_l_west_internal():
+    """ORTHO_L: west face is internal (chair in void)."""
+    assert BLOCK_2_ORTHO_L.faces.west.internal is True
+    assert BLOCK_2_ORTHO_L.faces.west.outer_cm == 0
+    assert BLOCK_2_ORTHO_L.faces.north.internal is False
+    assert BLOCK_2_ORTHO_L.faces.north.outer_cm == CHAIR_CLEARANCE_CM

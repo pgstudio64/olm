@@ -166,10 +166,10 @@ def compute_pattern_footprint(
     y_maxs: list[int] = []
     for bp in positions:
         fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
-        x_mins.append(bp.x_cm - fc.west.total_cm)
-        x_maxs.append(bp.x_cm + bp.eo_cm + fc.east.total_cm)
-        y_mins.append(bp.y_cm - fc.north.total_cm)
-        y_maxs.append(bp.y_cm + bp.ns_cm + fc.south.total_cm)
+        x_mins.append(bp.x_cm - fc.west.outer_cm)
+        x_maxs.append(bp.x_cm + bp.eo_cm + fc.east.outer_cm)
+        y_mins.append(bp.y_cm - fc.north.outer_cm)
+        y_maxs.append(bp.y_cm + bp.ns_cm + fc.south.outer_cm)
 
     # Door swing areas as 2D obstacles.
     _apply_door_obstacles(
@@ -312,32 +312,32 @@ def _apply_door_obstacles(
         for bp in positions:
             fc = get_face_zones(bp.block_type, bp.orientation, block_defs)
             if face in ("south", "north"):
-                bp_lat_lo = bp.x_cm - fc.west.total_cm
-                bp_lat_hi = bp.x_cm + bp.eo_cm + fc.east.total_cm
+                bp_lat_lo = bp.x_cm - fc.west.outer_cm
+                bp_lat_hi = bp.x_cm + bp.eo_cm + fc.east.outer_cm
                 if bp_lat_hi <= d_lo or bp_lat_lo >= d_hi:
                     continue
                 if face == "south":
                     y_maxs.append(
-                        bp.y_cm + bp.ns_cm + fc.south.total_cm
+                        bp.y_cm + bp.ns_cm + fc.south.outer_cm
                         + excl_depth
                     )
                 else:
                     y_mins.append(
-                        bp.y_cm - fc.north.total_cm - excl_depth
+                        bp.y_cm - fc.north.outer_cm - excl_depth
                     )
             else:
-                bp_lat_lo = bp.y_cm - fc.north.total_cm
-                bp_lat_hi = bp.y_cm + bp.ns_cm + fc.south.total_cm
+                bp_lat_lo = bp.y_cm - fc.north.outer_cm
+                bp_lat_hi = bp.y_cm + bp.ns_cm + fc.south.outer_cm
                 if bp_lat_hi <= d_lo or bp_lat_lo >= d_hi:
                     continue
                 if face == "east":
                     x_maxs.append(
-                        bp.x_cm + bp.eo_cm + fc.east.total_cm
+                        bp.x_cm + bp.eo_cm + fc.east.outer_cm
                         + excl_depth
                     )
                 else:
                     x_mins.append(
-                        bp.x_cm - fc.west.total_cm - excl_depth
+                        bp.x_cm - fc.west.outer_cm - excl_depth
                     )
 
 
@@ -360,18 +360,22 @@ def get_face_zones(
         north=FaceZone(
             faces["north"]["non_superposable_cm"],
             faces["north"]["candidate_cm"],
+            internal=faces["north"].get("internal", False),
         ),
         south=FaceZone(
             faces["south"]["non_superposable_cm"],
             faces["south"]["candidate_cm"],
+            internal=faces["south"].get("internal", False),
         ),
         east=FaceZone(
             faces["east"]["non_superposable_cm"],
             faces["east"]["candidate_cm"],
+            internal=faces["east"].get("internal", False),
         ),
         west=FaceZone(
             faces["west"]["non_superposable_cm"],
             faces["west"]["candidate_cm"],
+            internal=faces["west"].get("internal", False),
         ),
     )
     if orientation != 0:

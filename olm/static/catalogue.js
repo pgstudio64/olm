@@ -33,6 +33,18 @@ function _wireCatDelegation() {
         });
         return;
       }
+      // Overflow badge diagnostic (dev-mode only, D-240)
+      var warn = e.target.closest(".card-warning");
+      if (warn && APP_CONFIG.dev_mode) {
+        e.stopPropagation();
+        var card = warn.closest(".catalogue-card");
+        if (card) {
+          var pName = card.dataset.patternName;
+          var pat = catalogueData.find(function(p) { return p.name === pName; });
+          if (pat) OLM_DIAGS.run("pattern.footprint", pat);
+        }
+        return;
+      }
       // Card click (load pattern)
       var card = e.target.closest(".catalogue-card");
       if (card) {

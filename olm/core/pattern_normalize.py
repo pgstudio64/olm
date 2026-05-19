@@ -233,7 +233,7 @@ def _normalize_intra_row_gaps(
                 block_defs,
             )
 
-            required_gap = left_fc.east.total_cm + right_fc.west.total_cm
+            required_gap = left_fc.east.outer_cm + right_fc.west.outer_cm
             current_gap = right.get("gap_cm", 0)
 
             if current_gap != required_gap:
@@ -363,8 +363,8 @@ def _compute_pair_required_gap(
         offset_ns_upper = block_upper.get("offset_ns_cm", 0)
 
         # Effective X footprint (body + EW face zones)
-        x_min_upper = bp_upper.x_cm - fc_upper.west.total_cm
-        x_max_upper = bp_upper.x_cm + bp_upper.eo_cm + fc_upper.east.total_cm
+        x_min_upper = bp_upper.x_cm - fc_upper.west.outer_cm
+        x_max_upper = bp_upper.x_cm + bp_upper.eo_cm + fc_upper.east.outer_cm
 
         # Extreme offset warning for upper block
         _check_extreme_offset(
@@ -380,9 +380,9 @@ def _compute_pair_required_gap(
             offset_ns_lower = block_lower.get("offset_ns_cm", 0)
 
             # Effective X footprint (body + EW face zones)
-            x_min_lower = bp_lower.x_cm - fc_lower.west.total_cm
+            x_min_lower = bp_lower.x_cm - fc_lower.west.outer_cm
             x_max_lower = (
-                bp_lower.x_cm + bp_lower.eo_cm + fc_lower.east.total_cm
+                bp_lower.x_cm + bp_lower.eo_cm + fc_lower.east.outer_cm
             )
 
             # X overlap check
@@ -392,10 +392,10 @@ def _compute_pair_required_gap(
             # Vertical constraint: bottom[b] <= top[b']
             pair_required = (
                 offset_ns_upper + bp_upper.ns_cm
-                + fc_upper.south.total_cm
+                + fc_upper.south.outer_cm
                 - max_ns_upper
                 - offset_ns_lower
-                + fc_lower.north.total_cm
+                + fc_lower.north.outer_cm
             )
             max_required = max(max_required, pair_required)
 

@@ -163,11 +163,14 @@ function clearDirty() {
 // (blue chair clearance + grey circulation) and door swing areas as
 // 2D obstacles. Uses BLOCK_DEFS_BY_STD/SPACING_CONFIGS for the
 // pattern's standard so a multi-standard catalogue is handled cleanly.
-function computePatternFootprint(p) {
+function computePatternFootprint(p, opts) {
   var rows = p.rows || [];
   var rowGaps = p.row_gaps_cm || [];
+  var trace = opts && opts.trace;
   if (rows.length === 0) {
-    return { xMin: 0, xMax: 0, yMin: 0, yMax: 0 };
+    var empty = { xMin: 0, xMax: 0, yMin: 0, yMax: 0 };
+    if (trace) { empty.contributors = []; empty.doorObstacles = []; }
+    return empty;
   }
   var std = p.standard;
   var prevDefs = BLOCK_DEFS;
@@ -184,15 +187,20 @@ function computePatternFootprint(p) {
         if (b.gap_cm) x_cm += b.gap_cm;
         var g = getEffectiveGeom(b.type, b.orientation);
         var f = g.faces || {};
-        var fw = (f.west && (f.west.non_superposable_cm || 0) + (f.west.candidate_cm || 0)) || 0;
-        var fe = (f.east && (f.east.non_superposable_cm || 0) + (f.east.candidate_cm || 0)) || 0;
-        var fn = (f.north && (f.north.non_superposable_cm || 0) + (f.north.candidate_cm || 0)) || 0;
-        var fs = (f.south && (f.south.non_superposable_cm || 0) + (f.south.candidate_cm || 0)) || 0;
-        positions.push({
+        var fw = (f.west && !f.west.internal) ? (f.west.non_superposable_cm || 0) + (f.west.candidate_cm || 0) : 0;
+        var fe = (f.east && !f.east.internal) ? (f.east.non_superposable_cm || 0) + (f.east.candidate_cm || 0) : 0;
+        var fn = (f.north && !f.north.internal) ? (f.north.non_superposable_cm || 0) + (f.north.candidate_cm || 0) : 0;
+        var fs = (f.south && !f.south.internal) ? (f.south.non_superposable_cm || 0) + (f.south.candidate_cm || 0) : 0;
+        var pos = {
           x: x_cm, y: y_cm + (b.offset_ns_cm || 0),
           w: g.eo, h: g.ns,
           fw: fw, fe: fe, fn: fn, fs: fs
-        });
+        };
+        if (trace) {
+          pos.label = "R" + (ri + 1) + "B" + (bi + 1)
+            + " " + (b.type || "?") + " " + (b.orientation || "?");
+        }
+        positions.push(pos);
         x_cm += g.eo;
         if (g.ns > rowMaxNS) rowMaxNS = g.ns;
       }
@@ -216,6 +224,7 @@ function computePatternFootprint(p) {
       }
     }
 
+    var traceDoors = trace ? [] : null;
     var spacing = (std && SPACING_CONFIGS) ? SPACING_CONFIGS[std] : null;
     var excl = spacing ? (spacing.door_exclusion_depth_cm || 0) : 0;
     if (excl > 0) {
@@ -226,6 +235,7 @@ function computePatternFootprint(p) {
         var face = o.face;
         var dLo = o.offset_cm || 0;
         var dHi = dLo + (o.width_cm || 0);
+        var pushDescs = [];
         if (face === "south" || face === "north") {
           if (dLo < xMin) xMin = dLo;
           if (dHi > xMax) xMax = dHi;
@@ -241,9 +251,11 @@ function computePatternFootprint(p) {
             if (bHi <= dLo || bLo >= dHi) continue;
             if (face === "south") {
               var v = bp.y + bp.h + bp.fs + excl;
+              if (trace) pushDescs.push((bp.label || "block" + j) + " S+" + excl);
               if (v > yMax) yMax = v;
             } else {
               var v2 = bp.y - bp.fn - excl;
+              if (trace) pushDescs.push((bp.label || "block" + j) + " N-" + excl);
               if (v2 < yMin) yMin = v2;
             }
           } else {
@@ -252,16 +264,32 @@ function computePatternFootprint(p) {
             if (bHi2 <= dLo || bLo2 >= dHi) continue;
             if (face === "east") {
               var v3 = bp.x + bp.w + bp.fe + excl;
+              if (trace) pushDescs.push((bp.label || "block" + j) + " E+" + excl);
               if (v3 > xMax) xMax = v3;
             } else {
               var v4 = bp.x - bp.fw - excl;
+              if (trace) pushDescs.push((bp.label || "block" + j) + " W-" + excl);
               if (v4 < xMin) xMin = v4;
             }
           }
         }
+        if (trace) {
+          traceDoors.push({
+            face: face,
+            offset_cm: dLo,
+            width_cm: o.width_cm || 0,
+            excl_cm: excl,
+            pushback_desc: pushDescs.join("; ") || "no overlap"
+          });
+        }
       }
     }
-    return { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax };
+    var result = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax };
+    if (trace) {
+      result.contributors = positions;
+      result.doorObstacles = traceDoors || [];
+    }
+    return result;
   } finally {
     BLOCK_DEFS = prevDefs;
   }

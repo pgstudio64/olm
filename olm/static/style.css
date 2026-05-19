@@ -769,6 +769,14 @@
     font-size: var(--fs-xs);
     margin-top: 2px;
   }
+  .dev-mode .card-warning {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+  }
+  .dev-mode .card-warning:hover {
+    color: var(--accent);
+  }
   .card-delete {
     position: absolute;
     top: 4px;
