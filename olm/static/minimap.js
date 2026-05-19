@@ -15,7 +15,13 @@
   var MARGIN_RATIO = 0.12;
   var _processedCanvas = null;
   var _processedUrl = "";
+  var _processedScale = 1;  // src_image → processed_canvas scale factor (v0.5.28)
   var _collapsed = true;
+  // Max dimension for processed canvas — avoids blocking the browser
+  // 10-20s on big architectural plans (was iterating over millions of
+  // pixels synchronously in a single tick). Minimap target ≤ 343 px so
+  // downsampling to 1024 max is more than sufficient.
+  var PROCESS_MAX_DIM = 1024;
 
   // 3 sizes derived from MAX_DIM and COLLAPSED_RATIO.
   var SIZE_L = MAX_DIM;
@@ -43,21 +49,31 @@
     return g > 170 && g > r + 20 && g > b + 20;
   }
 
-  // ── Pre-process plan at full resolution ───────────────
+  // ── Pre-process plan (downsampled) ────────────────────
+  // Returns {canvas, scale}. scale = src_image → processed_canvas factor.
+  // Callers must scale source coords (env.x0/y0/W/H) by `scale` when
+  // calling drawImage(canvas, sx, sy, sw, sh, ...).
   function _ensurePlanImage(url, cb) {
     if (_processedCanvas && _processedUrl === url) {
-      cb(_processedCanvas);
+      cb({ canvas: _processedCanvas, scale: _processedScale });
       return;
     }
     var img = new Image();
     img.onload = function () {
+      // v0.5.28 perf : downsample large plans before pixel-by-pixel loop.
+      // Was blocking the browser 10-20s on 4000x3000 plans (12M pixels).
+      var srcW = img.naturalWidth, srcH = img.naturalHeight;
+      var s = Math.min(PROCESS_MAX_DIM / srcW, PROCESS_MAX_DIM / srcH, 1);
+      var w = Math.max(1, Math.round(srcW * s));
+      var h = Math.max(1, Math.round(srcH * s));
       var cvs = document.createElement("canvas");
-      cvs.width = img.naturalWidth;
-      cvs.height = img.naturalHeight;
+      cvs.width = w;
+      cvs.height = h;
       var ctx = cvs.getContext("2d");
-      ctx.drawImage(img, 0, 0);
+      // drawImage with explicit size = browser downsamples natively (fast).
+      ctx.drawImage(img, 0, 0, w, h);
       try {
-        var id = ctx.getImageData(0, 0, cvs.width, cvs.height);
+        var id = ctx.getImageData(0, 0, w, h);
       } catch (e) {
         console.warn("Minimap: cannot read pixels", e);
         cb(null);
@@ -79,7 +95,8 @@
       ctx.putImageData(id, 0, 0);
       _processedCanvas = cvs;
       _processedUrl = url;
-      cb(cvs);
+      _processedScale = s;
+      cb({ canvas: cvs, scale: s });
     };
     img.onerror = function () { cb(null); };
     img.src = url;
@@ -184,7 +201,12 @@
       ctx.clip();
 
       // Draw cropped pre-processed plan (grey tones).
-      ctx.drawImage(img, env.x0, env.y0, envW, envH, 0, 0, cw, ch);
+      // v0.5.28 : img is now {canvas, scale} — scale source coords
+      // because the processed canvas is downsampled.
+      var _s = img.scale || 1;
+      ctx.drawImage(img.canvas,
+        env.x0 * _s, env.y0 * _s, envW * _s, envH * _s,
+        0, 0, cw, ch);
 
       var ox = -env.x0 * ratio;
       var oy = -env.y0 * ratio;
