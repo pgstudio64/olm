@@ -81,9 +81,15 @@
       pt.y = evt.clientY;
       var svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
       var snap = (typeof customSnapCm === "number" && customSnapCm > 0) ? customSnapCm : GRID_STEP_CM;
+      // D-243 F2: subtract roomRenderOffset BEFORE snap so coords are
+      // relative to room NW (not SVG NW) after resize.
+      var offX = (state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0);
+      var offY = (state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0);
+      var rawX = svgPt.x / SCALE - offX;
+      var rawY = svgPt.y / SCALE - offY;
       return {
-        x_cm: Math.round(svgPt.x / SCALE / snap) * snap,
-        y_cm: Math.round(svgPt.y / SCALE / snap) * snap,
+        x_cm: Math.round(rawX / snap) * snap,
+        y_cm: Math.round(rawY / snap) * snap,
       };
     }
 

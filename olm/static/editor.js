@@ -226,62 +226,73 @@ function computePatternFootprint(p, opts) {
 
     var traceDoors = trace ? [] : null;
     var spacing = (std && SPACING_CONFIGS) ? SPACING_CONFIGS[std] : null;
-    var excl = spacing ? (spacing.door_exclusion_depth_cm || 0) : 0;
-    if (excl > 0) {
-      var openings = p.room_openings || [];
-      for (var oi = 0; oi < openings.length; oi++) {
-        var o = openings[oi];
-        if (!o.has_door) continue;
-        var face = o.face;
-        var dLo = o.offset_cm || 0;
-        var dHi = dLo + (o.width_cm || 0);
-        var pushDescs = [];
-        if (face === "south" || face === "north") {
-          if (dLo < xMin) xMin = dLo;
-          if (dHi > xMax) xMax = dHi;
-        } else if (face === "east" || face === "west") {
-          if (dLo < yMin) yMin = dLo;
-          if (dHi > yMax) yMax = dHi;
-        }
-        for (var j = 0; j < positions.length; j++) {
-          var bp = positions[j];
-          if (face === "south" || face === "north") {
-            var bLo = bp.x - bp.fw;
-            var bHi = bp.x + bp.w + bp.fe;
-            if (bHi <= dLo || bLo >= dHi) continue;
-            if (face === "south") {
-              var v = bp.y + bp.h + bp.fs + excl;
-              if (trace) pushDescs.push((bp.label || "block" + j) + " S+" + excl);
-              if (v > yMax) yMax = v;
-            } else {
-              var v2 = bp.y - bp.fn - excl;
-              if (trace) pushDescs.push((bp.label || "block" + j) + " N-" + excl);
-              if (v2 < yMin) yMin = v2;
-            }
-          } else {
-            var bLo2 = bp.y - bp.fn;
-            var bHi2 = bp.y + bp.h + bp.fs;
-            if (bHi2 <= dLo || bLo2 >= dHi) continue;
-            if (face === "east") {
-              var v3 = bp.x + bp.w + bp.fe + excl;
-              if (trace) pushDescs.push((bp.label || "block" + j) + " E+" + excl);
-              if (v3 > xMax) xMax = v3;
-            } else {
-              var v4 = bp.x - bp.fw - excl;
-              if (trace) pushDescs.push((bp.label || "block" + j) + " W-" + excl);
-              if (v4 < xMin) xMin = v4;
-            }
-          }
-        }
+    var openings = p.room_openings || [];
+    for (var oi = 0; oi < openings.length; oi++) {
+      var o = openings[oi];
+      if (!o.has_door) continue;
+      var face = o.face;
+      var dLo = o.offset_cm || 0;
+      var dHi = dLo + (o.width_cm || 0);
+      var pushDescs = [];
+      // Lateral extent (always)
+      if (face === "south" || face === "north") {
+        if (dLo < xMin) xMin = dLo;
+        if (dHi > xMax) xMax = dHi;
+      } else if (face === "east" || face === "west") {
+        if (dLo < yMin) yMin = dLo;
+        if (dHi > yMax) yMax = dHi;
+      }
+      // D-243 F1: per-door exclusion depth (inward vs outward)
+      var excl = 0;
+      if (spacing) {
+        excl = (o.opens_inward !== false)
+          ? (spacing.door_exclusion_depth_cm || 0)
+          : (spacing.walking_margin_cm || 0);
+      }
+      if (excl <= 0) {
         if (trace) {
           traceDoors.push({
-            face: face,
-            offset_cm: dLo,
-            width_cm: o.width_cm || 0,
-            excl_cm: excl,
-            pushback_desc: pushDescs.join("; ") || "no overlap"
+            face: face, offset_cm: dLo, width_cm: o.width_cm || 0,
+            excl_cm: 0, pushback_desc: "no exclusion"
           });
         }
+        continue;
+      }
+      for (var j = 0; j < positions.length; j++) {
+        var bp = positions[j];
+        if (face === "south" || face === "north") {
+          var bLo = bp.x - bp.fw;
+          var bHi = bp.x + bp.w + bp.fe;
+          if (bHi <= dLo || bLo >= dHi) continue;
+          if (face === "south") {
+            var v = bp.y + bp.h + bp.fs + excl;
+            if (trace) pushDescs.push((bp.label || "block" + j) + " S+" + excl);
+            if (v > yMax) yMax = v;
+          } else {
+            var v2 = bp.y - bp.fn - excl;
+            if (trace) pushDescs.push((bp.label || "block" + j) + " N-" + excl);
+            if (v2 < yMin) yMin = v2;
+          }
+        } else {
+          var bLo2 = bp.y - bp.fn;
+          var bHi2 = bp.y + bp.h + bp.fs;
+          if (bHi2 <= dLo || bLo2 >= dHi) continue;
+          if (face === "east") {
+            var v3 = bp.x + bp.w + bp.fe + excl;
+            if (trace) pushDescs.push((bp.label || "block" + j) + " E+" + excl);
+            if (v3 > xMax) xMax = v3;
+          } else {
+            var v4 = bp.x - bp.fw - excl;
+            if (trace) pushDescs.push((bp.label || "block" + j) + " W-" + excl);
+            if (v4 < xMin) xMin = v4;
+          }
+        }
+      }
+      if (trace) {
+        traceDoors.push({
+          face: face, offset_cm: dLo, width_cm: o.width_cm || 0,
+          excl_cm: excl, pushback_desc: pushDescs.join("; ") || "no overlap"
+        });
       }
     }
     var result = { xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax };
@@ -865,14 +876,12 @@ function faceTouchesWall(rowIdx, blockIdx, face) {
   var b = row.blocks[blockIdx];
   var g = getEffectiveGeom(b.type, b.orientation);
   var f = g.faces;
-  var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
-  // Zone extent in cm for the requested face
+  var faceDir = face === "N" ? "north" : face === "S" ? "south"
+              : face === "E" ? "east" : "west";
+  var fd = f[faceDir];
   var zone = 0;
-  if (!isOrtho) {
-    var faceDir = face === "N" ? "north" : face === "S" ? "south"
-                : face === "E" ? "east" : "west";
-    var fd = f[faceDir];
-    if (fd) zone = (fd.non_superposable_cm || 0) + (fd.candidate_cm || 0);
+  if (fd && !fd.internal) {
+    zone = (fd.non_superposable_cm || 0) + (fd.candidate_cm || 0);
   }
   var positions = computeBlockPositions();
   for (var i = 0; i < positions.length; i++) {
@@ -1129,15 +1138,17 @@ function _renderImpl(targetSvg) {
     rowBlockPos[ri].push({ x: bx, y: by, w: bw, h: bh, gap_cm: b.gap_cm || 0 });
 
     // Setback zone dimensions (always computed for the opaque background)
-    var isOrtho = (b.type === "BLOCK_2_ORTHO_R" || b.type === "BLOCK_2_ORTHO_L");
-    var wNSup = isOrtho ? 0 : (((f.west && f.west.non_superposable_cm) || 0) * SCALE);
-    var eNSup = isOrtho ? 0 : (((f.east && f.east.non_superposable_cm) || 0) * SCALE);
-    var nNSup = isOrtho ? 0 : (((f.north && f.north.non_superposable_cm) || 0) * SCALE);
-    var sNSup = isOrtho ? 0 : (((f.south && f.south.non_superposable_cm) || 0) * SCALE);
-    var wCandPx = isOrtho ? 0 : (((f.west && f.west.candidate_cm) || 0) * SCALE);
-    var eCandPx = isOrtho ? 0 : (((f.east && f.east.candidate_cm) || 0) * SCALE);
-    var nCandPx = isOrtho ? 0 : (((f.north && f.north.candidate_cm) || 0) * SCALE);
-    var sCandPx = isOrtho ? 0 : (((f.south && f.south.candidate_cm) || 0) * SCALE);
+    function _faceOuter(fd, attr) {
+      return (fd && !fd.internal && fd[attr]) ? fd[attr] * SCALE : 0;
+    }
+    var wNSup = _faceOuter(f.west, 'non_superposable_cm');
+    var eNSup = _faceOuter(f.east, 'non_superposable_cm');
+    var nNSup = _faceOuter(f.north, 'non_superposable_cm');
+    var sNSup = _faceOuter(f.south, 'non_superposable_cm');
+    var wCandPx = _faceOuter(f.west, 'candidate_cm');
+    var eCandPx = _faceOuter(f.east, 'candidate_cm');
+    var nCandPx = _faceOuter(f.north, 'candidate_cm');
+    var sCandPx = _faceOuter(f.south, 'candidate_cm');
 
     renderBlockZones(elements, bx, by, bw, bh, b.type, b.orientation, f, SCALE, 0.5);
 
@@ -1189,15 +1200,35 @@ function _renderImpl(targetSvg) {
     var outerE = bx + bw + eTotal;
     var outerCx = (outerW + outerE) / 2;
     var outerCy = (outerN + outerS) / 2;
+    // D-243 C6: ORTHO lock positions on L outline segments (orientation 0 only)
+    var lockN_cx = outerCx, lockN_cy = outerN + lockInset;
+    var lockS_cx = outerCx, lockS_cy = outerS - lockInset;
+    var lockW_cx = outerW + lockInset, lockW_cy = outerCy;
+    var lockE_cx = outerE - lockInset, lockE_cy = outerCy;
+    if ((b.orientation || 0) === 0) {
+      if (b.type === "BLOCK_2_ORTHO_R") {
+        // L bottom-left: solid N=full, W=full, E=desk1 top, S=desk2 base
+        lockN_cx = bx + bw / 2;
+        lockE_cy = by + DESK_D * SCALE / 2;
+        lockS_cx = bx + DESK_D * SCALE / 2;
+        lockW_cy = outerCy;
+      } else if (b.type === "BLOCK_2_ORTHO_L") {
+        // L bottom-right: solid N=full, E=full, W=desk1 top, S=desk2 base
+        lockN_cx = bx + bw / 2;
+        lockW_cy = by + DESK_D * SCALE / 2;
+        lockS_cx = bx + bw - DESK_D * SCALE / 2;
+        lockE_cy = outerCy;
+      }
+    }
     var lockFaces = [
       { face: "N", touches: faceTouchesWall(ri, bi, "N"),
-        cx: outerCx, cy: outerN + lockInset },
+        cx: lockN_cx, cy: lockN_cy },
       { face: "S", touches: faceTouchesWall(ri, bi, "S"),
-        cx: outerCx, cy: outerS - lockInset },
+        cx: lockS_cx, cy: lockS_cy },
       { face: "W", touches: faceTouchesWall(ri, bi, "W"),
-        cx: outerW + lockInset, cy: outerCy },
+        cx: lockW_cx, cy: lockW_cy },
       { face: "E", touches: faceTouchesWall(ri, bi, "E"),
-        cx: outerE - lockInset, cy: outerCy },
+        cx: lockE_cx, cy: lockE_cy },
     ];
     var isOffice = (isReview || isDesign);
     for (var lf = 0; lf < lockFaces.length; lf++) {
@@ -2811,10 +2842,10 @@ function exitRoomAmendUI() {
 }
 
 function duplicatePattern() {
-  // Copy layout to memory without saving.
-  // User adjusts size/standard -> name changes -> Save creates a new pattern.
+  // Clear saved name so Save creates a new pattern, then save immediately.
   state._savedName = null;
-  setStatus("Copied in memory. Adjust size/standard then save.");
+  updateAutoName();
+  save();
 }
 
 async function deletePattern() {
@@ -2837,6 +2868,7 @@ async function deletePattern() {
 
 function resetState() {
   clearDirty();
+  state._savedName = null;
   state.rows = [];
   state.row_gaps_cm = [];
   var defW = APP_CONFIG.default_pattern_width_cm || 300;

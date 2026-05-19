@@ -139,11 +139,14 @@ def build_grid(
         eo_cm = b["eo_cm"]
         ns_cm = b["ns_cm"]
 
-        # Physical footprint
-        col1 = x_cm // GRID_CELL_CM
-        col2 = (x_cm + eo_cm) // GRID_CELL_CM
-        row1 = y_cm // GRID_CELL_CM
-        row2 = (y_cm + ns_cm) // GRID_CELL_CM
+        # Physical footprint.
+        # D-242: oversize patterns are no longer hard-filtered, so block
+        # positions can exceed room bounds. Clamp indices to [0, ROWS/COLS]
+        # to prevent numpy IndexError on the assignment below.
+        col1 = max(0, min(COLS, x_cm // GRID_CELL_CM))
+        col2 = max(0, min(COLS, (x_cm + eo_cm) // GRID_CELL_CM))
+        row1 = max(0, min(ROWS, y_cm // GRID_CELL_CM))
+        row2 = max(0, min(ROWS, (y_cm + ns_cm) // GRID_CELL_CM))
         grid[row1:row2, col1:col2] = int(CellType.FOOTPRINT)
 
         # Fixed zones (chair clearance, non_superposable_cm)
@@ -157,25 +160,25 @@ def build_grid(
         # North: strip above the block
         if faces.north.non_superposable_cm > 0:
             t = faces.north.non_superposable_cm // GRID_CELL_CM
-            r1 = max(0, row1 - t)
+            r1 = max(0, min(ROWS, row1 - t))
             grid[r1:row1, col1:col2] = int(CellType.FOOTPRINT)
 
         # South: strip below the block
         if faces.south.non_superposable_cm > 0:
             t = faces.south.non_superposable_cm // GRID_CELL_CM
-            r2 = min(ROWS, row2 + t)
+            r2 = max(0, min(ROWS, row2 + t))
             grid[row2:r2, col1:col2] = int(CellType.FOOTPRINT)
 
         # East: strip to the right of the block
         if faces.east.non_superposable_cm > 0:
             t = faces.east.non_superposable_cm // GRID_CELL_CM
-            c2 = min(COLS, col2 + t)
+            c2 = max(0, min(COLS, col2 + t))
             grid[row1:row2, col2:c2] = int(CellType.FOOTPRINT)
 
         # West: strip to the left of the block
         if faces.west.non_superposable_cm > 0:
             t = faces.west.non_superposable_cm // GRID_CELL_CM
-            c1 = max(0, col1 - t)
+            c1 = max(0, min(COLS, col1 - t))
             grid[row1:row2, c1:col1] = int(CellType.FOOTPRINT)
 
     # Interior corridors: all CORRIDOR cells are confirmed
@@ -470,7 +473,15 @@ def _desk_access_cells(
     def _best_walkable(
         candidates: list[tuple[int, int]], mid_r: float, mid_c: float,
     ) -> tuple[int, int] | None:
-        valid = [(r, c) for r, c in candidates if int(grid[r, c]) in walkable]
+        # D-242 hotfix: filter out-of-bounds candidates before grid access.
+        # Oversize patterns (post-D-242) can yield r or c outside the grid;
+        # the per-face guards in _access_for_zone only catch one direction
+        # of overshoot. Defensive bounds check here covers all cases.
+        valid = [
+            (r, c) for r, c in candidates
+            if 0 <= r < ROWS and 0 <= c < COLS
+            and int(grid[r, c]) in walkable
+        ]
         if not valid:
             return None
         valid.sort(key=lambda rc: abs(rc[0] - mid_r) + abs(rc[1] - mid_c))

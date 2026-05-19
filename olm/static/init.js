@@ -963,6 +963,8 @@ async function init() {
   document.getElementById("catFilterMaxW").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMinD").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMaxD").addEventListener("change", onCatalogueFilterChange);
+  document.getElementById("catFilterMinDesks").addEventListener("change", onCatalogueFilterChange);
+  document.getElementById("catFilterMaxDesks").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("btnRotate").addEventListener("click", rotateSelectedBlock);
   document.getElementById("btnOffsetN").addEventListener("click", function() { offsetSelectedBlock(-GRID_STEP_CM); });
   document.getElementById("btnOffsetS").addEventListener("click", function() { offsetSelectedBlock(GRID_STEP_CM); });
@@ -1102,6 +1104,20 @@ async function init() {
 
   document.addEventListener("keydown", function(e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    // D-243 C4: PageUp/Down navigates prev/next pattern in PE
+    // Active in Catalogue tab (any subtab), not in amend mode.
+    if (e.key === "PageUp" || e.key === "PageDown") {
+      var navTab = document.querySelector(".tab-btn.active");
+      if (navTab && navTab.dataset.tab === "lytCatalogue" && !state.amendMode) {
+        e.preventDefault();
+        if (window.peNavigate) {
+          window.peNavigate(e.key === "PageUp" ? -1 : 1);
+        }
+      }
+      return;
+    }
+
     // Keyboard editing only in Catalogue > Editor or amend mode
     var activeTab = document.querySelector(".tab-btn.active");
     var inEditor = activeTab && activeTab.dataset.tab === "lytCatalogue";

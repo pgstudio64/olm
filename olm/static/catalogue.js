@@ -205,12 +205,21 @@ function getFilteredPatterns() {
   var maxW = parseInt(document.getElementById("catFilterMaxW").value) || Infinity;
   var minD = parseInt(document.getElementById("catFilterMinD").value) || 0;
   var maxD = parseInt(document.getElementById("catFilterMaxD").value) || Infinity;
+  var minDesks = parseInt(document.getElementById("catFilterMinDesks").value) || 0;
+  var maxDesks = parseInt(document.getElementById("catFilterMaxDesks").value) || Infinity;
   return catalogueData.filter(function(p) {
     if (stdFilter && p.standard !== stdFilter) return false;
     var w = p.room_width_cm || 0;
     var d = p.room_depth_cm || 0;
     if (w < minW || w > maxW) return false;
     if (d < minD || d > maxD) return false;
+    if (minDesks > 0 || maxDesks < Infinity) {
+      var nd = 0;
+      (p.rows || []).forEach(function(r) {
+        (r.blocks || []).forEach(function(b) { nd += countDesksInBlock(b.type) || 0; });
+      });
+      if (nd < minDesks || nd > maxDesks) return false;
+    }
     return true;
   });
 }

@@ -287,10 +287,6 @@ def _apply_door_obstacles(
         block_defs: Block defs for the pattern's standard.
         x_mins..y_maxs: Bbox extent lists (mutated in place).
     """
-    excl_depth = spacing.door_exclusion_depth_cm
-    if excl_depth <= 0:
-        return
-
     for feat in pattern.get("room_openings", []):
         if not feat.get("has_door", False):
             continue
@@ -300,13 +296,21 @@ def _apply_door_obstacles(
         d_lo = do
         d_hi = do + dw
 
-        # 1. Lateral extent on wall
+        # 1. Lateral extent on wall (always, regardless of excl_depth)
         if face in ("south", "north"):
             x_mins.append(d_lo)
             x_maxs.append(d_hi)
         elif face in ("east", "west"):
             y_mins.append(d_lo)
             y_maxs.append(d_hi)
+
+        # D-243 F1: per-door exclusion depth
+        if feat.get("opens_inward", True):
+            excl_depth = spacing.door_exclusion_depth_cm
+        else:
+            excl_depth = spacing.walking_margin_cm
+        if excl_depth <= 0:
+            continue
 
         # 2. Perpendicular pushback for blocks in door's lateral range
         for bp in positions:

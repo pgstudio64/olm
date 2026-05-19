@@ -666,3 +666,40 @@ class TestOrthoInternalFaceZones:
         assert x_max == 180
         assert y_min == -70  # north chair clearance
         assert y_max == 260
+
+
+# ---------------------------------------------------------------------------
+# D-243 F1: outward door uses walking_margin_cm
+# ---------------------------------------------------------------------------
+
+
+class TestOutwardDoorExclusion:
+    """An outward door uses walking_margin_cm instead of
+    door_exclusion_depth_cm for its perpendicular pushback."""
+
+    def test_outward_south_door_uses_walking_margin(self):
+        """Outward south door: pushback = walking_margin_cm (90),
+        not door_exclusion_depth_cm (180)."""
+        door = _door_opening("south", offset_cm=0, width_cm=90)
+        door["opens_inward"] = False
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800, room_d=800,
+            openings=[door],
+        )
+        sp = _spacing()  # walking_margin_cm=90, door_exclusion_depth_cm=180
+        x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
+        # Inward would give y_max = 360 + 180 = 540.
+        # Outward gives y_max = 360 + 90 = 450.
+        assert y_max == 450
+
+    def test_inward_south_door_still_uses_excl_depth(self):
+        """Inward south door: pushback = door_exclusion_depth_cm (180)."""
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=800, room_d=800,
+            openings=[_door_opening("south", offset_cm=0, width_cm=90)],
+        )
+        sp = _spacing()
+        x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
+        assert y_max == 540

@@ -194,6 +194,49 @@ class TestBuildGrid:
         # Cellule loin du bloc = CORRIDOR
         assert grid[40, 40] == int(CellType.CORRIDOR)
 
+    def test_oversize_block_clamps_indices(self) -> None:
+        """Regression D-242 : un bloc qui deborde la piece ne crashe pas.
+
+        Avant ce fix, ``build_grid`` indexait ``grid[row1:row2, col1:col2]``
+        sans clamp, ce qui levait ``IndexError: index N out of bounds for
+        axis 0 with size M`` quand un pattern oversize atteignait la
+        circulation analysis (apres D-242 qui retire le hard filter).
+        """
+        room = _make_room(eo_cm=350, ns_cm=350)
+        # Bloc volontairement plus large que la piece (480 > 350)
+        block = _make_block("BLOCK_1", x_cm=0, y_cm=0,
+                            eo_cm=480, ns_cm=500)
+        # Ne doit pas lever — clampage aux bornes du grid
+        grid = build_grid(room, [block])
+        rows, cols = grid.shape
+        assert rows == 350 // GRID_CELL_CM
+        assert cols == 350 // GRID_CELL_CM
+        # Tout l'interieur est FOOTPRINT (le bloc clamp couvre toute la piece
+        # sauf les bords WALL).
+        assert grid[rows // 2, cols // 2] == int(CellType.FOOTPRINT)
+
+
+class TestAnalyseOversize:
+    """Regression D-242 hotfix #2 : analyse() ne crashe pas sur oversize."""
+
+    def test_analyse_oversize_block_no_crash(self) -> None:
+        """Bloc place largement hors piece (x=480 dans piece 350) — analyse ne plante pas.
+
+        Avant ce fix, ``_access_for_zone`` calculait un r ou c hors bornes
+        cote positif (eg r1=48 dans grid de 35 rangees), que ``_best_walkable``
+        utilisait directement pour ``grid[r, c]`` → IndexError axis 0.
+        """
+        room = _make_room(eo_cm=350, ns_cm=350,
+                          doors=[{"wall": "south",
+                                  "position_cm": 50, "width_cm": 90}])
+        # Bloc place a x=480 (hors piece 350), simule un pattern oversize
+        block = _make_block("BLOCK_1", x_cm=480, y_cm=480,
+                            eo_cm=80, ns_cm=180)
+        result = analyse(room, [block])
+        # Ne doit pas crasher — la grade est ce qu'elle est, on n'a juste
+        # pas d'IndexError.
+        assert result.grade in ("A", "B", "C", "D", "E", "F")
+
 
 # ---------------------------------------------------------------------------
 # 12-16 : analyse() integration
