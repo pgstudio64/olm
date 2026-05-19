@@ -1,27 +1,9 @@
 "use strict";
 
 function _hydrateBlockDefs(data) {
-  // D-235: gray circulation band around chair faces = slip-in margin only.
-  // (Previously walking_margin for >=2 chairs per face — too aggressive
-  // without Dijkstra integration. Slip-in is the conservative default;
-  // walking margin only matters when the gap is actually a passage,
-  // which D-235 leaves to the user's judgement via amber coloring.)
-  var blocks = data.blocks || data || {};
-  var slipIn = (data.constants && data.constants.SLIP_IN_MARGIN_CM) || 30;
-  var DIRS = ["north", "south", "east", "west"];
-  var names = Object.keys(blocks);
-  for (var i = 0; i < names.length; i++) {
-    var blk = blocks[names[i]];
-    var faces = blk.faces;
-    if (!faces) continue;
-    for (var d = 0; d < DIRS.length; d++) {
-      var f = faces[DIRS[d]];
-      if (f && f.non_superposable_cm > 0) {
-        f.candidate_cm = slipIn;
-      }
-    }
-  }
-  return blocks;
+  // D-244: slip-in is now included in candidate_cm by the backend
+  // (build_block_defs in spacing_config.py). No client-side patching needed.
+  return data.blocks || data || {};
 }
 
 async function loadBlockDefs() {

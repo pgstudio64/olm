@@ -192,7 +192,9 @@ def _block_def_to_json(block: _pg.Block) -> dict:
 def build_block_defs(cfg: SpacingConfig) -> dict[str, dict]:
     """Build block definitions for a given standard.
 
-    D-229: candidate_cm = 0 on all faces (circulation is pattern-level).
+    D-244: candidate_cm = slip_in_margin_cm on chair faces so that the
+    backend footprint includes the slip-in zone (grey band drawn by
+    the frontend). Non-chair faces keep candidate_cm = 0.
     non_superposable_cm = cfg.chair_clearance_cm on chair faces
     (faces where the module-level block has non_superposable_cm > 0).
 
@@ -203,12 +205,16 @@ def build_block_defs(cfg: SpacingConfig) -> dict[str, dict]:
         Dict mapping block name to its JSON definition (with faces).
     """
     chair = cfg.chair_clearance_cm
+    slip_in = cfg.slip_in_margin_cm
     defs: dict[str, dict] = {}
     for block in _BASE_BLOCKS:
         d = _block_def_to_json(block)
         for face in ("north", "south", "east", "west"):
-            if d["faces"][face]["non_superposable_cm"] > 0:
+            has_chair = d["faces"][face]["non_superposable_cm"] > 0
+            if has_chair:
                 d["faces"][face]["non_superposable_cm"] = chair
-            d["faces"][face]["candidate_cm"] = 0
+                d["faces"][face]["candidate_cm"] = slip_in
+            else:
+                d["faces"][face]["candidate_cm"] = 0
         defs[block.name] = d
     return defs

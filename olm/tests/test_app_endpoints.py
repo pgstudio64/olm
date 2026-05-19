@@ -1215,14 +1215,14 @@ class TestDoorSeedsRoundTrip:
 def _make_importable_pattern(name: str, standard: str = "standard1") -> dict:
     """Build a minimal valid pattern for import tests.
 
-    gap_cm=70 = chair_clearance_cm: pushes the block east so its west
-    chair zone (70cm) ends exactly at x=0, keeping the footprint inside
-    the 500x500 room.
+    gap_cm=100 = chair_clearance_cm (70) + slip_in_margin_cm (30):
+    pushes the block east so its west face zone (70+30=100cm) ends
+    exactly at x=0, keeping the footprint inside the 500x500 room.
     """
     return {
         "name": name,
         "rows": [{"blocks": [
-            {"type": "BLOCK_1", "orientation": 0, "gap_cm": 70},
+            {"type": "BLOCK_1", "orientation": 0, "gap_cm": 100},
         ]}],
         "row_gaps_cm": [],
         "room_width_cm": 500,

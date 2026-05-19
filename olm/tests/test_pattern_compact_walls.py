@@ -92,15 +92,15 @@ def _pattern_480x500_site_1() -> dict:
 class TestUserCase480x500Site1:
     """Reproduce the bug: room should shrink to 340x360, all locks valid."""
 
-    def test_room_shrinks_to_300x360(self):
-        """D-229: chair-only zones → room 300x360 (was 340x360)."""
+    def test_room_shrinks_to_360x360(self):
+        """D-244: chair+slip zones → room 360x360."""
         pat = _pattern_480x500_site_1()
         result = normalize_pattern(pat, STD3)
 
-        # D-229: W/E face = chair(70) only, candidate=0.
-        # Gap WS01-WS02 = E(70) + W(70) = 140.
-        # Width = 0 + 80 + 140 + 80 + 0 = 300.
-        assert pat["room_width_cm"] == 300
+        # D-244: W/E face = chair(70)+slip(30) = 100.
+        # Gap WS01-WS02 = E(100) + W(100) = 200.
+        # Width = 0 + 80 + 200 + 80 + 0 = 360.
+        assert pat["room_width_cm"] == 360
         assert pat["room_depth_cm"] == 360
 
     def test_ws02_still_touches_east(self):
@@ -108,7 +108,7 @@ class TestUserCase480x500Site1:
         pat = _pattern_480x500_site_1()
         normalize_pattern(pat, STD3)
 
-        # D-229: gap = E(70)+W(70)=140. WS02 x_max = room_width.
+        # D-244: gap = E(100)+W(100)=200. WS02 x_max = room_width.
         ws02 = pat["rows"][0]["blocks"][1]
         ws01 = pat["rows"][0]["blocks"][0]
         ws02_x = ws01["gap_cm"] + 80 + ws02["gap_cm"]
@@ -170,8 +170,8 @@ class TestBlockAccidentallyTouchingEast:
     """Block at x_max == room_width without formal lock — moves with wall."""
 
     def test_accidental_touch_shrinks(self):
-        # D-229: orient 0 W=70 (chair), E=0.
-        # Min gap = 0 + 70 = 70. width = 70+80+70+80 = 300.
+        # D-244: orient 0 W=100 (chair+slip), E=0.
+        # Min gap = 0 + 100 = 100. width = 100+80+100+80 = 360.
         pat = {
             "name": "TEST_ACCIDENTAL",
             "rows": [{"blocks": [
@@ -190,7 +190,7 @@ class TestBlockAccidentallyTouchingEast:
         }
         normalize_pattern(pat, STD3)
 
-        assert pat["room_width_cm"] == 300
+        assert pat["room_width_cm"] == 360
         b_right = pat["rows"][0]["blocks"][1]
         b_left = pat["rows"][0]["blocks"][0]
         x_right = b_left["gap_cm"] + 80 + b_right["gap_cm"]
@@ -209,8 +209,8 @@ class TestThreeBlocksResidual:
     """
 
     def test_three_blocks_all_gaps_minimized(self):
-        # D-229: A orient 180: E=70. B orient 0: W=70, E=0. C orient 0: W=70.
-        # Gap A-B min = 70+70 = 140. Gap B-C min = 0+70 = 70.
+        # D-244: A orient 180: E=100. B orient 0: W=100, E=0. C orient 0: W=100.
+        # Gap A-B min = 100+100 = 200. Gap B-C min = 0+100 = 100.
         pat = {
             "name": "TEST_3BLOCKS",
             "rows": [{"blocks": [
@@ -232,10 +232,10 @@ class TestThreeBlocksResidual:
         normalize_pattern(pat, STD3)
 
         blocks = pat["rows"][0]["blocks"]
-        assert blocks[1]["gap_cm"] == 140
-        assert blocks[2]["gap_cm"] == 70
-        # Room = 80 + 140 + 80 + 70 + 80 = 450. Snap 450.
-        assert pat["room_width_cm"] == 450
+        assert blocks[1]["gap_cm"] == 200
+        assert blocks[2]["gap_cm"] == 100
+        # Room = 80 + 200 + 80 + 100 + 80 = 540. Snap 540.
+        assert pat["room_width_cm"] == 540
 
 
 # ---------------------------------------------------------------------------
@@ -247,18 +247,18 @@ class TestGapAtMinimumSkipped:
     """Pattern already at minimum dimensions — compact is no-op."""
 
     def test_already_minimal(self):
-        # D-229: orient 180 E=70, orient 0 W=70. Min gap = 140.
-        # Room = 80+140+80 = 300.
+        # D-244: orient 180 E=100, orient 0 W=100. Min gap = 200.
+        # Room = 80+200+80 = 360.
         pat = {
             "name": "TEST_MINIMAL",
             "rows": [{"blocks": [
                 {"type": "BLOCK_1", "orientation": 180, "gap_cm": 0,
                  "offset_ns_cm": 0},
-                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 140,
+                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 200,
                  "offset_ns_cm": 0},
             ]}],
             "row_gaps_cm": [],
-            "room_width_cm": 300,
+            "room_width_cm": 360,
             "room_depth_cm": 300,
             "standard": "standard3",
             "room_windows": [],
@@ -268,8 +268,8 @@ class TestGapAtMinimumSkipped:
         orig = copy.deepcopy(pat)
         normalize_pattern(pat, STD3)
 
-        assert pat["room_width_cm"] == 300
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 140
+        assert pat["room_width_cm"] == 360
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 200
 
 
 # ---------------------------------------------------------------------------
@@ -297,8 +297,8 @@ class TestNoCompactPossible:
         }
         normalize_pattern(pat, STD3)
 
-        # D-229: W face=70 (chair only). width=70+80=150. depth=180.
-        assert pat["room_width_cm"] == 150
+        # D-244: W face=100 (chair+slip). width=100+80=180. depth=180.
+        assert pat["room_width_cm"] == 180
         assert pat["room_depth_cm"] == 180
 
 
@@ -311,16 +311,16 @@ class TestBlockTouchingBothWalls:
     """Block spans the full room width — east wall cannot move."""
 
     def test_touching_both_walls_noop(self):
-        # D-229: W face=70, E=0. Room width=70+80=150.
-        # Block at gap=70: x=70, x_max=150. x_min_eff=0.
+        # D-244: W face=100 (chair+slip), E=0. Room width=100+80=180.
+        # Block at gap=100: x=100, x_max=180. x_min_eff=0.
         pat = {
             "name": "TEST_BOTH_WALLS",
             "rows": [{"blocks": [
-                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 70,
+                {"type": "BLOCK_1", "orientation": 0, "gap_cm": 100,
                  "offset_ns_cm": 0},
             ]}],
             "row_gaps_cm": [],
-            "room_width_cm": 150,
+            "room_width_cm": 180,
             "room_depth_cm": 300,
             "standard": "standard3",
             "room_windows": [],
@@ -329,7 +329,7 @@ class TestBlockTouchingBothWalls:
         }
         normalize_pattern(pat, STD3)
 
-        assert pat["room_width_cm"] == 150  # unchanged
+        assert pat["room_width_cm"] == 180  # unchanged
 
 
 # ---------------------------------------------------------------------------
@@ -410,25 +410,23 @@ def _pattern_offset_east() -> dict:
 class TestCompactEastCatchesOffsetBlock:
     """D-218: Iterative catch-distance recovers slack from non-touching rows."""
 
-    def test_room_width_300_after_normalize(self):
-        """D-229: After full normalize_pattern, room_width must be 300."""
+    def test_room_width_360_after_normalize(self):
+        """D-244: After full normalize_pattern, room_width must be 360."""
         pat = _pattern_offset_east()
         normalize_pattern(pat, STD3)
-        assert pat["room_width_cm"] == 300
+        assert pat["room_width_cm"] == 360
 
     def test_intermediate_gaps_after_compact(self):
         """After compact_walls only (no normalize_intra/fit), check gap_cm."""
         from olm.core.pattern_compact_walls import compact_walls
-        from olm.core.spacing_config import build_block_defs
 
         pat = _pattern_offset_east()
-        block_defs = build_block_defs(STD3)
         changes = compact_walls(pat, STD3)
 
-        # D-229: WS02 gap: 270 → 140 (E(70)+W(70))
-        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 140
-        # WS03 gap: 400 → 220 (reduced iteratively)
-        assert pat["rows"][1]["blocks"][0]["gap_cm"] == 220
+        # D-244: WS02 gap: 270 → 200 (E(100)+W(100))
+        assert pat["rows"][0]["blocks"][1]["gap_cm"] == 200
+        # WS03 gap: 400 → 280 (reduced iteratively)
+        assert pat["rows"][1]["blocks"][0]["gap_cm"] == 280
         assert changes >= 3
 
 
@@ -450,8 +448,8 @@ class TestCompactSouthUnaffectedByEastOffset:
 class TestCompactEastNoInitialTouching:
     """D-218: Compact works even when no block initially touches room_width."""
 
-    def test_room_width_300(self):
-        """D-229: Iterative catch compresses to 300."""
+    def test_room_width_360(self):
+        """D-244: Iterative catch compresses to 360."""
         pat = {
             "name": "TEST_NO_INITIAL_TOUCHING",
             "rows": [
@@ -475,4 +473,4 @@ class TestCompactEastNoInitialTouching:
             "room_exclusions": [],
         }
         normalize_pattern(pat, STD3)
-        assert pat["room_width_cm"] == 300
+        assert pat["room_width_cm"] == 360

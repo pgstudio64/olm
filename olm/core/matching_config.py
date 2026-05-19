@@ -19,4 +19,9 @@ MIN_DESKS_DROP_RATIO: float = (
     _matching.get("min_desks_drop_ratio", 0.30) if isinstance(_matching, dict) else 0.30
 )
 
+# D-244: tolerance for oversize classification.
+# A pattern whose footprint exceeds the room by <= FIT_TOLERANCE (per axis)
+# is listed as "tolere" (grey). Beyond that it is hidden entirely.
+FIT_TOLERANCE: float = 0.10
+
 # D-242: OVERSIZE_MARGIN removed — no hard filter, all patterns proposed.

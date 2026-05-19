@@ -1,7 +1,7 @@
 """Catalogue pattern matching against real rooms.
 
 Pipeline (7 steps):
-    1. Selection: footprint <= room + Pareto front (width, depth)
+    1. Selection: classify fit (fitting/tolere/hidden) + top/top-1 desks
     2. East-West mirror
     3. Stick clamping + homothety
     4. Individual desk removal in forbidden zones
@@ -33,6 +33,7 @@ from olm.core.pattern_generator import (
     DESK_D_CM,
     DESK_W_CM,
 )
+from olm.core.matching_config import FIT_TOLERANCE
 from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
 
@@ -42,6 +43,21 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Catalogue lives in project/catalogue/ (business data, not in generic core)
 _PROJECT_DIR = os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "project")
 CATALOGUE_PATH = os.path.join(_PROJECT_DIR, "catalogue", "patterns.json")
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class PatternAdaptOverlap(ValueError):
+    """Blocks overlap after adaptation to a target room.
+
+    Raised by ``_assert_no_block_overlap`` when adapt_to_room produces
+    a layout where two blocks physically collide. Semantically close to
+    ``PatternStructurallyInvalid`` (pattern_fit.py) but defined here to
+    avoid a circular import.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -75,8 +91,8 @@ class SelectionResult:
 
     Attributes:
         standard: Standard name.
-        candidates: Patterns on the Pareto front.
-        all_fitting: All patterns whose footprint fits (before Pareto).
+        candidates: D-244 — top/top-1 fittings + all tolerated (displayed).
+        all_fitting: All fitting + tolerated before top/top-1 filter.
     """
     standard: str
     candidates: list[PatternCandidate]
@@ -180,16 +196,19 @@ def effective_dimensions(room: RoomSpec) -> tuple[int, int]:
     return max(0, ew), max(0, ed)
 
 
-def _fits_in_room(
+def _classify_fit(
     pattern: dict,
     room: RoomSpec,
     spacing: "SpacingConfig | None" = None,
-) -> bool:
-    """Check whether the pattern's real footprint fits the target room.
+) -> str:
+    """Classify how a pattern fits in a room.
 
-    D-242: uses ``compute_pattern_footprint`` (real emprise including
-    face zones and door obstacles) instead of declared room dimensions.
-    Compares footprint width/depth to effective room dimensions.
+    D-244: three-state classification with FIT_TOLERANCE.
+
+    Returns:
+        "fitting" — footprint fits within the room.
+        "tolere" — footprint exceeds the room by <= FIT_TOLERANCE per axis.
+        "hidden" — footprint exceeds the room by > FIT_TOLERANCE on any axis.
 
     Args:
         spacing: Spacing config for the pattern's standard. If None,
@@ -203,49 +222,39 @@ def _fits_in_room(
                 pattern, spacing,
             )
         except Exception:
-            return False
+            return "hidden"
         fp_w = x_max - x_min
         fp_d = y_max - y_min
-        return fp_w <= ew and fp_d <= ed
-    # Fallback: declared dimensions
-    pw = pattern.get("room_width_cm", 0)
-    pd = pattern.get("room_depth_cm", 0)
-    return pw <= ew and pd <= ed
+    else:
+        fp_w = pattern.get("room_width_cm", 0)
+        fp_d = pattern.get("room_depth_cm", 0)
+
+    if fp_w <= ew and fp_d <= ed:
+        return "fitting"
+    tol = FIT_TOLERANCE
+    if fp_w <= (1 + tol) * ew and fp_d <= (1 + tol) * ed:
+        return "tolere"
+    return "hidden"
 
 
-def _is_dominated(p: PatternCandidate, others: list[PatternCandidate]) -> bool:
-    """Check whether p is dominated by at least one other candidate.
+def _select_top_desks(
+    candidates: list[PatternCandidate],
+) -> list[PatternCandidate]:
+    """Keep only patterns with the top or top-1 desk count.
 
-    Pattern P1 dominates P2 if:
-        P1.room_width_cm >= P2.room_width_cm AND
-        P1.room_depth_cm >= P2.room_depth_cm AND
-        at least one inequality is strict.
-    """
-    for o in others:
-        if o is p:
-            continue
-        if (o.room_width_cm >= p.room_width_cm
-                and o.room_depth_cm >= p.room_depth_cm
-                and (o.room_width_cm > p.room_width_cm
-                     or o.room_depth_cm > p.room_depth_cm)):
-            return True
-    return False
-
-
-def pareto_front(candidates: list[PatternCandidate]) -> list[PatternCandidate]:
-    """Extract the Pareto front on (width, depth).
-
-    Patterns dominated in both width AND depth by another are excluded.
+    D-244: replaces the Pareto front. Simpler and more predictable.
 
     Args:
-        candidates: List of candidates whose footprint fits in the room.
+        candidates: Fitting candidates (oversize=False).
 
     Returns:
-        Sub-list of non-dominated candidates.
+        Sub-list with n_desks in {N, N-1} where N = max desk count.
     """
-    if len(candidates) <= 1:
-        return list(candidates)
-    return [p for p in candidates if not _is_dominated(p, candidates)]
+    if not candidates:
+        return []
+    n_max = max(c.n_desks for c in candidates)
+    keep_set = {n_max, n_max - 1}
+    return [c for c in candidates if c.n_desks in keep_set]
 
 
 def select_candidates(
@@ -255,9 +264,8 @@ def select_candidates(
 ) -> SelectionResult | list[SelectionResult]:
     """Select candidate patterns for a target room.
 
-    Filters by footprint (<= room) then extracts the Pareto front.
-    If standard is specified, returns a single SelectionResult.
-    Otherwise returns a list of 3 SelectionResult (one per standard).
+    D-244: three-state classification (fitting / tolere / hidden) with
+    FIT_TOLERANCE, then top + top-1 desk selection on fittings.
 
     Args:
         catalogue: JSON patterns from the catalogue.
@@ -277,9 +285,9 @@ def select_candidates(
         for p in catalogue:
             if p.get("standard") != std:
                 continue
-            # D-242: no hard filter — all patterns of the target standard
-            # are proposed. Oversize classification uses real footprint.
-            exact = _fits_in_room(p, room, spacing)
+            cls = _classify_fit(p, room, spacing)
+            if cls == "hidden":
+                continue
             candidate = PatternCandidate(
                 pattern=p,
                 name=p["name"],
@@ -287,28 +295,26 @@ def select_candidates(
                 room_depth_cm=p["room_depth_cm"],
                 standard=std,
                 n_desks=count_desks(p),
-                oversize=not exact,
+                oversize=(cls == "tolere"),
             )
-            if exact:
+            if cls == "fitting":
                 fitting.append(candidate)
             else:
                 oversize_extra.append(candidate)
 
-        front = pareto_front(fitting)
-        # Sort by desk count descending
-        front.sort(key=lambda c: c.n_desks, reverse=True)
-        # Append oversize candidates after the Pareto front
+        top = _select_top_desks(fitting)
+        top.sort(key=lambda c: c.n_desks, reverse=True)
         oversize_extra.sort(key=lambda c: c.n_desks, reverse=True)
 
         results.append(SelectionResult(
             standard=std,
-            candidates=front + oversize_extra,
+            candidates=top + oversize_extra,
             all_fitting=fitting + oversize_extra,
         ))
 
         logger.debug(
-            "Selection %s: %d fit, %d oversize, %d on Pareto front",
-            std, len(fitting), len(oversize_extra), len(front),
+            "Selection %s: %d fit, %d tolere, %d top desks",
+            std, len(fitting), len(oversize_extra), len(top),
         )
 
     if standard:
@@ -578,7 +584,22 @@ def _adapt_row_eo(
     new_x = [positions[i][0] for i in range(len(blocks))]
 
     if not anchors:
-        pass  # No anchor -> positions unchanged, extra space on the right
+        # D-244: proportional stretching of all gaps
+        orig_total = x  # total used width (gaps + blocks)
+        if orig_total > 0 and target_width != orig_total:
+            ratio = target_width / orig_total
+            gaps = [b.get("gap_cm", 0) for b in blocks]
+            scaled_gaps = [int(round(g * ratio)) for g in gaps]
+            # Absorb rounding residual on the last gap
+            total_blocks_eo = sum(positions[i][1] for i in range(len(blocks)))
+            residual = target_width - sum(scaled_gaps) - total_blocks_eo
+            scaled_gaps[-1] += residual
+            # Recompute positions from scaled gaps
+            cx = 0
+            for i in range(len(blocks)):
+                cx += scaled_gaps[i]
+                new_x[i] = cx
+                cx += positions[i][1]
     elif len(anchors) == 1:
         idx, ax = anchors[0]
         shift = ax - positions[idx][0]
@@ -671,11 +692,11 @@ def _adapt_ns(
 
     if len(rows) == 1:
         # Single row: extra space goes above/below
-        # Blocks with stick S have their offset_ns increased by dd
+        # D-244: clamp to 0 when dd < 0 to prevent negative offset
         for b in rows[0].get("blocks", []):
             sticks = set(b.get("sticks", []))
             if "S" in sticks:
-                b["offset_ns_cm"] = b.get("offset_ns_cm", 0) + dd
+                b["offset_ns_cm"] = max(0, b.get("offset_ns_cm", 0) + dd)
         p["rows"] = rows
         return p
 
@@ -696,18 +717,47 @@ def _adapt_ns(
         return p
 
     # Distribute dd proportionally into row_gaps
+    # D-244: clamp to 0 + absorb rounding residual on last gap
     total_gaps = sum(row_gaps)
     if total_gaps > 0:
         for i in range(len(row_gaps)):
-            row_gaps[i] += int(round(dd * row_gaps[i] / total_gaps))
+            new_val = row_gaps[i] + int(round(dd * row_gaps[i] / total_gaps))
+            row_gaps[i] = max(0, new_val)
     else:
-        # All gaps at 0: equal distribution
         per_gap = dd // len(row_gaps)
         for i in range(len(row_gaps)):
-            row_gaps[i] += per_gap
+            row_gaps[i] = max(0, row_gaps[i] + per_gap)
+
+    # Absorb rounding residual on last gap
+    target_total = max(0, total_gaps + dd)
+    actual_total = sum(row_gaps)
+    if row_gaps and actual_total != target_total:
+        row_gaps[-1] = max(0, row_gaps[-1] + target_total - actual_total)
 
     p["row_gaps_cm"] = row_gaps
     return p
+
+
+def _assert_no_block_overlap(adapted: dict) -> None:
+    """Raise PatternAdaptOverlap if any two blocks physically overlap.
+
+    D-244: runtime guard after adapt_to_room to prevent broken layouts.
+    Checks body rectangles only (face zones are circulation, not bodies).
+    """
+    positions = compute_block_positions(adapted)
+    for i in range(len(positions)):
+        a = positions[i]
+        for j in range(i + 1, len(positions)):
+            b = positions[j]
+            overlap_eo = a.x_cm < b.x_cm + b.eo_cm and b.x_cm < a.x_cm + a.eo_cm
+            overlap_ns = a.y_cm < b.y_cm + b.ns_cm and b.y_cm < a.y_cm + a.ns_cm
+            if overlap_eo and overlap_ns:
+                raise PatternAdaptOverlap(
+                    f"Overlap row {a.row_idx} block {a.block_idx} "
+                    f"({a.block_type} at {a.x_cm},{a.y_cm}) vs "
+                    f"row {b.row_idx} block {b.block_idx} "
+                    f"({b.block_type} at {b.x_cm},{b.y_cm})"
+                )
 
 
 def adapt_to_room(
@@ -718,12 +768,18 @@ def adapt_to_room(
     Clamping: stick blocks stay anchored to their wall.
     Homothety: non-stick blocks are redistributed proportionally.
 
+    D-244: raises PatternAdaptOverlap if the adaptation produces
+    overlapping blocks.
+
     Args:
         pattern: JSON pattern from the catalogue.
         target_room: Target room (dimensions >= pattern).
 
     Returns:
         New pattern with adjusted gaps and target dimensions.
+
+    Raises:
+        PatternAdaptOverlap: Blocks overlap after adaptation.
     """
     orig_w = pattern.get("room_width_cm", 0)
     orig_d = pattern.get("room_depth_cm", 0)
@@ -759,6 +815,7 @@ def adapt_to_room(
         for z in target_room.exclusion_zones
     ]
 
+    _assert_no_block_overlap(adapted)
     return adapted
 
 
@@ -1801,7 +1858,14 @@ def match_room(
         seen_fps: set[tuple] = set()
         deduped_pairs: list[tuple[PatternCandidate, dict]] = []
         for candidate in with_mirrors:
-            adapted = adapt_to_room(candidate.pattern, room)
+            try:
+                adapted = adapt_to_room(candidate.pattern, room)
+            except PatternAdaptOverlap:
+                logger.warning(
+                    "Skipping %s: blocks overlap after adaptation",
+                    candidate.name,
+                )
+                continue
             fp = _pattern_fingerprint(adapted)
             if fp in seen_fps:
                 continue

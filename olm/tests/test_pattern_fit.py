@@ -82,18 +82,18 @@ class TestFitShrinksOversizeRoom:
 
     def test_shrinks(self):
         # BLOCK_4_FACE: eo=160, ns=360 at orientation 0.
-        # D-229: E/W faces have non_superposable=70, candidate=0.
-        # N/S faces absent -> 0 (no desk_to_wall).
-        # Expected width = 70 + 160 + 70 = 300
+        # D-244: E/W faces have non_superposable=70, candidate=30 (slip-in).
+        # N/S faces absent -> 0.
+        # Expected width = 100 + 160 + 100 = 360
         # Expected depth = 0 + 360 + 0 = 360
         pat = _pattern(room_w=800, room_d=600)
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
 
         assert result.direction == "shrink"
-        assert result.new_width == 300
+        assert result.new_width == 360
         assert result.new_depth == 360
-        assert pat["room_width_cm"] == 300
+        assert pat["room_width_cm"] == 360
         assert pat["room_depth_cm"] == 360
 
 
@@ -303,10 +303,10 @@ class TestDoorExclusionSouth:
             openings=[_door_opening("south", offset_cm=0, width_cm=90)],
         )
         sp = _spacing()
-        # Block: x=[-70, 230], y=[0, 360]. Door lat=[0,90] overlaps block
+        # Block: x=[-100, 260], y=[0, 360]. Door lat=[0,90] overlaps block
         # lat → south wall pushed: y_max = 360 + 0 + 180 = 540.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 300
+        assert result.new_width == 360
         assert result.new_depth == 540
 
 
@@ -321,10 +321,10 @@ class TestDoorExclusionNorth:
             openings=[_door_opening("north", offset_cm=0, width_cm=360)],
         )
         sp = _spacing()
-        # Block lat [-70,230] overlaps door [0,360]: y_min = -180.
-        # Width: x_max = max(block 230, door 360) = 360.
+        # Block lat [-100,260] overlaps door [0,360]: y_min = -180.
+        # Width: x_max = max(block 260, door 360) = 360.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 430
+        assert result.new_width == 460
         assert result.new_depth == 540
 
 
@@ -340,9 +340,9 @@ class TestDoorExclusionEast:
         )
         sp = _spacing()
         # Block lat (y) [0,360] overlaps door [0,360]: x_max pushed to
-        # 0 + 160 + 70 + 180 = 410. Width = 410 - (-70) = 480.
+        # 0 + 160 + 100 + 180 = 440. Width = 440 - (-100) = 540.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 480
+        assert result.new_width == 540
         assert result.new_depth == 360
 
 
@@ -358,9 +358,9 @@ class TestDoorExclusionWest:
         )
         sp = _spacing()
         # Block lat (y) [0,360] overlaps door [0,360]: x_min pushed to
-        # 0 - 70 - 180 = -250. Width = 230 - (-250) = 480.
+        # 0 - 100 - 180 = -280. Width = 260 - (-280) = 540.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 480
+        assert result.new_width == 540
 
 
 class TestOpeningWithoutDoor:
@@ -378,8 +378,8 @@ class TestOpeningWithoutDoor:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Same as without any door: 300x360 (D-229)
-        assert result.new_width == 300
+        # Same as without any door: 360x360 (D-244)
+        assert result.new_width == 360
         assert result.new_depth == 360
 
 
@@ -390,7 +390,7 @@ class TestNoDoorRegression:
         pat = _pattern(room_w=800, room_d=600)
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 300
+        assert result.new_width == 360
         assert result.new_depth == 360
 
 
@@ -398,8 +398,8 @@ class TestDoorAtCorner:
     """Door at offset=0 (corner) with block at x=0: south wall pushed."""
 
     def test_corner_door(self):
-        # BLOCK_1 x=[-70,80] y=[0,180]. Door south [0,90] overlaps block
-        # → y_max pushed to 0+180+0+180 = 360. Width = max(80,90)-(-70)=160.
+        # BLOCK_1 x=[-100,80] y=[0,180]. Door south [0,90] overlaps block
+        # → y_max pushed to 0+180+0+180 = 360. Width = max(80,90)-(-100)=190.
         pat = _pattern(
             block_type="BLOCK_1",
             room_w=800,
@@ -408,7 +408,7 @@ class TestDoorAtCorner:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 160
+        assert result.new_width == 190
         assert result.new_depth == 360
 
 
@@ -446,10 +446,11 @@ class TestMultipleDoorsOnSameFace:
             ],
         )
         sp = _spacing()
-        # Block lat [-70,230] overlaps both door bands. Both push y_max
+        # Block lat [-100,260] overlaps both door bands. Both push y_max
         # to 540 (same value). Width: door2 [200,290] extends x_max to 290.
+        # Width = 290 - (-100) = 390.
         result = fit_room_to_pattern(pat, sp)
-        assert result.new_width == 360
+        assert result.new_width == 390
         assert result.new_depth == 540
 
 
@@ -554,8 +555,8 @@ class TestComputePatternFootprintPure:
         sp = _spacing()
         snapshot = copy.deepcopy(pat)
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
-        # BLOCK_4_FACE: body 160x360, west/east chair=70.
-        assert (x_min, x_max, y_min, y_max) == (-70, 230, 0, 360)
+        # BLOCK_4_FACE: body 160x360, west/east chair=70+slip=30=100.
+        assert (x_min, x_max, y_min, y_max) == (-100, 260, 0, 360)
         # Pure: no mutation.
         assert pat == snapshot
 
@@ -579,8 +580,8 @@ class TestIsPatternValid:
             block_type="BLOCK_1",
             room_w=300, room_d=300,
         )
-        # Shift block east so chair zone stays inside the room.
-        pat["rows"][0]["blocks"][0]["gap_cm"] = 70
+        # Shift block east so chair+slip zone stays inside the room.
+        pat["rows"][0]["blocks"][0]["gap_cm"] = 100
         assert is_pattern_valid(pat, _spacing())
 
     def test_invalid_when_chair_extends_past_wall(self):
@@ -620,51 +621,44 @@ class TestOrthoInternalFaceZones:
 
     def test_ortho_r_no_east_outer_clearance(self):
         """ORTHO_R east face is internal → does NOT extend footprint east."""
-        # BLOCK_2_ORTHO_R: eo=180, ns=260. chair_clearance=70.
-        # North face (external): extends 70 north → needs room_depth >= 260+70=330
+        # BLOCK_2_ORTHO_R: eo=180, ns=260. chair+slip=100.
+        # North face (external): extends 100 north
         # East face (internal): 0 outer → NO east extension
-        # Room 180x330 should fit exactly (no east clearance needed)
         pat = _pattern(
             block_type="BLOCK_2_ORTHO_R",
-            room_w=180, room_d=330,
+            room_w=180, room_d=360,
         )
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
         assert x_min == 0
         assert x_max == 180  # no east clearance (internal)
-        assert y_min == -70  # north chair clearance
+        assert y_min == -100  # north chair+slip clearance
         assert y_max == 260  # no south clearance
 
     def test_ortho_r_valid_tight_room(self):
         """ORTHO_R fits in a room with no east margin."""
         pat = _pattern(
             block_type="BLOCK_2_ORTHO_R",
-            room_w=180, room_d=330,
+            room_w=180, room_d=360,
         )
-        # fit_room snaps → the minimum room is what matters.
-        # is_pattern_valid compares footprint vs declared room.
-        # Footprint: 0..180 x -70..260 → width=180, depth=330
-        # Room declared: 180x330 → but y_min=-70 means needs translation.
-        # After fit, room is snapped to accommodate.
-        # Test via direct footprint check:
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
         fp_w = x_max - x_min  # 180
-        fp_d = y_max - y_min  # 330
+        fp_d = y_max - y_min  # 360
         assert fp_w <= 180
-        assert fp_d <= 330
+        assert fp_d <= 360
 
     def test_ortho_l_no_west_outer_clearance(self):
         """ORTHO_L west face is internal → does NOT extend footprint west."""
         pat = _pattern(
             block_type="BLOCK_2_ORTHO_L",
-            room_w=180, room_d=330,
+            room_w=180, room_d=360,
         )
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
         assert x_min == 0   # no west clearance (internal)
         assert x_max == 180
-        assert y_min == -70  # north chair clearance
+        assert y_min == -100  # north chair+slip clearance
         assert y_max == 260
 
 

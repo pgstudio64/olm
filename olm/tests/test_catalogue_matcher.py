@@ -5,16 +5,21 @@ import pytest
 
 from olm.core.catalogue_matcher import (
     MatchScore,
+    PatternAdaptOverlap,
     PatternCandidate,
     SelectionResult,
+    _assert_no_block_overlap,
+    _classify_fit,
     _compute_composite_and_grade,
     _compute_dim_back_door,
     _compute_dim_face_wall,
     _compute_dim_light,
     _GRADE_TO_DIM,
+    _select_top_desks,
     adapt_dimensions,
     adapt_to_room,
     compact_catalogue_names,
+    compute_block_positions,
     compute_desk_positions,
     count_desks,
     dedupe_by_fingerprint,
@@ -23,7 +28,6 @@ from olm.core.catalogue_matcher import (
     largest_free_rectangle_m2,
     load_catalogue,
     mirror_pattern,
-    pareto_front,
     remove_conflicting_desks,
     score_candidate,
     select_candidates,
@@ -147,51 +151,79 @@ class TestCountDesks:
 
 
 # ---------------------------------------------------------------------------
-# 2. pareto_front
+# 2. _select_top_desks + _classify_fit (D-244)
 # ---------------------------------------------------------------------------
 
-class TestParetoFront:
-    """Verifies the Pareto front on (width, depth)."""
+class TestSelectTopDesks:
+    """D-244: keeps only N and N-1 desk counts."""
 
-    def test_no_dominated(self):
-        """Two non-dominated candidates both remain."""
-        c1 = _make_candidate("A", room_width_cm=400, room_depth_cm=300)
-        c2 = _make_candidate("B", room_width_cm=300, room_depth_cm=400)
-        front = pareto_front([c1, c2])
-        assert len(front) == 2
+    def test_top_and_top_minus_one(self):
+        """6-desk and 5-desk patterns kept, 4-desk excluded."""
+        c6 = _make_candidate("C6", n_desks=6)
+        c5 = _make_candidate("C5", n_desks=5)
+        c4 = _make_candidate("C4", n_desks=4)
+        result = _select_top_desks([c6, c5, c4])
+        desks = {c.n_desks for c in result}
+        assert desks == {6, 5}
 
-    def test_dominated_removed(self):
-        """A candidate dominated by another is eliminated."""
-        big = _make_candidate("big", room_width_cm=500, room_depth_cm=500)
-        small = _make_candidate("small", room_width_cm=300, room_depth_cm=300)
-        front = pareto_front([big, small])
-        assert len(front) == 1
-        assert front[0].name == "big"
-
-    def test_identical_not_dominated(self):
-        """Two candidates with identical dimensions do not dominate each other."""
-        c1 = _make_candidate("A", room_width_cm=400, room_depth_cm=400)
-        c2 = _make_candidate("B", room_width_cm=400, room_depth_cm=400)
-        front = pareto_front([c1, c2])
-        assert len(front) == 2
+    def test_all_same_desk_count(self):
+        """All fittings at N=6: only 6 and 5 in keep_set, 5 absent."""
+        c1 = _make_candidate("A", n_desks=6)
+        c2 = _make_candidate("B", n_desks=6)
+        result = _select_top_desks([c1, c2])
+        assert len(result) == 2
 
     def test_single_candidate(self):
-        c = _make_candidate("solo")
-        front = pareto_front([c])
-        assert len(front) == 1
+        c = _make_candidate("solo", n_desks=4)
+        result = _select_top_desks([c])
+        assert len(result) == 1
 
     def test_empty(self):
-        assert pareto_front([]) == []
+        assert _select_top_desks([]) == []
 
-    def test_three_candidates_mixed(self):
-        """One dominated, two non-dominated on the front."""
-        c1 = _make_candidate("A", room_width_cm=500, room_depth_cm=300)
-        c2 = _make_candidate("B", room_width_cm=300, room_depth_cm=500)
-        c3 = _make_candidate("C", room_width_cm=400, room_depth_cm=400)
-        # c3 is not dominated by c1 (c1.depth=300 < c3.depth=400)
-        # nor by c2 (c2.width=300 < c3.width=400)
-        front = pareto_front([c1, c2, c3])
-        assert len(front) == 3
+    def test_multiple_at_each_level(self):
+        """Multiple patterns at N and N-1 all kept."""
+        cs = [
+            _make_candidate("A6", n_desks=6),
+            _make_candidate("B6", n_desks=6),
+            _make_candidate("C6", n_desks=6),
+            _make_candidate("D5", n_desks=5),
+            _make_candidate("E5", n_desks=5),
+            _make_candidate("F4", n_desks=4),
+        ]
+        result = _select_top_desks(cs)
+        assert len(result) == 5
+        assert all(c.n_desks >= 5 for c in result)
+
+
+class TestClassifyFit:
+    """D-244: three-state classification."""
+
+    def test_fitting(self):
+        """Footprint smaller than room → fitting."""
+        from olm.core.room_model import RoomSpec
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=200, room_depth_cm=200)
+        room = RoomSpec(width_cm=400, depth_cm=400)
+        assert _classify_fit(p, room) == "fitting"
+
+    def test_tolere(self):
+        """Footprint exceeds by < 10% → tolere."""
+        from olm.core.room_model import RoomSpec
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=308, room_depth_cm=200)
+        room = RoomSpec(width_cm=300, depth_cm=400)
+        # 308/300 = 2.7% < 10%, sans spacing → compare declared dims
+        assert _classify_fit(p, room) == "tolere"
+
+    def test_hidden(self):
+        """Footprint exceeds by > 10% → hidden."""
+        from olm.core.room_model import RoomSpec
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=400, room_depth_cm=200)
+        room = RoomSpec(width_cm=300, depth_cm=400)
+        # 400/300 = 33% > 10%
+        assert _classify_fit(p, room) == "hidden"
 
 
 # ---------------------------------------------------------------------------
@@ -233,8 +265,8 @@ class TestSelectCandidates:
         assert isinstance(result, SelectionResult)
         assert result.standard == "standard1"
 
-    def test_pareto_subset_of_fitting(self, catalogue):
-        """Pareto candidates are a subset of all_fitting."""
+    def test_candidates_subset_of_all_fitting(self, catalogue):
+        """D-244: displayed candidates are a subset of all_fitting."""
         if not catalogue:
             pytest.skip("Empty catalogue")
         room = RoomSpec(width_cm=600, depth_cm=500)
@@ -243,22 +275,20 @@ class TestSelectCandidates:
             for c in sel.candidates:
                 assert c in sel.all_fitting
 
-    def test_no_hard_filter_all_proposed(self, catalogue):
-        """D-242: all patterns of a standard are proposed (no hard filter)."""
+    def test_hidden_patterns_excluded(self, catalogue):
+        """D-244: patterns exceeding 10% tolerance are hidden."""
         if not catalogue:
             pytest.skip("Empty catalogue")
-        # Count patterns per standard in catalogue
-        from collections import Counter
-        std_counts = Counter(p.get("standard") for p in catalogue)
-        # For a tiny room, all patterns should appear (as oversize)
         tiny = RoomSpec(width_cm=50, depth_cm=50)
         results = select_candidates(catalogue, tiny)
         for sel in results:
-            n_cat = std_counts.get(sel.standard, 0)
-            assert len(sel.candidates) == n_cat, (
-                f"Standard {sel.standard}: expected {n_cat} candidates, "
-                f"got {len(sel.candidates)}"
-            )
+            # All candidates should be oversize (tolere) or fitting
+            # but patterns >> 10% bigger should be excluded
+            for c in sel.candidates:
+                # Declared dimensions must be within 10% of room
+                assert c.room_width_cm <= 55 or c.room_depth_cm <= 55 or (
+                    c.oversize
+                ), f"{c.name} should be hidden for 50x50"
 
     def test_fitting_before_oversize_in_candidates(self, catalogue):
         """D-242: fitting candidates come before oversize in the list."""
@@ -454,6 +484,102 @@ class TestAdaptDimensions:
 
         adapted = adapt_dimensions(p, 300, 300)
         assert adapted["rows"][0]["blocks"][0]["gap_cm"] == 50
+
+
+# ---------------------------------------------------------------------------
+# 5c. D-244 — proportional EO stretching (no locks)
+# ---------------------------------------------------------------------------
+
+class TestHomothetyNoLock:
+    """D-244: without locks, gaps are stretched proportionally."""
+
+    def test_double_width_doubles_gaps(self):
+        """Pattern 270-wide in 540-wide room: gaps doubled."""
+        # BLOCK_1 eo = 80 (DESK_D). gap=90 + 80 + gap=100 = 270
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "gap_cm": 90},
+             {"type": "BLOCK_1", "gap_cm": 100}],
+        ], room_width_cm=270, room_depth_cm=300)
+        target = RoomSpec(width_cm=540, depth_cm=300)
+        adapted = adapt_to_room(p, target)
+        blocks = adapted["rows"][0]["blocks"]
+        # Total gaps + blocks must equal target width
+        total = 0
+        for b in blocks:
+            total += b.get("gap_cm", 0)
+            from olm.core.catalogue_matcher import _block_eo_extent
+            total += _block_eo_extent(b)
+        assert total == 540
+
+    def test_lock_w_preserves_position(self):
+        """With lock W, block stays at its position, extra space at right."""
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "sticks": ["W"], "gap_cm": 90}],
+        ], room_width_cm=270, room_depth_cm=300)
+        target = RoomSpec(width_cm=540, depth_cm=300)
+        adapted = adapt_to_room(p, target)
+        blocks = adapted["rows"][0]["blocks"]
+        assert blocks[0]["gap_cm"] == 90  # unchanged (lock W)
+
+
+# ---------------------------------------------------------------------------
+# 5d. D-244 — NS clamp offset_ns_cm single-row
+# ---------------------------------------------------------------------------
+
+class TestAdaptNSClamp:
+    """D-244: offset_ns_cm clamps to 0 when room shrinks."""
+
+    def test_stick_s_offset_clamped_to_zero(self):
+        """offset_ns_cm=50, dd=-100 → clamped to 0."""
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "sticks": ["S"], "gap_cm": 0,
+              "offset_ns_cm": 50}],
+        ], room_width_cm=300, room_depth_cm=400)
+        adapted = adapt_dimensions(p, 300, 300)
+        blocks = adapted["rows"][0]["blocks"]
+        assert blocks[0]["offset_ns_cm"] == 0
+
+    def test_row_gaps_clamped_to_zero(self):
+        """Multi-row: row_gaps clamped to 0 when room shrinks a lot."""
+        p = _make_pattern([
+            [{"type": "BLOCK_1", "gap_cm": 0}],
+            [{"type": "BLOCK_1", "gap_cm": 0}],
+        ], room_width_cm=300, room_depth_cm=400, row_gaps_cm=[100])
+        adapted = adapt_dimensions(p, 300, 200)
+        assert all(g >= 0 for g in adapted.get("row_gaps_cm", []))
+
+
+# ---------------------------------------------------------------------------
+# 5e. D-244 — overlap guard
+# ---------------------------------------------------------------------------
+
+class TestOverlapGuard:
+    """D-244: runtime guard against block overlap after adaptation."""
+
+    def test_normal_pattern_no_overlap(self):
+        """Normal pattern in normal room: no exception."""
+        p = _make_pattern([
+            [{"type": "BLOCK_4_FACE", "gap_cm": 10}],
+        ], room_width_cm=400, room_depth_cm=400)
+        target = RoomSpec(width_cm=500, depth_cm=500)
+        adapted = adapt_to_room(p, target)
+        # Should not raise
+        _assert_no_block_overlap(adapted)
+
+    def test_overlap_detected(self):
+        """Forged pattern with overlapping blocks raises exception."""
+        p = {
+            "name": "overlap_test",
+            "standard": "standard1",
+            "room_width_cm": 200,
+            "room_depth_cm": 200,
+            "rows": [{"blocks": [
+                {"type": "BLOCK_4_FACE", "gap_cm": 0, "orientation": 0},
+                {"type": "BLOCK_4_FACE", "gap_cm": -50, "orientation": 0},
+            ]}],
+        }
+        with pytest.raises(PatternAdaptOverlap):
+            _assert_no_block_overlap(p)
 
 
 # ---------------------------------------------------------------------------
