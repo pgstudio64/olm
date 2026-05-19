@@ -1225,6 +1225,7 @@ def generate_mirrors(
             room_depth_cm=c.room_depth_cm,
             standard=c.standard,
             n_desks=c.n_desks,
+            oversize=c.oversize,  # D-242 hotfix: mirror inherits oversize flag
         ))
     return result
 

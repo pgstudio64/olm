@@ -817,6 +817,34 @@ class TestDedupeByFingerprint:
         result = dedupe_by_fingerprint(candidates)
         assert len(result) == 2
 
+    def test_mirror_inherits_oversize_flag(self):
+        """D-242 hotfix: mirror PatternCandidate must inherit oversize.
+
+        Avant ce fix, generate_mirrors n'incluait pas oversize dans le
+        PatternCandidate du mirror, donc tous les _MIX se retrouvaient avec
+        oversize=False (default), causant des patterns visiblement
+        oversize a apparaitre comme fitting (non grises) dans Office.
+        """
+        p = _make_pattern(
+            [[
+                {"type": "BLOCK_1", "gap_cm": 0, "sticks": ["W"]},
+                {"type": "BLOCK_2_FACE", "gap_cm": 50, "sticks": ["E"]},
+            ]],
+            name="big_oversize",
+            room_width_cm=600,
+            room_depth_cm=400,
+        )
+        orig = PatternCandidate(
+            pattern=p, name=p["name"],
+            room_width_cm=600, room_depth_cm=400,
+            standard="standard1", n_desks=3,
+            oversize=True,
+        )
+        candidates = generate_mirrors([orig])
+        assert len(candidates) == 2
+        # Original + mirror both oversize=True
+        assert all(c.oversize for c in candidates)
+
     def test_two_independent_patterns_same_layout_deduped(self):
         """Two catalogue patterns with identical block layout → 1 result."""
         p1 = _make_pattern(
