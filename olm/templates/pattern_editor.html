@@ -411,11 +411,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
                   <input type="range" id="rvOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
                   <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
                   <label><input type="checkbox" id="rvGridToggle" checked onchange="window._rvRefresh && window._rvRefresh()"> Grid</label>
-                </td>
-                <td class="nav-right">
                   <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
                   <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
                   <button class="btn btn-toolbar" id="rvZoomIn" title="Zoom in">+</button>
+                </td>
+                <td class="nav-right">
                   <button class="btn btn-toolbar" id="rvBtnReanalyze" style="display:none;" title="Rescan windows & openings (keeps manual edits)">Rescan</button>
                   <label id="rvLockWallsWrap" style="display:none;font-size:11px;color:var(--text-dim);margin-left:2px;" title="Lock walls: re-scan openings &amp; windows but keep the walls detected earlier (auto-checked when you resized the bbox).">
                     <input type="checkbox" id="rvLockWalls"> Lock walls
@@ -507,12 +507,11 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
                 <input type="range" id="fpOverlayOpacity" min="5" max="80" value="25" style="width:60px;" title="Overlay opacity">
                 <span id="fpOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">25%</span>
                 <label><input type="checkbox" id="fpGridToggle" checked> Grid</label>
-              </td>
-              <td class="nav-right">
                 <button class="btn btn-toolbar" id="fpZoomOut" title="Zoom out">&#8722;</button>
                 <button class="btn btn-toolbar" id="fpZoomFit" title="Fit all">&#8861;</button>
                 <button class="btn btn-toolbar" id="fpZoomIn" title="Zoom in">+</button>
               </td>
+              <td class="nav-right">
             </tr></table>
           </div>
           <svg id="fpCanvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" class="svg-canvas"></svg>

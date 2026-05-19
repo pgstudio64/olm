@@ -502,11 +502,10 @@
         ovOffX = room.bbox_px[0] / ov.pxPerCm;  // px → cm
         ovOffY = room.bbox_px[1] / ov.pxPerCm;
       }
-      var ist = window.ingState;
-      var ovUrl = (ist && ist.hideDetectionColors && ist.planUrlClean)
-        ? ist.planUrlClean : ov.dataUrl;
+      // Always use ov.dataUrl (-SD enhanced version, no detection colors).
+      // User requirement 2026-05-19: hideDetectionColors no longer switches background.
       state.overlay = {
-        dataUrl: ovUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
+        dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
         offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,
       };
     } else {
@@ -643,11 +642,10 @@
         roomOvY = room.bbox_px[1] / ov.pxPerCm;
       }
       var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
-      var ist2 = window.ingState;
-      var ovUrl2 = (ist2 && ist2.hideDetectionColors && ist2.planUrlClean)
-        ? ist2.planUrlClean : ov.dataUrl;
+      // Always use ov.dataUrl (-SD enhanced version, no detection colors).
+      // User requirement 2026-05-19.
       state.overlay = {
-        dataUrl: ovUrl2,
+        dataUrl: ov.dataUrl,
         pxPerCm: ov.pxPerCm,
         opacity: fpOvOpacity,
         offsetX: roomOvX,

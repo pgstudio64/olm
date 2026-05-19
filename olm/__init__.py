@@ -1,2 +1,2 @@
 """OLM -- Office Layout Matching."""
-__version__ = "0.5.25"
+__version__ = "0.5.26"

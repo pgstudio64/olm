@@ -1299,15 +1299,12 @@
       '" fill="#1e1e1e"/>');
 
     // Background: floor plan image (as overlay)
+    // Always display the -SD enhanced version (no cartouche, no detection colors)
+    // regardless of hideDetectionColors toggle (user requirement 2026-05-19).
     if (ingState.overlayVisible && ingState.planUrl) {
-      var _displayUrl = ingState.planUrl;
-      if (ingState.hideDetectionColors) {
-        if (ingState.planUrlClean) {
-          _displayUrl = ingState.planUrlClean;
-        } else {
-          _buildCleanPlanUrl();
-        }
-      }
+      var _displayUrl = ingState.planPathEnhanced
+        ? '/api/image?path=' + encodeURIComponent(ingState.planPathEnhanced)
+        : ingState.planUrl;
       elsBg.push('<image href="' + _displayUrl +
         '" x="0" y="0" width="' + W + '" height="' + H +
         '" opacity="' + ingState.opacity +

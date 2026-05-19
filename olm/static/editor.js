@@ -2537,12 +2537,10 @@ function enterAmendMode(room, candidate) {
       ovOffX = room.bbox_px[0] / ov.pxPerCm;
       ovOffY = room.bbox_px[1] / ov.pxPerCm;
     }
-    var ist = window.ingState;
-    var ovUrl = (ist && ist.hideDetectionColors && ist.planUrlClean)
-      ? ist.planUrlClean : ov.dataUrl;
+    // Always use ov.dataUrl (-SD enhanced version). User requirement 2026-05-19.
     var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
     state.overlay = {
-      dataUrl: ovUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
+      dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
       offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,
     };
     state.corridor_face_abs = room.corridor_face_abs || "";

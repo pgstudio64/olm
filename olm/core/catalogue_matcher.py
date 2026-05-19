@@ -33,6 +33,7 @@ from olm.core.pattern_generator import (
     DESK_D_CM,
     DESK_W_CM,
 )
+from olm.core.exceptions import PatternStructurallyInvalid
 from olm.core.matching_config import FIT_TOLERANCE
 from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
@@ -50,13 +51,13 @@ CATALOGUE_PATH = os.path.join(_PROJECT_DIR, "catalogue", "patterns.json")
 # ---------------------------------------------------------------------------
 
 
-class PatternAdaptOverlap(ValueError):
+class PatternAdaptOverlap(PatternStructurallyInvalid):
     """Blocks overlap after adaptation to a target room.
 
     Raised by ``_assert_no_block_overlap`` when adapt_to_room produces
-    a layout where two blocks physically collide. Semantically close to
-    ``PatternStructurallyInvalid`` (pattern_fit.py) but defined here to
-    avoid a circular import.
+    a layout where two blocks physically collide. Inherits from
+    ``PatternStructurallyInvalid`` (olm.core.exceptions) so a single
+    ``except PatternStructurallyInvalid`` catches both cases.
     """
 
 

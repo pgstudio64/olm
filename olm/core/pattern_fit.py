@@ -37,8 +37,9 @@ MIN_DOOR_WIDTH_CM = 90
 SNAP_CM = 10
 
 
-class PatternStructurallyInvalid(Exception):
-    """Blocks have physical collisions — pattern cannot be fitted."""
+# Re-exported from olm.core.exceptions to avoid circular imports while keeping
+# the legacy import path ``from olm.core.pattern_fit import PatternStructurallyInvalid``.
+from olm.core.exceptions import PatternStructurallyInvalid  # noqa: F401, E402
 
 
 @dataclass
