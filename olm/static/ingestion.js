@@ -229,8 +229,11 @@
       var el = document.getElementById(id);
       if (el) el.style.display = '';
     });
-    // Build clean plan image (colors removed) for minimap + hide-colors.
-    _buildCleanPlanUrl();
+    // _buildCleanPlanUrl() retire (v0.5.27) : iterait synchronement sur chaque
+    // pixel du PNG (10-20s CPU bloquant) pour produire planUrlClean. Depuis
+    // que hide-detection-colors ne switch plus le fond d ecran (v0.5.26),
+    // planUrlClean n est plus lu nulle part. La fonction reste presente pour
+    // l instant mais n est plus appelee.
   }
 
   // --- Shared re-analyze canonicalisation (D-112/D-113) ---------------------
