@@ -58,8 +58,10 @@
       cb({ canvas: _processedCanvas, scale: _processedScale });
       return;
     }
+    var _tLoadStart = (window.performance || Date).now();
     var img = new Image();
     img.onload = function () {
+      var _tDecoded = (window.performance || Date).now();
       // v0.5.28 perf : downsample large plans before pixel-by-pixel loop.
       // Was blocking the browser 10-20s on 4000x3000 plans (12M pixels).
       var srcW = img.naturalWidth, srcH = img.naturalHeight;
@@ -72,6 +74,7 @@
       var ctx = cvs.getContext("2d");
       // drawImage with explicit size = browser downsamples natively (fast).
       ctx.drawImage(img, 0, 0, w, h);
+      var _tDrawn = (window.performance || Date).now();
       try {
         var id = ctx.getImageData(0, 0, w, h);
       } catch (e) {
@@ -79,6 +82,7 @@
         cb(null);
         return;
       }
+      var _tGotData = (window.performance || Date).now();
       var d = id.data;
       for (var i = 0; i < d.length; i += 4) {
         var r = d[i], g = d[i + 1], b = d[i + 2];
@@ -92,10 +96,21 @@
         }
         d[i] = tone; d[i + 1] = tone; d[i + 2] = tone;
       }
+      var _tLooped = (window.performance || Date).now();
       ctx.putImageData(id, 0, 0);
       _processedCanvas = cvs;
       _processedUrl = url;
       _processedScale = s;
+      // v0.5.30 instrumentation : log timing to server (no DevTools needed).
+      if (window._perfMark) {
+        window._perfMark("minimap._ensurePlanImage",
+          Math.round(_tLooped - _tLoadStart),
+          "src=" + srcW + "x" + srcH + " proc=" + w + "x" + h +
+          " decode=" + Math.round(_tDecoded - _tLoadStart) +
+          " draw=" + Math.round(_tDrawn - _tDecoded) +
+          " getData=" + Math.round(_tGotData - _tDrawn) +
+          " loop=" + Math.round(_tLooped - _tGotData));
+      }
       cb({ canvas: cvs, scale: s });
     };
     img.onerror = function () { cb(null); };
