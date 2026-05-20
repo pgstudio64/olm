@@ -1066,6 +1066,21 @@
     // (type, face, offset, width) key — the DSL serializes these 3 values
     // exactly, so the cache key is stable.
     function _rvCommitFromState() {
+      // v0.5.42 DIAG TEMPORAIRE (room-shift) : capture avant/après commit.
+      // Gated --dev, affiché en barre de statut (sans DevTools). À retirer.
+      var _diag = !!(window.APP_CONFIG && window.APP_CONFIG.dev_mode);
+      var _snap = function () {
+        var rro = state.roomRenderOffset || { x_cm: 0, y_cm: 0 };
+        var items = []
+          .concat((state.room_doors || []).map(function (d) {
+            return "D:" + d.face + "@" + d.offset_cm; }))
+          .concat((state.room_windows || []).map(function (w) {
+            return "W:" + w.face + "@" + w.offset_cm; }));
+        return "cf=" + (state.corridor_face_abs || "-")
+          + " dims=" + state.room_width_cm + "x" + state.room_depth_cm
+          + " rro=(" + rro.x_cm + "," + rro.y_cm + ") [" + items.join(" ") + "]";
+      };
+      var _before = _diag ? _snap() : "";
       var originCache = {};
       function _keyFor(kind, e) {
         return kind + "|" + e.face + "|" + (e.offset_cm || 0) +
@@ -1100,6 +1115,11 @@
         });
         _syncPatternEditorUI();
         if (typeof markDirty === "function") markDirty();
+        if (_diag) {
+          var msg = "DIAG room-shift | BEFORE " + _before + " | AFTER " + _snap();
+          console.log(msg);
+          if (typeof setStatus === "function") setStatus(msg);
+        }
       });
     }
 
