@@ -44,7 +44,11 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    /* Largeur mini raisonnable (2026-05-20) : sous 1800px on scrolle plutôt
+       que de comprimer les barres jusqu'à tronquer les boutons. */
+    min-width: 1800px;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   /* ── Dev mode ──────────────────────────────────────── */
@@ -646,15 +650,6 @@
   .nav-layout td button,
   .nav-layout td .fp-room-label { display: inline-flex; align-items: center; }
   .nav-layout .nav-right { text-align: right; white-space: nowrap; }
-  /* Petits écrans / fenêtres étroites : les barres de commandes se replient
-     au lieu d'être tronquées — tous les boutons restent accessibles (2026-05-20).
-     Le rendu maximisé (>1200px) reste identique. */
-  @media (max-width: 1200px) {
-    .nav-layout { table-layout: auto; }
-    .nav-layout .nav-left,
-    .nav-layout .nav-center,
-    .nav-layout .nav-right { white-space: normal; }
-  }
   .fp-canvas-wrap {
     flex: 1; overflow: hidden; display: flex;
     flex-direction: column; position: relative;

@@ -10,7 +10,7 @@
  * Click to toggle full / reduced size.  Starts collapsed.
  */
 (function () {
-  var MAX_DIM = 274;  // -20% (etait 343) — taille minimap Room/Office
+  var MAX_DIM = 309;  // -10% (etait 343) — taille minimap Room/Office
   var COLLAPSED_RATIO = 1.67;
   var MARGIN_RATIO = 0.12;
   var _processedCanvas = null;
