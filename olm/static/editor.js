@@ -1045,10 +1045,17 @@ function _roomVisualInfo(corridorFace, roomWPx, roomHPx) {
 }
 
 function render(targetSvg) {
+  // v0.5.33 instrumentation : compteur de render (zoomFit en declenche 3 par
+  // transition) + bornes pour isoler le render lent.
+  if (window._perf) {
+    window._renderSeq = (window._renderSeq || 0) + 1;
+    window._perf.mark("render#" + window._renderSeq + " enter");
+  }
   try { _renderImpl(targetSvg); }
   catch(e) { console.error("render() error:", e); setStatus("RENDER ERROR: " + e.message); }
   // Minimap refresh after each render (Room / Office views).
   if (window._minimapRefresh) window._minimapRefresh();
+  if (window._perf) window._perf.mark("render#" + window._renderSeq + " done (+minimap)");
 }
 function _renderImpl(targetSvg) {
   const svg = targetSvg || document.getElementById("canvas");
@@ -1710,6 +1717,7 @@ function _renderImpl(targetSvg) {
   // D-83: data is already in local coordinates — render directly, no SVG rotation needed.
   // Only the overlay needs rotation (handled separately via overlay transform).
   document.getElementById(bgId).innerHTML = elementsBg.map(function(e) { return e.s; }).join('\n');
+  if (window._perf) window._perf.mark("  r#" + (window._renderSeq || 0) + " bg-inject");
 
   const editorVb = state.viewBox;
   const editorGridKey = JSON.stringify({
@@ -1734,8 +1742,10 @@ function _renderImpl(targetSvg) {
       gridLayer.innerHTML = '';
     }
   }
+  if (window._perf) window._perf.mark("  r#" + (window._renderSeq || 0) + " grid");
 
   document.getElementById(overlayId).innerHTML = elementsOverlay.map(function(e) { return e.s; }).join('\n');
+  if (window._perf) window._perf.mark("  r#" + (window._renderSeq || 0) + " overlay-inject");
 
   // Store dimensions for zoomFit
   state._lastContentW = totalW;

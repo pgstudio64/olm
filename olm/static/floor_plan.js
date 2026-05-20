@@ -117,6 +117,7 @@
       return Object.assign({}, r, { openings: apiOpenings, doors: undefined });
     });
 
+    if (window._perf) window._perf.mark("fetch /api/floor-plan/match : sent");
     fetch("/api/floor-plan/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -124,6 +125,10 @@
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      if (window._perf) {
+        window._perf.mark("fetch /api/floor-plan/match : parsed");
+        if (data._perf) window._perf.setExtra("server_match_ms", data._perf.total_ms);
+      }
       if (data.error) { alertModal("Error: " + data.error); return; }
       // Sort results by name
       data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
@@ -266,8 +271,11 @@
   }
 
   function rvRenderCurrent() {
+    // v0.5.33 instrumentation : capture la transition Floor→Room.
+    if (window._perf) window._perf.begin("Floor→Room");
     // Floor properties always refreshed (independent of selected room).
     updateFloorProperties();
+    if (window._perf) window._perf.mark("updateFloorProperties");
 
     var room = fpCurrent();
     if (!room) {
@@ -289,12 +297,14 @@
     if (typeof window.loadRoomHitsAndSeedFromIngState === "function") {
       window.loadRoomHitsAndSeedFromIngState(roomData);
     }
+    if (window._perf) window._perf.mark("loadRoomHitsAndSeed");
 
     // Render room SVG in canvas (empty room, no blocks)
     var reviewSubtab = document.getElementById("tabFpReview");
     if (reviewSubtab && reviewSubtab.classList.contains("active")) {
       fpRenderEmptyRoom(roomData, document.getElementById("rvCanvas"));
     }
+    if (window._perf) window._perf.mark("fpRenderEmptyRoom (sync)");
 
     // Navigation — same amendment-kinds label as Office view.
     _setRoomLabel("rvRoomLabel", roomData.name || "(unnamed)", room);
@@ -512,9 +522,15 @@
       state.overlay = null;
     }
 
+    // v0.5.33 instrumentation : sonde l'overlay (type/taille/dims/decode).
+    if (window._perf) window._perf.probeImage(state.overlay && state.overlay.dataUrl);
     render(targetSvg);
     // Delay zoomFit to ensure the SVG container is laid out
-    requestAnimationFrame(function() { zoomFit(targetSvg); });
+    requestAnimationFrame(function() {
+      if (window._perf) window._perf.mark("rAF: before zoomFit");
+      zoomFit(targetSvg);
+      if (window._perf) window._perf.mark("rAF: after zoomFit");
+    });
   }
 
   // ── Candidate list ─────────────────────────────────────────────────────

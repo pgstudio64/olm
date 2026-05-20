@@ -397,6 +397,14 @@
       if (e.target === diagModal) diagModal.style.display = "none";
     };
 
+    // --- Perf button (v0.5.33) : timing transition Floor→Room (freeze diag) ---
+    var perfBtn = document.getElementById("rvBtnPerf");
+    if (perfBtn) {
+      perfBtn.addEventListener("click", function () {
+        OLM_DIAGS.run("perf.transition");
+      });
+    }
+
     // --- Diagnostic button (D-160) ---
     var diagBtn = document.getElementById("rvBtnDiag");
     if (diagBtn) {

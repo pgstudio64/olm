@@ -1,5 +1,81 @@
 "use strict";
 
+// ─────────────────────────────────────────────────────────────────────────
+// v0.5.33 INSTRUMENTATION TEMPORAIRE — diagnostic du freeze Floor→Room.
+// 3 voies complementaires pour localiser un blocage de 20s en UNE iteration :
+//   1. marqueurs de phase (performance.now) — capte un blocage JS synchrone
+//      (le delta entre 2 marques contient le temps gele).
+//   2. PerformanceObserver longtask — capte decode/layout/paint asynchrones
+//      que les marques ne voient pas.
+//   3. sonde image (probeImage) — type/taille/dims/temps de decode de l'overlay.
+// Capture la VRAIE transition (pas de re-run : caches chauds masqueraient le
+// gel). Le bouton "Perf" (Room, dev) affiche la derniere capture via OLM_DIAGS.
+// A RETIRER une fois la cause identifiee.
+window._perf = (function () {
+  var cur = null;          // session courante == derniere lisible
+  var obs = null;
+  var quietTimer = null;
+  var QUIET_MS = 2500;     // fin de session apres 2.5s sans nouvelle marque
+
+  function _disconnect() {
+    if (obs) { try { obs.disconnect(); } catch (e) { /* noop */ } obs = null; }
+  }
+  function _arm() {
+    if (quietTimer) clearTimeout(quietTimer);
+    quietTimer = setTimeout(_disconnect, QUIET_MS);
+  }
+  function begin(label) {
+    _disconnect();
+    window._renderSeq = 0;   // labels render#1/2/3 repartent a chaque capture
+    cur = {
+      label: label, t0: performance.now(),
+      marks: [{ label: "start", t: 0 }], longtasks: [], extra: {},
+    };
+    if (window.PerformanceObserver) {
+      try {
+        obs = new PerformanceObserver(function (list) {
+          if (!cur) return;
+          list.getEntries().forEach(function (e) {
+            cur.longtasks.push({
+              start: Math.round(e.startTime - cur.t0),
+              dur: Math.round(e.duration),
+            });
+          });
+        });
+        obs.observe({ entryTypes: ["longtask"] });
+      } catch (e) { obs = null; }
+    }
+    _arm();
+  }
+  function mark(label) {
+    if (!cur) return;
+    cur.marks.push({ label: label, t: Math.round(performance.now() - cur.t0) });
+    _arm();
+  }
+  function setExtra(k, v) { if (cur) { cur.extra[k] = v; _arm(); } }
+  function probeImage(url) {
+    if (!cur) return;
+    if (!url) { setExtra("overlay", "none"); return; }
+    setExtra("overlay_url", url.slice(0, 5) === "data:"
+      ? "data: " + Math.round(url.length / 1024) + " KB"
+      : url.slice(0, 70));
+    var s = performance.now();
+    var img = new Image();
+    img.onload = function () {
+      setExtra("overlay_decode_ms", Math.round(performance.now() - s));
+      setExtra("overlay_px", img.naturalWidth + "x" + img.naturalHeight
+        + " (" + (img.naturalWidth * img.naturalHeight / 1e6).toFixed(1) + " MP)");
+    };
+    img.onerror = function () { setExtra("overlay_decode_ms", "error"); };
+    img.src = url;
+  }
+  function getLast() { return cur; }
+  return {
+    begin: begin, mark: mark, setExtra: setExtra,
+    probeImage: probeImage, getLast: getLast,
+  };
+})();
+
 function _hydrateBlockDefs(data) {
   // D-244: slip-in is now included in candidate_cm by the backend
   // (build_block_defs in spacing_config.py). No client-side patching needed.

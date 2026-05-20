@@ -5,6 +5,7 @@ Handles all operations for group E endpoints.
 from __future__ import annotations
 
 import logging
+import time  # v0.5.33 instrumentation : timing matching (freeze Floor→Room)
 
 from olm.core.catalogue_matcher import (
     compute_desk_positions,
@@ -139,9 +140,25 @@ def floor_plan_match(data: dict) -> dict:
     catalogue = load_catalogue()
     results = []
 
+    # v0.5.33 instrumentation : timing par piece + total. Logue dans olm.log
+    # ([MATCH-PERF]) ET renvoie dans la reponse (_perf) pour la modal Perf.
+    _t_all = time.perf_counter()
+    _perf_rooms = []
+    logger.info("[MATCH-PERF] start : %d rooms, %d patterns",
+                len(data["rooms"]), len(catalogue))
+
     for r in data["rooms"]:
         room = room_from_json(r)
+        _t_room = time.perf_counter()
         match_result = match_room(catalogue, room)
+        _dt_room = (time.perf_counter() - _t_room) * 1000
+        logger.info("[MATCH-PERF] room %s : %.0f ms, %d scores",
+                    r.get("name", "?"), _dt_room, len(match_result.all_scores))
+        _perf_rooms.append({
+            "name": r.get("name", "?"),
+            "ms": round(_dt_room),
+            "scores": len(match_result.all_scores),
+        })
 
         room_result = room_to_json(room)
         room_result["by_standard"] = {}
@@ -194,7 +211,14 @@ def floor_plan_match(data: dict) -> dict:
 
         results.append(room_result)
 
-    return {"rooms": results}
+    _dt_all = (time.perf_counter() - _t_all) * 1000
+    logger.info("[MATCH-PERF] total : %.0f ms for %d rooms",
+                _dt_all, len(data["rooms"]))
+
+    return {
+        "rooms": results,
+        "_perf": {"total_ms": round(_dt_all), "rooms": _perf_rooms},
+    }
 
 
 # ---------------------------------------------------------------------------

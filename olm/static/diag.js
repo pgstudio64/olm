@@ -247,3 +247,93 @@ OLM_DIAGS.register("pattern.footprint", function (pattern) {
     sections: sections
   };
 });
+
+
+// ========== DIAG: perf.transition (v0.5.33 — freeze Floor→Room) ==========
+// Affiche la derniere transition capturee par window._perf. Trois voies :
+// deltas entre marques (blocage JS synchrone), longtasks (decode/paint async),
+// sonde overlay (type/taille/dims/decode). A retirer avec l'instrumentation.
+
+OLM_DIAGS.register("perf.transition", function () {
+  var DELTA_WARN = 300, DELTA_BAD = 1000;   // seuils d'AFFICHAGE uniquement
+  var cap = (window._perf && window._perf.getLast) ? window._perf.getLast() : null;
+  if (!cap || !cap.marks || cap.marks.length < 2) {
+    return {
+      name: "perf.transition", verdict: "warning",
+      summary: "Aucune transition capturee. Navigue Floor→Room puis re-clique Perf.",
+      sections: [],
+    };
+  }
+
+  // Deltas entre marques consecutives : phase[i] = temps avant d'atteindre marks[i].
+  var phaseRows = [];
+  var maxDelta = 0, maxLabel = "";
+  for (var i = 1; i < cap.marks.length; i++) {
+    var dt = cap.marks[i].t - cap.marks[i - 1].t;
+    var st = dt >= DELTA_BAD ? "error" : (dt >= DELTA_WARN ? "warning" : "ok");
+    phaseRows.push({
+      label: cap.marks[i].label, value: dt + " ms",
+      status: st, note: "@ " + cap.marks[i].t + " ms",
+    });
+    if (dt > maxDelta) { maxDelta = dt; maxLabel = cap.marks[i].label; }
+  }
+
+  // Longtasks (decode/layout/paint async, invisibles aux marques).
+  var ltRows = [];
+  var maxLt = 0;
+  (cap.longtasks || []).forEach(function (lt) {
+    if (lt.dur > maxLt) maxLt = lt.dur;
+    ltRows.push({
+      label: "longtask @ " + lt.start + " ms",
+      value: lt.dur + " ms",
+      status: lt.dur >= DELTA_BAD ? "error" : (lt.dur >= DELTA_WARN ? "warning" : "ok"),
+    });
+  });
+  if (!ltRows.length) {
+    ltRows.push({ label: "aucune longtask >50ms", value: "-",
+      note: "API longtask absente ou rien d'async lourd" });
+  }
+
+  // Overlay (sonde image).
+  var ex = cap.extra || {};
+  var ovRows = [
+    { label: "URL overlay", value: ex.overlay_url || ex.overlay || "n/a" },
+    { label: "dimensions", value: ex.overlay_px || "n/a" },
+    {
+      label: "decode (sonde)",
+      value: (ex.overlay_decode_ms != null ? ex.overlay_decode_ms + " ms" : "n/a"),
+      status: (typeof ex.overlay_decode_ms === "number" && ex.overlay_decode_ms >= DELTA_BAD)
+        ? "error" : (typeof ex.overlay_decode_ms === "number" && ex.overlay_decode_ms >= DELTA_WARN
+          ? "warning" : undefined),
+    },
+  ];
+  if (ex.server_match_ms != null) {
+    ovRows.push({ label: "matching serveur", value: ex.server_match_ms + " ms",
+      note: "depuis reponse /api/floor-plan/match" });
+  }
+
+  // Verdict : la plus grosse cause entre blocage JS (maxDelta) et async (maxLt).
+  var worst = Math.max(maxDelta, maxLt);
+  var verdict = worst >= DELTA_BAD ? "error" : (worst >= DELTA_WARN ? "warning" : "ok");
+  var summary;
+  if (worst < DELTA_WARN) {
+    summary = "RAS : total " + cap.marks[cap.marks.length - 1].t + " ms, rien de bloquant.";
+  } else if (maxLt > maxDelta) {
+    summary = "Cause probable ASYNC (decode/layout/paint) : longtask " + maxLt
+      + " ms. Voir overlay ci-dessous.";
+  } else {
+    summary = "Cause probable JS SYNCHRONE : phase \"" + maxLabel + "\" = "
+      + maxDelta + " ms.";
+  }
+
+  return {
+    name: "perf.transition (" + cap.label + ")",
+    verdict: verdict,
+    summary: summary,
+    sections: [
+      { title: "Phases (delta entre marques)", rows: phaseRows },
+      { title: "Long tasks (async)", rows: ltRows },
+      { title: "Overlay & serveur", rows: ovRows },
+    ],
+  };
+});
