@@ -691,21 +691,6 @@ def api_debug_room_diagnostic():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/debug/client-timing", methods=["POST"])
-def api_debug_client_timing():
-    """Log client-side performance timings to the server log (diag).
-
-    Lets the user diagnose UI freezes without browser DevTools: the
-    frontend POSTs {label, ms, extra} and it lands in logs/olm.log.
-    """
-    data = request.json or {}
-    label = str(data.get("label", "?"))
-    ms = data.get("ms", 0)
-    extra = data.get("extra", "")
-    logger.info("[CLIENT-PERF] %s : %s ms %s", label, ms, extra)
-    return jsonify({"ok": True})
-
-
 @app.route("/api/room/orientation-check", methods=["POST"])
 def api_room_orientation_check():
     """Check canonical orientation of a single room."""

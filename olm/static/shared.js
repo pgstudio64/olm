@@ -1,19 +1,5 @@
 "use strict";
 
-// v0.5.30 instrumentation : POST client-side timings to the server log
-// (logs/olm.log) so UI freezes can be diagnosed without browser DevTools.
-window._perfMark = function (label, ms, extra) {
-  try {
-    console.log("[PERF] " + label + " : " + ms + " ms " + (extra || ""));
-    fetch("/api/debug/client-timing", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: label, ms: ms, extra: extra || "" }),
-      keepalive: true,
-    }).catch(function () {});
-  } catch (e) { /* never break the app for instrumentation */ }
-};
-
 function _hydrateBlockDefs(data) {
   // D-244: slip-in is now included in candidate_cm by the backend
   // (build_block_defs in spacing_config.py). No client-side patching needed.

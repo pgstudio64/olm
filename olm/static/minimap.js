@@ -16,6 +16,12 @@
   var _processedCanvas = null;
   var _processedUrl = "";
   var _processedScale = 1;  // src_image → processed_canvas scale factor (v0.5.28)
+  // v0.5.31 : in-flight guard. Without it, 3 concurrent _ensurePlanImage
+  // calls (Room render + Office render + resize) each decode + process the
+  // full plan independently before the cache is set — 3× redundant work.
+  // On a 30-megapixel plan on a slow machine that is ~20s freeze.
+  var _processingUrl = null;
+  var _processingCbs = [];
   var _collapsed = true;
   // Max dimension for processed canvas — avoids blocking the browser
   // 10-20s on big architectural plans (was iterating over millions of
@@ -58,12 +64,19 @@
       cb({ canvas: _processedCanvas, scale: _processedScale });
       return;
     }
-    var _tLoadStart = (window.performance || Date).now();
+    // v0.5.31 : if a processing for this url is already in flight, queue the
+    // callback instead of starting a redundant decode+process. Collapses N
+    // concurrent first-time calls into a single heavy operation.
+    if (_processingUrl === url) {
+      _processingCbs.push(cb);
+      return;
+    }
+    _processingUrl = url;
+    _processingCbs = [cb];
     var img = new Image();
     img.onload = function () {
-      var _tDecoded = (window.performance || Date).now();
       // v0.5.28 perf : downsample large plans before pixel-by-pixel loop.
-      // Was blocking the browser 10-20s on 4000x3000 plans (12M pixels).
+      // Was blocking the browser 10-20s on big plans (millions of pixels).
       var srcW = img.naturalWidth, srcH = img.naturalHeight;
       var s = Math.min(PROCESS_MAX_DIM / srcW, PROCESS_MAX_DIM / srcH, 1);
       var w = Math.max(1, Math.round(srcW * s));
@@ -74,15 +87,15 @@
       var ctx = cvs.getContext("2d");
       // drawImage with explicit size = browser downsamples natively (fast).
       ctx.drawImage(img, 0, 0, w, h);
-      var _tDrawn = (window.performance || Date).now();
       try {
         var id = ctx.getImageData(0, 0, w, h);
       } catch (e) {
         console.warn("Minimap: cannot read pixels", e);
-        cb(null);
+        _processingUrl = null;
+        var _errCbs = _processingCbs; _processingCbs = [];
+        _errCbs.forEach(function (c) { c(null); });
         return;
       }
-      var _tGotData = (window.performance || Date).now();
       var d = id.data;
       for (var i = 0; i < d.length; i += 4) {
         var r = d[i], g = d[i + 1], b = d[i + 2];
@@ -96,24 +109,20 @@
         }
         d[i] = tone; d[i + 1] = tone; d[i + 2] = tone;
       }
-      var _tLooped = (window.performance || Date).now();
       ctx.putImageData(id, 0, 0);
       _processedCanvas = cvs;
       _processedUrl = url;
       _processedScale = s;
-      // v0.5.30 instrumentation : log timing to server (no DevTools needed).
-      if (window._perfMark) {
-        window._perfMark("minimap._ensurePlanImage",
-          Math.round(_tLooped - _tLoadStart),
-          "src=" + srcW + "x" + srcH + " proc=" + w + "x" + h +
-          " decode=" + Math.round(_tDecoded - _tLoadStart) +
-          " draw=" + Math.round(_tDrawn - _tDecoded) +
-          " getData=" + Math.round(_tGotData - _tDrawn) +
-          " loop=" + Math.round(_tLooped - _tGotData));
-      }
-      cb({ canvas: cvs, scale: s });
+      // v0.5.31 : flush all queued callbacks with the single processed result.
+      _processingUrl = null;
+      var _doneCbs = _processingCbs; _processingCbs = [];
+      _doneCbs.forEach(function (c) { c({ canvas: cvs, scale: s }); });
     };
-    img.onerror = function () { cb(null); };
+    img.onerror = function () {
+      _processingUrl = null;
+      var _failCbs = _processingCbs; _processingCbs = [];
+      _failCbs.forEach(function (c) { c(null); });
+    };
     img.src = url;
   }
 
