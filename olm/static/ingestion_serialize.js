@@ -37,7 +37,7 @@
 
   // ==========================================================================
   // Destination 1 : Matching (D-122 P5 — frontière canonique)
-  // Consommée par fpLoadAndMatch / fpRematchRoom → `/api/floor-plan/match`.
+  // Consommée par prepareFpRooms / fpRematchRoom → `/api/floor-plan/match`.
   // Payload en repère CANONIQUE : le backend matcher suppose corridor-south,
   // aligné avec le catalogue lui-même canonique. Les portes sont fusionnées
   // dans `openings[]` via has_door=true (contrat OpeningSpec backend).

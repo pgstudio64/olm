@@ -940,8 +940,8 @@
         updatePlanDependentUI();
 
         // Feed rooms into the floor plan pipeline (Review + Design)
-        if (typeof window.fpLoadAndMatch === 'function') {
-          window.fpLoadAndMatch(ingState.rooms);
+        if (typeof window.prepareFpRooms === 'function') {
+          window.prepareFpRooms(ingState.rooms);
         }
 
         // Set overlay for Review/Design from the ingestion plan (prefer -SD).
@@ -1179,8 +1179,8 @@
     renderIngestion();
 
     // Re-trigger matching so the new room appears in Review/Design
-    if (typeof window.fpLoadAndMatch === 'function') {
-      window.fpLoadAndMatch(ingState.rooms);
+    if (typeof window.prepareFpRooms === 'function') {
+      window.prepareFpRooms(ingState.rooms);
     }
   }
   window.addIngRoom = addIngRoom;
@@ -1197,8 +1197,8 @@
     updateIngRoomList();
     renderIngestion();
 
-    if (typeof window.fpLoadAndMatch === 'function') {
-      window.fpLoadAndMatch(ingState.rooms);
+    if (typeof window.prepareFpRooms === 'function') {
+      window.prepareFpRooms(ingState.rooms);
     }
     }); // end confirmModal.then
   }
@@ -1982,8 +1982,8 @@
       if (typeof window.updateFloorProperties === 'function') {
         window.updateFloorProperties();
       }
-      if (typeof window.fpLoadAndMatch === 'function') {
-        window.fpLoadAndMatch(ingState.rooms);
+      if (typeof window.prepareFpRooms === 'function') {
+        window.prepareFpRooms(ingState.rooms);
       }
     };
 
@@ -2016,8 +2016,8 @@
           updateIngRoomList();
           renderIngestion();
           // Sync restored bbox back to fpData (Room/Office)
-          if (typeof window.fpLoadAndMatch === 'function') {
-            window.fpLoadAndMatch(ingState.rooms);
+          if (typeof window.prepareFpRooms === 'function') {
+            window.prepareFpRooms(ingState.rooms);
           }
         }
         return;
@@ -2137,7 +2137,7 @@
       be.preDragBbox = null;
       // D-128 : clamp openings/zones au nouveau bbox + re-match.
       // Sans clamp, les openings dont offset+width dépasse le mur résultant
-      // restent (visuellement hors pièce). Sans fpLoadAndMatch, fpData
+      // restent (visuellement hors pièce). Sans prepareFpRooms, fpData
       // garde l'ancien bbox/dims → Review affiche la pièce non modifiée.
       var room = ingState.rooms.find(function(r) {
         return r.name === be.selectedName;
@@ -2181,8 +2181,8 @@
           ra.surface_m2_bbox = room.surface_m2 || ra.surface_m2_bbox;
         }
       }
-      if (typeof window.fpLoadAndMatch === 'function') {
-        window.fpLoadAndMatch(ingState.rooms);
+      if (typeof window.prepareFpRooms === 'function') {
+        window.prepareFpRooms(ingState.rooms);
       }
     });
 
@@ -2515,8 +2515,8 @@
           }
           renderIngestion();
           populateRoomsJson();
-          if (typeof window.fpLoadAndMatch === 'function') {
-            window.fpLoadAndMatch(ingState.rooms);
+          if (typeof window.prepareFpRooms === 'function') {
+            window.prepareFpRooms(ingState.rooms);
           }
           if (statusEl) statusEl.textContent =
             'Rescan done: ' + okCount + ' OK, ' + fail + ' failed.';
@@ -2654,7 +2654,7 @@
 
         // D-245: restore saved layouts from JSON v3 before matching.
         // Sequence: reset fpAmendments (fresh plan) then populate from
-        // saved_layout fields. Must happen BEFORE fpLoadAndMatch so that
+        // saved_layout fields. Must happen BEFORE prepareFpRooms so that
         // fpRenderCurrent sees the amendments.
         var _fpAm = window.fpAmendments;
         Object.keys(_fpAm).forEach(function (k) { delete _fpAm[k]; });
@@ -2669,8 +2669,8 @@
         updateIngRoomList();
         updatePlanDependentUI();
 
-        if (typeof window.fpLoadAndMatch === 'function') {
-          window.fpLoadAndMatch(ingState.rooms);
+        if (typeof window.prepareFpRooms === 'function') {
+          window.prepareFpRooms(ingState.rooms);
         }
 
         // fpOverlay pour Review/Design = PNG -SD si disponible, sinon fallback overlay standard.

@@ -19,15 +19,18 @@
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   }
 
-  // ── Loading and matching ──────────────────────────────────────────────
-  // R-12 C4 : bimode. Accepte soit :
-  //   - un Array de pièces (appel interne depuis ingState.rooms) — pas de
-  //     stringify / parse, pas de fromStorage redondant pour les pièces déjà
-  //     canoniques (Préprocessé). Les pièces non-canoniques (mode OCR, sans
-  //     corridor_face_abs) sont canonicalisées au vol.
-  //   - une string JSON (legacy : file upload, reload button, auto-dev) —
-  //     parse + fromStorage sur chaque pièce.
-  function fpLoadAndMatch(arg) {
+  // ── Room preparation (no server round-trip) ─────────────────────────
+  // Chantier A : lazy per-room matching. prepareFpRooms parses input,
+  // canonicalises rooms, populates fpData.rooms with all_candidates=null
+  // and by_standard=null. Matching happens lazily via ensureRoomMatched
+  // when the Design tab displays a room.
+  // Bimode: accepts Array (ingState.rooms) or JSON string (file upload).
+  var _matchGeneration = 0;
+  var _matchInFlight = {};
+
+  function prepareFpRooms(arg) {
+    _matchGeneration++;
+    _matchInFlight = {};
     var _fpScale = (window.ingState && window.ingState.scale) || 0;
     var rooms;
     if (typeof arg === "string") {
@@ -35,8 +38,6 @@
       try { parsed = JSON.parse(arg); } catch(e) {
         alertModal("Invalid JSON: " + e.message); return;
       }
-      // parsed.rooms accepté en array (format matching) ou en dict
-      // indexé par room_id (format storage v3). Dict converti au vol.
       var roomsInput;
       if (Array.isArray(parsed.rooms)) {
         roomsInput = parsed.rooms;
@@ -63,7 +64,7 @@
           : window.canonicalIO.fromStorage(r, _fpScale);
       });
     } else {
-      console.warn("fpLoadAndMatch: invalid argument", arg); return;
+      console.warn("prepareFpRooms: invalid argument", arg); return;
     }
 
     // Sort by alphanumeric name (non-mutating)
@@ -71,115 +72,153 @@
       return natSort(a.name || "", b.name || "");
     });
 
-    // Preserve fields from input (not returned by matching API)
-    // D-122 P2 : bbox_px / seed_px uniquement (bbox_abs_px / seed_abs_px fusionnés).
-    var bboxByName = {};
-    var corridorByName = {};
-    var seedByName = {};
-    var doorsByName = {};
-    var wallsEditByName = {};
-    var planAreaByName = {};
+    // Mark every room as unmatched (null = not yet matched; distinguished
+    // from [] = matched with 0 candidates by ensureRoomMatched).
     rooms.forEach(function(r) {
-      if (r.bbox_px) bboxByName[r.name] = r.bbox_px;
-      corridorByName[r.name] = r.corridor_face_abs || "";
-      if (r.seed_px) seedByName[r.name] = r.seed_px;
-      if (r.doors) doorsByName[r.name] = r.doors;
-      wallsEditByName[r.name] = !!r.walls_user_edited;
-      if (typeof r.plan_area_m2 === "number" && r.plan_area_m2 > 0) {
-        planAreaByName[r.name] = r.plan_area_m2;
-      }
+      r.all_candidates = null;
+      r.by_standard = null;
     });
 
-    document.getElementById("fpCandidatesList").innerHTML =
-      '<div class="fp-no-match">Matching in progress...</div>';
+    // D-130 : preserve current selection by name across replacement.
+    var prevName = null;
+    if (fpData.rooms && fpData.currentIdx != null &&
+        fpData.rooms[fpData.currentIdx]) {
+      prevName = fpData.rooms[fpData.currentIdx].name;
+    }
+    fpData.rooms = rooms;
+    if (prevName) {
+      var foundIdx = fpData.rooms.findIndex(function (r) {
+        return r.name === prevName;
+      });
+      fpData.currentIdx = foundIdx >= 0 ? foundIdx : 0;
+    } else {
+      fpData.currentIdx = 0;
+    }
+    // Render views — candidates show placeholder until lazily matched.
+    fpRenderCurrent();
+    rvRenderCurrent();
+    document.activeElement.blur();
+  }
 
-    // D-122 P5 fix : backend OpeningSpec.has_door défaut = True → il faut
-    // explicitement poser has_door=false pour les openings ET combiner
-    // state.doors (has_door=true) dans openings[]. Sinon les openings
-    // canoniques sont interprétés comme des portes et écrasent la
-    // collection state.room_openings au retour (bug save JSON).
-    // D-141 : skip les entries non-enrichies (sans face). Cf. commentaire
-    // détaillé dans ingestion_serialize.js.
-    var apiRooms = rooms.map(function (r) {
-      var apiOpenings = (r.openings || []).filter(function (o) {
-        return o && o.face;
-      }).map(function (o) {
-        return Object.assign({}, o, { has_door: false });
-      });
-      (r.doors || []).forEach(function (d) {
-        if (!d || !d.face) return;
-        apiOpenings.push(Object.assign({}, d, {
-          has_door: true,
-          opens_inward: d.opens_inward !== false,
-          hinge_side: d.hinge_side || "left",
-        }));
-      });
-      return Object.assign({}, r, { openings: apiOpenings, doors: undefined });
+  // ── API room builder (shared by ensureRoomMatched & fpRematchRoom) ──
+  // Merges openings + doors into a single openings[] with has_door flag,
+  // as expected by the /api/floor-plan/match backend.
+  function _buildApiRoom(r) {
+    var apiOpenings = (r.openings || []).filter(function (o) {
+      return o && o.face;
+    }).map(function (o) {
+      return Object.assign({}, o, { has_door: false });
     });
+    (r.doors || []).forEach(function (d) {
+      if (!d || !d.face) return;
+      apiOpenings.push(Object.assign({}, d, {
+        has_door: true,
+        opens_inward: d.opens_inward !== false,
+        hinge_side: d.hinge_side || "left",
+      }));
+    });
+    return Object.assign({}, r, { openings: apiOpenings, doors: undefined });
+  }
 
+  // ── Single-room match fetch wrapper ───────────────────────────────────
+  // Sends one room to /api/floor-plan/match and calls onDone(responseRoom)
+  // or onDone(null) on error. Caller stores results as appropriate.
+  function _matchSingleRoom(roomName, apiRoom, onDone) {
     if (window._perf) window._perf.mark("fetch /api/floor-plan/match : sent");
     fetch("/api/floor-plan/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rooms: apiRooms }),
+      body: JSON.stringify({ rooms: [apiRoom] }),
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (window._perf) {
         window._perf.mark("fetch /api/floor-plan/match : parsed");
-        if (data._perf) window._perf.setExtra("server_match_ms", data._perf.total_ms);
-      }
-      if (data.error) { alertModal("Error: " + data.error); return; }
-      // Sort results by name
-      data.rooms.sort(function(a, b) { return natSort(a.name || "", b.name || ""); });
-      // Re-attach canonical fields not returned by matching API.
-      // D-122 P2 : bbox_px / seed_px = coords image absolues uniques.
-      // D-122 P5 : réponse backend en canonique ; D-122 P4 impose
-      // openings/doors séparés côté state → on split si retour combiné.
-      data.rooms.forEach(function(r) {
-        if (bboxByName[r.name]) r.bbox_px = bboxByName[r.name];
-        if (seedByName[r.name]) r.seed_px = seedByName[r.name];
-        r.corridor_face_abs = corridorByName[r.name] || "";
-        r.corridor_face = "south";
-        r.walls_user_edited = !!wallsEditByName[r.name];
-        if (planAreaByName[r.name] != null) {
-          r.plan_area_m2 = planAreaByName[r.name];
+        if (data._perf) {
+          window._perf.setExtra("server_match_ms", data._perf.total_ms);
         }
-        // Split openings combinées (has_door) via source unique
-        // splitOpeningsToFrontEnd (room_sync_helpers.js).
-        if (Array.isArray(r.openings) && r.openings.some(function(o){ return o.has_door; })) {
-          var _split = window.splitOpeningsToFrontEnd(r.openings);
-          r.openings = _split.openings;
-          r.doors = _split.doors;
-        } else if (doorsByName[r.name]) {
-          r.doors = doorsByName[r.name];
-        }
-      });
-      // D-130 : préserver la sélection courante par NOM à travers le
-      // remplacement de fpData.rooms. Sans ça, chaque re-match (ex :
-      // déclenché par bbox edit dans Floor) reset currentIdx = 0 → la
-      // Review peut afficher une autre pièce que celle sur laquelle
-      // l'utilisateur travaille.
-      var prevName = null;
-      if (fpData.rooms && fpData.currentIdx != null &&
-          fpData.rooms[fpData.currentIdx]) {
-        prevName = fpData.rooms[fpData.currentIdx].name;
       }
-      fpData.rooms = data.rooms;
-      if (prevName) {
-        var foundIdx = fpData.rooms.findIndex(function (r) {
-          return r.name === prevName;
-        });
-        fpData.currentIdx = foundIdx >= 0 ? foundIdx : 0;
-      } else {
-        fpData.currentIdx = 0;
+      if (data.error || !data.rooms || !data.rooms.length) {
+        console.warn("Match error for " + roomName + ":",
+          data.error || "empty response");
+        onDone(null);
+        return;
       }
-      // Render Review data (but stay on current tab)
-      fpRenderCurrent();
-      rvRenderCurrent();
-      document.activeElement.blur();
+      onDone(data.rooms[0]);
     })
-    .catch(function(e) { alertModal("Network error: " + e); });
+    .catch(function(e) {
+      console.warn("Match network error for " + roomName + ":", e);
+      onDone(null);
+    });
+  }
+
+  // ── Lazy per-room matching ────────────────────────────────────────────
+  // Matches a single room on demand. Cache: all_candidates !== null means
+  // already matched. Guards concurrent fetches via _matchInFlight queue.
+  // R1: stores ONLY all_candidates + by_standard — never rewrites geometry.
+  function ensureRoomMatched(roomName, cb) {
+    var room = null;
+    for (var i = 0; i < fpData.rooms.length; i++) {
+      if (fpData.rooms[i].name === roomName) { room = fpData.rooms[i]; break; }
+    }
+    if (!room) { if (cb) cb(); return; }
+    // Already matched (including [] = matched with 0 candidates)
+    if (room.all_candidates !== null) { if (cb) cb(); return; }
+    // Match in flight for this room — queue callback
+    if (_matchInFlight[roomName]) {
+      if (cb) _matchInFlight[roomName].push(cb);
+      return;
+    }
+    _matchInFlight[roomName] = cb ? [cb] : [];
+    var gen = _matchGeneration;
+    var apiRoom = _buildApiRoom(room);
+    _matchSingleRoom(roomName, apiRoom, function(responseRoom) {
+      // Discard if rooms were replaced (generation changed by prepareFpRooms)
+      if (gen !== _matchGeneration) return;
+      for (var j = 0; j < fpData.rooms.length; j++) {
+        if (fpData.rooms[j].name === roomName) {
+          if (responseRoom) {
+            fpData.rooms[j].all_candidates =
+              responseRoom.all_candidates || [];
+            fpData.rooms[j].by_standard =
+              responseRoom.by_standard || {};
+          } else {
+            fpData.rooms[j].all_candidates = [];
+            fpData.rooms[j].by_standard = {};
+          }
+          break;
+        }
+      }
+      var cbs = _matchInFlight[roomName] || [];
+      delete _matchInFlight[roomName];
+      cbs.forEach(function(fn) { fn(); });
+    });
+  }
+  window.ensureRoomMatched = ensureRoomMatched;
+
+  // Matches all unmatched rooms sequentially with progress feedback.
+  // Used by fpExport before building the export payload.
+  function ensureAllMatched(cb) {
+    var unmatched = [];
+    fpData.rooms.forEach(function(r) {
+      if (r.all_candidates === null) unmatched.push(r.name);
+    });
+    if (!unmatched.length) { cb(); return; }
+    var total = unmatched.length;
+    var done = 0;
+    function next() {
+      if (done >= total) {
+        setStatus("Matching complete.");
+        cb();
+        return;
+      }
+      setStatus("Matching " + (done + 1) + "/" + total + "...");
+      ensureRoomMatched(unmatched[done], function() {
+        done++;
+        next();
+      });
+    }
+    next();
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────
@@ -460,21 +499,50 @@
     // previous room's candidate in fpCurrentCandidate).
     fpCurrentCandidate = null;
 
-    // Candidates (sorted best first)
+    // Candidates: real list if cached, placeholder if not yet matched.
+    // D3(a) guard inside fpRenderCandidates handles null all_candidates.
     fpRenderCandidates(room);
 
-    // Auto-select: if a saved/amended solution exists, show it.
-    // Otherwise select the first candidate in the list.
+    // R5: synchronous auto-select.
     var _amend = fpAmendments[room.name];
-    var selCard = document.querySelector("#fpSelectedSolution .fp-candidate");
-    if (_amend && selCard) {
-      selCard.click();
-    } else {
-      var firstCand = document.querySelector("#fpCandidatesList .fp-candidate");
+    if (_amend) {
+      // Saved/amended solution — show immediately (no match needed).
+      var selCard = document.querySelector(
+        "#fpSelectedSolution .fp-candidate");
+      if (selCard) selCard.click();
+    } else if (room.all_candidates !== null) {
+      // Already matched (from cache) — select first candidate.
+      var firstCand = document.querySelector(
+        "#fpCandidatesList .fp-candidate");
       if (firstCand) {
         firstCand.click();
       } else {
         fpRenderEmptyRoom(room, document.getElementById("fpCanvas"));
+      }
+    } else {
+      // Not yet matched — show empty room while waiting.
+      fpRenderEmptyRoom(room, document.getElementById("fpCanvas"));
+    }
+
+    // Lazy match: trigger fetch only when Design tab is active.
+    // At import time the user is on Import tab — no match fired.
+    // When user switches to Design, init.js calls fpRenderCurrent again.
+    if (room.all_candidates === null) {
+      var designTab = document.getElementById("tabLytDesign");
+      if (designTab && designTab.classList.contains("active")) {
+        var matchRoomName = room.name;
+        ensureRoomMatched(matchRoomName, function() {
+          // Race guard: discard if user navigated to another room.
+          var cur = fpCurrent();
+          if (!cur || cur.name !== matchRoomName) return;
+          fpRenderCandidates(cur);
+          // Auto-select first candidate if no saved amendment.
+          if (!fpAmendments[cur.name]) {
+            var firstCand = document.querySelector(
+              "#fpCandidatesList .fp-candidate");
+            if (firstCand) firstCand.click();
+          }
+        });
       }
     }
   }
@@ -537,6 +605,14 @@
   // ── Candidate list ─────────────────────────────────────────────────────
   function fpRenderCandidates(room) {
     var container = document.getElementById("fpCandidatesList");
+    // D3(a): guard for unmatched rooms (null = not yet matched).
+    // Distinct from [] = matched with 0 candidates (falls through to
+    // "No matching patterns" below).
+    if (!room.all_candidates) {
+      container.innerHTML =
+        '<div class="fp-no-match">Matching in progress...</div>';
+      return;
+    }
     var stdFilter = fpGetStandardFilter();
 
     // Candidate list: pure catalogue data, never affected by amendments.
@@ -745,50 +821,47 @@
   }
 
   // ── Export results ─────────────────────────────────────────────────────
-  // Re-match a single room with amended geometry
+  // Re-match a single room with amended geometry.
+  // amendedRoom is already in API format (openings merged with has_door,
+  // doors deleted) — passed directly to _matchSingleRoom.
   window.fpRematchRoom = function(roomName, amendedRoom) {
-    fetch("/api/floor-plan/match", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rooms: [amendedRoom] }),
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.error || !data.rooms || !data.rooms.length) {
+    _matchSingleRoom(roomName, amendedRoom, function(responseRoom) {
+      if (!responseRoom) {
         setStatus("Re-matching error for \"" + roomName + "\".");
         return;
       }
-      // Replace the room data (D-122 P5 : réponse canonique ;
-      // D-122 P4 : split openings combiné retour backend via
-      // splitOpeningsToFrontEnd — source unique).
-      var newRoom = data.rooms[0];
-      var split = window.splitOpeningsToFrontEnd(newRoom.openings || []);
+      // D-122 P5 : réponse canonique ; D-122 P4 : split openings.
+      var split = window.splitOpeningsToFrontEnd(
+        responseRoom.openings || []);
       for (var i = 0; i < fpData.rooms.length; i++) {
         if (fpData.rooms[i].name === roomName) {
-          fpData.rooms[i].width_cm = newRoom.width_cm;
-          fpData.rooms[i].depth_cm = newRoom.depth_cm;
-          fpData.rooms[i].windows = newRoom.windows;
+          fpData.rooms[i].width_cm = responseRoom.width_cm;
+          fpData.rooms[i].depth_cm = responseRoom.depth_cm;
+          fpData.rooms[i].windows = responseRoom.windows;
           fpData.rooms[i].openings = split.openings;
           fpData.rooms[i].doors = split.doors;
-          fpData.rooms[i].exclusion_zones = newRoom.exclusion_zones;
-          fpData.rooms[i].all_candidates = newRoom.all_candidates;
-          fpData.rooms[i].by_standard = newRoom.by_standard;
+          fpData.rooms[i].exclusion_zones = responseRoom.exclusion_zones;
+          fpData.rooms[i].all_candidates = responseRoom.all_candidates;
+          fpData.rooms[i].by_standard = responseRoom.by_standard;
           fpData.rooms[i].room_amended = true;
           break;
         }
       }
-      // Clear layout amendment if any (room geometry changed)
       delete fpAmendments[roomName];
       fpRenderCurrent();
       rvRenderCurrent();
-      setStatus("Room \"" + roomName + "\" re-matched with amended geometry.");
-    })
-    .catch(function(e) { setStatus("Re-matching error: " + e); });
+      setStatus(
+        "Room \"" + roomName + "\" re-matched with amended geometry.");
+    });
   };
 
   function fpExport() {
     if (!fpRooms().length) { alertModal("No results to export"); return; }
+    // D2/D3(b): match all unmatched rooms before building export payload.
+    ensureAllMatched(function() { _doFpExport(); });
+  }
 
+  function _doFpExport() {
     var gradeOrd = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
     var exportData = {
       exported_at: new Date().toISOString(),
@@ -1166,7 +1239,7 @@
     if (btnLoadJson) {
       btnLoadJson.addEventListener("click", function() {
         var json = document.getElementById("fpRoomsJson").value.trim();
-        if (json) fpLoadAndMatch(json);
+        if (json) prepareFpRooms(json);
       });
     }
 
@@ -1179,7 +1252,7 @@
       var reader = new FileReader();
       reader.onload = function(ev) {
         document.getElementById("fpRoomsJson").value = ev.target.result;
-        fpLoadAndMatch(ev.target.result);
+        prepareFpRooms(ev.target.result);
       };
       reader.readAsText(file);
     });
@@ -1270,12 +1343,12 @@
       .then(function(json) {
         if (json) {
           document.getElementById("fpRoomsJson").value = json;
-          fpLoadAndMatch(json);
+          prepareFpRooms(json);
         }
       })
       .catch(function() {});
   });
 
   // Expose for ingestion integration
-  window.fpLoadAndMatch = fpLoadAndMatch;
+  window.prepareFpRooms = prepareFpRooms;
 })();
