@@ -350,6 +350,7 @@ function renderFloorplanSettings() {
         catch (e) { /* ignore */ }
         if (typeof window.renderIngestion === "function") window.renderIngestion();
         if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
+        if (typeof window.rvRenderCurrent === "function") window.rvRenderCurrent();
       }
     };
   }

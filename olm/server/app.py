@@ -332,6 +332,20 @@ def api_serve_image():
     ]
     if not any(real.startswith(d + os.sep) or real == d for d in allowed):
         return jsonify({"error": "Access denied"}), 403
+    # D-247 : clean=1 → serve the image with detection colours (exterior blue,
+    # corridor green) replaced by white server-side (numpy, fast). Powers the
+    # "hide detection colors" toggle without any client-side pixel loop.
+    if request.args.get("clean"):
+        import io
+        from PIL import Image
+        from olm.server.services.export_service import (
+            neutralize_detection_colors,
+        )
+        cleaned = neutralize_detection_colors(Image.open(real))
+        buf = io.BytesIO()
+        cleaned.save(buf, "PNG")
+        buf.seek(0)
+        return send_file(buf, mimetype="image/png")
     return send_file(real, mimetype="image/png")
 
 

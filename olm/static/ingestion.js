@@ -1027,9 +1027,11 @@
       // D-245: checkmark for rooms with a saved/amended layout.
       var _layoutAmend = (window.fpAmendments || {})[r.name];
       var layoutTag = _layoutAmend
-        ? ' <span class="room-saved-mark" title="' +
+        ? ' <span class="' +
+          (_layoutAmend.saved ? 'room-saved-mark' : 'room-amend-mark') +
+          '" title="' +
           (_layoutAmend.saved ? 'Layout saved' : 'Layout amended') +
-          '">' + (_layoutAmend.saved ? '\u2713' : '\u270E') + '</span>'
+          '">' + (_layoutAmend.saved ? '\u2713' : '\u25CF') + '</span>'
         : '';
       html += '<div style="display:flex;align-items:center;gap:4px;padding:2px 4px 2px 4px;margin-right:16px;' + active +
         '"><span style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-ing-room="' + r.name + '">' +
@@ -1312,12 +1314,14 @@
     elsBg.push('<rect x="' + vb.x + '" y="' + vb.y + '" width="' + vb.w + '" height="' + vb.h +
       '" fill="#1e1e1e"/>');
 
-    // Background: floor plan image (as overlay)
-    // Always display the -SD enhanced version (no cartouche, no detection colors)
-    // regardless of hideDetectionColors toggle (user requirement 2026-05-19).
+    // Background: floor plan image.
+    // D-247 : Floor uses plan.png (planPath — WITH cartouches), not the -SD.
+    // hide-detection-colors → withCleanParam adds &clean=1 (server neutralises
+    // exterior/corridor colours, cartouches kept).
     if (ingState.overlayVisible && ingState.planUrl) {
-      var _displayUrl = ingState.planPathEnhanced
-        ? '/api/image?path=' + encodeURIComponent(ingState.planPathEnhanced)
+      var _displayUrl = ingState.planPath
+        ? window.withCleanParam(
+            '/api/image?path=' + encodeURIComponent(ingState.planPath))
         : ingState.planUrl;
       elsBg.push('<image href="' + _displayUrl +
         '" x="0" y="0" width="' + W + '" height="' + H +

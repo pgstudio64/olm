@@ -582,10 +582,11 @@
         ovOffX = room.bbox_px[0] / ov.pxPerCm;  // px → cm
         ovOffY = room.bbox_px[1] / ov.pxPerCm;
       }
-      // Always use ov.dataUrl (-SD enhanced version, no detection colors).
-      // User requirement 2026-05-19: hideDetectionColors no longer switches background.
+      // D-247 : hide-detection-colors → withCleanParam adds &clean=1 so the
+      // server neutralises exterior/corridor colours on the overlay.
       state.overlay = {
-        dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
+        dataUrl: window.withCleanParam(ov.dataUrl),
+        pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
         offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,
       };
     } else {

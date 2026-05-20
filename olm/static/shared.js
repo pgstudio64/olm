@@ -93,6 +93,17 @@ window._perf = (function () {
   };
 })();
 
+// D-247 : append &clean=1 to an /api/image URL when "hide detection colors"
+// is active, so the server neutralises exterior/corridor colours. No-op for
+// non-/api/image URLs or when the toggle is off.
+window.withCleanParam = function (url) {
+  if (!url || !window.ingState || !window.ingState.hideDetectionColors) {
+    return url;
+  }
+  if (url.indexOf("/api/image") < 0) return url;
+  return url + (url.indexOf("?") >= 0 ? "&" : "?") + "clean=1";
+};
+
 function _hydrateBlockDefs(data) {
   // D-244: slip-in is now included in candidate_cm by the backend
   // (build_block_defs in spacing_config.py). No client-side patching needed.

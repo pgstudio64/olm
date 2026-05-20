@@ -182,6 +182,28 @@ _ARC_ANGLES: dict[str, tuple[int, int]] = {
 # ---------------------------------------------------------------------------
 
 
+def neutralize_detection_colors(img: Image.Image) -> Image.Image:
+    """Replace exterior + corridor detection colours with white.
+
+    Cartouches and plan content are preserved. Shared by the export composer
+    and by ``/api/image?clean=1`` (hide-detection-colors toggle, D-247).
+
+    Args:
+        img: Source plan image.
+
+    Returns:
+        New RGBA image with detection colours neutralised.
+    """
+    ext_rgb = get_exterior_rgb()
+    cor_rgb = get_corridor_rgb()
+    arr = np.array(img.convert("RGBA"))
+    white = np.array(_WHITE, dtype=np.uint8)
+    for rgb in (ext_rgb, cor_rgb):
+        mask = (arr[:, :, :3] == np.array(rgb, dtype=np.uint8)).all(axis=2)
+        arr[mask] = white
+    return Image.fromarray(arr)
+
+
 def compose_plan_image(
     plan_id: str,
     rooms_payload: list[dict],
@@ -205,13 +227,7 @@ def compose_plan_image(
     img = Image.open(sd_path).convert("RGBA")
 
     # Neutralize detection colours → white
-    ext_rgb = get_exterior_rgb()
-    cor_rgb = get_corridor_rgb()
-    arr = np.array(img)
-    for rgb in (ext_rgb, cor_rgb):
-        mask = (arr[:, :, :3] == np.array(rgb, dtype=np.uint8)).all(axis=2)
-        arr[mask] = _WHITE
-    img = Image.fromarray(arr)
+    img = neutralize_detection_colors(img)
 
     draw = ImageDraw.Draw(img)
     font = ImageFont.load_default()
