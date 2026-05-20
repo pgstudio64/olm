@@ -760,11 +760,12 @@
     flex: 1;
   }
   .catalogue-card {
+    --card-w: 200px;
     background: var(--surface2);
     border: 1px solid var(--border);
     padding: var(--sp-sm);
     cursor: pointer;
-    width: 200px;
+    width: var(--card-w);
     min-height: 100px;
     display: flex;
     flex-direction: column;
@@ -773,10 +774,15 @@
   .catalogue-card { position: relative; }
   .catalogue-card.card-overflow { border-color: var(--bad); }
   .catalogue-card.card-overflow .card-title { color: var(--bad); }
+  .catalogue-card.card-tolere { border-color: #888; }
+  .catalogue-card.card-tolere .card-title { color: #888; }
   .card-warning {
     color: var(--bad);
     font-size: var(--fs-xs);
     margin-top: 2px;
+  }
+  .card-warning-tolere {
+    color: #888;
   }
   .dev-mode .card-warning {
     cursor: pointer;
@@ -839,62 +845,6 @@
     border-color: var(--accent);
   }
 
-  /* Matrix view */
-  .matrix-container {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-    background: var(--bg);
-  }
-  .matrix-container svg {
-    width: 100%;
-    height: 100%;
-    cursor: grab;
-  }
-  .matrix-container svg.panning { cursor: grabbing; }
-  .matrix-ruler-top {
-    position: absolute; top: 0; left: 60px; right: 0; height: 28px;
-    background: var(--bg); border-bottom: 1px solid var(--border);
-    z-index: 10; overflow: hidden; display: flex; align-items: flex-end;
-    pointer-events: none;
-  }
-  .matrix-ruler-left {
-    position: absolute; top: 28px; left: 0; bottom: 0; width: 60px;
-    background: var(--bg); border-right: 1px solid var(--border);
-    z-index: 10; overflow: hidden;
-    pointer-events: none;
-  }
-  .matrix-ruler-corner {
-    position: absolute; top: 0; left: 0; width: 60px; height: 28px;
-    background: var(--bg); z-index: 11; border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-  }
-  .matrix-ruler-label {
-    position: absolute; color: var(--text-dim);
-    font-family: var(--font-mono); white-space: nowrap;
-  }
-  .matrix-axis-label {
-    fill: var(--text-dim);
-    font-size: 11px;
-    font-family: var(--font-mono);
-  }
-  .matrix-cell-border {
-    fill: none;
-    stroke: var(--border);
-    stroke-width: 0.5;
-  }
-  .matrix-cell-label {
-    fill: var(--text-dim);
-    font-size: 8px;
-    font-family: var(--font-mono);
-  }
-  .matrix-room-bg {
-    fill: var(--surface2);
-    stroke: var(--text-dim);
-    stroke-width: 0.5;
-  }
   .view-toggle {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -907,28 +857,24 @@
   .view-toggle:hover { border-color: var(--accent); color: var(--text); }
   .view-toggle.active { border-color: var(--accent); color: var(--accent); }
 
-  /* Catalogue view pill selector */
-  .cat-view-pill {
-    display: inline-flex;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    overflow: hidden;
+  /* Card miniature SVG */
+  .card-mini-svg {
+    display: block;
+    width: 100%;
+    background: #111;
+    border-radius: 2px;
+    margin-bottom: 4px;
   }
-  .cat-view-btn {
-    background: var(--surface);
-    border: none;
-    border-right: 1px solid var(--border);
-    color: var(--text-dim);
-    font-family: var(--font-mono);
-    font-size: var(--fs-md);
-    padding: 5px 14px;
-    cursor: pointer;
+  .card-mini-svg svg {
+    display: block;
+    width: 100%;
+    height: auto;
   }
-  .cat-view-btn:last-child { border-right: none; }
-  .cat-view-btn:hover { color: var(--text); }
-  .cat-view-btn.active {
-    background: var(--accent);
-    color: var(--surface);
+
+  /* Enlarged card in-place (single card, flexbox reflow) */
+  .catalogue-card.card-enlarged {
+    /* 3x card width + 2 gaps from .catalogue-row-cards (gap: 8px) */
+    width: calc(var(--card-w, 200px) * 3 + 8px * 2);
   }
 
   /* Zoom rectangle selection */

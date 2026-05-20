@@ -216,6 +216,16 @@ function renderGeneralSettings() {
   el = document.getElementById("cfgGrid");
   if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
 
+  // Export cartouche (floor summary): font sizes (pt) + position (px)
+  el = document.getElementById("cfgCartoucheTitlePt");
+  if (el) { el.value = APP_CONFIG.cartouche_title_pt || 22; el.onchange = function() { saveConfigField("cartouche_title_pt", parseInt(this.value)||22); }; }
+  el = document.getElementById("cfgCartoucheBodyPt");
+  if (el) { el.value = APP_CONFIG.cartouche_body_pt || 20; el.onchange = function() { saveConfigField("cartouche_body_pt", parseInt(this.value)||20); }; }
+  el = document.getElementById("cfgCartoucheX");
+  if (el) { el.value = (APP_CONFIG.cartouche_x_px != null ? APP_CONFIG.cartouche_x_px : 20); el.onchange = function() { var v = parseInt(this.value); saveConfigField("cartouche_x_px", isNaN(v) ? 0 : v); }; }
+  el = document.getElementById("cfgCartoucheY");
+  if (el) { el.value = (APP_CONFIG.cartouche_y_px != null ? APP_CONFIG.cartouche_y_px : 20); el.onchange = function() { var v = parseInt(this.value); saveConfigField("cartouche_y_px", isNaN(v) ? 0 : v); }; }
+
   // New pattern defaults (Settings > Catalogue)
   el = document.getElementById("cfgDefPatternW");
   if (el) { el.value = APP_CONFIG.default_pattern_width_cm || 300; el.onchange = function() { saveConfigField("default_pattern_width_cm", parseInt(this.value)||300); }; }

@@ -215,6 +215,7 @@ def get_config() -> dict:
     """
     from olm import __version__
     from olm.core import app_config
+    app_config.reload_if_changed()
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
     cfg["dev_mode"] = _DEV_MODE

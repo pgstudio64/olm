@@ -403,7 +403,7 @@ def _check_preconditions(
     for i in range(len(positions)):
         for j in range(i + 1, len(positions)):
             a, b = positions[i], positions[j]
-            if _rects_overlap(
+            if rects_overlap(
                 a.x_cm, a.y_cm, a.eo_cm, a.ns_cm,
                 b.x_cm, b.y_cm, b.eo_cm, b.ns_cm,
             ):
@@ -451,7 +451,7 @@ def _check_preconditions(
             )
 
 
-def _rects_overlap(
+def rects_overlap(
     x1: int, y1: int, w1: int, h1: int,
     x2: int, y2: int, w2: int, h2: int,
 ) -> bool:

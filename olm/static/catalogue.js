@@ -1,13 +1,16 @@
 "use strict";
 // ========== CATALOGUE ==========
 
+// Breathing ratio for card miniature viewBox (fraction of largest dimension)
+var MINI_VIEWBOX_BREATH = 0.04;
+
 let catalogueData = [];
 
 
 // --- Event delegation (P1.4) ---
-// Single click handler on #catalogueGrid dispatches card-click and card-delete.
-// Single click handler on #matrixSvg dispatches matrix-pattern clicks.
-// Both are session-life: bound once, never re-bound.
+// Single click handler on #catalogueGrid dispatches:
+//   delete > warning > miniature (open) > card body (enlarge/shrink).
+// Session-life: bound once, never re-bound.
 var _catDelegationWired = false;
 function _wireCatDelegation() {
   if (_catDelegationWired) return;
@@ -16,75 +19,63 @@ function _wireCatDelegation() {
   var grid = document.getElementById("catalogueGrid");
   if (grid) {
     grid.addEventListener("click", function(e) {
-      // Delete button
+      // 1. Delete button
       var delBtn = e.target.closest(".card-delete");
       if (delBtn) {
         e.stopPropagation();
         var name = delBtn.dataset.delName;
         if (!name) return;
-        confirmModal("Delete \"" + name + "\" from catalogue?").then(function(ok) {
-          if (!ok) return;
-          fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" })
-            .then(function(resp) {
-              if (!resp.ok) throw new Error("Delete failed");
-              loadCatalogue();
-            })
-            .catch(function(err) { setStatus("Delete error: " + err.message); });
-        });
+        confirmModal("Delete \"" + name + "\" from catalogue?")
+          .then(function(ok) {
+            if (!ok) return;
+            fetch("/api/patterns/" + encodeURIComponent(name),
+              { method: "DELETE" })
+              .then(function(resp) {
+                if (!resp.ok) throw new Error("Delete failed");
+                loadCatalogue();
+              })
+              .catch(function(err) {
+                setStatus("Delete error: " + err.message);
+              });
+          });
         return;
       }
-      // Overflow badge diagnostic (dev-mode only, D-240)
+      // 2. Overflow badge diagnostic (dev-mode only, D-240)
       var warn = e.target.closest(".card-warning");
       if (warn && APP_CONFIG.dev_mode) {
         e.stopPropagation();
         var card = warn.closest(".catalogue-card");
         if (card) {
           var pName = card.dataset.patternName;
-          var pat = catalogueData.find(function(p) { return p.name === pName; });
+          var pat = catalogueData.find(function(p) {
+            return p.name === pName;
+          });
           if (pat) OLM_DIAGS.run("pattern.footprint", pat);
         }
         return;
       }
-      // Card click (load pattern)
-      var card = e.target.closest(".catalogue-card");
-      if (card) {
-        var name = card.dataset.patternName;
-        if (name) {
-          document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
-          loadPattern(name);
+      // 3. Click on miniature SVG → open pattern in editor
+      var mini = e.target.closest(".card-mini-svg");
+      if (mini) {
+        var card = mini.closest(".catalogue-card");
+        if (card) {
+          var name = card.dataset.patternName;
+          if (name) {
+            document.querySelector(
+              '.sub-tab-btn[data-subtab="catEditor"]').click();
+            loadPattern(name);
+          }
         }
-      }
-    });
-  }
-
-  var svg = document.getElementById("matrixSvg");
-  if (svg) {
-    svg.addEventListener("click", function(e) {
-      // Delete button in matrix
-      var delEl = e.target.closest("[data-matrix-delete]");
-      if (delEl) {
-        e.stopPropagation();
-        var name = delEl.dataset.matrixDelete;
-        if (!name) return;
-        confirmModal("Delete \"" + name + "\" from catalogue?").then(function(ok) {
-          if (!ok) return;
-          fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" })
-            .then(function(resp) {
-              if (!resp.ok) throw new Error("Delete failed");
-              loadCatalogue();
-            })
-            .catch(function(err) { setStatus("Delete error: " + err.message); });
-        });
         return;
       }
-      // Pattern click (load in editor)
-      var el = e.target.closest("[data-matrix-pattern]");
-      if (!el) return;
-      e.stopPropagation();
-      var name = el.dataset.matrixPattern;
-      if (!name) return;
-      document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
-      loadPattern(name);
+      // 4. Click elsewhere on card → toggle enlarge in-place
+      var card = e.target.closest(".catalogue-card");
+      if (card) {
+        // Collapse any other enlarged card first
+        var prev = grid.querySelector(".catalogue-card.card-enlarged");
+        if (prev && prev !== card) prev.classList.remove("card-enlarged");
+        card.classList.toggle("card-enlarged");
+      }
     });
   }
 }
@@ -105,7 +96,6 @@ async function loadCatalogue() {
     }
     try {
       renderCatalogue();
-      renderMatrixView();
     } catch (renderErr) {
       console.error("renderCatalogue error:", renderErr);
       document.getElementById("catalogueGrid").innerHTML =
@@ -119,11 +109,36 @@ async function loadCatalogue() {
   }
 }
 
+// Compute the drawing extent of a pattern in cm (footprint + outward door
+// arcs, with an empty-pattern fallback to room dimensions). The breathing
+// margin and the uniform square framing are applied globally in
+// renderCatalogue so that a desk renders at the same pixel size on every card.
+function _patternExtent(p) {
+  var fp = computePatternFootprint(p);
+  var roomW = p.room_width_cm || 300;
+  var roomH = p.room_depth_cm || 400;
+  // Fallback: empty pattern → use room dimensions
+  var xMin = fp.xMin, xMax = fp.xMax, yMin = fp.yMin, yMax = fp.yMax;
+  if (xMin === 0 && xMax === 0 && yMin === 0 && yMax === 0) {
+    xMin = 0; yMin = 0; xMax = roomW; yMax = roomH;
+  }
+  // Extend for outward door arcs (radius = opening width, extends beyond room wall)
+  (p.room_openings || []).forEach(function(o) {
+    if (o.opens_inward || !o.has_door) return;
+    var arcR = o.width_cm || 0;
+    if (o.face === "north") { yMin = Math.min(yMin, -arcR); }
+    else if (o.face === "south") { yMax = Math.max(yMax, roomH + arcR); }
+    else if (o.face === "west") { xMin = Math.min(xMin, -arcR); }
+    else if (o.face === "east") { xMax = Math.max(xMax, roomW + arcR); }
+  });
+  return { xMin: xMin, yMin: yMin, xMax: xMax, yMax: yMax };
+}
+
 function renderCatalogue() {
   var grid = document.getElementById("catalogueGrid");
   var filtered = getFilteredPatterns();
 
-  // Matrix sort: depth ascending, width ascending, then name ascending
+  // Sort: depth ascending, width ascending, then name ascending
   filtered.sort(function(a, b) {
     var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
     if (da !== 0) return da;
@@ -136,9 +151,22 @@ function renderCatalogue() {
   if (countEl) countEl.textContent = filtered.length + " pattern(s)";
 
   if (filtered.length === 0) {
-    grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:24px;">No patterns.</div>';
+    grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;' +
+      'padding:24px;">No patterns.</div>';
     return;
   }
+
+  // Uniform miniature scale: one square sized to the largest pattern extent,
+  // so every desk renders at the same pixel size across all cards. Small
+  // patterns sit centered with margin; the largest fills the square.
+  var extByPattern = new Map();
+  var maxExtentCm = 1;
+  filtered.forEach(function(p) {
+    var e = _patternExtent(p);
+    extByPattern.set(p, e);
+    maxExtentCm = Math.max(maxExtentCm, e.xMax - e.xMin, e.yMax - e.yMin);
+  });
+  var miniSideCm = maxExtentCm * (1 + MINI_VIEWBOX_BREATH * 2);
 
   // Group by depth to display one row per depth
   var groups = [];
@@ -170,34 +198,47 @@ function renderCatalogue() {
       var w = p.room_width_cm || "?";
       var d = p.room_depth_cm || "?";
 
-      var overflow = patternOverflowsRoom(p);
-      var cardClass = "catalogue-card" + (overflow ? " card-overflow" : "");
-      html += '<div class="' + cardClass + '" data-pattern-name="' + (p.name || "") + '">';
-      html += '<button class="card-delete" data-del-name="' + (p.name || "") + '" title="Delete">&times;</button>';
+      var fitClass = p.fit_class || "ok";
+      var cardClass = "catalogue-card" +
+        (fitClass === "reject" ? " card-overflow" :
+         fitClass === "tolere" ? " card-tolere" : "");
+      html += '<div class="' + cardClass + '" data-pattern-name="' +
+        (p.name || "") + '">';
+      html += '<button class="card-delete" data-del-name="' +
+        (p.name || "") + '" title="Delete">&times;</button>';
+
+      // Miniature SVG: uniform square viewBox, pattern centered (noLabels)
+      var ext = extByPattern.get(p);
+      var offX = miniSideCm / 2 - (ext.xMin + ext.xMax) / 2;
+      var offY = miniSideCm / 2 - (ext.yMin + ext.yMax) / 2;
+      var svgContent = renderPatternMiniSvg(
+        p, 1, offX, offY, { noLabels: true }
+      );
+      html += '<div class="card-mini-svg"><svg viewBox="0 0 ' +
+        miniSideCm + ' ' + miniSideCm +
+        '" preserveAspectRatio="xMidYMid meet">' +
+        svgContent + '</svg></div>';
+
       html += '<div class="card-title">' + (p.name || "Unnamed") + '</div>';
-      html += '<div class="card-info">' + nDesks + ' desks · ' + nBlocks + ' blocks · ' + std + ' · ' + w + 'x' + d + '</div>';
+      html += '<div class="card-info">' + nDesks + ' desks · ' +
+        nBlocks + ' blocks · ' + std + ' · ' + w + 'x' + d + '</div>';
       var sc = computePatternScoring(p);
-      if (sc.nDesks > 0) html += '<div class="card-info">' + scoringHtml(sc) + '</div>';
-      if (overflow) html += '<div class="card-warning">Overflow</div>';
+      if (sc.nDesks > 0) {
+        html += '<div class="card-info">' + scoringHtml(sc) + '</div>';
+      }
+      if (fitClass === "reject")
+        html += '<div class="card-warning">Overflow</div>';
+      else if (fitClass === "tolere")
+        html += '<div class="card-warning card-warning-tolere">Tight</div>';
       html += '</div>';
     });
     html += '</div></div>';
   });
   grid.innerHTML = html;
 
-  // Event delegation handles card-click and card-delete (P1.4)
+  // Event delegation handles card interactions (P1.4)
   _wireCatDelegation();
 }
-
-// ========== MATRIX VIEW ==========
-
-let matrixViewBox = { x: 0, y: 0, w: 1000, h: 800 };
-let matrixFullExtent = null;  // stored after render for zoom-out limit
-let matrixPanning = false;
-let matrixPanStart = { x: 0, y: 0 };
-// Metadata for fixed rulers
-let matrixMeta = { widths: [], depths: [], colXs: [], rowYs: [], colWidths: [], rowHeights: [], labelW: 60, labelH: 30, margin: 20 };
-
 
 function getFilteredPatterns() {
   var stdFilter = getCurrentStandard();
@@ -293,9 +334,11 @@ function renderBlockDesks(elements, bx, by, blockType, orientation, scale, start
 
 // --- End shared rendering functions ---
 
-function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
+function renderPatternMiniSvg(p, scale, offsetX, offsetY, opts) {
   // Rendering identical to editor: z-order, circulation zones, chairs, screens, distances
+  // opts.noLabels: suppress text elements (dimension labels, scoring, pattern name)
   // Switch BLOCK_DEFS to the pattern's standard for correct dimensions
+  var _noLabels = opts && opts.noLabels;
   var savedDefs = BLOCK_DEFS;
   if (p.standard && BLOCK_DEFS_BY_STD[p.standard]) BLOCK_DEFS = BLOCK_DEFS_BY_STD[p.standard];
   var elements = [];
@@ -310,13 +353,15 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
     '" fill="#1a1a1a" stroke="#4a4640" stroke-width="1"/>' });
 
   // Room dimension labels (z=10)
-  elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 3) +
-    '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="7" font-family="monospace">' +
-    roomWcm + ' cm</text>' });
-  elements.push({ z: 10, s: '<text x="' + (offsetX - 3) + '" y="' + (offsetY + roomH / 2) +
-    '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="7" font-family="monospace"' +
-    ' transform="rotate(-90,' + (offsetX - 3) + ',' + (offsetY + roomH / 2) + ')">' +
-    roomHcm + ' cm</text>' });
+  if (!_noLabels) {
+    elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 3) +
+      '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="7" font-family="monospace">' +
+      roomWcm + ' cm</text>' });
+    elements.push({ z: 10, s: '<text x="' + (offsetX - 3) + '" y="' + (offsetY + roomH / 2) +
+      '" text-anchor="middle" fill="' + COLOR_RULER + '" font-size="7" font-family="monospace"' +
+      ' transform="rotate(-90,' + (offsetX - 3) + ',' + (offsetY + roomH / 2) + ')">' +
+      roomHcm + ' cm</text>' });
+  }
 
   // Exclusion zones (z=5)
   (p.room_exclusions || []).forEach(function(z) {
@@ -629,29 +674,32 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
   );
 
   // Bottom caption: desks + scoring (z=10)
-  var sc = computePatternScoring(p);
-  var cartFs = Math.max(6, Math.min(9, roomW * 0.06));
-  var cartY = offsetY + roomH + cartFs + 2;
-  var scoreBlue = "#5090c0";
-  // Line 1: desk count + m²/desk
-  var line1 = sc.nDesks + " desks";
-  if (sc.nDesks > 0) line1 += " \u00b7 " + sc.m2pp.toFixed(1) + " m\u00b2/d";
-  elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + cartY +
-    '" text-anchor="middle" fill="' + scoreBlue + '" font-size="' + cartFs + '" font-family="monospace">' +
-    line1 + '</text>' });
-  // Line 2: min passage
-  if (sc.nDesks > 0) {
-    elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (cartY + cartFs + 2) +
-      '" text-anchor="middle" fill="' + scoreBlue + '" font-size="' + cartFs + '" font-family="monospace">' +
-      'min passage ' + sc.minPassageCm + ' cm</text>' });
+  if (!_noLabels) {
+    var sc = computePatternScoring(p);
+    var cartFs = Math.max(6, Math.min(9, roomW * 0.06));
+    var cartY = offsetY + roomH + cartFs + 2;
+    var scoreBlue = "#5090c0";
+    var line1 = sc.nDesks + " desks";
+    if (sc.nDesks > 0) line1 += " \u00b7 " + sc.m2pp.toFixed(1) + " m\u00b2/d";
+    elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + cartY +
+      '" text-anchor="middle" fill="' + scoreBlue + '" font-size="' + cartFs +
+      '" font-family="monospace">' + line1 + '</text>' });
+    if (sc.nDesks > 0) {
+      elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' +
+        (cartY + cartFs + 2) + '" text-anchor="middle" fill="' + scoreBlue +
+        '" font-size="' + cartFs + '" font-family="monospace">' +
+        'min passage ' + sc.minPassageCm + ' cm</text>' });
+    }
   }
 
   // Pattern name centered at top (z=10)
-  var stdLabel = getStdLabel(p.standard);
-  var titleFontSize = Math.max(6, Math.min(12, roomW * 0.06));
-  elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 14) +
-    '" text-anchor="middle" fill="' + COLOR_GAP_LABEL + '" font-size="' + titleFontSize +
-    '" font-family="monospace">' + (p.name || "") + ' \u00b7 ' + stdLabel + '</text>' });
+  if (!_noLabels) {
+    var stdLabel = getStdLabel(p.standard);
+    var titleFontSize = Math.max(6, Math.min(12, roomW * 0.06));
+    elements.push({ z: 10, s: '<text x="' + (offsetX + roomW / 2) + '" y="' + (offsetY - 14) +
+      '" text-anchor="middle" fill="' + COLOR_GAP_LABEL + '" font-size="' + titleFontSize +
+      '" font-family="monospace">' + (p.name || "") + ' \u00b7 ' + stdLabel + '</text>' });
+  }
 
   // Restore BLOCK_DEFS
   BLOCK_DEFS = savedDefs;
@@ -659,298 +707,6 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY) {
   // Sort by z and assemble
   elements.sort(function(a, b) { return a.z - b.z; });
   return elements.map(function(e) { return e.s; }).join("\n");
-}
-
-function applyMatrixViewBox() {
-  var svg = document.getElementById("matrixSvg");
-  svg.setAttribute("viewBox", matrixViewBox.x + " " + matrixViewBox.y + " " + matrixViewBox.w + " " + matrixViewBox.h);
-  updateMatrixRulers();
-}
-
-function updateMatrixRulers() {
-  var m = matrixMeta;
-  if (!m.widths.length) return;
-  var container = document.getElementById("matrixContainer");
-  var svgEl = document.getElementById("matrixSvg");
-  var rect = svgEl.getBoundingClientRect();
-  if (rect.width < 1) return;
-  var scaleX = rect.width / matrixViewBox.w;
-  var scaleY = rect.height / matrixViewBox.h;
-  function svgToScreenX(sx) { return (sx - matrixViewBox.x) * scaleX; }
-  function svgToScreenY(sy) { return (sy - matrixViewBox.y) * scaleY; }
-  var baseFontSize = Math.max(10, Math.min(16, 15 * scaleX));
-
-  // Ruler top (widths)
-  var topEl = document.getElementById("matrixRulerTop");
-  var topHtml = "";
-  for (var c = 0; c < m.widths.length; c++) {
-    var sx = svgToScreenX(m.colXs[c]);
-    topHtml += '<span class="matrix-ruler-label" style="left:' + sx.toFixed(0) +
-      'px;bottom:4px;transform:translateX(-50%);font-size:' + baseFontSize.toFixed(0) + 'px;">' +
-      m.widths[c] + '</span>';
-  }
-  topEl.innerHTML = topHtml;
-
-  // Ruler left (depths)
-  var leftEl = document.getElementById("matrixRulerLeft");
-  var leftHtml = "";
-  for (var r = 0; r < m.depths.length; r++) {
-    var sy = svgToScreenY(m.rowYs[r]) - 28;
-    leftHtml += '<span class="matrix-ruler-label" style="top:' + sy.toFixed(0) +
-      'px;right:6px;transform:translateY(-50%);font-size:' + baseFontSize.toFixed(0) + 'px;">' +
-      m.depths[r] + '</span>';
-  }
-  leftEl.innerHTML = leftHtml;
-
-  // Corner
-  document.getElementById("matrixRulerCorner").innerHTML =
-    '<span style="font-size:8px;color:var(--text-dim);">cm</span>';
-}
-
-function renderMatrixView() {
-  var filtered = getFilteredPatterns();
-  var svg = document.getElementById("matrixSvg");
-  var countEl = document.getElementById("catCount");
-  if (countEl) countEl.textContent = filtered.length + " pattern(s)";
-
-  if (filtered.length === 0) {
-    svg.innerHTML = '<text x="50" y="40" fill="#6e6a62" font-size="12" font-family="monospace">No patterns.</text>';
-    return;
-  }
-
-  // Collect distinct widths and depths, sorted
-  var widthSet = {};
-  var depthSet = {};
-  filtered.forEach(function(p) {
-    var w = p.room_width_cm || 0;
-    var d = p.room_depth_cm || 0;
-    widthSet[w] = true;
-    depthSet[d] = true;
-  });
-  var widths = Object.keys(widthSet).map(Number).sort(function(a, b) { return a - b; });
-  var depths = Object.keys(depthSet).map(Number).sort(function(a, b) { return a - b; });
-
-  // Index for quick lookup
-  var widthIdx = {};
-  widths.forEach(function(w, i) { widthIdx[w] = i; });
-  var depthIdx = {};
-  depths.forEach(function(d, i) { depthIdx[d] = i; });
-
-  // Build the matrix (pattern array per cell)
-  var matrix = [];
-  for (var r = 0; r < depths.length; r++) {
-    matrix[r] = [];
-    for (var c = 0; c < widths.length; c++) {
-      matrix[r][c] = [];
-    }
-  }
-  filtered.forEach(function(p) {
-    var c = widthIdx[p.room_width_cm || 0];
-    var r = depthIdx[p.room_depth_cm || 0];
-    matrix[r][c].push(p);
-  });
-
-  // Grid dimensions
-  var CELL_SCALE = 0.5;      // same scale as editor (SCALE=0.5)
-  var CELL_PAD = 20;          // padding around each room
-  var CELL_PAD_TOP = 14;      // extra top margin (room for delete button)
-  var CELL_GAP = 8;           // spacing between patterns in the same cell
-  var LABEL_W = 60;           // space for depth labels (left)
-  var LABEL_H = 30;           // space for width labels (top)
-  var MARGIN = 20;
-
-  // Size of each cell: if multiple patterns, stack them horizontally
-  var colWidths = widths.map(function(w, ci) {
-    var maxCount = 1;
-    for (var ri = 0; ri < depths.length; ri++) {
-      if (matrix[ri][ci].length > maxCount) maxCount = matrix[ri][ci].length;
-    }
-    return maxCount * (w * CELL_SCALE) + (maxCount - 1) * CELL_GAP + CELL_PAD * 2;
-  });
-  var CARTOUCHE_H = 24;  // space for 2 scoring lines below the room
-  var rowHeights = depths.map(function(d) { return d * CELL_SCALE + CELL_PAD * 2 + CELL_PAD_TOP + CARTOUCHE_H; });
-
-  var totalW = MARGIN + LABEL_W + colWidths.reduce(function(a, b) { return a + b; }, 0) + MARGIN;
-  var totalH = MARGIN + LABEL_H + rowHeights.reduce(function(a, b) { return a + b; }, 0) + MARGIN;
-
-  // Store positions for HTML rulers
-  var colXs = [];
-  var cx = MARGIN + LABEL_W;
-  for (var c = 0; c < widths.length; c++) {
-    colXs.push(cx + colWidths[c] / 2);
-    cx += colWidths[c];
-  }
-  var rowYs = [];
-  var cy = MARGIN + LABEL_H;
-  for (var r = 0; r < depths.length; r++) {
-    rowYs.push(cy + rowHeights[r] / 2);
-    cy += rowHeights[r];
-  }
-  matrixMeta = {
-    widths: widths, depths: depths,
-    colXs: colXs, rowYs: rowYs,
-    colWidths: colWidths, rowHeights: rowHeights,
-    labelW: LABEL_W, labelH: LABEL_H, margin: MARGIN,
-  };
-
-  var parts = [];
-  // Axis labels are in HTML rulers (not in the SVG)
-
-  // Cells
-  cy = MARGIN + LABEL_H;
-  for (var r = 0; r < depths.length; r++) {
-    cx = MARGIN + LABEL_W;
-    for (var c = 0; c < widths.length; c++) {
-      // Cell border + clip to prevent overflow into adjacent cells
-      var cellId = 'mc_' + r + '_' + c;
-      parts.push('<clipPath id="' + cellId + '"><rect x="' + cx + '" y="' + cy +
-        '" width="' + colWidths[c] + '" height="' + rowHeights[r] + '"/></clipPath>');
-      parts.push('<rect x="' + cx + '" y="' + cy +
-        '" width="' + colWidths[c] + '" height="' + rowHeights[r] +
-        '" class="matrix-cell-border"/>');
-
-      var patterns = matrix[r][c];
-      if (patterns.length > 0) {
-        var pieceW = widths[c] * CELL_SCALE;
-        var pieceH = depths[r] * CELL_SCALE;
-        parts.push('<g clip-path="url(#' + cellId + ')">');
-        for (var pi = 0; pi < patterns.length; pi++) {
-          var pieceX = cx + CELL_PAD + pi * (pieceW + CELL_GAP);
-          var pieceY = cy + CELL_PAD + CELL_PAD_TOP;
-          parts.push(renderPatternMiniSvg(patterns[pi], CELL_SCALE, pieceX, pieceY));
-          // Transparent clickable zone to open in editor
-          parts.push('<rect x="' + pieceX + '" y="' + pieceY +
-            '" width="' + pieceW + '" height="' + pieceH +
-            '" fill="transparent" style="cursor:pointer;" data-matrix-pattern="' +
-            (patterns[pi].name || "") + '"/>');
-          // Delete button (above top-right corner, outside the pattern)
-          var delX = pieceX + pieceW;
-          var delY = pieceY - 3;
-          parts.push('<text x="' + delX + '" y="' + delY +
-            '" text-anchor="end" font-size="16" font-weight="bold"' +
-            ' font-family="sans-serif"' +
-            ' fill="#6e6a62" style="cursor:pointer;" data-matrix-delete="' +
-            (patterns[pi].name || "") + '">\u00d7</text>');
-        }
-        parts.push('</g>');
-      } else {
-        parts.push('<text x="' + (cx + colWidths[c] / 2) + '" y="' + (cy + rowHeights[r] / 2 + 3) +
-          '" text-anchor="middle" fill="#2a2826" font-size="10" font-family="monospace">\u2014</text>');
-      }
-
-      cx += colWidths[c];
-    }
-    cy += rowHeights[r];
-  }
-
-  // Initial viewBox = show everything
-  matrixViewBox = { x: 0, y: 0, w: totalW, h: totalH };
-  matrixFullExtent = { w: totalW, h: totalH };
-  svg.innerHTML = parts.join("\n");
-  applyMatrixViewBox();
-
-  // Event delegation handles matrix-pattern clicks (P1.4)
-  _wireCatDelegation();
-}
-
-// Zoom limits: min ~one room (300 SVG units), max = full matrix
-var MATRIX_ZOOM_MIN_W = 250;
-
-function _matrixClampZoom(newW, newH) {
-  var svg = document.getElementById("matrixSvg");
-  var vb = svg.getAttribute("viewBox");
-  // Max = initial full extent (stored after renderMatrixView)
-  var maxW = matrixFullExtent ? matrixFullExtent.w : 2000;
-  var maxH = matrixFullExtent ? matrixFullExtent.h : 2000;
-  if (newW < MATRIX_ZOOM_MIN_W) return null;
-  if (newW > maxW || newH > maxH) return null;
-  return { w: newW, h: newH };
-}
-
-function matrixZoom(e) {
-  e.preventDefault();
-  var svg = document.getElementById("matrixSvg");
-  var rect = svg.getBoundingClientRect();
-  var mx = (e.clientX - rect.left) / rect.width;
-  var my = (e.clientY - rect.top) / rect.height;
-  // Pinch (ctrlKey) sends fine deltaY — use proportional factor
-  var factor;
-  if (e.ctrlKey) {
-    factor = 1 + Math.min(Math.abs(e.deltaY), 10) * 0.02 * (e.deltaY > 0 ? 1 : -1);
-  } else {
-    factor = e.deltaY > 0 ? 1.15 : 0.87;
-  }
-  var newW = matrixViewBox.w * factor;
-  var newH = matrixViewBox.h * factor;
-  var clamped = _matrixClampZoom(newW, newH);
-  if (!clamped) return;
-  matrixViewBox.x += (matrixViewBox.w - clamped.w) * mx;
-  matrixViewBox.y += (matrixViewBox.h - clamped.h) * my;
-  matrixViewBox.w = clamped.w;
-  matrixViewBox.h = clamped.h;
-  applyMatrixViewBox();
-}
-
-function matrixZoomBy(factor) {
-  var newW = matrixViewBox.w * factor;
-  var newH = matrixViewBox.h * factor;
-  var clamped = _matrixClampZoom(newW, newH);
-  if (!clamped) return;
-  matrixViewBox.x += (matrixViewBox.w - clamped.w) / 2;
-  matrixViewBox.y += (matrixViewBox.h - clamped.h) / 2;
-  matrixViewBox.w = clamped.w;
-  matrixViewBox.h = clamped.h;
-  applyMatrixViewBox();
-}
-
-function matrixZoomFit() {
-  // Recalculate viewBox to show everything
-  renderMatrixView();
-}
-
-function initMatrixPanZoom() {
-  var container = document.getElementById("matrixContainer");
-  var svg = document.getElementById("matrixSvg");
-
-  // Session-life: all pan/zoom listeners bound once at init
-  container.addEventListener("wheel", function(e) {
-    e.preventDefault();
-    matrixZoom(e);
-  }, { passive: false });
-
-  svg.addEventListener("mousedown", function(e) {
-    if (e.target.closest("[data-matrix-pattern]")) return;
-    if (e.button !== 0) return;
-    // Shift+drag = zoom rectangle
-    if (zoomSelStart(e, svg, matrixViewBox, function() {
-      applyMatrixViewBox();
-    })) return;
-    matrixPanning = true;
-    matrixPanStart = { x: e.clientX, y: e.clientY };
-    svg.classList.add("panning");
-    e.preventDefault();
-  });
-
-  document.addEventListener("mousemove", function(e) {
-    if (zoomSel.active && zoomSel.svg === svg) { zoomSelMove(e); return; }
-    if (!matrixPanning) return;
-    var svgEl = document.getElementById("matrixSvg");
-    var rect = svgEl.getBoundingClientRect();
-    var dx = e.clientX - matrixPanStart.x;
-    var dy = e.clientY - matrixPanStart.y;
-    matrixPanStart = { x: e.clientX, y: e.clientY };
-    matrixViewBox.x -= dx * (matrixViewBox.w / rect.width);
-    matrixViewBox.y -= dy * (matrixViewBox.h / rect.height);
-    applyMatrixViewBox();
-  });
-
-  document.addEventListener("mouseup", function(e) {
-    if (zoomSel.active && zoomSel.svg === svg) { zoomSelEnd(e); return; }
-    if (matrixPanning) {
-      matrixPanning = false;
-      document.getElementById("matrixSvg").classList.remove("panning");
-    }
-  });
 }
 
 // --- Pattern Editor navigation (Prev / Next, width then depth ascending) ---

@@ -81,16 +81,44 @@ def find_pattern(patterns: list[dict], name: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _add_fit_class(pattern: dict) -> None:
+    """Annotate *pattern* with ``fit_class`` (ok/tolere/reject).
+
+    Uses the pattern's standard to resolve spacing. Falls back to
+    ``"ok"`` if the standard is unknown.  The pattern dict is mutated
+    in-place (response-only, not persisted).
+    """
+    from olm.core.pattern_classify import classify_pattern
+    from olm.core.spacing_config import ALL_CONFIGS
+
+    std = pattern.get("standard", "")
+    spacing = ALL_CONFIGS.get(std) if std else None
+    if spacing is None:
+        pattern["fit_class"] = "ok"
+        return
+    try:
+        pattern["fit_class"] = classify_pattern(pattern, spacing)
+    except Exception:
+        logger.exception("classify_pattern failed for %s", pattern.get("name"))
+        pattern["fit_class"] = "ok"
+
+
 def list_patterns() -> dict:
-    """Return all patterns with count.
+    """Return all patterns with count and fit classification.
 
     Includes ``default_available`` flag for the first-launch banner:
     True when the private catalogue is empty and the default is not.
+
+    Each pattern in the response carries a ``fit_class`` field
+    (``"ok"`` / ``"tolere"`` / ``"reject"``), computed on-the-fly
+    and not persisted to disk.
     """
     patterns = load_catalogue()
     default_available = (
         len(patterns) == 0 and len(load_default_catalogue()) > 0
     )
+    for p in patterns:
+        _add_fit_class(p)
     return {
         "patterns": patterns,
         "count": len(patterns),
@@ -135,12 +163,17 @@ def create_pattern(data: dict) -> dict:
 
 
 def get_pattern(name: str) -> dict | None:
-    """Return a pattern by name, or ``None`` if not found."""
+    """Return a pattern by name, or ``None`` if not found.
+
+    The returned dict includes a ``fit_class`` field.
+    """
     patterns = load_catalogue()
     idx = find_pattern(patterns, name)
     if idx < 0:
         return None
-    return patterns[idx]
+    p = patterns[idx]
+    _add_fit_class(p)
+    return p
 
 
 def delete_pattern(name: str) -> dict | None:

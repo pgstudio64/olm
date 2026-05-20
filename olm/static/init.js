@@ -545,7 +545,7 @@ async function init() {
         parentTab.querySelectorAll(":scope > .sub-tab-content").forEach(function(c) { c.classList.remove("active"); });
         var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
         if (subtab) subtab.classList.add("active");
-        if (btn.dataset.subtab === "catalogue") { loadCatalogue(); _refreshCatView(); }
+        if (btn.dataset.subtab === "catalogue") { loadCatalogue(); }
       }
       // Guard: pattern room amend active — confirm discard
       if (state.roomAmendMode && state.roomAmendMode.context === "pattern"
@@ -568,40 +568,6 @@ async function init() {
       _doSubSwitch();
     });
   });
-
-  // Catalogue view pill (Cards / Grid)
-  var _catViewMode = "cards";
-  function _refreshCatView() {
-    var cardsEl = document.getElementById("catalogueGrid");
-    var gridEl = document.getElementById("matrixContainer");
-    var zoomEl = document.getElementById("catGridZoom");
-    if (_catViewMode === "cards") {
-      if (cardsEl) cardsEl.style.display = "";
-      if (gridEl) gridEl.style.display = "none";
-      if (zoomEl) zoomEl.style.display = "none";
-    } else {
-      if (cardsEl) cardsEl.style.display = "none";
-      if (gridEl) gridEl.style.display = "";
-      if (zoomEl) zoomEl.style.display = "";
-      renderMatrixView();
-    }
-  }
-  document.querySelectorAll(".cat-view-btn").forEach(function(btn) {
-    btn.addEventListener("click", function() {
-      document.querySelectorAll(".cat-view-btn").forEach(function(b) {
-        b.classList.remove("active");
-      });
-      btn.classList.add("active");
-      _catViewMode = btn.dataset.catView;
-      _refreshCatView();
-    });
-  });
-
-  // Matrix pan/zoom
-  initMatrixPanZoom();
-  document.getElementById("btnMatrixZoomIn").addEventListener("click", function() { matrixZoomBy(0.8); });
-  document.getElementById("btnMatrixZoomOut").addEventListener("click", function() { matrixZoomBy(1.25); });
-  document.getElementById("btnMatrixZoomFit").addEventListener("click", matrixZoomFit);
 
   // Catalogue import/export — dropdown menus
   var _EXPORT_BTN   = ["btnCatExport"];
@@ -710,7 +676,7 @@ async function init() {
     document.getElementById(filePickerId).click();
   }
 
-  // Helper: attach same handler to Card + Grid IDs
+  // Helper: attach same handler to multiple IDs
   function _bindPair(ids, handler) {
     ids.forEach(function(id) {
       var el = document.getElementById(id);
@@ -904,7 +870,7 @@ async function init() {
       .catch(function(err) { setStatus("Compact error: " + err.message); });
   });
 
-  // --- Fit all to pattern (catalogue, Card + Grid) ---
+  // --- Fit all to pattern (catalogue) ---
   function _catFitAll() {
     fetch("/api/patterns/fit-all", { method: "POST" })
       .then(function(r) { return r.json(); })
@@ -949,12 +915,11 @@ async function init() {
       })
       .catch(function(err) { alertModal("Fit-all error: " + err.message); });
   }
-  _bindPair(["btnFitAll", "btnFitAllGrid"], _catFitAll);
+  _bindPair(["btnFitAll"], _catFitAll);
 
-  // Catalogue filters — update both views (Card + Grid)
+  // Catalogue filters — update card view
   function onCatalogueFilterChange() {
     renderCatalogue();
-    renderMatrixView();
   }
   var _peBtnPrev = document.getElementById("peBtnPrev");
   if (_peBtnPrev) _peBtnPrev.addEventListener("click", function() {

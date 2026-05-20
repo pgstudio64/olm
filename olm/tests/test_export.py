@@ -1,17 +1,23 @@
-"""Tests for the export service (D-196).
+"""Tests for the export service (D-196, floor-summary cartouche).
 
 Covers PNG export, PDF export, CSV generation, missing -SD 404,
-and amendment desk recomputation.
+amendment desk recomputation, and floor-summary aggregation.
 """
 from __future__ import annotations
 
 import csv
+import json
 import os
 
 import pytest
 from PIL import Image
 
 from olm.server.app import app
+from olm.server.services.export_service import (
+    _compute_floor_summary,
+    _get_active_desks,
+    _parse_surface_m2,
+)
 
 
 @pytest.fixture()
@@ -40,6 +46,8 @@ def export_env(tmp_path, monkeypatch):
     monkeypatch.setattr("olm.server.app.PLANS_DIR", _plans_str)
     monkeypatch.setattr(
         "olm.server.services.config_service.get_plans_dir", _plans_fn)
+    monkeypatch.setattr(
+        "olm.server.services.export_service.get_plans_dir", _plans_fn)
     monkeypatch.setattr(
         "olm.server.app.get_plans_dir", _plans_fn)
     # Redirect PROJECT_ROOT so exports go to tmp_path
@@ -227,3 +235,179 @@ class TestExportAmendmentRecompute:
         # differ from a plain grey image (check non-grey pixels exist
         # in the desk area)
         assert img.size == (100, 80)
+
+
+# ---------------------------------------------------------------------------
+# Floor-summary cartouche tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseSurface:
+    """_parse_surface_m2 — various format strings."""
+
+    def test_standard_format(self):
+        assert _parse_surface_m2("16.84 m2") == 16.84
+
+    def test_no_space(self):
+        assert _parse_surface_m2("16.84m2") == 16.84
+
+    def test_unicode_m2(self):
+        assert _parse_surface_m2("16.84 m\u00b2") == 16.84
+
+    def test_integer(self):
+        assert _parse_surface_m2("20 m2") == 20.0
+
+    def test_empty_string(self):
+        assert _parse_surface_m2("") is None
+
+    def test_garbage(self):
+        assert _parse_surface_m2("unknown") is None
+
+
+class TestGetActiveDesks:
+    """_get_active_desks — filters removed desks, recomputes if needed."""
+
+    def test_filters_removed(self):
+        candidate = {
+            "desks": [
+                {"x_cm": 0, "y_cm": 0, "removed": False},
+                {"x_cm": 1, "y_cm": 0, "removed": True},
+                {"x_cm": 2, "y_cm": 0, "removed": False},
+            ],
+        }
+        active = _get_active_desks(candidate)
+        assert len(active) == 2
+        assert all(not d["removed"] for d in active)
+
+    def test_empty_desks_no_pattern(self):
+        candidate = {"desks": []}
+        assert _get_active_desks(candidate) == []
+
+    def test_no_desks_key(self):
+        candidate = {}
+        assert _get_active_desks(candidate) == []
+
+
+class TestComputeFloorSummary:
+    """_compute_floor_summary — aggregation logic."""
+
+    @pytest.fixture()
+    def plans_dir(self, tmp_path, monkeypatch):
+        """Temp plans dir with a minimal JSON plan."""
+        plans = tmp_path / "plans"
+        plans.mkdir()
+        plan = {
+            "rooms": {
+                "101": {
+                    "surface": "14.40 m2",
+                    "bbox_px": [10, 10, 70, 106],
+                },
+                "102": {
+                    "surface": "20.00 m2",
+                    "bbox_px": [80, 10, 140, 60],
+                },
+                "103": {
+                    "bbox_px": [150, 10, 200, 50],
+                },
+            },
+        }
+        with open(plans / "tp.json", "w") as f:
+            json.dump(plan, f)
+        _plans_str = str(plans)
+        monkeypatch.setattr(
+            "olm.server.services.export_service.get_plans_dir",
+            lambda: _plans_str,
+        )
+        return plans
+
+    def test_annotated_surface(self, plans_dir):
+        """Surface parsed from JSON 'surface' field."""
+        rooms = [_room_payload()]
+        rooms[0]["name"] = "101"
+        s = _compute_floor_summary("tp", rooms, 5.0)
+        assert s["furnished_offices"] == 1
+        assert s["total_offices"] == 3
+        assert s["furnished_area"] == 14.4
+        assert s["total_workstations"] == 1
+        assert s["avg_area"] is not None
+
+    def test_fallback_bbox_payload(self, plans_dir):
+        """Room 103 has no 'surface' → bbox from payload used."""
+        room = _room_payload()
+        room["name"] = "103"
+        room["width_cm"] = 250
+        room["depth_cm"] = 200
+        s = _compute_floor_summary("tp", [room], 5.0)
+        # 250*200/10000 = 5.0
+        assert s["furnished_area"] == 5.0
+
+    def test_fallback_bbox_json(self, plans_dir):
+        """Room 103 not in payload → bbox_px from JSON + scale."""
+        rooms = [_room_payload()]
+        rooms[0]["name"] = "101"
+        s = _compute_floor_summary("tp", rooms, 5.0)
+        # Room 103: bbox_px [150,10,200,50] → 50*40 px
+        # → 250*200 cm → 5.0 m2
+        # Total = 14.40 + 20.00 + 5.0 = 39.4
+        assert s["total_area"] == 39.4
+
+    def test_zero_workstations(self, plans_dir):
+        """Room without desks → avg = n/a."""
+        room = _room_payload(with_candidate=False)
+        room["name"] = "101"
+        s = _compute_floor_summary("tp", [room], 5.0)
+        assert s["furnished_offices"] == 0
+        assert s["total_workstations"] == 0
+        assert s["avg_area"] is None
+
+    def test_room_outside_json(self, plans_dir):
+        """Payload room not in JSON → still counted in total."""
+        room = _room_payload()
+        room["name"] = "999"
+        room["width_cm"] = 400
+        room["depth_cm"] = 500
+        s = _compute_floor_summary("tp", [room], 5.0)
+        # Union: 101, 102, 103, 999 → 4 total
+        assert s["total_offices"] == 4
+        assert s["furnished_offices"] == 1
+
+    def test_json_not_found(self, tmp_path, monkeypatch):
+        """Missing JSON plan → total = payload names only."""
+        monkeypatch.setattr(
+            "olm.server.services.export_service.get_plans_dir",
+            lambda: str(tmp_path),
+        )
+        room = _room_payload()
+        room["name"] = "A1"
+        s = _compute_floor_summary("nonexistent", [room], 5.0)
+        assert s["total_offices"] == 1
+        assert s["furnished_offices"] == 1
+
+
+class TestCartoucheSmokeExport:
+    """Smoke test: compose_plan_image with cartouche runs without error."""
+
+    def test_compose_with_cartouche(self, export_env):
+        """compose_plan_image produces an image with cartouche pixels."""
+        from olm.server.services.export_service import (
+            compose_plan_image,
+        )
+        # Write a minimal JSON plan so the cartouche has data
+        plans_dir = export_env / "plans"
+        plan = {
+            "rooms": {
+                "101": {"surface": "14.40 m2", "bbox_px": [10, 10, 60, 50]},
+            },
+        }
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+        rooms = [_room_payload()]
+        img = compose_plan_image("test_plan", rooms, 5.0)
+        assert img.size == (100, 80)
+        assert img.mode == "RGBA"
+        # The cartouche draws in the top-left corner — pixel (13,13)
+        # should differ from plain grey (200,200,200) due to the
+        # semi-opaque white background
+        px = img.getpixel((13, 13))
+        assert px != (200, 200, 200, 255), "Cartouche should be visible"

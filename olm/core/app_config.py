@@ -42,6 +42,11 @@ _EMBEDDED_DEFAULTS: dict = {
     "standards": {},
     "current_standard": "",
     "circulation_visible": True,
+    # Export floor-summary cartouche (configurable via Settings).
+    "cartouche_title_pt": 22,
+    "cartouche_body_pt": 20,
+    "cartouche_x_px": 20,
+    "cartouche_y_px": 20,
 }
 
 
@@ -60,11 +65,39 @@ def _load() -> dict:
     return json.loads(json.dumps(_EMBEDDED_DEFAULTS))  # deep copy
 
 
+def _file_mtime() -> float | None:
+    """Return config.json modification time, or None if absent."""
+    try:
+        return _CONFIG_PATH.stat().st_mtime
+    except OSError:
+        return None
+
+
 _cfg: dict = _load()
+_cfg_mtime: float | None = _file_mtime()
+
+
+def reload_if_changed() -> None:
+    """Reload config from disk if the file changed since last load.
+
+    Guards against a stale in-memory cache: the config is loaded once at
+    import, but the dev-server reloader does not watch config.json. Without
+    this guard, an external edit is invisible and the next settings save
+    rewrites the whole file with the outdated in-memory value (D-252). Called
+    before every read of display config and before every write.
+    """
+    global _cfg_mtime
+    mtime = _file_mtime()
+    if mtime is not None and mtime != _cfg_mtime:
+        fresh = _load()
+        _cfg.clear()
+        _cfg.update(fresh)
+        _cfg_mtime = mtime
 
 
 def _save() -> None:
     """Persist config to disk atomically with .bak."""
+    global _cfg_mtime
     path = str(_CONFIG_PATH)
     if _CONFIG_PATH.exists():
         shutil.copy2(path, path + '.bak')
@@ -73,6 +106,7 @@ def _save() -> None:
         json.dump(_cfg, f, indent=2, ensure_ascii=False)
         f.write("\n")
     os.replace(tmp, path)
+    _cfg_mtime = _file_mtime()
 
 
 # ── Getters ────────────────────────────────────────────────────────────────
@@ -110,6 +144,7 @@ def get_spacing(slot: str) -> dict:
 
 def get_current_standard() -> str:
     """Return the current_standard slot id."""
+    reload_if_changed()
     return _cfg.get("current_standard", "")
 
 
@@ -122,6 +157,7 @@ def set_current_standard(slot: str) -> None:
     Raises:
         ValueError: If slot is not in the defined standards.
     """
+    reload_if_changed()
     if slot not in get_all_standards():
         raise ValueError(f"Unknown standard slot: {slot}")
     _cfg["current_standard"] = slot
@@ -142,6 +178,7 @@ def get_matching() -> dict:
 
 def update(key: str, value) -> None:
     """Update a top-level config key and persist."""
+    reload_if_changed()
     _cfg[key] = value
     _save()
 
@@ -153,6 +190,7 @@ def update_nested(path: list[str], value) -> None:
         path: list of keys, e.g. ["matching", "w_density"]
         value: new value
     """
+    reload_if_changed()
     d = _cfg
     for k in path[:-1]:
         d = d.setdefault(k, {})
@@ -162,6 +200,7 @@ def update_nested(path: list[str], value) -> None:
 
 def update_spacing(slot: str, values: dict) -> None:
     """Update spacing values for a standard slot and persist."""
+    reload_if_changed()
     standards = _cfg.setdefault("standards", {})
     std = standards.setdefault(slot, {})
     spacing = std.setdefault("spacing", {})
@@ -171,6 +210,7 @@ def update_spacing(slot: str, values: dict) -> None:
 
 def update_standard_label(slot: str, label: str) -> None:
     """Update the display label for a standard slot and persist."""
+    reload_if_changed()
     standards = _cfg.setdefault("standards", {})
     std = standards.setdefault(slot, {})
     std["label"] = label
@@ -187,6 +227,7 @@ def reset_spacing(slot: str) -> None:
     spacing = defaults.get("spacing", {})
     if not spacing:
         raise ValueError(f"No embedded defaults for slot: {slot}")
+    reload_if_changed()
     standards = _cfg.setdefault("standards", {})
     std = standards.setdefault(slot, {})
     std["spacing"] = dict(spacing)
@@ -195,5 +236,6 @@ def reset_spacing(slot: str) -> None:
 
 def reload() -> None:
     """Reload config from disk. Useful after external modification."""
-    global _cfg
+    global _cfg, _cfg_mtime
     _cfg = _load()
+    _cfg_mtime = _file_mtime()

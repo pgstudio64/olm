@@ -701,6 +701,13 @@
           if (typeof exitRoomAmendUI === 'function') exitRoomAmendUI();
         }
       }
+      // D-253: clear per-plan amendment caches before loading a new plan.
+      // fpRoomAmendments / fpAmendments are keyed by room name and persist
+      // across plan switches; a previous plan's room of the same name would
+      // otherwise leak into the new plan's Room/Review view (wrong dims,
+      // stale exclusions, stale scale). Reset is in-place so the
+      // window.fpRoomAmendments / fpAmendments references stay valid.
+      if (window.olmStore) window.olmStore.reset("amendments");
       // Reset view to Floor (Import sub-tab) regardless of current view
       // (Room, Office, Catalogue). Avoids confusion when user changes
       // plan from a non-Floor view — the new plan loads into Floor.
@@ -2667,6 +2674,15 @@
             _fpAm[r.name] = JSON.parse(JSON.stringify(r.saved_layout));
           }
         });
+        // D-253: also clear the room-amendment cache (fpRoomAmendments) on
+        // plan load. It is keyed by room name and is NOT re-seeded from the
+        // JSON; if left intact, a previous plan's room of the same name leaks
+        // into this plan's Room/Review view (wrong dims, stale exclusions,
+        // stale scale). Cleared in place to keep the live reference valid.
+        var _fpRoomAm = window.fpRoomAmendments;
+        if (_fpRoomAm) {
+          Object.keys(_fpRoomAm).forEach(function (k) { delete _fpRoomAm[k]; });
+        }
 
         renderIngestion();
         populateRoomsJson();

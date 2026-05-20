@@ -8,8 +8,10 @@ recomputed from the pattern via ``compute_desk_positions``.
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import os
+import re
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -176,6 +178,32 @@ _ARC_ANGLES: dict[str, tuple[int, int]] = {
     "S": (0, 180),
 }
 
+# Floor-summary cartouche (top-left of exported image).
+# Position (x/y px) and font sizes (pt) are configurable via Settings;
+# these are the fallback defaults if the config keys are absent.
+_CARTOUCHE_TITLE_PT_DEFAULT = 22
+_CARTOUCHE_BODY_PT_DEFAULT = 20
+_CARTOUCHE_X_PX_DEFAULT = 20
+_CARTOUCHE_Y_PX_DEFAULT = 20
+_CARTOUCHE_PADDING = 8
+_CARTOUCHE_BG = (255, 255, 255, 210)
+_CARTOUCHE_BORDER = (0, 0, 0, 255)
+_CARTOUCHE_BORDER_W = 1
+_CARTOUCHE_TEXT = (0, 0, 0, 255)
+_CARTOUCHE_LINE_SPACING = 4
+
+
+def _cartouche_font(pt: int) -> ImageFont.ImageFont:
+    """Load a scalable default font at the given point size.
+
+    Falls back to the fixed bitmap default on old Pillow versions that
+    do not accept a size argument.
+    """
+    try:
+        return ImageFont.load_default(size=pt)
+    except (TypeError, AttributeError):
+        return ImageFont.load_default()
+
 
 # ---------------------------------------------------------------------------
 # compose_plan_image
@@ -235,7 +263,30 @@ def compose_plan_image(
     for room in rooms_payload:
         _draw_room_desks(draw, font, room, scale_cm_per_px)
 
+    # Floor-summary cartouche (top-left, drawn last = on top)
+    summary = _compute_floor_summary(
+        plan_id, rooms_payload, scale_cm_per_px,
+    )
+    _draw_cartouche(img, summary)
+
     return img
+
+
+def _get_active_desks(candidate: dict) -> list[dict]:
+    """Return non-removed desks from a candidate, recomputing if needed.
+
+    Args:
+        candidate: Room candidate dict with ``desks`` and/or ``pattern``.
+
+    Returns:
+        List of active (non-removed) desk dicts.
+    """
+    desks = candidate.get("desks")
+    if not desks and candidate.get("pattern"):
+        desks = _compute_desks_with_chair_side(candidate["pattern"])
+    if not desks:
+        return []
+    return [d for d in desks if not d.get("removed")]
 
 
 def _draw_room_desks(
@@ -257,20 +308,12 @@ def _draw_room_desks(
     if not room_w or not room_d:
         return
 
-    # Get desks — recompute for amendments if needed
-    desks = candidate.get("desks")
-    if not desks and candidate.get("pattern"):
-        desks = _compute_desks_with_chair_side(candidate["pattern"])
-    if not desks:
+    active = _get_active_desks(candidate)
+    if not active:
         logger.warning("Room %s: no desks to render", room.get("name"))
         return
 
-    desk_local_idx = 0
-    for desk in desks:
-        if desk.get("removed"):
-            continue
-        desk_local_idx += 1
-
+    for desk_local_idx, desk in enumerate(active, start=1):
         # Decanonicalize rect → absolute coords (cm)
         ax, ay, aw, ad = _decanon_rect(
             desk["x_cm"], desk["y_cm"],
@@ -346,6 +389,213 @@ def _draw_room_desks(
             ((x1 + x2) / 2 - tw / 2, (y1 + y2) / 2 - th / 2),
             label, fill=_LABEL_COLOR, font=font,
         )
+
+
+# ---------------------------------------------------------------------------
+# Floor-summary cartouche
+# ---------------------------------------------------------------------------
+
+_SURFACE_RE = re.compile(r"([\d.]+)")
+
+
+def _parse_surface_m2(surface_str: str) -> float | None:
+    """Parse a surface string like ``'16.84 m2'`` to float.
+
+    Returns:
+        Parsed value, or ``None`` if unparseable.
+    """
+    m = _SURFACE_RE.match(surface_str)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def _compute_floor_summary(
+    plan_id: str,
+    rooms_payload: list[dict],
+    scale_cm_per_px: float,
+) -> dict:
+    """Aggregate floor-level statistics for the export cartouche.
+
+    Args:
+        plan_id: Plan identifier (resolves to ``<plan_id>.json``).
+        rooms_payload: Room dicts from the UI.
+        scale_cm_per_px: cm per pixel.
+
+    Returns:
+        Dict with keys ``furnished_offices``, ``total_offices``,
+        ``furnished_area``, ``total_area``, ``total_workstations``,
+        ``avg_area``.
+    """
+    plans_dir = get_plans_dir()
+    json_path = os.path.join(plans_dir, f"{plan_id}.json")
+
+    # Load JSON plan for total rooms + annotated surfaces
+    plan_rooms: dict[str, dict] = {}
+    if os.path.isfile(json_path):
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                plan_data = json.load(f)
+            plan_rooms = plan_data.get("rooms", {})
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Cannot load plan JSON %s: %s", json_path, exc)
+    else:
+        logger.warning("Plan JSON not found: %s", json_path)
+
+    # Build payload lookup by name
+    payload_by_name: dict[str, dict] = {}
+    for room in rooms_payload:
+        name = room.get("name", "")
+        if name:
+            payload_by_name[name] = room
+
+    # Union of all room identifiers
+    all_names = set(plan_rooms.keys()) | set(payload_by_name.keys())
+
+    # Surface helper for a room in the union
+    def _surface(name: str) -> float:
+        # 1. JSON annotated surface
+        jr = plan_rooms.get(name)
+        if jr:
+            s = _parse_surface_m2(jr.get("surface", ""))
+            if s is not None:
+                return s
+        # 2. Payload bbox (width_cm * depth_cm)
+        pr = payload_by_name.get(name)
+        if pr:
+            w = pr.get("width_cm", 0)
+            d = pr.get("depth_cm", 0)
+            if w and d:
+                return round(w * d / 10000, 2)
+        # 3. JSON bbox_px + scale
+        if jr and scale_cm_per_px > 0:
+            bbox = jr.get("bbox_px")
+            if bbox and len(bbox) >= 4:
+                w_px = bbox[2] - bbox[0]
+                h_px = bbox[3] - bbox[1]
+                w_cm = w_px * scale_cm_per_px
+                d_cm = h_px * scale_cm_per_px
+                return round(w_cm * d_cm / 10000, 2)
+        return 0.0
+
+    # Aggregate
+    furnished_offices = 0
+    furnished_area = 0.0
+    total_workstations = 0
+
+    for room in rooms_payload:
+        candidate = room.get("candidate")
+        if not candidate:
+            continue
+        furnished_offices += 1
+        name = room.get("name", "")
+        furnished_area += _surface(name)
+        total_workstations += len(_get_active_desks(candidate))
+
+    total_offices = len(all_names)
+    total_area = sum(_surface(n) for n in all_names)
+    avg_area: float | None = None
+    if total_workstations > 0:
+        avg_area = round(furnished_area / total_workstations, 2)
+
+    return {
+        "furnished_offices": furnished_offices,
+        "total_offices": total_offices,
+        "furnished_area": round(furnished_area, 1),
+        "total_area": round(total_area, 1),
+        "total_workstations": total_workstations,
+        "avg_area": avg_area,
+    }
+
+
+def _draw_cartouche(
+    img: Image.Image,
+    summary: dict,
+) -> None:
+    """Draw the floor-summary cartouche in the top-left corner.
+
+    Composites a semi-opaque background onto *img* in-place, then draws
+    text lines on top. Font sizes (title/body, in points) and the (x, y)
+    pixel position are read from app config (Settings), with fallbacks.
+
+    Args:
+        img: RGBA PIL image (modified in-place).
+        summary: Dict from ``_compute_floor_summary``.
+    """
+    from datetime import date
+
+    from olm.core import app_config
+    title_pt = max(6, int(app_config.get(
+        "cartouche_title_pt", _CARTOUCHE_TITLE_PT_DEFAULT)
+        or _CARTOUCHE_TITLE_PT_DEFAULT))
+    body_pt = max(6, int(app_config.get(
+        "cartouche_body_pt", _CARTOUCHE_BODY_PT_DEFAULT)
+        or _CARTOUCHE_BODY_PT_DEFAULT))
+    x0 = max(0, int(app_config.get(
+        "cartouche_x_px", _CARTOUCHE_X_PX_DEFAULT)))
+    y0 = max(0, int(app_config.get(
+        "cartouche_y_px", _CARTOUCHE_Y_PX_DEFAULT)))
+    title_font = _cartouche_font(title_pt)
+    body_font = _cartouche_font(body_pt)
+
+    avg_str = (
+        f"{summary['avg_area']:.1f}" if summary["avg_area"] is not None
+        else "n/a"
+    )
+    # (text, font) per line — title in the larger font, the rest in body.
+    items = [
+        ("FLOOR SUMMARY", title_font),
+        (f"Furnished offices: {summary['furnished_offices']}"
+         f" / {summary['total_offices']}", body_font),
+        (f"Furnished area: {summary['furnished_area']:.1f}"
+         f" / {summary['total_area']:.1f} m2", body_font),
+        (f"Total workstations: {summary['total_workstations']}", body_font),
+        (f"Avg area / workstation: {avg_str} m2", body_font),
+        (f"Printed: {date.today().isoformat()}", body_font),
+    ]
+
+    # Measure text extents
+    tmp_draw = ImageDraw.Draw(img)
+    line_heights: list[int] = []
+    max_width = 0
+    for text, fnt in items:
+        tb = tmp_draw.textbbox((0, 0), text, font=fnt)
+        tw, th = tb[2] - tb[0], tb[3] - tb[1]
+        line_heights.append(th)
+        if tw > max_width:
+            max_width = tw
+
+    total_text_h = (
+        sum(line_heights)
+        + _CARTOUCHE_LINE_SPACING * (len(items) - 1)
+    )
+    box_w = max_width + _CARTOUCHE_PADDING * 2
+    box_h = total_text_h + _CARTOUCHE_PADDING * 2
+
+    # Semi-opaque background via overlay + alpha_composite
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ov_draw = ImageDraw.Draw(overlay)
+    ov_draw.rectangle(
+        [x0, y0, x0 + box_w, y0 + box_h],
+        fill=_CARTOUCHE_BG,
+        outline=_CARTOUCHE_BORDER,
+        width=_CARTOUCHE_BORDER_W,
+    )
+    composited = Image.alpha_composite(img, overlay)
+    img.paste(composited)
+
+    # Text lines (on top of the composited background)
+    draw = ImageDraw.Draw(img)
+    ty = y0 + _CARTOUCHE_PADDING
+    for i, (text, fnt) in enumerate(items):
+        draw.text(
+            (x0 + _CARTOUCHE_PADDING, ty),
+            text, fill=_CARTOUCHE_TEXT, font=fnt,
+        )
+        ty += line_heights[i] + _CARTOUCHE_LINE_SPACING
 
 
 # ---------------------------------------------------------------------------

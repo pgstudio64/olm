@@ -306,14 +306,6 @@ function computePatternFootprint(p, opts) {
   }
 }
 
-function patternOverflowsRoom(p) {
-  var roomW = p.room_width_cm || 0;
-  var roomD = p.room_depth_cm || 0;
-  if (roomW <= 0 || roomD <= 0) return false;
-  var fp = computePatternFootprint(p);
-  return fp.xMin < 0 || fp.yMin < 0 || fp.xMax > roomW || fp.yMax > roomD;
-}
-
 function computeAutoName() {
   const w = state.room_width_cm;
   const d = state.room_depth_cm;
