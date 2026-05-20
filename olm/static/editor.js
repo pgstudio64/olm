@@ -2395,7 +2395,8 @@ async function save() {
     // Update existing pattern: send the saved name
     payload.name = state._savedName;
   } else {
-    // New pattern: let the server generate the name    payload.auto_name = true;
+    // New pattern: let the server generate a unique auto-name.
+    payload.auto_name = true;
     delete payload.name;
   }
   try {
@@ -2508,6 +2509,11 @@ function switchToEditorWithPattern(data) {
   setTimeout(function() {
     document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
     loadPatternFromData(JSON.parse(JSON.stringify(data)));
+    // D-248: from Office, editing a layout creates a NEW catalogue pattern on
+    // save — it must never overwrite the generic source pattern. Clearing the
+    // saved name makes save() take the auto-name (unique) create path.
+    state._savedName = null;
+    updateAutoName();
   }, 0);
 }
 
