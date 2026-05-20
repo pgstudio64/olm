@@ -1,35 +1,52 @@
 "use strict";
 
 // ─────────────────────────────────────────────────────────────────────────
-// v0.5.33 INSTRUMENTATION TEMPORAIRE — diagnostic du freeze Floor→Room.
-// 3 voies complementaires pour localiser un blocage de 20s en UNE iteration :
-//   1. marqueurs de phase (performance.now) — capte un blocage JS synchrone
-//      (le delta entre 2 marques contient le temps gele).
-//   2. PerformanceObserver longtask — capte decode/layout/paint asynchrones
-//      que les marques ne voient pas.
-//   3. sonde image (probeImage) — type/taille/dims/temps de decode de l'overlay.
-// Capture la VRAIE transition (pas de re-run : caches chauds masqueraient le
-// gel). Le bouton "Perf" (Room, dev) affiche la derniere capture via OLM_DIAGS.
+// v0.5.34 INSTRUMENTATION TEMPORAIRE — diagnostic du freeze Floor→Room.
+// Argument d'EXHAUSTIVITE : 20s entre un clic et l'ecran ne peuvent aller que
+// dans 5 endroits. On les couvre tous, donc le gel apparait forcement quelque
+// part :
+//   1. JS synchrone        → marqueurs de phase (delta entre marques)
+//   2. tache/JS async      → PerformanceObserver longtask
+//   3. decodage image      → sonde image (probeImage)
+//   4. RESEAU              → Resource Timing (lu par le diag au moment du clic)
+//   5. RENDU navigateur    → ecart entre requestAnimationFrame (raster/paint/
+//      layout/blocage — tous navigateurs, capte ce que longtask rate)
+// La capture demarre des le clic d'onglet (begin) ; rAF + longtask tournent
+// jusqu'a MAX_WINDOW. Le bouton "Perf" (Room, dev) affiche la derniere capture.
 // A RETIRER une fois la cause identifiee.
 window._perf = (function () {
-  var cur = null;          // session courante == derniere lisible
-  var obs = null;
-  var quietTimer = null;
-  var QUIET_MS = 2500;     // fin de session apres 2.5s sans nouvelle marque
+  var cur = null;             // session courante == derniere lisible
+  var obs = null;             // PerformanceObserver longtask
+  var rafOn = false;          // boucle rAF active ?
+  var rafLast = 0;            // timestamp du dernier tick rAF
+  var LONGFRAME_MS = 200;     // ecart inter-frame considere comme "frame longue"
+  var MAX_WINDOW = 30000;     // duree max de capture (le gel fait ~20s)
 
   function _disconnect() {
     if (obs) { try { obs.disconnect(); } catch (e) { /* noop */ } obs = null; }
+    rafOn = false;
   }
-  function _arm() {
-    if (quietTimer) clearTimeout(quietTimer);
-    quietTimer = setTimeout(_disconnect, QUIET_MS);
+  function _rafTick() {
+    if (!rafOn || !cur) { rafOn = false; return; }
+    var now = performance.now();
+    if (rafLast) {
+      var gap = now - rafLast;
+      if (gap > LONGFRAME_MS) {
+        cur.rafStalls.push({
+          start: Math.round(rafLast - cur.t0), dur: Math.round(gap),
+        });
+      }
+    }
+    rafLast = now;
+    if (now - cur.t0 < MAX_WINDOW) requestAnimationFrame(_rafTick);
+    else rafOn = false;
   }
   function begin(label) {
     _disconnect();
     window._renderSeq = 0;   // labels render#1/2/3 repartent a chaque capture
     cur = {
       label: label, t0: performance.now(),
-      marks: [{ label: "start", t: 0 }], longtasks: [], extra: {},
+      marks: [{ label: "start", t: 0 }], longtasks: [], rafStalls: [], extra: {},
     };
     if (window.PerformanceObserver) {
       try {
@@ -45,14 +62,14 @@ window._perf = (function () {
         obs.observe({ entryTypes: ["longtask"] });
       } catch (e) { obs = null; }
     }
-    _arm();
+    rafOn = true; rafLast = 0;
+    requestAnimationFrame(_rafTick);
   }
   function mark(label) {
     if (!cur) return;
     cur.marks.push({ label: label, t: Math.round(performance.now() - cur.t0) });
-    _arm();
   }
-  function setExtra(k, v) { if (cur) { cur.extra[k] = v; _arm(); } }
+  function setExtra(k, v) { if (cur) cur.extra[k] = v; }
   function probeImage(url) {
     if (!cur) return;
     if (!url) { setExtra("overlay", "none"); return; }

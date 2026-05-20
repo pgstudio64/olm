@@ -249,13 +249,14 @@ OLM_DIAGS.register("pattern.footprint", function (pattern) {
 });
 
 
-// ========== DIAG: perf.transition (v0.5.33 — freeze Floor→Room) ==========
-// Affiche la derniere transition capturee par window._perf. Trois voies :
-// deltas entre marques (blocage JS synchrone), longtasks (decode/paint async),
-// sonde overlay (type/taille/dims/decode). A retirer avec l'instrumentation.
+// ========== DIAG: perf.transition (v0.5.34 — freeze Floor→Room) ==========
+// Couverture EXHAUSTIVE des 5 endroits ou 20s peuvent passer :
+//   1 JS sync (deltas marques) · 2 async (longtask) · 3 decode (sonde) ·
+//   4 reseau (Resource Timing) · 5 rendu navigateur (ecart rAF).
+// Le gel apparait forcement dans une de ces lignes. A retirer apres diagnostic.
 
 OLM_DIAGS.register("perf.transition", function () {
-  var DELTA_WARN = 300, DELTA_BAD = 1000;   // seuils d'AFFICHAGE uniquement
+  var WARN = 300, BAD = 1000;   // seuils d'AFFICHAGE uniquement
   var cap = (window._perf && window._perf.getLast) ? window._perf.getLast() : null;
   if (!cap || !cap.marks || cap.marks.length < 2) {
     return {
@@ -264,76 +265,99 @@ OLM_DIAGS.register("perf.transition", function () {
       sections: [],
     };
   }
+  function _st(ms) { return ms >= BAD ? "error" : (ms >= WARN ? "warning" : "ok"); }
 
-  // Deltas entre marques consecutives : phase[i] = temps avant d'atteindre marks[i].
+  // 1. JS synchrone — deltas entre marques consecutives.
   var phaseRows = [];
   var maxDelta = 0, maxLabel = "";
   for (var i = 1; i < cap.marks.length; i++) {
     var dt = cap.marks[i].t - cap.marks[i - 1].t;
-    var st = dt >= DELTA_BAD ? "error" : (dt >= DELTA_WARN ? "warning" : "ok");
     phaseRows.push({
       label: cap.marks[i].label, value: dt + " ms",
-      status: st, note: "@ " + cap.marks[i].t + " ms",
+      status: _st(dt), note: "@ " + cap.marks[i].t + " ms",
     });
     if (dt > maxDelta) { maxDelta = dt; maxLabel = cap.marks[i].label; }
   }
 
-  // Longtasks (decode/layout/paint async, invisibles aux marques).
+  // 2. Async — longtasks.
   var ltRows = [];
   var maxLt = 0;
   (cap.longtasks || []).forEach(function (lt) {
     if (lt.dur > maxLt) maxLt = lt.dur;
-    ltRows.push({
-      label: "longtask @ " + lt.start + " ms",
-      value: lt.dur + " ms",
-      status: lt.dur >= DELTA_BAD ? "error" : (lt.dur >= DELTA_WARN ? "warning" : "ok"),
-    });
+    ltRows.push({ label: "longtask @ " + lt.start + " ms",
+      value: lt.dur + " ms", status: _st(lt.dur) });
   });
-  if (!ltRows.length) {
-    ltRows.push({ label: "aucune longtask >50ms", value: "-",
-      note: "API longtask absente ou rien d'async lourd" });
-  }
+  if (!ltRows.length) ltRows.push({ label: "aucune longtask >50ms", value: "-",
+    note: "API absente ou rien d'async lourd cote JS" });
 
-  // Overlay (sonde image).
+  // 5. Rendu navigateur — frames longues (ecart entre rAF).
+  var rafRows = [];
+  var maxRaf = 0, maxRafAt = 0;
+  (cap.rafStalls || []).forEach(function (s) {
+    if (s.dur > maxRaf) { maxRaf = s.dur; maxRafAt = s.start; }
+    rafRows.push({ label: "frame longue @ " + s.start + " ms",
+      value: s.dur + " ms", status: _st(s.dur) });
+  });
+  if (!rafRows.length) rafRows.push({ label: "aucune frame longue >200ms", value: "-",
+    note: "ni raster/paint/layout ni blocage du thread" });
+
+  // 4. Reseau — Resource Timing pendant la fenetre de capture.
+  var resRows = [];
+  var maxRes = 0, maxResName = "";
+  try {
+    var entries = performance.getEntriesByType("resource")
+      .filter(function (e) { return e.startTime >= cap.t0 - 50 && e.duration > WARN; })
+      .sort(function (a, b) { return b.duration - a.duration; })
+      .slice(0, 8);
+    entries.forEach(function (e) {
+      var d = Math.round(e.duration);
+      if (d > maxRes) { maxRes = d; maxResName = e.name; }
+      var nm = e.name.split("?")[0].split("/").slice(-1)[0] || e.name;
+      resRows.push({ label: (e.initiatorType || "?") + ": " + nm.slice(0, 38),
+        value: d + " ms", status: _st(d) });
+    });
+  } catch (e) { /* Resource Timing indispo */ }
+  if (!resRows.length) resRows.push({ label: "aucune ressource >300ms", value: "-",
+    note: "rien de lent cote reseau/serveur (local)" });
+
+  // 3 + serveur — overlay & match.
   var ex = cap.extra || {};
   var ovRows = [
     { label: "URL overlay", value: ex.overlay_url || ex.overlay || "n/a" },
     { label: "dimensions", value: ex.overlay_px || "n/a" },
-    {
-      label: "decode (sonde)",
+    { label: "decode (sonde)",
       value: (ex.overlay_decode_ms != null ? ex.overlay_decode_ms + " ms" : "n/a"),
-      status: (typeof ex.overlay_decode_ms === "number" && ex.overlay_decode_ms >= DELTA_BAD)
-        ? "error" : (typeof ex.overlay_decode_ms === "number" && ex.overlay_decode_ms >= DELTA_WARN
-          ? "warning" : undefined),
-    },
+      status: (typeof ex.overlay_decode_ms === "number") ? _st(ex.overlay_decode_ms) : undefined },
   ];
-  if (ex.server_match_ms != null) {
-    ovRows.push({ label: "matching serveur", value: ex.server_match_ms + " ms",
-      note: "depuis reponse /api/floor-plan/match" });
-  }
+  if (ex.server_match_ms != null) ovRows.push({ label: "matching serveur",
+    value: ex.server_match_ms + " ms", note: "reponse /api/floor-plan/match" });
 
-  // Verdict : la plus grosse cause entre blocage JS (maxDelta) et async (maxLt).
-  var worst = Math.max(maxDelta, maxLt);
-  var verdict = worst >= DELTA_BAD ? "error" : (worst >= DELTA_WARN ? "warning" : "ok");
-  var summary;
-  if (worst < DELTA_WARN) {
-    summary = "RAS : total " + cap.marks[cap.marks.length - 1].t + " ms, rien de bloquant.";
-  } else if (maxLt > maxDelta) {
-    summary = "Cause probable ASYNC (decode/layout/paint) : longtask " + maxLt
-      + " ms. Voir overlay ci-dessous.";
-  } else {
-    summary = "Cause probable JS SYNCHRONE : phase \"" + maxLabel + "\" = "
-      + maxDelta + " ms.";
-  }
+  // Verdict : la plus grosse des 5 categories l'emporte → cause unique.
+  var cats = [
+    { v: maxDelta, msg: "JS SYNCHRONE : phase \"" + maxLabel + "\"" },
+    { v: maxLt, msg: "JS ASYNC : longtask de " + maxLt + " ms" },
+    { v: maxRes, msg: "RESEAU/SERVEUR : " + (maxResName.split("/").slice(-1)[0] || "") },
+    { v: maxRaf, msg: "RENDU NAVIGATEUR (paint/raster/layout) : frame de " + maxRaf
+      + " ms @ " + maxRafAt + " ms" },
+  ];
+  cats.sort(function (a, b) { return b.v - a.v; });
+  var worst = cats[0].v;
+  var verdict = _st(worst);
+  var summary = worst < WARN
+    ? "RAS : total " + cap.marks[cap.marks.length - 1].t + " ms mesure, rien de >300ms. "
+      + "Si le gel a bien eu lieu, il est hors fenetre (>30s ou avant le clic)."
+    : "CAUSE : " + cats[0].msg + " (" + worst + " ms).";
 
   return {
     name: "perf.transition (" + cap.label + ")",
     verdict: verdict,
     summary: summary,
     sections: [
-      { title: "Phases (delta entre marques)", rows: phaseRows },
-      { title: "Long tasks (async)", rows: ltRows },
-      { title: "Overlay & serveur", rows: ovRows },
+      { title: "5 · Rendu navigateur (ecart rAF)", rows: rafRows },
+      { title: "4 · Reseau / serveur (Resource Timing)", rows: resRows },
+      { title: "1 · JS synchrone (deltas marques)", rows: phaseRows },
+      { title: "2 · JS async (longtasks)", rows: ltRows },
+      { title: "3 · Overlay & match", rows: ovRows },
     ],
   };
 });

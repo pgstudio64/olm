@@ -271,8 +271,9 @@
   }
 
   function rvRenderCurrent() {
-    // v0.5.33 instrumentation : capture la transition Floor→Room.
-    if (window._perf) window._perf.begin("Floor→Room");
+    // v0.5.34 instrumentation : la capture demarre au clic d'onglet (init.js).
+    // Ici on marque seulement (rvRenderCurrent tourne dans la session active).
+    if (window._perf) window._perf.mark("rvRenderCurrent enter");
     // Floor properties always refreshed (independent of selected room).
     updateFloorProperties();
     if (window._perf) window._perf.mark("updateFloorProperties");

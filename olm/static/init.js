@@ -474,6 +474,11 @@ async function init() {
   // Main tabs (flat nav)
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
+      // v0.5.34 instrumentation : demarrer la capture du freeze des le clic
+      // d'onglet vers Room (couvre tab-switch + paint, avant rvRenderCurrent).
+      if (btn.dataset.tab === "fpReview" && window._perf) {
+        window._perf.begin("Floor→Room");
+      }
       var isLayoutTab = btn.dataset.tab === "lytDesign" || btn.dataset.tab === "lytCatalogue";
       // Guard: room amend mode active — confirm discard before switching
       if (state.roomAmendMode && btn.dataset.tab !== "fpReview") {
