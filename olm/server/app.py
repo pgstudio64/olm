@@ -1253,4 +1253,9 @@ if __name__ == "__main__":
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         logger.info("Pattern editor%s — http://localhost:5051", mode_label)
         logger.info("Catalogue: %s", CATALOGUE_PATH)
-    app.run(debug=True, port=5051)
+    # threaded=True (v0.5.35) : sans ca le serveur de dev Werkzeug est
+    # mono-thread et serialise toutes les requetes. Un matching long (~17s
+    # sur gros catalogue/CPU lent) monopolisait alors le serveur et bloquait
+    # l'/api/image de l'overlay → vue Room "gelee" 20s. En threaded, l'overlay
+    # se charge pendant le calcul du match.
+    app.run(debug=True, port=5051, threaded=True)
