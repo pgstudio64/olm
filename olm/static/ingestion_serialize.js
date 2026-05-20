@@ -385,48 +385,47 @@
     }
   }
 
-  function exportPlan(fmt) {
-    var ingState = window.ingState;
-    var fpData = window.fpData;
-    if (!fpData || !fpData.rooms || !fpData.rooms.length) {
-      alertModal('No floor plan loaded.');
-      return;
-    }
-    var hdr = document.getElementById('hdrCurrentPlanText');
-    var planId = hdr ? hdr.textContent.trim() : '';
-    if (!planId) {
-      alertModal('Cannot determine plan name.');
-      return;
-    }
-    var scaleCmPerPx = (ingState && ingState.scale) || 0;
-    if (!scaleCmPerPx || scaleCmPerPx <= 0) {
-      alertModal('Scale not available.');
-      return;
-    }
-    // D-237: only export rooms with an explicitly saved layout. Previous
-    // fallback to all_candidates[0] caused every room to ship its first
-    // matcher candidate, even those the user never confirmed.
+  // Build one room's export payload. D-237 : only an explicitly *saved*
+  // layout ships its desks. `useBestFallback` (opt-in, D-246) lets a room
+  // without a saved layout export its best matching candidate instead.
+  function _buildExportRoom(r, useBestFallback) {
     var fpAmendments = window.fpAmendments || {};
-    var rooms = fpData.rooms.map(function (r) {
-      var saved = fpAmendments[r.name];
-      var candidate = null;
-      if (saved && saved.saved) {
-        candidate = JSON.parse(JSON.stringify(saved));
-        if (candidate.desks && candidate.desks.length && candidate.pattern) {
-          _enrichDesksWithChairSide(candidate);
-        }
+    var saved = fpAmendments[r.name];
+    var candidate = null;
+    var isAmended = false;
+    if (saved && saved.saved) {
+      candidate = JSON.parse(JSON.stringify(saved));
+      isAmended = true;
+    } else if (useBestFallback && r.all_candidates && r.all_candidates.length) {
+      // Best candidate for the current standard, else first available.
+      var std = (typeof getCurrentStandard === 'function')
+        ? getCurrentStandard() : '';
+      var best = null;
+      var bestName = (std && r.by_standard) ? r.by_standard[std] : null;
+      if (bestName) {
+        best = r.all_candidates.find(function (c) {
+          return c.pattern_name === bestName && c.standard === std;
+        });
       }
-      return {
-        name: r.name,
-        width_cm: r.width_cm,
-        depth_cm: r.depth_cm,
-        bbox_px: r.bbox_px,
-        corridor_face_abs: r.corridor_face_abs || '',
-        is_amended: !!(saved && saved.saved),
-        candidate: candidate,
-      };
-    });
+      if (!best) best = r.all_candidates[0];
+      if (best) candidate = JSON.parse(JSON.stringify(best));
+    }
+    if (candidate && candidate.desks && candidate.desks.length
+        && candidate.pattern) {
+      _enrichDesksWithChairSide(candidate);
+    }
+    return {
+      name: r.name,
+      width_cm: r.width_cm,
+      depth_cm: r.depth_cm,
+      bbox_px: r.bbox_px,
+      corridor_face_abs: r.corridor_face_abs || '',
+      is_amended: isAmended,
+      candidate: candidate,
+    };
+  }
 
+  function _postExport(fmt, planId, scaleCmPerPx, rooms) {
     showModal('Exporting ' + fmt.toUpperCase() + '...');
     fetch('/api/floor-plan/export/' + encodeURIComponent(fmt), {
       method: 'POST',
@@ -457,6 +456,64 @@
         console.error('Export error:', e);
         alertModal('Export failed: ' + e);
       });
+  }
+
+  function exportPlan(fmt) {
+    var ingState = window.ingState;
+    var fpData = window.fpData;
+    if (!fpData || !fpData.rooms || !fpData.rooms.length) {
+      alertModal('No floor plan loaded.');
+      return;
+    }
+    var hdr = document.getElementById('hdrCurrentPlanText');
+    var planId = hdr ? hdr.textContent.trim() : '';
+    if (!planId) {
+      alertModal('Cannot determine plan name.');
+      return;
+    }
+    var scaleCmPerPx = (ingState && ingState.scale) || 0;
+    if (!scaleCmPerPx || scaleCmPerPx <= 0) {
+      alertModal('Scale not available.');
+      return;
+    }
+
+    // D-237 : export only rooms with an explicitly saved layout.
+    var fpAmendments = window.fpAmendments || {};
+    var nSaved = fpData.rooms.filter(function (r) {
+      var s = fpAmendments[r.name];
+      return s && s.saved;
+    }).length;
+
+    // D-246 : no saved layout → warn instead of producing a desk-less plan,
+    // and offer to export the best matching candidate of each room.
+    if (nSaved === 0) {
+      confirmModal(
+        'No room has a saved layout — the export would contain no ' +
+        'workstations.\n\nExport the best matching candidate for each ' +
+        'room instead?'
+      ).then(function (ok) {
+        if (!ok) return;
+        var go = function () {
+          var rooms = fpData.rooms.map(function (r) {
+            return _buildExportRoom(r, true);
+          });
+          _postExport(fmt, planId, scaleCmPerPx, rooms);
+        };
+        // Best candidate needs every room matched (lazy matching, A).
+        if (typeof window.ensureAllMatched === 'function') {
+          showModal('Matching rooms...');
+          window.ensureAllMatched(function () { hideModal(); go(); });
+        } else {
+          go();
+        }
+      });
+      return;
+    }
+
+    var rooms = fpData.rooms.map(function (r) {
+      return _buildExportRoom(r, false);
+    });
+    _postExport(fmt, planId, scaleCmPerPx, rooms);
   }
 
   // ==========================================================================

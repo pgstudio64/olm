@@ -220,6 +220,7 @@
     }
     next();
   }
+  window.ensureAllMatched = ensureAllMatched;
 
   // ── Navigation ─────────────────────────────────────────────────────────
   function fpGo(delta) {
