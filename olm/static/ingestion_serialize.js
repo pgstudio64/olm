@@ -385,15 +385,17 @@
     }
   }
 
-  // Build one room's export payload. D-237 : only an explicitly *saved*
-  // layout ships its desks. `useBestFallback` (opt-in, D-246) lets a room
-  // without a saved layout export its best matching candidate instead.
+  // Build one room's export payload. D-237 : only an explicitly committed
+  // layout ships its desks — either *saved* (Save layout button) or
+  // *amended* (edited in the layout editor, D-259). `useBestFallback`
+  // (opt-in, D-246) lets a room without a committed layout export its best
+  // matching candidate instead.
   function _buildExportRoom(r, useBestFallback) {
     var fpAmendments = window.fpAmendments || {};
     var saved = fpAmendments[r.name];
     var candidate = null;
     var isAmended = false;
-    if (saved && saved.saved) {
+    if (saved && (saved.saved || saved.amended)) {
       candidate = JSON.parse(JSON.stringify(saved));
       isAmended = true;
     } else if (useBestFallback && r.all_candidates && r.all_candidates.length) {
