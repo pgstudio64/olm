@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from olm.core.app_config import get_standard_label
 from olm.core.pattern_generator import (
+    CABINET,
     BLOCK_1,
     BLOCK_2_FACE,
     BLOCK_2_ORTHO_L,
@@ -134,6 +135,7 @@ _BLOCK_REGISTRY = {
     "BLOCK_6_FACE":     (BLOCK_6_FACE.eo_cm, BLOCK_6_FACE.ns_cm, 6),
     "BLOCK_2_ORTHO_R":  (BLOCK_2_ORTHO_R.eo_cm, BLOCK_2_ORTHO_R.ns_cm, 2),
     "BLOCK_2_ORTHO_L":  (BLOCK_2_ORTHO_L.eo_cm, BLOCK_2_ORTHO_L.ns_cm, 2),
+    "CABINET":          (CABINET.eo_cm, CABINET.ns_cm, 0),
 }
 
 _BLOCK_N_DESKS = {k: v[2] for k, v in _BLOCK_REGISTRY.items()}

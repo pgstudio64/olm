@@ -137,6 +137,7 @@ _BASE_BLOCKS = [
     _pg.BLOCK_1, _pg.BLOCK_2_FACE, _pg.BLOCK_2_SIDE, _pg.BLOCK_3_SIDE,
     _pg.BLOCK_4_FACE, _pg.BLOCK_6_FACE,
     _pg.BLOCK_2_ORTHO_L, _pg.BLOCK_2_ORTHO_R,
+    _pg.CABINET,
 ]
 
 # Block dimension formulas: (eo_factor_w, eo_factor_d, ns_factor_w, ns_factor_d)
@@ -163,6 +164,10 @@ def _block_def_to_json(block: _pg.Block) -> dict:
         fw, fd, gw, gd = factors
         eo = fw * _pg.DESK_W_CM + fd * _pg.DESK_D_CM
         ns = gw * _pg.DESK_W_CM + gd * _pg.DESK_D_CM
+    elif block.name == "CABINET":
+        # D-256: read current module-level dims (reactive to config changes)
+        eo = _pg.CABINET_W_CM
+        ns = _pg.CABINET_D_CM
     else:
         eo = block.eo_cm
         ns = block.ns_cm
@@ -172,6 +177,7 @@ def _block_def_to_json(block: _pg.Block) -> dict:
         "ns_cm": ns,
         "n_desks": block.n_desks,
         "derogatory": block.derogatory,
+        "furniture": block.furniture,
         "faces": {
             "north": {"non_superposable_cm": block.faces.north.non_superposable_cm,
                        "candidate_cm": block.faces.north.candidate_cm,

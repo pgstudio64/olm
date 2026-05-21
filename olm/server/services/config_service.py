@@ -246,12 +246,17 @@ def update_config(data: dict) -> dict:
         app_config.update(data["key"], data["value"])
     else:
         raise ValueError("Missing 'key' or 'path'")
-    # Invalidate block defs cache when desk dimensions change
+    # Invalidate block defs cache when desk/cabinet dimensions change
     key = data.get("key", "")
     if key in ("desk_width_cm", "desk_depth_cm"):
         import olm.core.pattern_generator as pg
         pg.DESK_W_CM = app_config.get("desk_width_cm", 180)
         pg.DESK_D_CM = app_config.get("desk_depth_cm", 80)
+        invalidate_block_cache()
+    elif key in ("cabinet_width_cm", "cabinet_depth_cm"):
+        import olm.core.pattern_generator as pg
+        pg.CABINET_W_CM = app_config.get("cabinet_width_cm", 70)
+        pg.CABINET_D_CM = app_config.get("cabinet_depth_cm", 40)
         invalidate_block_cache()
     return {"ok": True}
 

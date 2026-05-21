@@ -148,7 +148,12 @@ function renderCatalogue() {
   });
 
   var countEl = document.getElementById("catCount");
-  if (countEl) countEl.textContent = filtered.length + " pattern(s)";
+  if (countEl) {
+    var total = catalogueData.length;
+    countEl.textContent = (filtered.length === total)
+      ? total + " pattern(s)"
+      : filtered.length + " / " + total + " pattern(s)";
+  }
 
   if (filtered.length === 0) {
     grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;' +

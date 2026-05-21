@@ -80,6 +80,7 @@ def build_grid(
     """
     # Local imports to avoid module-level circular dependency
     from olm.core.pattern_generator import (
+        CABINET,
         BLOCK_1,
         BLOCK_2_FACE,
         BLOCK_2_ORTHO_L,
@@ -92,7 +93,7 @@ def build_grid(
     )
     _BLOCKS = {b.name: b for b in [
         BLOCK_1, BLOCK_2_FACE, BLOCK_2_SIDE, BLOCK_3_SIDE, BLOCK_4_FACE,
-        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L,
+        BLOCK_6_FACE, BLOCK_2_ORTHO_R, BLOCK_2_ORTHO_L, CABINET,
     ]}
 
     room_eo = room["eo_cm"]

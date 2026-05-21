@@ -12,6 +12,10 @@ from olm.core.app_config import (
 #   depth  = front-to-back (towards screen)      = 80 cm
 DESK_W_CM: int = _cfg_get("desk_width_cm", 180)   # desk width
 DESK_D_CM: int = _cfg_get("desk_depth_cm", 80)    # desk depth
+
+# Cabinet dimensions (D-256) — furniture, not a workstation
+CABINET_W_CM: int = _cfg_get("cabinet_width_cm", 70)
+CABINET_D_CM: int = _cfg_get("cabinet_depth_cm", 40)
 CHAIR_CLEARANCE_CM = 70   # ES-01 chair clearance — fixed non-overlappable zone
 WALKING_MARGIN_CM = 90    # ES-02 walking margin beyond chair (AFNOR bootstrap)
 SLIP_IN_MARGIN_CM = 30    # ES-03 slip-in margin for single desk access
@@ -88,6 +92,7 @@ class Block:
     faces: FaceCandidates
     symmetric_180: bool = False  # True if block is identical after 180° rotation
     derogatory: bool = False
+    furniture: bool = False       # D-256: True for non-desk objects (cabinet)
 
 
 @dataclass
@@ -233,6 +238,22 @@ BLOCK_2_ORTHO_L = Block(
         east=FaceZone.absent(),
         west=FaceZone.chair_internal(),  # D-241: chaise desk2 dans le void
     ),
+)
+
+# D-256: Cabinet — furniture obstacle, not a workstation
+CABINET = Block(
+    name="CABINET",
+    eo_cm=CABINET_W_CM,
+    ns_cm=CABINET_D_CM,
+    n_desks=0,
+    faces=FaceCandidates(
+        north=FaceZone.absent(),
+        south=FaceZone.absent(),
+        east=FaceZone.absent(),
+        west=FaceZone.absent(),
+    ),
+    symmetric_180=True,
+    furniture=True,
 )
 
 

@@ -1038,7 +1038,7 @@
           (_layoutAmend.saved ? 'room-saved-mark' : 'room-amend-mark') +
           '" title="' +
           (_layoutAmend.saved ? 'Layout saved' : 'Layout amended') +
-          '">' + (_layoutAmend.saved ? '\u2713' : '\u25CF') + '</span>'
+          '">' + (_layoutAmend.saved ? '\u2713' : '\u270E') + '</span>'
         : '';
       html += '<div style="display:flex;align-items:center;gap:4px;padding:2px 4px 2px 4px;margin-right:16px;' + active +
         '"><span style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-ing-room="' + r.name + '">' +

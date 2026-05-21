@@ -165,6 +165,23 @@
       }
     }
 
+    // D-256 Lot 2: factored helpers for rect drag + arrow move (shared by
+    // exclusions, transparents, and furniture).
+    function _dragRectClamped(rect, mouseCm, dragOffset) {
+      var maxX = state.room_width_cm - (rect.width_cm || 0);
+      var maxY = state.room_depth_cm - (rect.depth_cm || 0);
+      rect.x_cm = Math.max(0, Math.min(maxX, mouseCm.x_cm - dragOffset.dx_cm));
+      rect.y_cm = Math.max(0, Math.min(maxY, mouseCm.y_cm - dragOffset.dy_cm));
+    }
+    function _arrowMoveRect(rect, key, step) {
+      var maxX = state.room_width_cm - (rect.width_cm || 0);
+      var maxY = state.room_depth_cm - (rect.depth_cm || 0);
+      if (key === "ArrowRight") rect.x_cm = Math.min(maxX, rect.x_cm + step);
+      else if (key === "ArrowLeft") rect.x_cm = Math.max(0, rect.x_cm - step);
+      else if (key === "ArrowDown") rect.y_cm = Math.min(maxY, rect.y_cm + step);
+      else if (key === "ArrowUp") rect.y_cm = Math.max(0, rect.y_cm - step);
+    }
+
     function rvShowGhostRect(x_svg, y_svg, w_svg, h_svg) {
       var svg = _getActiveSvg();
       if (!_rvGhostRect) {
@@ -1061,6 +1078,40 @@
       });
     }
 
+    // D-256: "Add cabinet" button — toggle furnPlacing mode
+    var btnAddCabinet = document.getElementById("btnAddCabinet");
+    if (btnAddCabinet) {
+      btnAddCabinet.addEventListener("click", function () {
+        if (!state.amendMode) return;
+        if (rvTool.mode === "furnPlacing") {
+          rvTool.mode = "idle";
+          btnAddCabinet.classList.remove("active");
+          rvRemoveGhostRect();
+          _getActiveSvg().style.cursor = "";
+        } else {
+          rvTool.mode = "furnPlacing";
+          rvTool._furnOrientation = 0;
+          state.selectedFurniture = -1;
+          btnAddCabinet.classList.add("active");
+          _getActiveSvg().style.cursor = "crosshair";
+          _renderActive();
+        }
+      });
+    }
+
+    // D-256: "Rotate" button for selected cabinet
+    var btnRotCabinet = document.getElementById("btnRotateCabinet");
+    if (btnRotCabinet) {
+      btnRotCabinet.addEventListener("click", function () {
+        if (state.selectedFurniture < 0) return;
+        var f = (state.furniture || [])[state.selectedFurniture];
+        if (!f) return;
+        f.orientation = (f.orientation || 0) === 0 ? 90 : 0;
+        if (typeof markDirty === "function") markDirty();
+        _renderActive();
+      });
+    }
+
     // Helper: rebuild full Room DSL from state and push to backend.
     // Preserves `origin` across the DSL round-trip by caching per
     // (type, face, offset, width) key — the DSL serializes these 3 values
@@ -1337,6 +1388,88 @@
         return;
       }
 
+      // D-256: Furniture (cabinet) — click to deposit
+      if (rvTool.mode === "furnPlacing") {
+        var fpt = rvScreenToRoomCm(e);
+        var fdims = window._furnitureEffectiveDims({ orientation: rvTool._furnOrientation || 0 });
+        var fx = Math.max(0, Math.min(state.room_width_cm - fdims.width_cm, fpt.x_cm));
+        var fy = Math.max(0, Math.min(state.room_depth_cm - fdims.depth_cm, fpt.y_cm));
+        state.furniture = state.furniture || [];
+        state.furniture.push({
+          type: "CABINET", x_cm: fx, y_cm: fy,
+          orientation: rvTool._furnOrientation || 0,
+        });
+        state.selectedFurniture = state.furniture.length - 1;
+        state.selectedBlock = -1;
+        state.selectedExclusion = -1;
+        rvTool.mode = "furnSelected";
+        rvRemoveGhostRect();
+        _getActiveSvg().style.cursor = "";
+        var _abtn = document.getElementById("btnAddCabinet");
+        if (_abtn) _abtn.classList.remove("active");
+        if (typeof markDirty === "function") markDirty();
+        _renderActive();
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+        return;
+      }
+
+      // D-256: Furniture target — select + start drag in one motion
+      var furnTarget = e.target.closest("[data-furn]") ||
+        e.target.closest("[data-furn-rotate]") ||
+        e.target.closest("[data-furn-delete]");
+      if (furnTarget !== null && state.amendMode) {
+        // Handle rotate/delete pictogram clicks
+        var rotTarget = e.target.closest("[data-furn-rotate]");
+        var delTarget = e.target.closest("[data-furn-delete]");
+        if (rotTarget) {
+          var rfi = parseInt(rotTarget.dataset.furnRotate, 10);
+          var rItem = (state.furniture || [])[rfi];
+          if (rItem) {
+            rItem.orientation = (rItem.orientation || 0) === 0 ? 90 : 0;
+            if (typeof markDirty === "function") markDirty();
+            _renderActive();
+          }
+          e.preventDefault(); e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          return;
+        }
+        if (delTarget) {
+          var dfi = parseInt(delTarget.dataset.furnDelete, 10);
+          state.furniture.splice(dfi, 1);
+          state.selectedFurniture = -1;
+          rvTool.mode = "idle";
+          if (typeof markDirty === "function") markDirty();
+          _renderActive();
+          e.preventDefault(); e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          return;
+        }
+        var fIdx = parseInt(furnTarget.dataset.furn, 10);
+        var fItem = (state.furniture || [])[fIdx];
+        if (fItem) {
+          // Always start drag immediately (select + drag in one motion)
+          state.selectedFurniture = fIdx;
+          state.selectedBlock = -1;
+          state.selectedExclusion = -1;
+          var fpt2 = rvScreenToRoomCm(e);
+          var fdims2 = window._furnitureEffectiveDims(fItem);
+          rvTool.dragOffset = {
+            dx_cm: fpt2.x_cm - fItem.x_cm,
+            dy_cm: fpt2.y_cm - fItem.y_cm,
+          };
+          rvTool._dragStartPos = { x_cm: fItem.x_cm, y_cm: fItem.y_cm };
+          rvTool._furnDragDims = fdims2;
+          rvTool.mode = "furnDragging";
+          _renderActive();
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          return;
+        }
+      }
+
       if (rvTool.mode === "placing") {
         var pt = rvScreenToRoomCm(e);
         rvTool.drawStart = pt;
@@ -1454,8 +1587,9 @@
     // Canvas click: deselect on empty area (both canvases)
     function _onRoomCanvasClick(e) {
       var isPeCanvas2 = peCvEl && (e.currentTarget === peCvEl);
-      if (!state.roomAmendMode && !isPeCanvas2) return;
-      if (rvTool.mode === "placing" || rvTool.mode === "drawing") return;
+      if (!state.roomAmendMode && !isPeCanvas2 && !state.amendMode) return;
+      if (rvTool.mode === "placing" || rvTool.mode === "drawing" ||
+          rvTool.mode === "furnPlacing") return;
       var exclTarget = e.target.closest("[data-excl]");
       var openingTarget = e.target.closest("[data-opening-handle]") ||
         e.target.closest("[data-opening-delete]") ||
@@ -1464,14 +1598,18 @@
         e.target.closest("[data-door-dir]");
       var transpTarget2 = e.target.closest("[data-transp]") ||
         e.target.closest("[data-transp-handle]");
-      if (!exclTarget && !openingTarget && !transpTarget2 &&
+      var furnTarget2 = e.target.closest("[data-furn]") ||
+        e.target.closest("[data-furn-rotate]") ||
+        e.target.closest("[data-furn-delete]");
+      if (!exclTarget && !openingTarget && !transpTarget2 && !furnTarget2 &&
           (rvTool.mode === "selected" || rvTool.mode === "transpSelected" ||
-           rvTool.mode === "idle")) {
+           rvTool.mode === "furnSelected" || rvTool.mode === "idle")) {
         rvTool.selectedIndex = -1;
         rvTool.mode = "idle";
         state.selectedExclusion = -1;
         state.selectedOpening = null;
         state.selectedTransparent = -1;
+        state.selectedFurniture = -1;
         _renderActive();
       }
     }
@@ -1614,13 +1752,9 @@
       }
       if (rvTool.mode === "transpDragging" && rvTool.dragOffset) {
         var tpt2 = rvScreenToRoomCm(e);
-        var tiDrag = rvTool.selectedIndex;
-        var tzDrag = state.room_transparents[tiDrag];
+        var tzDrag = state.room_transparents[rvTool.selectedIndex];
         if (!tzDrag) return;
-        var tMaxX = state.room_width_cm - tzDrag.width_cm;
-        var tMaxY = state.room_depth_cm - tzDrag.depth_cm;
-        tzDrag.x_cm = Math.max(0, Math.min(tMaxX, tpt2.x_cm - rvTool.dragOffset.dx_cm));
-        tzDrag.y_cm = Math.max(0, Math.min(tMaxY, tpt2.y_cm - rvTool.dragOffset.dy_cm));
+        _dragRectClamped(tzDrag, tpt2, rvTool.dragOffset);
         _renderActive();
         return;
       }
@@ -1692,11 +1826,45 @@
         _renderActive();
         return;
       }
+      // D-256 Lot 2: furnPlacing — ghost follows cursor
+      if (rvTool.mode === "furnPlacing") {
+        var fpt3 = rvScreenToRoomCm(e);
+        var fdims3 = window._furnitureEffectiveDims({ orientation: rvTool._furnOrientation || 0 });
+        var fx3 = Math.max(0, Math.min(state.room_width_cm - fdims3.width_cm, fpt3.x_cm));
+        var fy3 = Math.max(0, Math.min(state.room_depth_cm - fdims3.depth_cm, fpt3.y_cm));
+        var fOffX = state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0;
+        var fOffY = state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0;
+        rvShowGhostRect(
+          (fx3 + fOffX) * SCALE, (fy3 + fOffY) * SCALE,
+          fdims3.width_cm * SCALE, fdims3.depth_cm * SCALE);
+        return;
+      }
+      // D-256: furnDragging — move cabinet
+      if (rvTool.mode === "furnDragging" && rvTool.dragOffset) {
+        var fpt4 = rvScreenToRoomCm(e);
+        var fIdx4 = state.selectedFurniture;
+        var fItem4 = (state.furniture || [])[fIdx4];
+        if (!fItem4) return;
+        var fdims4 = rvTool._furnDragDims || window._furnitureEffectiveDims(fItem4);
+        var fProxy = { x_cm: fItem4.x_cm, y_cm: fItem4.y_cm,
+                       width_cm: fdims4.width_cm, depth_cm: fdims4.depth_cm };
+        _dragRectClamped(fProxy, fpt4, rvTool.dragOffset);
+        fItem4.x_cm = fProxy.x_cm;
+        fItem4.y_cm = fProxy.y_cm;
+        _renderActive();
+        return;
+      }
       if (rvTool.mode === "drawing" && rvTool.drawStart) {
         var pt = rvScreenToRoomCm(e);
         var ds = rvTool.drawStart;
-        var x_svg = Math.min(ds.x_cm, pt.x_cm) * SCALE;
-        var y_svg = Math.min(ds.y_cm, pt.y_cm) * SCALE;
+        // ds/pt are room cm (rvScreenToRoomCm already subtracted the
+        // roomRenderOffset). To draw the ghost in SVG units, add the offset
+        // back — exactly mirroring render()'s roomX = offset*SCALE — otherwise
+        // the ghost is shifted while a resize offset is pending (not saved).
+        var offX = state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0;
+        var offY = state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0;
+        var x_svg = (Math.min(ds.x_cm, pt.x_cm) + offX) * SCALE;
+        var y_svg = (Math.min(ds.y_cm, pt.y_cm) + offY) * SCALE;
         var w_svg = Math.abs(pt.x_cm - ds.x_cm) * SCALE;
         var h_svg = Math.abs(pt.y_cm - ds.y_cm) * SCALE;
         rvShowGhostRect(x_svg, y_svg, w_svg, h_svg);
@@ -1704,13 +1872,9 @@
       }
       if (rvTool.mode === "dragging" && rvTool.dragOffset) {
         var pt3 = rvScreenToRoomCm(e);
-        var idx3 = rvTool.selectedIndex;
-        var excl3 = state.room_exclusions[idx3];
+        var excl3 = state.room_exclusions[rvTool.selectedIndex];
         if (!excl3) return;
-        var maxX3 = state.room_width_cm - excl3.width_cm;
-        var maxY3 = state.room_depth_cm - excl3.depth_cm;
-        excl3.x_cm = Math.max(0, Math.min(maxX3, pt3.x_cm - rvTool.dragOffset.dx_cm));
-        excl3.y_cm = Math.max(0, Math.min(maxY3, pt3.y_cm - rvTool.dragOffset.dy_cm));
+        _dragRectClamped(excl3, pt3, rvTool.dragOffset);
         _renderActive();
         return;
       }
@@ -1823,6 +1987,15 @@
 
     // document mouseup: commit drawing or drag
     document.addEventListener("mouseup", function (e) {
+      // D-256 Lot 2: commit furniture drag
+      if (rvTool.mode === "furnDragging") {
+        rvTool.mode = "furnSelected";
+        rvTool.dragOffset = null;
+        rvTool._furnDragDims = null;
+        if (typeof markDirty === "function") markDirty();
+        _renderActive();
+        return;
+      }
       if (rvTool.mode === "transpDragging" || rvTool.mode === "transpResizing") {
         rvTool.mode = "transpSelected";
         rvTool.dragOffset = null;
@@ -1919,8 +2092,95 @@
     // Capture phase so arrow keys preempt floor_plan.js's room navigation
     // when an exclusion is selected.
     document.addEventListener("keydown", function (e) {
-      if (!state.roomAmendMode) return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+      // D-256 Lot 2: Furniture interactions (Amend Layout mode)
+      if (state.amendMode) {
+        // Escape — cancel placing or deselect
+        if (e.key === "Escape") {
+          if (rvTool.mode === "furnPlacing") {
+            rvTool.mode = "idle";
+            rvRemoveGhostRect();
+            _getActiveSvg().style.cursor = "";
+            var _ab = document.getElementById("btnAddCabinet");
+            if (_ab) _ab.classList.remove("active");
+            e.preventDefault();
+            return;
+          }
+          if (rvTool.mode === "furnDragging" && rvTool.dragOffset) {
+            var fDrag = (state.furniture || [])[state.selectedFurniture];
+            if (fDrag && rvTool._dragStartPos) {
+              fDrag.x_cm = rvTool._dragStartPos.x_cm;
+              fDrag.y_cm = rvTool._dragStartPos.y_cm;
+            }
+            rvTool.mode = "furnSelected";
+            rvTool.dragOffset = null;
+            _renderActive();
+            e.preventDefault();
+            return;
+          }
+          if (rvTool.mode === "furnSelected") {
+            state.selectedFurniture = -1;
+            rvTool.mode = "idle";
+            _renderActive();
+            e.preventDefault();
+            return;
+          }
+        }
+        // R key — rotate selected cabinet (capture phase — always fires)
+        if ((e.key === "r" || e.key === "R") && !e.ctrlKey && !e.metaKey) {
+          if (rvTool.mode === "furnPlacing") {
+            rvTool._furnOrientation = (rvTool._furnOrientation || 0) === 0 ? 90 : 0;
+            e.preventDefault();
+            if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+            return;
+          }
+          if (state.selectedFurniture >= 0) {
+            var fRot = (state.furniture || [])[state.selectedFurniture];
+            if (fRot) {
+              fRot.orientation = (fRot.orientation || 0) === 0 ? 90 : 0;
+              if (typeof markDirty === "function") markDirty();
+              _renderActive();
+              e.preventDefault();
+              if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+              return;
+            }
+          }
+        }
+        // Delete / Backspace — remove selected cabinet
+        if ((e.key === "Delete" || e.key === "Backspace") &&
+            state.selectedFurniture >= 0) {
+          state.furniture.splice(state.selectedFurniture, 1);
+          state.selectedFurniture = -1;
+          rvTool.mode = "idle";
+          if (typeof markDirty === "function") markDirty();
+          _renderActive();
+          e.preventDefault();
+          return;
+        }
+        // Arrow keys — move selected cabinet
+        if (state.selectedFurniture >= 0 &&
+            (e.key === "ArrowLeft" || e.key === "ArrowRight" ||
+             e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          var fMov = (state.furniture || [])[state.selectedFurniture];
+          if (fMov) {
+            e.preventDefault();
+            if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+            var fStep = e.shiftKey ? GRID_STEP_CM * ARROW_KEY_SHIFT_MULTIPLIER : GRID_STEP_CM;
+            var fDims = window._furnitureEffectiveDims(fMov);
+            var fProxy2 = { x_cm: fMov.x_cm, y_cm: fMov.y_cm,
+                            width_cm: fDims.width_cm, depth_cm: fDims.depth_cm };
+            _arrowMoveRect(fProxy2, e.key, fStep);
+            fMov.x_cm = fProxy2.x_cm;
+            fMov.y_cm = fProxy2.y_cm;
+            if (typeof markDirty === "function") markDirty();
+            _renderActive();
+            return;
+          }
+        }
+      }
+
+      if (!state.roomAmendMode) return;
 
       // Arrow keys: move the selected exclusion (Shift = 5× step)
       if (rvTool.mode === "selected" && rvTool.selectedIndex >= 0 &&
@@ -1934,12 +2194,7 @@
         var idxK = rvTool.selectedIndex;
         var exclK = state.room_exclusions[idxK];
         if (!exclK) return;
-        var maxXK = state.room_width_cm - exclK.width_cm;
-        var maxYK = state.room_depth_cm - exclK.depth_cm;
-        if (e.key === "ArrowRight") exclK.x_cm = Math.min(maxXK, exclK.x_cm + step);
-        else if (e.key === "ArrowLeft") exclK.x_cm = Math.max(0, exclK.x_cm - step);
-        else if (e.key === "ArrowDown") exclK.y_cm = Math.min(maxYK, exclK.y_cm + step);
-        else if (e.key === "ArrowUp") exclK.y_cm = Math.max(0, exclK.y_cm - step);
+        _arrowMoveRect(exclK, e.key, step);
         rvDslReplaceExcl(idxK, exclK.x_cm, exclK.y_cm, exclK.width_cm, exclK.depth_cm);
         _renderActive();
         return;

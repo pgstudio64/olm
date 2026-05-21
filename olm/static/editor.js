@@ -120,9 +120,11 @@ let state = {
   room_openings: [],     // [{face, offset_cm, width_cm}] — non-door openings only (D-122 P4)
   room_doors: [],        // [{face, offset_cm, width_cm, opens_inward, hinge_side}] — séparé (D-122 P4)
   room_exclusions: [],   // [{x_cm, y_cm, width_cm, depth_cm}]
+  furniture: [],          // D-256 Lot 2: [{type, x_cm, y_cm, orientation}]
   selectedRow: 0,
   selectedBlock: -1,
   selectedExclusion: -1,
+  selectedFurniture: -1,  // D-256 Lot 2: index in state.furniture
   gridVisible: true,
   circVisible: true,
   dirty: false,          // true when pattern has unsaved changes
@@ -395,6 +397,16 @@ async function applyRoomDSL() {
     setStatus("Room definition error: " + err.message);
   }
 }
+
+// D-256 Lot 2: effective width/depth of a furniture item (orientation-aware).
+function _furnitureEffectiveDims(item) {
+  var def = BLOCK_DEFS && BLOCK_DEFS["CABINET"];
+  var w = def ? def.eo_cm : 70;
+  var d = def ? def.ns_cm : 40;
+  if (item.orientation === 90) return { width_cm: d, depth_cm: w };
+  return { width_cm: w, depth_cm: d };
+}
+window._furnitureEffectiveDims = _furnitureEffectiveDims;
 
 function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview, isPatternAmend) {
   // Windows — cyan line offset outward (or on wall in review mode)
@@ -780,6 +792,66 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview, 
     elements.push({ z: 9, s: '<rect x="' + zx + '" y="' + zy +
       '" width="' + zw + '" height="' + zh +
       '" fill="transparent" data-excl="' + zi + '" style="cursor:pointer;"/>' });
+  });
+
+  // D-256: Furniture (cabinets) — solid light-brown rectangle with white border.
+  var _furnArr = state.furniture || [];
+  _furnArr.forEach(function (f, fi) {
+    var dims = _furnitureEffectiveDims(f);
+    var fx = roomX + f.x_cm * SCALE;
+    var fy = roomY + f.y_cm * SCALE;
+    var fw = dims.width_cm * SCALE;
+    var fh = dims.depth_cm * SCALE;
+    elements.push({ z: 5, s: '<rect x="' + fx.toFixed(1) + '" y="' + fy.toFixed(1) +
+      '" width="' + fw.toFixed(1) + '" height="' + fh.toFixed(1) +
+      '" fill="#c2a06a" fill-opacity="0.85" stroke="#ffffff" stroke-width="1.5"' +
+      ' vector-effect="non-scaling-stroke"/>' });
+    if (fi === state.selectedFurniture) {
+      elements.push({ z: 8, s: '<rect x="' + fx.toFixed(1) + '" y="' + fy.toFixed(1) +
+        '" width="' + fw.toFixed(1) + '" height="' + fh.toFixed(1) +
+        '" fill="none" stroke="' + COLOR_NEUTRAL + '" stroke-width="1.5"' +
+        ' vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>' });
+      // Pictograms: rotate + delete (on-canvas, like door badges)
+      var hzf = 1; // handle zoom factor (could scale with zoom)
+      var delR = 6 * hzf;
+      var bgap = 3 * hzf;
+      var bw = 14 * hzf, bh = 10 * hzf;
+      var bFontSz = 8 * hzf;
+      // Position: top-right corner of the cabinet
+      var pxR = fx + fw + bgap;
+      var pyR = fy;
+      // Rotate badge
+      elements.push({ z: 9.4, s: '<rect x="' + pxR.toFixed(1) +
+        '" y="' + (pyR - bh / 2).toFixed(1) +
+        '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) +
+        '" rx="2" fill="' + COLOR_NEUTRAL +
+        '" stroke="#333" stroke-width="0.5"' +
+        ' data-furn-rotate="' + fi +
+        '" style="cursor:pointer;" />' });
+      elements.push({ z: 9.5, s: '<text x="' +
+        (pxR + bw / 2).toFixed(1) + '" y="' +
+        (pyR + bFontSz * 0.35).toFixed(1) +
+        '" text-anchor="middle" fill="#333"' +
+        ' font-size="' + bFontSz.toFixed(1) + '" font-weight="bold"' +
+        ' style="pointer-events:none;">↻</text>' });
+      // Delete badge
+      var pdx = pxR + bw + bgap;
+      elements.push({ z: 9.4, s: '<circle cx="' + (pdx + delR).toFixed(1) +
+        '" cy="' + pyR.toFixed(1) + '" r="' + delR.toFixed(1) + '"' +
+        ' fill="' + COLOR_DANGER + '" stroke="#333" stroke-width="0.5"' +
+        ' data-furn-delete="' + fi +
+        '" style="cursor:pointer;"/>' });
+      elements.push({ z: 9.5, s: '<text x="' + (pdx + delR).toFixed(1) +
+        '" y="' + (pyR + 3 * hzf).toFixed(1) +
+        '" text-anchor="middle" fill="#fff" font-size="' +
+        (delR * 1.4).toFixed(1) + '" font-weight="bold"' +
+        ' style="pointer-events:none;">×</text>' });
+    }
+    if (state.amendMode) {
+      elements.push({ z: 9, s: '<rect x="' + fx.toFixed(1) + '" y="' + fy.toFixed(1) +
+        '" width="' + fw.toFixed(1) + '" height="' + fh.toFixed(1) +
+        '" fill="transparent" data-furn="' + fi + '" style="cursor:pointer;"/>' });
+    }
   });
 }
 
@@ -1699,6 +1771,10 @@ function _renderImpl(targetSvg) {
   const overlayId = svgId + '-overlay';
   if (!document.getElementById(bgId)) {
     svg.innerHTML = '<g id="' + bgId + '"></g><g id="' + gridId + '"></g><g id="' + overlayId + '"></g>';
+    // Groups recreated empty → invalidate per-layer caches so content is
+    // re-injected on this render (otherwise a stale key would skip injection).
+    svg._bgCacheKey = null;
+    svg._gridCacheKey = null;
   }
 
   const elementsBg = elements.filter(function(e) { return e.z < 0; });
@@ -1708,7 +1784,16 @@ function _renderImpl(targetSvg) {
 
   // D-83: data is already in local coordinates — render directly, no SVG rotation needed.
   // Only the overlay needs rotation (handled separately via overlay transform).
-  document.getElementById(bgId).innerHTML = elementsBg.map(function(e) { return e.s; }).join('\n');
+  // Cache the background layer (= the full-resolution plan overlay <image>).
+  // Re-injecting it via innerHTML on every render forces the browser to
+  // re-decode a multi-megapixel image, which made every interaction
+  // (select/drag/resize) lag on big plans. Only re-inject when the bg HTML
+  // actually changes (overlay url, position, scale, opacity or rotation).
+  const bgHtml = elementsBg.map(function(e) { return e.s; }).join('\n');
+  if (svg._bgCacheKey !== bgHtml) {
+    svg._bgCacheKey = bgHtml;
+    document.getElementById(bgId).innerHTML = bgHtml;
+  }
   if (window._perf) window._perf.mark("  r#" + (window._renderSeq || 0) + " bg-inject");
 
   const editorVb = state.viewBox;
@@ -2366,6 +2451,7 @@ async function save() {
       largest_free_rect_m2: 0,
       desks: circInfo ? circInfo.desks : [],
       pattern: payload,
+      furniture: JSON.parse(JSON.stringify(state.furniture || [])),
       amended: true,
     };
     state.amendMode = null;
@@ -2475,6 +2561,8 @@ function loadPatternFromData(data) {
   state.room_windows = data.room_windows || [];
   _splitOpeningsIntoState(data.room_openings);
   state.room_exclusions = data.room_exclusions || [];
+  state.furniture = [];
+  state.selectedFurniture = -1;
   state.selectedRow = 0;
   state.selectedBlock = -1;
   state._savedName = data.name || null;
@@ -2536,6 +2624,9 @@ function enterAmendMode(room, candidate) {
   // Hide sub-tab bar (Card view / Grid view / Pattern editor)
   document.querySelector("#tabLytCatalogue > .sub-tab-bar").style.display = "none";
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));
+  // D-256 Lot 2: load furniture from saved amendment
+  state.furniture = JSON.parse(JSON.stringify(candidate.furniture || []));
+  state.selectedFurniture = -1;
 
   // Restore overlay (cleared by loadPatternFromData) aligned to room bbox
   if (window.fpOverlay) {
@@ -2581,6 +2672,9 @@ function exitAmendUI() {
   document.getElementById("btnSave").textContent = "Save";
   document.getElementById("btnAmendCancel").style.display = "none";
   document.querySelector(".ol-header").classList.remove("edit-mode");
+  // D-256 Lot 2: clear furniture state on exit
+  state.furniture = [];
+  state.selectedFurniture = -1;
   // D-215: remove dedicated amend-layout CSS mode
   document.body.classList.remove("amend-layout-mode");
   // Restore sub-tab bar and reset to Catalogue view
@@ -2894,8 +2988,10 @@ function resetState() {
   else if (doorPos === "right") doorOffset = defW - doorW;
   state.room_doors = [{ face: "south", offset_cm: doorOffset, width_cm: doorW, opens_inward: true, hinge_side: "left" }];
   state.room_exclusions = [];
+  state.furniture = [];
   state.selectedRow = 0;
   state.selectedBlock = -1;
+  state.selectedFurniture = -1;
   state.viewBox = { x: 0, y: 0, w: 800, h: 600 };
   state.zoom = 1.0;
   updateAutoName();

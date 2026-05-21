@@ -183,14 +183,16 @@ _ARC_ANGLES: dict[str, tuple[int, int]] = {
 # these are the fallback defaults if the config keys are absent.
 _CARTOUCHE_TITLE_PT_DEFAULT = 22
 _CARTOUCHE_BODY_PT_DEFAULT = 20
-_CARTOUCHE_X_PX_DEFAULT = 20
-_CARTOUCHE_Y_PX_DEFAULT = 20
+_CARTOUCHE_X_PX_DEFAULT = 120
+_CARTOUCHE_Y_PX_DEFAULT = 120
 _CARTOUCHE_PADDING = 8
 _CARTOUCHE_BG = (255, 255, 255, 210)
 _CARTOUCHE_BORDER = (0, 0, 0, 255)
 _CARTOUCHE_BORDER_W = 1
 _CARTOUCHE_TEXT = (0, 0, 0, 255)
-_CARTOUCHE_LINE_SPACING = 4
+_CARTOUCHE_LINE_SPACING = 12
+# Footer line ("Export done on …") drawn smaller than the body text.
+_CARTOUCHE_FOOTER_PT_DROP = 6
 
 
 def _cartouche_font(pt: int) -> ImageFont.ImageFont:
@@ -540,6 +542,7 @@ def _draw_cartouche(
         "cartouche_y_px", _CARTOUCHE_Y_PX_DEFAULT)))
     title_font = _cartouche_font(title_pt)
     body_font = _cartouche_font(body_pt)
+    footer_font = _cartouche_font(max(6, body_pt - _CARTOUCHE_FOOTER_PT_DROP))
 
     avg_str = (
         f"{summary['avg_area']:.1f}" if summary["avg_area"] is not None
@@ -547,14 +550,14 @@ def _draw_cartouche(
     )
     # (text, font) per line — title in the larger font, the rest in body.
     items = [
-        ("FLOOR SUMMARY", title_font),
+        ("Floor Layout", title_font),
         (f"Furnished offices: {summary['furnished_offices']}"
          f" / {summary['total_offices']}", body_font),
         (f"Furnished area: {summary['furnished_area']:.1f}"
          f" / {summary['total_area']:.1f} m2", body_font),
         (f"Total workstations: {summary['total_workstations']}", body_font),
         (f"Avg area / workstation: {avg_str} m2", body_font),
-        (f"Printed: {date.today().isoformat()}", body_font),
+        (f"Export done on {date.today().isoformat()}", footer_font),
     ]
 
     # Measure text extents

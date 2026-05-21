@@ -554,6 +554,8 @@
     var localRoom = room;
     state.rows = [];
     state.row_gaps_cm = [];
+    state.furniture = [];
+    state.selectedFurniture = -1;
     state.room_width_cm = localRoom.width_cm;
     state.room_depth_cm = localRoom.depth_cm;
     state.room_windows = localRoom.windows || [];
@@ -718,6 +720,9 @@
     state._savedName = null;
     state.selectedRow = 0;
     state.selectedBlock = -1;
+    // D-256: load furniture from candidate (cabinets in saved_layout)
+    state.furniture = JSON.parse(JSON.stringify(candidate.furniture || []));
+    state.selectedFurniture = -1;
 
     document.getElementById("roomWidth").value = state.room_width_cm;
     document.getElementById("roomDepth").value = state.room_depth_cm;

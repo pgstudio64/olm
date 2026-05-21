@@ -292,6 +292,7 @@
             ctx.fillRect(dx, dy, dw, dh);
           });
         }
+
       }
 
       ctx.restore();

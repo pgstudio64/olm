@@ -213,6 +213,20 @@ function renderGeneralSettings() {
     });
   }; }
 
+  el = document.getElementById("cfgCabinetW");
+  if (el) { el.value = APP_CONFIG.cabinet_width_cm || 70; el.onchange = function() {
+    saveConfigField("cabinet_width_cm", parseInt(this.value)||70).then(function() {
+      loadAllBlockDefs().then(function() { loadBlockDefs().then(function() { render(); }); });
+    });
+  }; }
+
+  el = document.getElementById("cfgCabinetD");
+  if (el) { el.value = APP_CONFIG.cabinet_depth_cm || 40; el.onchange = function() {
+    saveConfigField("cabinet_depth_cm", parseInt(this.value)||40).then(function() {
+      loadAllBlockDefs().then(function() { loadBlockDefs().then(function() { render(); }); });
+    });
+  }; }
+
   el = document.getElementById("cfgGrid");
   if (el) { el.value = APP_CONFIG.grid_cell_cm || 10; el.onchange = function() { saveConfigField("grid_cell_cm", parseInt(this.value)||10).then(function() { render(); }); }; }
 

@@ -230,6 +230,15 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
       </div>
     </div>
     <div class="settings-section">
+      <div class="section-title">Cabinet</div>
+      <div class="settings-grid">
+        <label class="settings-label">Width (cm)</label>
+        <input type="number" id="cfgCabinetW" class="settings-input" style="width:70px;">
+        <label class="settings-label">Depth (cm)</label>
+        <input type="number" id="cfgCabinetD" class="settings-input" style="width:70px;">
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-title">Scoring weights</div>
       <div class="settings-grid">
         <label class="settings-label">Density</label>
@@ -337,7 +346,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div id="ingRoomList" style="height:370px;min-height:80px;max-height:800px;overflow-y:auto;resize:vertical;font-size:11px;border:1px solid var(--border);"></div>
         <div style="font-size:9px;color:var(--text-dim);margin-top:3px;line-height:1.4;">
           <span class="room-saved-mark">&#10003;</span> saved layout &nbsp;&middot;&nbsp;
-          <span class="room-amend-mark">&#9679;</span> amended layout
+          <span class="room-amend-mark">&#9998;</span> amended layout
         </div>
 
         </div><!-- /ingPlanSections -->
@@ -691,6 +700,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <td class="nav-right">
           <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions (keeps current gaps)">Fit room to pattern</button>
           <button class="btn" id="peBtnAddDoor" title="Add a door to the room">Add door</button>
+          <button class="btn" id="btnAddCabinet" title="Add a cabinet (furniture)">Add cabinet</button>
+          <button class="btn" id="btnRotateCabinet" title="Rotate selected cabinet (R)">Rotate</button>
         </td>
       </tr></table>
     </div>

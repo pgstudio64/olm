@@ -44,11 +44,6 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    /* Largeur mini raisonnable (2026-05-20) : sous 1800px on scrolle plutôt
-       que de comprimer les barres jusqu'à tronquer les boutons. */
-    min-width: 1800px;
-    overflow-x: auto;
-    overflow-y: hidden;
   }
 
   /* ── Dev mode ──────────────────────────────────────── */
@@ -601,7 +596,7 @@
   /* D-245: saved/amended layout marker in room sidebar */
   .room-saved-mark { font-size: 11px; color: #6ab06a; margin-left: 2px; }
   /* Amended (non saved) layout marker: amber dot, non-clickable look. */
-  .room-amend-mark { font-size: 10px; color: var(--accent); margin-left: 2px; }
+  .room-amend-mark { font-size: 11px; color: #6ab06a; margin-left: 2px; }
   .standard-row {
     display: flex;
     gap: var(--sp-sm);
@@ -1116,3 +1111,9 @@
   .amend-layout-mode #peBtnPrev { display: none; }
   .amend-layout-mode #peBtnNext { display: none; }
   .amend-layout-mode #peNavInfo { display: none; }
+
+  /* D-256: Cabinet buttons — hidden by default, visible in amend mode */
+  #btnAddCabinet { display: none; }
+  .amend-layout-mode #btnAddCabinet { display: inline-block; }
+  #btnRotateCabinet { display: none; }
+  .amend-layout-mode #btnRotateCabinet { display: inline-block; }

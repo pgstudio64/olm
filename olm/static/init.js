@@ -956,6 +956,9 @@ async function init() {
           e.target.closest("[data-opening-handle]") || e.target.closest("[data-opening-delete]") ||
           e.target.closest("[data-opening-resize]") || e.target.closest("[data-door-hinge]") ||
           e.target.closest("[data-door-dir]") ||
+          e.target.closest("[data-furn]") ||
+          e.target.closest("[data-furn-rotate]") ||
+          e.target.closest("[data-furn-delete]") ||
           e.target.getAttribute && e.target.getAttribute("data-lock-face")) return;
       if (svg.id === "rvCanvas" && window.rvTool &&
           (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing" ||
@@ -963,6 +966,9 @@ async function init() {
            window.rvTool.mode === "transpDragging" ||
            window.rvTool.mode === "transpResizing" ||
            window.rvTool.mode === "transpSelected" ||
+           window.rvTool.mode === "furnPlacing" ||
+           window.rvTool.mode === "furnSelected" ||
+           window.rvTool.mode === "furnDragging" ||
            window.rvTool.mode === "openingMoving" ||
            window.rvTool.mode === "openingResizing")) return;
       if (e.button !== 0) return;
@@ -1048,6 +1054,7 @@ async function init() {
     if (exclTarget) {
       state.selectedExclusion = parseInt(exclTarget.dataset.excl);
       state.selectedBlock = -1;
+      state.selectedFurniture = -1;
       render();
       updateRowList();
       return;
@@ -1064,9 +1071,11 @@ async function init() {
       state.selectedRow = parseInt(target.dataset.row);
       state.selectedBlock = parseInt(target.dataset.block);
       state.selectedExclusion = -1;
+      state.selectedFurniture = -1;
     } else {
       state.selectedBlock = -1;
       state.selectedExclusion = -1;
+      state.selectedFurniture = -1;
     }
     render();
     updateRowList();
