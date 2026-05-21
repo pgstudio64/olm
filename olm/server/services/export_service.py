@@ -321,6 +321,12 @@ def _draw_chair(
     draw.line(pts, fill=_CHAIR_ARC_OUTLINE, width=2, joint="curve")
 
 
+# D-264 (temporary): per-export diagnostic capture. export_plan clears this
+# at the start and writes it to {plan}_DEBUG.txt next to the PNG, so a remote
+# user can paste the exact desk coordinates without server log access.
+_EXPORT_DEBUG: list[str] = []
+
+
 def _draw_room_desks(
     draw: ImageDraw.ImageDraw,
     font: ImageFont.FreeTypeFont,
@@ -354,6 +360,17 @@ def _draw_room_desks(
     else:
         canon_w, canon_d = room_w, room_d
 
+    # D-264 diagnostic (temporary)
+    _pat = candidate.get("pattern") or {}
+    _EXPORT_DEBUG.append(
+        f"ROOM {room.get('name')} cf={cf_abs} room={room_w}x{room_d} "
+        f"canon={canon_w}x{canon_d} "
+        f"pattern={_pat.get('room_width_cm')}x{_pat.get('room_depth_cm')} "
+        f"bbox_px={bbox} scale={scale} "
+        f"desks_stored={len(candidate.get('desks') or [])} active={len(active)} "
+        f"saved={candidate.get('saved')} amended={candidate.get('amended')}"
+    )
+
     for desk_local_idx, desk in enumerate(active, start=1):
         # Decanonicalize rect → absolute coords (cm)
         ax, ay, aw, ad = _decanon_rect(
@@ -371,6 +388,15 @@ def _draw_room_desks(
         # Chair side: canonical → absolute
         cs_canon = desk.get("chair_side", "W")
         cs_abs = _decanon_chair_side(cs_canon, cf_abs)
+
+        # D-264 diagnostic (temporary)
+        _EXPORT_DEBUG.append(
+            f"  desk{desk_local_idx} "
+            f"canon=({desk['x_cm']},{desk['y_cm']},{desk['width_cm']},"
+            f"{desk['depth_cm']}) chair={cs_canon} -> "
+            f"abs=({round(ax)},{round(ay)},{round(aw)},{round(ad)}) "
+            f"chair={cs_abs} px=({round(x1)},{round(y1)})"
+        )
 
         # Chair first (behind the desk, as on screen), then the desk on top
         # so the desk overlaps the seat (mirrors editor z-order).
@@ -717,7 +743,15 @@ def export_plan(
         except FileNotFoundError:
             pass
 
+    _EXPORT_DEBUG.clear()
     img = compose_plan_image(plan_id, rooms_payload, scale_cm_per_px)
+    # D-264 diagnostic file (temporary) — dropped next to the export.
+    try:
+        with open(os.path.join(output_dir, f"{plan_id}_DEBUG.txt"),
+                  "w", encoding="utf-8") as _df:
+            _df.write("\n".join(_EXPORT_DEBUG) + "\n")
+    except OSError:
+        pass
 
     if fmt == "png":
         plan_path = os.path.join(output_dir, f"{plan_id}.png")
