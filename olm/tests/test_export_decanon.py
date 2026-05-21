@@ -1,73 +1,82 @@
-"""D-260 regression tests for export decanonicalization.
+"""D-260/D-261 regression tests for export decanonicalization.
 
 The export rebuilds each desk's absolute position and chair side from the
-canonical pattern. Two bugs affected east/west (side) corridors only:
-  1. ``_draw_room_desks`` passed the room's *actual* dims to
-     ``_decanon_rect``, which needs the *canonical* dims (swapped for
-     east/west) → desks shifted out of place.
-  2. The hardcoded chair-side table was inverted for east/west.
+canonical pattern. It MUST mirror the editor/screen convention
+(``canonical_io.js``), not the server ``canonical.py`` — the two use
+OPPOSITE east/west rotations, and the screen is the source of truth
+(D-261). Bugs that affected east/west (side) corridors only:
+  1. ``_draw_room_desks`` passed the room's *actual* dims instead of the
+     *canonical* dims (swapped for east/west) → desks shifted.
+  2. The decanon rect/chair used the server convention (opposite to the
+     screen for east/west) → desks placed on the wrong side, "between
+     rooms" instead of where the editor shows them.
 
-These tests verify, for all four corridor orientations, that:
-  - a rect round-trips (canonicalize → decanonicalize) to its original, and
-  - the chair-side decanon matches the editor's rotation (canonAngle CW).
+These tests verify, for all four corridor orientations, that the export
+decanon is the exact inverse of the FRONT (canonical_io.js) transforms.
 """
-from olm.core.canonical import canonicalize_room
 from olm.server.services.export_service import _decanon_chair_side, _decanon_rect
 
-# Editor ground truth: it rotates the canonical layout canonAngle° CW.
-_CANON_ANGLE = {"south": 0, "east": 90, "north": 180, "west": 270}
-_SIDE_CW = {"N": "E", "E": "S", "S": "W", "W": "N"}
-
-_ORIG = {"x_cm": 10, "y_cm": 20, "width_cm": 80, "depth_cm": 180}
 _FACES = ["south", "north", "east", "west"]
+_ABS_W, _ABS_D = 300, 500
+_ORIG = (10, 20, 80, 180)  # x, y, w, d (absolute)
 
 
-def _screen_chair(side: str, cf: str) -> str:
-    """Chair side as the editor displays it (canonAngle CW rotation)."""
-    s = side
-    for _ in range((_CANON_ANGLE[cf] // 90) % 4):
-        s = _SIDE_CW[s]
-    return s
+# ── canonical_io.js ground truth (abs → canon), replicated ──────────────
+def _front_rotate_rect(x, y, w, d, cf, abs_w, abs_d):
+    if cf == "north":
+        return (abs_w - x - w, abs_d - y - d, w, d)
+    if cf == "east":
+        return (abs_d - y - d, x, d, w)
+    if cf == "west":
+        return (y, abs_w - x - w, d, w)
+    return (x, y, w, d)
 
 
-def _canonical_dims(room: dict, cf: str) -> tuple[int, int]:
-    """Canonical (corridor-south) dims: swapped for east/west corridors."""
+_FRONT_FACE = {
+    "north": {"north": "south", "south": "north", "east": "west", "west": "east"},
+    "east":  {"north": "east",  "east": "south",  "south": "west", "west": "north"},
+    "west":  {"north": "west",  "west": "south",  "south": "east", "east": "north"},
+}
+_LONG = {"N": "north", "S": "south", "E": "east", "W": "west"}
+_SHORT = {v: k for k, v in _LONG.items()}
+
+
+def _front_rotate_dir(side, cf):
+    if cf not in _FRONT_FACE:
+        return side
+    return _SHORT[_FRONT_FACE[cf][_LONG[side]]]
+
+
+def _canonical_dims(cf):
+    """Canonical dims (corridor south): swapped for east/west corridors."""
     if cf in ("east", "west"):
-        return room["depth_cm"], room["width_cm"]
-    return room["width_cm"], room["depth_cm"]
+        return _ABS_D, _ABS_W
+    return _ABS_W, _ABS_D
 
 
-def test_decanon_rect_roundtrip_all_corridors():
-    """A rect survives canonicalize → _decanon_rect for every corridor."""
+def test_decanon_rect_inverts_front_rotate_rect():
+    """_decanon_rect is the exact inverse of canonical_io.js rotateRect."""
     for cf in _FACES:
-        room = {
-            "width_cm": 300, "depth_cm": 500, "corridor_face": cf,
-            "windows": [], "openings": [],
-            "exclusion_zones": [dict(_ORIG)],
-        }
-        canon = canonicalize_room(room)
-        cz = canon["exclusion_zones"][0]
-        canon_w, canon_d = _canonical_dims(room, cf)
-        got = _decanon_rect(
-            cz["x_cm"], cz["y_cm"], cz["width_cm"], cz["depth_cm"],
-            canon_w, canon_d, cf,
-        )
-        expected = (_ORIG["x_cm"], _ORIG["y_cm"],
-                    _ORIG["width_cm"], _ORIG["depth_cm"])
-        assert got == expected, f"corridor {cf}: {got} != {expected}"
+        canon = _front_rotate_rect(*_ORIG, cf, _ABS_W, _ABS_D)
+        canon_w, canon_d = _canonical_dims(cf)
+        back = _decanon_rect(canon[0], canon[1], canon[2], canon[3],
+                             canon_w, canon_d, cf)
+        assert back == _ORIG, f"corridor {cf}: {back} != {_ORIG}"
 
 
-def test_decanon_chair_side_matches_editor_all_corridors():
-    """Chair-side decanon matches the editor rotation for every corridor."""
+def test_decanon_chair_inverts_front_rotate_dir():
+    """_decanon_chair_side is the exact inverse of canonical_io.js rotateDir."""
     for cf in _FACES:
         for side in "NESW":
-            assert _decanon_chair_side(side, cf) == _screen_chair(side, cf), (
+            canon = _front_rotate_dir(side, cf)
+            assert _decanon_chair_side(canon, cf) == side, (
                 f"corridor {cf}, side {side}: "
-                f"{_decanon_chair_side(side, cf)} != {_screen_chair(side, cf)}"
+                f"{_decanon_chair_side(canon, cf)} != {side}"
             )
 
 
-def test_decanon_chair_side_default_face():
+def test_decanon_default_face_identity():
     """Empty/None corridor face behaves like south (identity)."""
+    assert _decanon_rect(10, 20, 80, 180, 300, 500, "") == (10, 20, 80, 180)
     for side in "NESW":
         assert _decanon_chair_side(side, "") == side

@@ -27,33 +27,33 @@ from olm.server.services.config_service import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Rotation helpers (single source) — mirror block_constants.js / canonicalIO
+# Decanonicalization helpers — mirror canonical_io.js (the FRONT / screen).
 # ---------------------------------------------------------------------------
+# The server's canonical.py uses the OPPOSITE east/west convention for rect
+# positions, so reusing it placed export desks on the wrong side for
+# side-corridor rooms. The editor (screen) is the source of truth, so the
+# export mirrors canonical_io.js exactly (D-261).
 
-# Clockwise rotation of a side direction (one 90° step).
-_SIDE_CW: dict[str, str] = {"N": "E", "E": "S", "S": "W", "W": "N"}
-# Canonical rotation angle per corridor face (mirrors canonicalIO.canonAngle):
-# the editor rotates the canonical layout by this angle to display the room.
-_CANON_ANGLE: dict[str, int] = {"south": 0, "east": 90, "north": 180, "west": 270}
-
-
-# ---------------------------------------------------------------------------
-# Decanonicalization helpers
-# ---------------------------------------------------------------------------
-
-# Chair-side decanon is derived from _CANON_ANGLE + _SIDE_CW (see
-# _decanon_chair_side) — no hardcoded per-face table to keep in sync.
+# Canonical face → absolute face (inverse of canonical_io.js FACE_MAPS).
+_FRONT_INV_FACE: dict[str, dict[str, str]] = {
+    "north": {"north": "south", "south": "north", "east": "west",  "west": "east"},
+    "east":  {"north": "west",  "east":  "north", "south": "east", "west": "south"},
+    "west":  {"north": "east",  "east":  "south", "south": "west", "west": "north"},
+}
+_LONG_SIDE = {"N": "north", "S": "south", "E": "east", "W": "west"}
+_SHORT_SIDE = {"north": "N", "south": "S", "east": "E", "west": "W"}
 
 
 def _decanon_rect(
     x: float, y: float, w: float, d: float,
-    room_w: float, room_d: float,
+    canon_w: float, canon_d: float,
     corridor_face_abs: str,
 ) -> tuple[float, float, float, float]:
     """Decanonicalize a rect from canonical (corridor-south) to absolute.
 
-    Same transform as ``decanonicalize_room`` for exclusion zones.
-    *room_w* / *room_d* are the **canonical** room dimensions.
+    Inverse of canonical_io.js ``rotateRect`` — the FRONT/screen convention
+    (the server's canonical.py uses the opposite east/west rotation, D-261).
+    *canon_w* / *canon_d* are the **canonical** room dimensions.
 
     Returns:
         ``(abs_x, abs_y, abs_w, abs_d)`` in the absolute (image) frame.
@@ -62,27 +62,26 @@ def _decanon_rect(
     if not cf or cf == "south":
         return x, y, w, d
     if cf == "north":
-        return room_w - x - w, room_d - y - d, w, d
+        return canon_w - x - w, canon_d - y - d, w, d
     if cf == "east":
-        return room_d - y - d, x, d, w
+        return y, canon_w - x - w, d, w
     if cf == "west":
-        return y, room_w - x - w, d, w
+        return canon_d - y - d, x, d, w
     return x, y, w, d
 
 
 def _decanon_chair_side(side: str, corridor_face_abs: str) -> str:
-    """Convert a canonical chair side to absolute, mirroring the editor.
+    """Convert a canonical chair side to absolute, mirroring the screen.
 
-    The editor displays a room by rotating the canonical layout
-    ``canonAngle(corridor_face)`` degrees clockwise; the chair side
-    rotates with it. Deriving from the single CW source guarantees the
-    export matches the on-screen orientation (D-260). The previous
-    hardcoded table was inverted for east/west.
+    Inverse of canonical_io.js ``rotateDir`` (uses INV_FACE_MAPS), so the
+    chair sits on the same edge the editor shows (D-261). The previous
+    server-derived convention was inverted for east/west.
     """
-    steps = (_CANON_ANGLE.get(corridor_face_abs or "south", 0) // 90) % 4
-    for _ in range(steps):
-        side = _SIDE_CW[side]
-    return side
+    m = _FRONT_INV_FACE.get(corridor_face_abs or "south")
+    if not m:
+        return side
+    long = _LONG_SIDE.get(side)
+    return _SHORT_SIDE.get(m.get(long, long), side) if long else side
 
 
 # ---------------------------------------------------------------------------
