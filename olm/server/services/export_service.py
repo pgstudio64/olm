@@ -705,6 +705,18 @@ def export_plan(
     output_dir = os.path.join(PROJECT_ROOT, "project", "exports", plan_id)
     os.makedirs(output_dir, exist_ok=True)
 
+    # D-262: purge previous outputs for this plan before writing, so the
+    # folder always reflects a single, consistent export. Otherwise the
+    # format NOT re-exported (e.g. an old PNG when exporting a PDF) keeps its
+    # stale date, which looks wrong next to the freshly-written CSV. Removing
+    # then recreating the file also refreshes its date (Windows preserves a
+    # file's creation date when it is overwritten in place).
+    for _ext in ("png", "pdf", "csv"):
+        try:
+            os.remove(os.path.join(output_dir, f"{plan_id}.{_ext}"))
+        except FileNotFoundError:
+            pass
+
     img = compose_plan_image(plan_id, rooms_payload, scale_cm_per_px)
 
     if fmt == "png":
