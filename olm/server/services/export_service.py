@@ -27,49 +27,22 @@ from olm.server.services.config_service import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Chair side helpers — mirrors JS getDeskRects (block_geometry.js)
+# Rotation helpers (single source) — mirror block_constants.js / canonicalIO
 # ---------------------------------------------------------------------------
 
-_SYMMETRIC_BLOCKS = frozenset({"BLOCK_2_FACE", "BLOCK_4_FACE", "BLOCK_6_FACE"})
-_ORTHO_CHAIR_SIDES: dict[str, dict[int, str]] = {
-    "BLOCK_2_ORTHO_R": {0: "N", 1: "E"},
-    "BLOCK_2_ORTHO_L": {0: "N", 1: "W"},
-}
-_SIDE_ROTATE: dict[int, dict[str, str]] = {
-    90:  {"N": "E", "E": "S", "S": "W", "W": "N"},
-    180: {"N": "S", "S": "N", "E": "W", "W": "E"},
-    270: {"N": "W", "W": "S", "S": "E", "E": "N"},
-}
-
-
-def _desk_chair_side_base(block_type: str, desk_idx: int) -> str:
-    """Chair side at orientation 0 for a desk within a block type."""
-    if block_type in _SYMMETRIC_BLOCKS:
-        return "W" if desk_idx % 2 == 0 else "E"
-    if block_type in _ORTHO_CHAIR_SIDES:
-        return _ORTHO_CHAIR_SIDES[block_type].get(desk_idx, "W")
-    return "W"
-
-
-def _rotate_side(side: str, degrees: int) -> str:
-    """Rotate a side direction by *degrees* (CW)."""
-    if degrees % 360 == 0:
-        return side
-    m = _SIDE_ROTATE.get(degrees % 360)
-    return m[side] if m else side
+# Clockwise rotation of a side direction (one 90° step).
+_SIDE_CW: dict[str, str] = {"N": "E", "E": "S", "S": "W", "W": "N"}
+# Canonical rotation angle per corridor face (mirrors canonicalIO.canonAngle):
+# the editor rotates the canonical layout by this angle to display the room.
+_CANON_ANGLE: dict[str, int] = {"south": 0, "east": 90, "north": 180, "west": 270}
 
 
 # ---------------------------------------------------------------------------
 # Decanonicalization helpers
 # ---------------------------------------------------------------------------
 
-# Canonical chair_side (pattern coords) → absolute (image coords).
-_CHAIR_DECANON: dict[str, dict[str, str]] = {
-    "south": {"N": "N", "S": "S", "E": "E", "W": "W"},
-    "north": {"N": "S", "S": "N", "E": "W", "W": "E"},
-    "east":  {"N": "W", "S": "E", "E": "N", "W": "S"},
-    "west":  {"N": "E", "S": "W", "E": "S", "W": "N"},
-}
+# Chair-side decanon is derived from _CANON_ANGLE + _SIDE_CW (see
+# _decanon_chair_side) — no hardcoded per-face table to keep in sync.
 
 
 def _decanon_rect(
@@ -98,9 +71,18 @@ def _decanon_rect(
 
 
 def _decanon_chair_side(side: str, corridor_face_abs: str) -> str:
-    """Convert canonical chair side to absolute orientation."""
-    m = _CHAIR_DECANON.get(corridor_face_abs or "south")
-    return m.get(side, side) if m else side
+    """Convert a canonical chair side to absolute, mirroring the editor.
+
+    The editor displays a room by rotating the canonical layout
+    ``canonAngle(corridor_face)`` degrees clockwise; the chair side
+    rotates with it. Deriving from the single CW source guarantees the
+    export matches the on-screen orientation (D-260). The previous
+    hardcoded table was inverted for east/west.
+    """
+    steps = (_CANON_ANGLE.get(corridor_face_abs or "south", 0) // 90) % 4
+    for _ in range(steps):
+        side = _SIDE_CW[side]
+    return side
 
 
 # ---------------------------------------------------------------------------
@@ -117,29 +99,22 @@ def _compute_desks_with_chair_side(pattern: dict) -> list[dict]:
     Returns:
         List of desk dicts compatible with the export payload format.
     """
-    positions = compute_desk_positions(pattern)
     removed_set: set[tuple[int, int, int]] = set()
     for rd in pattern.get("_removed_desks", []):
         removed_set.add((rd["row"], rd["block"], rd["desk"]))
 
-    # Build orientation lookup: (row_idx, block_idx) → orientation
-    orient_map: dict[tuple[int, int], int] = {}
-    for ri, row in enumerate(pattern.get("rows", [])):
-        for bi, block in enumerate(row.get("blocks", [])):
-            orient_map[(ri, bi)] = block.get("orientation", 0)
-
+    # D-260: compute_desk_positions is the single source of truth — it
+    # already returns each desk's chair_side (block orientation applied).
+    # Do NOT re-derive it here (a duplicate that drifts from the editor).
     desks: list[dict] = []
-    for p in positions:
-        orient = orient_map.get((p.row_idx, p.block_idx), 0)
-        base_side = _desk_chair_side_base(p.block_type, p.desk_idx)
-        chair_side = _rotate_side(base_side, orient)
+    for p in compute_desk_positions(pattern):
         desks.append({
             "x_cm": p.x_cm,
             "y_cm": p.y_cm,
             "width_cm": p.width_cm,
             "depth_cm": p.depth_cm,
             "removed": (p.row_idx, p.block_idx, p.desk_idx) in removed_set,
-            "chair_side": chair_side,
+            "chair_side": p.chair_side,
         })
     return desks
 
@@ -156,10 +131,11 @@ _SCREEN_FILL = (0, 0, 0, 255)
 _LABEL_COLOR = (0, 0, 0, 255)
 _WHITE = [255, 255, 255, 255]
 
-# Chair seat geometry (mirror of olm/static/block_constants.js CHAIR_W_CM).
-# The chair is drawn as a semicircle of seat-width diameter centered on
-# the chair side of the desk.
+# Chair seat geometry (mirror of olm/static/block_constants.js
+# CHAIR_W_CM / CHAIR_D_CM). The chair is drawn as a wireframe rounded
+# seat + backrest arc on the chair side of the desk (D-260).
 _CHAIR_SEAT_WIDTH_CM = 65
+_CHAIR_SEAT_DEPTH_CM = 60
 
 # Screen geometry — mirrors olm/static/block_svg.js.
 # Black thin bar on the desk side opposite to the chair, length ratio of
@@ -169,14 +145,6 @@ _SCREEN_THICK_PX = 3
 _SCREEN_LEN_RATIO = 0.55
 _SCREEN_INSET_PX = 3
 _OPPOSITE_SIDE = {"W": "E", "E": "W", "N": "S", "S": "N"}
-
-# PIL arc angles (CW from 3 o'clock) for each absolute chair side.
-_ARC_ANGLES: dict[str, tuple[int, int]] = {
-    "W": (90, 270),
-    "E": (270, 90),
-    "N": (180, 360),
-    "S": (0, 180),
-}
 
 # Floor-summary cartouche (top-left of exported image).
 # Position (x/y px) and font sizes (pt) are configurable via Settings;
@@ -291,6 +259,69 @@ def _get_active_desks(candidate: dict) -> list[dict]:
     return [d for d in desks if not d.get("removed")]
 
 
+def _draw_chair(
+    draw: ImageDraw.ImageDraw,
+    x1: float, y1: float, x2: float, y2: float,
+    cs: str, scale: float,
+) -> None:
+    """Draw a wireframe (B&W) chair on the *cs* side of a desk.
+
+    Mirrors the editor (block_svg.js renderDesk): a rounded-rectangle seat
+    overlapping the desk edge plus a curved backrest, drawn as a black
+    outline on white (no colour). Call BEFORE the desk rectangle so the
+    desk overlaps the seat, as on screen (chair z < desk z). D-260.
+    """
+    dw, dh = x2 - x1, y2 - y1
+    is_horiz = cs in ("W", "E")
+    chw = (_CHAIR_SEAT_DEPTH_CM if is_horiz else _CHAIR_SEAT_WIDTH_CM) / scale
+    chh = (_CHAIR_SEAT_WIDTH_CM if is_horiz else _CHAIR_SEAT_DEPTH_CM) / scale
+    seat_r = max(1.0, min(chw, chh) * 0.24)
+    overlap = chw * 0.4
+    back_inset = chw * 0.10
+    arc_curve = chw * 0.16
+    arc_pad = chh * 0.125
+
+    if cs == "W":
+        chx, chy = x1 - chw + overlap, y1 + (dh - chh) / 2
+        a = chx + back_inset
+        p0, ctrl, p2 = ((a, chy + arc_pad),
+                        (a - arc_curve, chy + chh / 2),
+                        (a, chy + chh - arc_pad))
+    elif cs == "E":
+        chx, chy = x2 - overlap, y1 + (dh - chh) / 2
+        a = chx + chw - back_inset
+        p0, ctrl, p2 = ((a, chy + arc_pad),
+                        (a + arc_curve, chy + chh / 2),
+                        (a, chy + chh - arc_pad))
+    elif cs == "N":
+        chx, chy = x1 + (dw - chw) / 2, y1 - chh + chh * 0.6
+        a = chy + back_inset
+        p0, ctrl, p2 = ((chx + arc_pad, a),
+                        (chx + chw / 2, a - arc_curve),
+                        (chx + chw - arc_pad, a))
+    else:  # S
+        chx, chy = x1 + (dw - chw) / 2, y2 - chh * 0.6
+        a = chy + chh - back_inset
+        p0, ctrl, p2 = ((chx + arc_pad, a),
+                        (chx + chw / 2, a + arc_curve),
+                        (chx + chw - arc_pad, a))
+
+    draw.rounded_rectangle(
+        [chx, chy, chx + chw, chy + chh], radius=seat_r,
+        outline=_DESK_OUTLINE, fill=_DESK_FILL, width=1,
+    )
+    # Backrest: quadratic Bézier sampled as a polyline.
+    pts = []
+    steps = 12
+    for i in range(steps + 1):
+        t = i / steps
+        mt = 1.0 - t
+        bx = mt * mt * p0[0] + 2 * mt * t * ctrl[0] + t * t * p2[0]
+        by = mt * mt * p0[1] + 2 * mt * t * ctrl[1] + t * t * p2[1]
+        pts.append((bx, by))
+    draw.line(pts, fill=_CHAIR_ARC_OUTLINE, width=2, joint="curve")
+
+
 def _draw_room_desks(
     draw: ImageDraw.ImageDraw,
     font: ImageFont.FreeTypeFont,
@@ -315,12 +346,21 @@ def _draw_room_desks(
         logger.warning("Room %s: no desks to render", room.get("name"))
         return
 
+    # _decanon_rect needs the CANONICAL room dims (corridor at south).
+    # For an east/west corridor, canonicalisation swaps width/depth, so the
+    # canonical dims are the actual dims swapped (D-260). Passing the actual
+    # dims shifted desks out of place for side-corridor rooms.
+    if cf_abs in ("east", "west"):
+        canon_w, canon_d = room_d, room_w
+    else:
+        canon_w, canon_d = room_w, room_d
+
     for desk_local_idx, desk in enumerate(active, start=1):
         # Decanonicalize rect → absolute coords (cm)
         ax, ay, aw, ad = _decanon_rect(
             desk["x_cm"], desk["y_cm"],
             desk["width_cm"], desk["depth_cm"],
-            room_w, room_d, cf_abs,
+            canon_w, canon_d, cf_abs,
         )
 
         # Convert cm → image px
@@ -329,34 +369,19 @@ def _draw_room_desks(
         x2 = x1 + aw / scale
         y2 = y1 + ad / scale
 
-        # Desk rectangle
+        # Chair side: canonical → absolute
+        cs_canon = desk.get("chair_side", "W")
+        cs_abs = _decanon_chair_side(cs_canon, cf_abs)
+
+        # Chair first (behind the desk, as on screen), then the desk on top
+        # so the desk overlaps the seat (mirrors editor z-order).
+        _draw_chair(draw, x1, y1, x2, y2, cs_abs, scale)
         draw.rectangle(
             [x1, y1, x2, y2],
             outline=_DESK_OUTLINE,
             fill=_DESK_FILL,
             width=_DESK_STROKE_WIDTH,
         )
-
-        # Chair side: canonical → absolute
-        cs_canon = desk.get("chair_side", "W")
-        cs_abs = _decanon_chair_side(cs_canon, cf_abs)
-
-        # Chair arc (semicircle on the chair side).
-        # Radius = half the chair-seat width, NOT the desk depth.
-        arc_r_px = (_CHAIR_SEAT_WIDTH_CM / 2) / scale
-        if cs_abs == "W":
-            cx, cy = x1, (y1 + y2) / 2
-        elif cs_abs == "E":
-            cx, cy = x2, (y1 + y2) / 2
-        elif cs_abs == "N":
-            cx, cy = (x1 + x2) / 2, y1
-        else:
-            cx, cy = (x1 + x2) / 2, y2
-        arc_bbox = [cx - arc_r_px, cy - arc_r_px,
-                    cx + arc_r_px, cy + arc_r_px]
-        angles = _ARC_ANGLES.get(cs_abs, (90, 270))
-        draw.arc(arc_bbox, angles[0], angles[1],
-                 fill=_CHAIR_ARC_OUTLINE, width=1)
 
         # Screen — thin black bar on the desk side opposite the chair
         scr_side = _OPPOSITE_SIDE.get(cs_abs, "E")
