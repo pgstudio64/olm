@@ -351,14 +351,13 @@ def _draw_room_desks(
         logger.warning("Room %s: no desks to render", room.get("name"))
         return
 
-    # _decanon_rect needs the CANONICAL room dims (corridor at south).
-    # For an east/west corridor, canonicalisation swaps width/depth, so the
-    # canonical dims are the actual dims swapped (D-260). Passing the actual
-    # dims shifted desks out of place for side-corridor rooms.
-    if cf_abs in ("east", "west"):
-        canon_w, canon_d = room_d, room_w
-    else:
-        canon_w, canon_d = room_w, room_d
+    # D-265: the room payload dims (room.width_cm/depth_cm) are ALREADY in
+    # CANONICAL (corridor-south) coordinates — the frontend canonicalises the
+    # room before matching, and the desks live in that same canonical frame
+    # (room == pattern dims, proven on real data). D-260's east/west swap was
+    # wrong: it DOUBLE-swapped, shifting desks by (depth − width) and pushing
+    # them out of the room (e.g. x = −34, "between rooms"). No swap.
+    canon_w, canon_d = room_w, room_d
 
     # D-264 diagnostic (temporary)
     _pat = candidate.get("pattern") or {}

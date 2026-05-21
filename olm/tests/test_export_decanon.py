@@ -75,6 +75,43 @@ def test_decanon_chair_inverts_front_rotate_dir():
             )
 
 
+def test_draw_room_desks_west_room_in_bounds():
+    """D-265: a west-corridor room's desks must stay inside the room.
+
+    Room payload dims are already canonical; D-260's east/west swap
+    double-swapped them and pushed a desk to x=-34 ("between rooms").
+    Real data (room 427): canonical 288x442, a desk at canon y=162.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    from olm.server.services.export_service import _draw_room_desks, _EXPORT_DEBUG
+
+    _EXPORT_DEBUG.clear()
+    img = Image.new("RGBA", (4000, 3000), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.load_default()
+    candidate = {
+        "desks": [
+            {"x_cm": 110, "y_cm": 6, "width_cm": 80, "depth_cm": 160,
+             "chair_side": "E"},
+            {"x_cm": 100, "y_cm": 162, "width_cm": 80, "depth_cm": 160,
+             "chair_side": "W"},
+        ],
+        "pattern": {"room_width_cm": 288, "room_depth_cm": 442},
+    }
+    room = {
+        "name": "427", "width_cm": 288, "depth_cm": 442,
+        "corridor_face_abs": "west", "bbox_px": [2454, 1519, 2663, 1655],
+        "candidate": candidate,
+    }
+    _draw_room_desks(draw, font, room, 2.1166666666666667)
+    assert _EXPORT_DEBUG, "no diagnostic captured"
+    assert not any("abs=(-" in line for line in _EXPORT_DEBUG), (
+        "desk decanonicalised to a negative coordinate (out of room): "
+        + " | ".join(_EXPORT_DEBUG)
+    )
+
+
 def test_decanon_default_face_identity():
     """Empty/None corridor face behaves like south (identity)."""
     assert _decanon_rect(10, 20, 80, 180, 300, 500, "") == (10, 20, 80, 180)
