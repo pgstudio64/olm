@@ -562,25 +562,10 @@ function scoringHtml(sc) {
     ' · min passage ' + sc.minPassageCm + ' cm</span>';
 }
 
-// D-233: legacy wrapper — catalogue cards still call this for color-only.
+// D-257: catalogue cards wrapper — returns {color, marge} for gap coloring.
+// Cards have no Dijkstra context, so passage=true (conservative).
 function distanceConformity(gapCm, faceA, faceB) {
-  var result = analyzeGap(gapCm, faceA, faceB, CURRENT_SPACING,
-                          _gapOptsForCurrentPattern());
-  return result.color;
-}
-
-// D-233 heuristic without Dijkstra: when the active pattern contains
-// exactly one workstation, every gap is a dead-end access (slip-in
-// margin) rather than a passage (walking margin). Conservative for
-// multi-desk patterns: fall back to walking until full Dijkstra is
-// wired in PE.
-function _gapOptsForCurrentPattern() {
-  if (typeof totalDesks === "function") {
-    try {
-      if (totalDesks() === 1) return { isDeadEnd: true };
-    } catch (e) { /* state not ready */ }
-  }
-  return undefined;
+  return analyzeGap(gapCm, faceA, faceB, CURRENT_SPACING, { passage: true });
 }
 
 function pushDistLabel(elements, x, y, valueCm, color, zf) {
@@ -599,48 +584,12 @@ function pushDistLabel(elements, x, y, valueCm, color, zf) {
     '" font-size="' + fontSize.toFixed(1) + '" font-weight="bold" font-family="monospace">' + valueCm + '</text>' });
 }
 
-// D-233: sub-label with free space, min required, and chair note.
-// Shown only in yellow/red. Used by editor.js (PE).
-function _pushGapSubLabels(elements, x, y, gap, zf) {
-  if (!zf) zf = window._currentZf || 1;
-  var isViolation = (gap.color === "#c05858");
-  var isWarning = (gap.color === "#c8a050");
-  if (isWarning) return;
-  var subColor = isViolation ? "#c05858" : "#58c080";
-  // Line 1: "free X — min Y (Rule)"
-  var line1 = isViolation
-    ? "min " + gap.minReqCm + " cm \u2014 " + gap.ruleName
-    : "free " + gap.freeSpaceCm + " cm";
-  var fontSize = 11 * zf;
-  var charW = 6.5 * zf, padX = 4 * zf, padY = 2 * zf;
-  var bgW = line1.length * charW + padX * 2;
-  var bgH = fontSize + padY * 2;
-  var subY = y + 6 * zf;
-  elements.push({ z: 6.9, s: '<rect x="' + (x - bgW / 2).toFixed(1) +
-    '" y="' + subY.toFixed(1) + '" width="' + bgW.toFixed(1) +
-    '" height="' + bgH.toFixed(1) + '" rx="' + (2 * zf).toFixed(1) +
-    '" fill="#0e0e0d" fill-opacity="0.75"/>' });
-  elements.push({ z: 7, s: '<text x="' + x.toFixed(1) + '" y="' +
-    (subY + padY + fontSize * 0.85).toFixed(1) +
-    '" text-anchor="middle" fill="' + subColor + '" font-size="' +
-    fontSize.toFixed(1) + '" font-family="monospace">' + line1 + '</text>' });
-}
-
-// D-233: render distance label with gap analysis sub-labels.
+// D-257: render distance label with signed margin and color.
 // faceA/faceB: effective face objects (null = wall).
-function pushDistLabelWithGap(elements, x, y, rawCm, faceA, faceB, zf) {
-  // D-234: distance coloring and sub-labels follow the circulation
-  // toggle (state.circVisible). When OFF, render neutral distances
-  // with no sub-label — coloring belongs with the circulation analysis.
-  var circOn = (typeof state !== "undefined") ? state.circVisible !== false : true;
-  if (!circOn) {
-    pushDistLabel(elements, x, y, rawCm, undefined, zf);
-    return;
-  }
-  var gap = analyzeGap(rawCm, faceA, faceB, CURRENT_SPACING,
-                       _gapOptsForCurrentPattern());
-  pushDistLabel(elements, x, y, rawCm, gap.color, zf);
-  // D-235: no sub-label. The colored value is the only signal.
+// opts: { passage: boolean } — from Dijkstra passage detection.
+function pushDistLabelWithGap(elements, x, y, rawCm, faceA, faceB, zf, opts) {
+  var gap = analyzeGap(rawCm, faceA, faceB, CURRENT_SPACING, opts);
+  pushDistLabel(elements, x, y, formatMarge(gap.marge), gap.color, zf);
 }
 
 function smoothPath(pts) {

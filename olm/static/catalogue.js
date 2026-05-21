@@ -603,23 +603,23 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY, opts) {
       var lx = a.x + a.w + nearestRightGap / 2;
       var ovT = Math.max(a.y, nearestRight.y);
       var ovB = Math.min(a.y + a.h, nearestRight.y + nearestRight.h);
-      // D-233: A's east face vs B's west face
-      var rcol = distanceConformity(gcm,
+      // D-257: signed margin, passage=true (conservative for cards)
+      var rGap = distanceConformity(gcm,
         getFacingFace(a.faces, "east"),
         getFacingFace(nearestRight.faces, "west"));
       elements.push({ z: 7, s: '<text x="' + lx.toFixed(1) + '" y="' + ((ovT + ovB) / 2 + labelFontSize * 0.35).toFixed(1) +
-        '" text-anchor="middle" fill="' + rcol + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm + '</text>' });
+        '" text-anchor="middle" fill="' + rGap.color + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + formatMarge(rGap.marge) + '</text>' });
     }
     if (nearestBelow) {
       var gcm2 = Math.round(nearestBelowGap / scale);
       var ovL = Math.max(a.x, nearestBelow.x);
       var ovR = Math.min(a.x + a.w, nearestBelow.x + nearestBelow.w);
-      // D-233: A's south face vs B's north face
-      var bcol = distanceConformity(gcm2,
+      // D-257: signed margin, passage=true (conservative for cards)
+      var bGap = distanceConformity(gcm2,
         getFacingFace(a.faces, "south"),
         getFacingFace(nearestBelow.faces, "north"));
       elements.push({ z: 7, s: '<text x="' + ((ovL + ovR) / 2).toFixed(1) + '" y="' + (a.y + a.h + nearestBelowGap / 2 + labelFontSize * 0.35).toFixed(1) +
-        '" text-anchor="middle" fill="' + bcol + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + gcm2 + '</text>' });
+        '" text-anchor="middle" fill="' + bGap.color + '" font-size="' + labelFontSize + '" font-weight="bold" font-family="monospace">' + formatMarge(bGap.marge) + '</text>' });
     }
   }
 
@@ -664,11 +664,11 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY, opts) {
         tx = wd.sign > 0 ? wd.bEdge + dist / 2 : wd.wallEdge + dist / 2;
         ty = br.y + br.h / 2;
       }
-      // D-233: block face vs wall (null = wall)
-      var wcol = distanceConformity(dcm,
+      // D-257: signed margin, passage=true (conservative for cards)
+      var wGap = distanceConformity(dcm,
         getFacingFace(br.faces, wd.face), null);
       elements.push({ z: 7, s: '<text x="' + tx.toFixed(1) + '" y="' + (ty + labelFontSize * 0.35).toFixed(1) +
-        '" text-anchor="middle" fill="' + wcol + '" font-size="' + labelFontSize + '" font-family="monospace">' + dcm + '</text>' });
+        '" text-anchor="middle" fill="' + wGap.color + '" font-size="' + labelFontSize + '" font-family="monospace">' + formatMarge(wGap.marge) + '</text>' });
     }
   }
 

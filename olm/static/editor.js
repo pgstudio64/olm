@@ -109,6 +109,142 @@ function setActiveStandard(std) {
   CURRENT_SPACING = (state.standard && SPACING_CONFIGS[state.standard]) || null;
 }
 
+// D-257: test whether a gap rectangle (in cells) is a passage based on
+// Dijkstra paths. A gap is a passage if at least one path either:
+//   (1) traverses it on the LONG axis (touches both extremes), or
+//   (2) has its terminal cell (points[0], the chair arrival) inside it.
+// gapRect: {r0, r1, c0, c1} — half-open ranges [r0,r1) × [c0,c1).
+// gapAxis: "x" (right gap, vertical strip) or "y" (below/wall gap, horizontal strip).
+// For a right gap the long axis is y (rows), for a below gap the long axis is x (cols).
+function _isPassage(circInfo, gapRect, gapAxis) {
+  if (!circInfo || !circInfo.paths) return false;
+  var r0 = gapRect.r0, r1 = gapRect.r1, c0 = gapRect.c0, c1 = gapRect.c1;
+  if (r0 >= r1 || c0 >= c1) return false;
+  for (var pi = 0; pi < circInfo.paths.length; pi++) {
+    var pts = circInfo.paths[pi].points;
+    if (!pts || pts.length === 0) continue;
+    // Rule 2: terminal cell (chair arrival) inside the rectangle
+    var term = pts[0];
+    if (term.r >= r0 && term.r < r1 && term.c >= c0 && term.c < c1) return true;
+    // Rule 1: traverse on the long axis
+    var minLong = Infinity, maxLong = -Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (p.r >= r0 && p.r < r1 && p.c >= c0 && p.c < c1) {
+        if (gapAxis === "x") {
+          // Right gap: long axis = y (rows)
+          if (p.r < minLong) minLong = p.r;
+          if (p.r > maxLong) maxLong = p.r;
+        } else {
+          // Below gap: long axis = x (cols)
+          if (p.c < minLong) minLong = p.c;
+          if (p.c > maxLong) maxLong = p.c;
+        }
+      }
+    }
+    if (minLong <= maxLong) {
+      var longStart = (gapAxis === "x") ? r0 : c0;
+      var longEnd = (gapAxis === "x") ? r1 - 1 : c1 - 1;
+      if (minLong <= longStart && maxLong >= longEnd) return true;
+    }
+  }
+  return false;
+}
+
+// D-257: build the residual gap rectangle in cells for a block-to-block
+// or block-to-wall gap. Returns {r0,r1,c0,c1} in cell coordinates,
+// or null if the residual is empty (emprises eat up the gap).
+// blockEdges in px (with MARGIN offset), spacing = CURRENT_SPACING.
+function _gapResidualCells(gapType, a, b, spacing, roomState) {
+  var cellCm = GRID_STEP_CM;
+  var emprise = function(face) {
+    var side = classifyGapSide(face);
+    if (side.type === "chair") {
+      return (spacing.chair_clearance_cm || 0) + (spacing.slip_in_margin_cm || 0);
+    }
+    return 0;
+  };
+
+  // Block positions are in pixels with origin at room NW corner (MARGIN=0).
+  // Convert to cm: cm = px / SCALE.
+  var x0_cm, x1_cm, y0_cm, y1_cm;
+  if (gapType === "right") {
+    var eA = emprise(getFacingFace(a.faces, "east"));
+    var eB = emprise(getFacingFace(b.faces, "west"));
+    x0_cm = (a.deskX + a.deskW) / SCALE + eA;
+    x1_cm = b.deskX / SCALE - eB;
+    y0_cm = Math.max(a.deskY, b.deskY) / SCALE;
+    y1_cm = Math.min(a.deskY + a.deskH, b.deskY + b.deskH) / SCALE;
+    return {
+      r0: Math.floor(y0_cm / cellCm),
+      r1: Math.ceil(y1_cm / cellCm),
+      c0: Math.ceil(x0_cm / cellCm),
+      c1: Math.floor(x1_cm / cellCm),
+      axis: "x",
+    };
+  } else if (gapType === "below") {
+    var eA2 = emprise(getFacingFace(a.faces, "south"));
+    var eB2 = emprise(getFacingFace(b.faces, "north"));
+    y0_cm = (a.deskY + a.deskH) / SCALE + eA2;
+    y1_cm = b.deskY / SCALE - eB2;
+    x0_cm = Math.max(a.deskX, b.deskX) / SCALE;
+    x1_cm = Math.min(a.deskX + a.deskW, b.deskX + b.deskW) / SCALE;
+    return {
+      r0: Math.ceil(y0_cm / cellCm),
+      r1: Math.floor(y1_cm / cellCm),
+      c0: Math.floor(x0_cm / cellCm),
+      c1: Math.ceil(x1_cm / cellCm),
+      axis: "y",
+    };
+  } else {
+    // Wall gap: gapType = "north"|"south"|"east"|"west"
+    var face = gapType;
+    var eA3 = emprise(getFacingFace(a.faces, face));
+    if (face === "south") {
+      y0_cm = (a.deskY + a.deskH) / SCALE + eA3;
+      y1_cm = roomState.room_depth_cm;
+      x0_cm = a.deskX / SCALE;
+      x1_cm = (a.deskX + a.deskW) / SCALE;
+      return {
+        r0: Math.ceil(y0_cm / cellCm), r1: Math.floor(y1_cm / cellCm),
+        c0: Math.floor(x0_cm / cellCm), c1: Math.ceil(x1_cm / cellCm),
+        axis: "y",
+      };
+    } else if (face === "north") {
+      y0_cm = 0;
+      y1_cm = a.deskY / SCALE - eA3;
+      x0_cm = a.deskX / SCALE;
+      x1_cm = (a.deskX + a.deskW) / SCALE;
+      return {
+        r0: Math.floor(y0_cm / cellCm), r1: Math.floor(y1_cm / cellCm),
+        c0: Math.floor(x0_cm / cellCm), c1: Math.ceil(x1_cm / cellCm),
+        axis: "y",
+      };
+    } else if (face === "east") {
+      x0_cm = (a.deskX + a.deskW) / SCALE + eA3;
+      x1_cm = roomState.room_width_cm;
+      y0_cm = a.deskY / SCALE;
+      y1_cm = (a.deskY + a.deskH) / SCALE;
+      return {
+        r0: Math.floor(y0_cm / cellCm), r1: Math.ceil(y1_cm / cellCm),
+        c0: Math.ceil(x0_cm / cellCm), c1: Math.floor(x1_cm / cellCm),
+        axis: "x",
+      };
+    } else {
+      // west
+      x0_cm = 0;
+      x1_cm = a.deskX / SCALE - eA3;
+      y0_cm = a.deskY / SCALE;
+      y1_cm = (a.deskY + a.deskH) / SCALE;
+      return {
+        r0: Math.floor(y0_cm / cellCm), r1: Math.ceil(y1_cm / cellCm),
+        c0: Math.floor(x0_cm / cellCm), c1: Math.floor(x1_cm / cellCm),
+        axis: "x",
+      };
+    }
+  }
+}
+
 let state = {
   name: "P_NEW",
   rows: [],
@@ -1363,6 +1499,10 @@ function _renderImpl(targetSvg) {
     if (bBottom > totalH) totalH = bBottom;
   }
 
+  // D-257: compute circulation info once for passage detection (cached per render).
+  // Called regardless of circVisible — margin coloring is permanent.
+  var _circCache = (totalDesks() > 0) ? computeCirculationInfo() : null;
+
   // Distance labels between neighboring blocks (z=7)
   // Rule UI-DIST: distance is shown between two blocks if and only if
   //   1. One is the nearest neighbor of the other in a direction (right or below)
@@ -1434,10 +1574,13 @@ function _renderImpl(targetSvg) {
       const overlapTop = Math.max(a.deskY, nearestRight.deskY);
       const overlapBot = Math.min(a.deskY + a.deskH, nearestRight.deskY + nearestRight.deskH);
       const ly = (overlapTop + overlapBot) / 2;
-      // D-233: A's east face vs B's west face
+      // D-257: passage detection via Dijkstra residual
+      var rRect = CURRENT_SPACING
+        ? _gapResidualCells("right", a, nearestRight, CURRENT_SPACING, state) : null;
+      var rPass = rRect ? _isPassage(_circCache, rRect, rRect.axis) : false;
       pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm,
         getFacingFace(a.faces, "east"),
-        getFacingFace(nearestRight.faces, "west"), zf);
+        getFacingFace(nearestRight.faces, "west"), zf, { passage: rPass });
     }
 
     if (nearestBelow) {
@@ -1446,10 +1589,13 @@ function _renderImpl(targetSvg) {
       const overlapRight = Math.min(a.deskX + a.deskW, nearestBelow.deskX + nearestBelow.deskW);
       const lx = (overlapLeft + overlapRight) / 2;
       const ly = a.deskY + a.deskH + nearestBelowGap / 2;
-      // D-233: A's south face vs B's north face
+      // D-257: passage detection via Dijkstra residual
+      var bRect = CURRENT_SPACING
+        ? _gapResidualCells("below", a, nearestBelow, CURRENT_SPACING, state) : null;
+      var bPass = bRect ? _isPassage(_circCache, bRect, bRect.axis) : false;
       pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm,
         getFacingFace(a.faces, "south"),
-        getFacingFace(nearestBelow.faces, "north"), zf);
+        getFacingFace(nearestBelow.faces, "north"), zf, { passage: bPass });
     }
   }
 
@@ -1498,9 +1644,12 @@ function _renderImpl(targetSvg) {
         tx = dir.sign > 0 ? dir.blockEdge + dist / 2 : dir.wallEdge + dist / 2;
         ty = a.deskY + a.deskH / 2;
       }
-      // D-233: block face vs wall (null = wall side)
+      // D-257: block face vs wall — passage from Dijkstra residual
+      var wRect = CURRENT_SPACING
+        ? _gapResidualCells(dir.face, a, null, CURRENT_SPACING, state) : null;
+      var wPass = wRect ? _isPassage(_circCache, wRect, wRect.axis) : false;
       pushDistLabelWithGap(elements, tx, ty + 4, dcm,
-        getFacingFace(a.faces, dir.face), null);
+        getFacingFace(a.faces, dir.face), null, undefined, { passage: wPass });
     }
   }
 
@@ -1594,8 +1743,9 @@ function _renderImpl(targetSvg) {
     elements, roomX, roomY, roomWPx, roomHPx, isReview, _peAmend);
 
   // Circulation — smoothed polylines, width proportional to traffic (z=0.2)
+  // D-257: reuse _circCache (already computed for margin coloring).
   if (hasBlocks && state.circVisible) {
-    var circ = computeCirculationInfo();
+    var circ = _circCache;
     if (circ && circ.paths.length > 0) {
       var cellPx = GRID_STEP_CM * SCALE;
       var halfCell = cellPx / 2;

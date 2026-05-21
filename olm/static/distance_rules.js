@@ -1,78 +1,85 @@
 "use strict";
 
-// D-235 (simplified): distance coloring with a single threshold.
-// Without Dijkstra integration in PE, fine-grained rules
-// (slip-in / walking / main_corridor + dead-end detection) produce
-// too many false positives. Conservative 2-state model:
-//   - free space >= walking_margin_cm : green (definitely OK)
-//   - free space <  walking_margin_cm : amber (user judges)
-// No red, no sub-label, no rule name.
-// Shared between editor.js (PE) and catalogue.js (cards).
+// D-257: signed-margin model for distance coloring.
+// Each gap's margin = rawDist - emprise(A) - emprise(B) - walking (if passage).
+// Emprise chair side = chair_clearance_cm + slip_in_margin_cm (from spacing).
+// Emprise non-chair/wall = 0.
+// Passage = determined by Dijkstra (caller provides opts.passage boolean).
+// Tolerance = spacing.distance_tolerance_cm (per standard, default 5).
+// Shared between editor.js (PE), catalogue.js (cards), shared.js wrappers.
 
 /**
- * Classify one side of a gap.
+ * Classify one side of a gap as chair or non-chair.
  *
  * @param {object|null} faceInfo - Effective face object with
  *   non_superposable_cm, or null for a wall / opening / door zone.
- * @returns {{type: string, chairClearanceCm: number}}
+ * @returns {{type: string}}
  */
 function classifyGapSide(faceInfo) {
-  if (!faceInfo) return { type: "wall", chairClearanceCm: 0 };
+  if (!faceInfo) return { type: "wall" };
   // D-241: internal face = chair in void, no outer clearance
-  if (faceInfo.internal) return { type: "other", chairClearanceCm: 0 };
+  if (faceInfo.internal) return { type: "other" };
   var nsup = faceInfo.non_superposable_cm || 0;
-  if (nsup > 0) return { type: "chair", chairClearanceCm: nsup };
-  return { type: "other", chairClearanceCm: 0 };
+  if (nsup > 0) return { type: "chair" };
+  return { type: "other" };
 }
 
 /**
- * Analyze a single gap and decide its colour.
+ * Compute the emprise (reserved space) for one side of a gap.
+ *
+ * @param {{type: string}} side - Output of classifyGapSide.
+ * @param {object} spacing - CURRENT_SPACING object.
+ * @returns {number} Reserved cm for this side.
+ */
+function _gapSideEmprise(side, spacing) {
+  if (side.type === "chair") {
+    return (spacing.chair_clearance_cm || 0) + (spacing.slip_in_margin_cm || 0);
+  }
+  return 0;
+}
+
+/**
+ * Format a signed margin for display: "+12", "0", "-8".
+ *
+ * @param {number} marge - Signed margin in cm.
+ * @returns {string}
+ */
+function formatMarge(marge) {
+  if (marge > 0) return "+" + marge;
+  return String(marge);
+}
+
+/**
+ * Analyze a single gap and decide its colour via signed margin.
+ *
+ * D-257: replaces the D-235 heuristic. Margin = rawDist - emprise(A)
+ * - emprise(B) - walking (if passage). Color from tolerance band.
  *
  * @param {number} rawDistCm - Body-to-body (or body-to-wall) distance.
  * @param {object|null} faceA - Effective face on side A (null = wall).
  * @param {object|null} faceB - Effective face on side B (null = wall).
  * @param {object} spacing - CURRENT_SPACING object.
- * @param {object} [opts] - Reserved for future Dijkstra-aware rules.
- * @returns {{color: string, freeSpaceCm: number, minReqCm: number,
- *            ruleName: string, chairNote: string}}
+ * @param {object} [opts] - { passage: boolean } from Dijkstra analysis.
+ * @returns {{color: string, marge: number}}
  */
 function analyzeGap(rawDistCm, faceA, faceB, spacing, opts) {
   if (!spacing) {
-    return {
-      color: "#c8a050",
-      freeSpaceCm: rawDistCm,
-      minReqCm: 0,
-      ruleName: "",
-      chairNote: "",
-    };
+    return { color: "#c8a050", marge: rawDistCm };
   }
   var sideA = classifyGapSide(faceA);
   var sideB = classifyGapSide(faceB);
-  var encroachment = sideA.chairClearanceCm + sideB.chairClearanceCm;
-  var freeSpace = rawDistCm - encroachment;
-  var nChairs = (sideA.type === "chair" ? 1 : 0)
-              + (sideB.type === "chair" ? 1 : 0);
-  // Default threshold = walking margin. Exception: one chair facing a
-  // wall = personal access only, no one passes between chair and wall,
-  // so slip-in suffices.
-  var minReq;
-  if (nChairs === 1 && (sideA.type === "wall" || sideB.type === "wall")) {
-    minReq = spacing.slip_in_margin_cm || 0;
-  } else {
-    minReq = spacing.walking_margin_cm || 0;
-  }
-  var TOL = 5;
+  var empriseA = _gapSideEmprise(sideA, spacing);
+  var empriseB = _gapSideEmprise(sideB, spacing);
+  var passage = opts && opts.passage;
+  var walking = passage ? (spacing.walking_margin_cm || 0) : 0;
+  var requis = empriseA + empriseB + walking;
+  var marge = rawDistCm - requis;
+  var tol = spacing.distance_tolerance_cm || 5;
   var color;
-  if (freeSpace > minReq + TOL) color = "#58c080";        // green
-  else if (freeSpace >= minReq - TOL) color = "#c8a050";  // amber
-  else color = "#d88080";                                 // soft red
-  return {
-    color: color,
-    freeSpaceCm: freeSpace,
-    minReqCm: minReq,
-    ruleName: "",
-    chairNote: "",
-  };
+  if (marge > tol) color = "#58c080";         // green
+  else if (marge >= -tol) color = "#c8a050";   // amber
+  else color = "#d88080";                      // red
+  return { color: color, marge: marge };
 }
 
 /**

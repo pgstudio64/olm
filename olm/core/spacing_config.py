@@ -51,6 +51,7 @@ class SpacingConfig:
     main_corridor_cm: int            # ES-04
     door_exclusion_depth_cm: int     # ES-05
     max_island_size: int             # ES-06
+    distance_tolerance_cm: int = 5     # D-257
     main_corridor_threshold: int = 6  # D-233
 
     def to_dict(self) -> dict:
