@@ -427,6 +427,20 @@
     };
   }
 
+  // Build the full export/preview payload from current state.
+  // useBestFallback: if true, rooms without a saved layout get the best
+  // matching candidate instead (D-246 fallback mode).
+  function _buildExportPayload(planId, scaleCmPerPx, useBestFallback) {
+    var rooms = fpData.rooms.map(function (r) {
+      return _buildExportRoom(r, useBestFallback);
+    });
+    return {
+      plan_id: planId,
+      scale_cm_per_px: scaleCmPerPx,
+      rooms: rooms,
+    };
+  }
+
   function _postExport(fmt, planId, scaleCmPerPx, rooms) {
     showModal('Exporting ' + fmt.toUpperCase() + '...');
     fetch('/api/floor-plan/export/' + encodeURIComponent(fmt), {
@@ -496,10 +510,8 @@
       ).then(function (ok) {
         if (!ok) return;
         var go = function () {
-          var rooms = fpData.rooms.map(function (r) {
-            return _buildExportRoom(r, true);
-          });
-          _postExport(fmt, planId, scaleCmPerPx, rooms);
+          var payload = _buildExportPayload(planId, scaleCmPerPx, true);
+          _postExport(fmt, planId, scaleCmPerPx, payload.rooms);
         };
         // Best candidate needs every room matched (lazy matching, A).
         if (typeof window.ensureAllMatched === 'function') {
@@ -512,10 +524,93 @@
       return;
     }
 
-    var rooms = fpData.rooms.map(function (r) {
-      return _buildExportRoom(r, false);
-    });
-    _postExport(fmt, planId, scaleCmPerPx, rooms);
+    var payload = _buildExportPayload(planId, scaleCmPerPx, false);
+    _postExport(fmt, planId, scaleCmPerPx, payload.rooms);
+  }
+
+  // Preview: same payload as export, rendered as PNG in a lightbox.
+  // Skips the D-246 confirmModal but replicates its fallback logic.
+  function previewPlan() {
+    var ingState = window.ingState;
+    var fpData = window.fpData;
+    if (!fpData || !fpData.rooms || !fpData.rooms.length) {
+      alertModal('No floor plan loaded.');
+      return;
+    }
+    var hdr = document.getElementById('hdrCurrentPlanText');
+    var planId = hdr ? hdr.textContent.trim() : '';
+    if (!planId) {
+      alertModal('Cannot determine plan name.');
+      return;
+    }
+    var scaleCmPerPx = (ingState && ingState.scale) || 0;
+    if (!scaleCmPerPx || scaleCmPerPx <= 0) {
+      alertModal('Scale not available.');
+      return;
+    }
+
+    var fpAmendments = window.fpAmendments || {};
+    var nSaved = fpData.rooms.filter(function (r) {
+      var s = fpAmendments[r.name];
+      return s && (s.saved || s.amended);
+    }).length;
+
+    var btn = document.getElementById('btnPreviewPlan');
+    if (btn) btn.disabled = true;
+
+    var doPreview = function (useBestFallback) {
+      showModal('Generating preview...');
+      var payload = _buildExportPayload(planId, scaleCmPerPx, useBestFallback);
+      fetch('/api/floor-plan/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) {
+          if (!r.ok) {
+            return r.json().then(function (e) {
+              return Promise.reject(e.error || 'Preview failed');
+            });
+          }
+          return r.blob();
+        })
+        .then(function (blob) {
+          hideModal();
+          var blobUrl = URL.createObjectURL(blob);
+          // Load image to get natural dimensions
+          var tmpImg = new Image();
+          tmpImg.onload = function () {
+            window.openPreviewLightbox(blobUrl, tmpImg.naturalWidth, tmpImg.naturalHeight);
+          };
+          tmpImg.onerror = function () {
+            URL.revokeObjectURL(blobUrl);
+            alertModal('Failed to decode preview image.');
+          };
+          tmpImg.src = blobUrl;
+        })
+        .catch(function (e) {
+          hideModal();
+          alertModal('Preview failed: ' + e);
+        })
+        .finally(function () {
+          if (btn) btn.disabled = false;
+        });
+    };
+
+    if (nSaved === 0) {
+      // No saved layout: use best fallback, ensure all rooms matched first.
+      if (typeof window.ensureAllMatched === 'function') {
+        showModal('Generating preview...');
+        window.ensureAllMatched(function () {
+          hideModal();
+          doPreview(true);
+        });
+      } else {
+        doPreview(true);
+      }
+    } else {
+      doPreview(false);
+    }
   }
 
   // ==========================================================================
@@ -529,4 +624,5 @@
   window.savePlanToDisk    = savePlanToDisk;
   window.devExportV3Json   = devExportV3Json;
   window.exportPlan        = exportPlan;
+  window.previewPlan       = previewPlan;
 })();

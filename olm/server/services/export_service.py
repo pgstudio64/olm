@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from olm.core.catalogue_matcher import compute_desk_positions
+from olm.core.pattern_generator import CABINET_D_CM, CABINET_W_CM
 from olm.server.services.config_service import (
     PROJECT_ROOT,
     get_corridor_rgb,
@@ -347,7 +348,8 @@ def _draw_room_desks(
         return
 
     active = _get_active_desks(candidate)
-    if not active:
+    furniture = candidate.get("furniture") or []
+    if not active and not furniture:
         logger.warning("Room %s: no desks to render", room.get("name"))
         return
 
@@ -439,6 +441,29 @@ def _draw_room_desks(
         draw.text(
             ((x1 + x2) / 2 - tw / 2, (y1 + y2) / 2 - th / 2),
             label, fill=_LABEL_COLOR, font=font,
+        )
+
+    # D-266: Draw cabinets (furniture) as B&W rectangles — no chair/screen/label
+    for item in furniture:
+        if item.get("type") != "CABINET":
+            continue
+        f_w = CABINET_W_CM
+        f_d = CABINET_D_CM
+        if item.get("orientation") == 90:
+            f_w, f_d = f_d, f_w
+        ax, ay, aw, ad = _decanon_rect(
+            item["x_cm"], item["y_cm"], f_w, f_d,
+            canon_w, canon_d, cf_abs,
+        )
+        x1 = bbox[0] + ax / scale
+        y1 = bbox[1] + ay / scale
+        x2 = x1 + aw / scale
+        y2 = y1 + ad / scale
+        draw.rectangle(
+            [x1, y1, x2, y2],
+            outline=_DESK_OUTLINE,
+            fill=_DESK_FILL,
+            width=_DESK_STROKE_WIDTH,
         )
 
 

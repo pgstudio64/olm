@@ -1044,6 +1044,11 @@ async function init() {
   });
 
   canvas.addEventListener("click", function(e) {
+    // D-267: suppress click after block drag release (SVG rebuilt, stale target)
+    if (window._blockDragJustReleased) {
+      window._blockDragJustReleased = false;
+      return;
+    }
     // Skip if clicking on door/opening interactive elements
     if (e.target.closest("[data-opening-handle]") ||
         e.target.closest("[data-opening-delete]") ||
@@ -1186,6 +1191,11 @@ async function init() {
     });
   }
 
+  // Preview button
+  document.getElementById("btnPreviewPlan").addEventListener("click", function() {
+    if (typeof window.previewPlan === "function") window.previewPlan();
+  });
+
   // Export dropdown toggle
   document.getElementById("btnExportPlan").addEventListener("click", function() {
     var menu = document.getElementById("exportMenu");
@@ -1207,8 +1217,9 @@ async function init() {
     // Reset header
     var hdr = document.getElementById("hdrCurrentPlanText");
     if (hdr) { hdr.textContent = "Select a floor plan..."; hdr.style.fontStyle = "italic"; hdr.style.fontWeight = "normal"; hdr.style.color = "var(--text-dim)"; hdr.style.fontSize = "var(--fs-sm)"; }
-    // Hide Save/Export/Close buttons + toolbar
+    // Hide Save/Preview/Export/Close buttons + toolbar
     document.getElementById("btnSavePlan").style.display = "none";
+    document.getElementById("btnPreviewPlan").style.display = "none";
     document.getElementById("exportWrapper").style.display = "none";
     document.getElementById("btnClosePlan").style.display = "none";
     var ingTbClose = document.getElementById("ingToolbar");

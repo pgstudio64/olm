@@ -384,6 +384,74 @@ class TestComputeFloorSummary:
         assert s["furnished_offices"] == 1
 
 
+class TestExportCabinet:
+    """D-266: cabinets (furniture) drawn as B&W rectangles at export."""
+
+    def test_cabinet_draws_rectangle(self, export_env):
+        """A cabinet in candidate.furniture produces a visible rectangle."""
+        from olm.server.services.export_service import compose_plan_image
+        plans_dir = export_env / "plans"
+        plan = {"rooms": {"101": {"surface": "14.40 m2",
+                                   "bbox_px": [10, 10, 60, 50]}}}
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+        room = _room_payload()
+        room["candidate"]["furniture"] = [
+            {"type": "CABINET", "x_cm": 200, "y_cm": 10, "orientation": 0},
+        ]
+        img_with = compose_plan_image("test_plan", [room], 5.0)
+
+        # Without furniture
+        room2 = _room_payload()
+        room2["candidate"]["furniture"] = []
+        img_without = compose_plan_image("test_plan", [room2], 5.0)
+
+        # Images should differ (cabinet adds pixels)
+        import numpy as np
+        arr_with = np.array(img_with)
+        arr_without = np.array(img_without)
+        assert not np.array_equal(arr_with, arr_without), \
+            "Cabinet should produce visible pixels"
+
+    def test_no_cabinet_no_change(self, export_env):
+        """Empty furniture list produces no additional drawing."""
+        from olm.server.services.export_service import compose_plan_image
+        plans_dir = export_env / "plans"
+        plan = {"rooms": {"101": {"surface": "14.40 m2",
+                                   "bbox_px": [10, 10, 60, 50]}}}
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+        room1 = _room_payload()
+        room1["candidate"]["furniture"] = []
+        img1 = compose_plan_image("test_plan", [room1], 5.0)
+
+        room2 = _room_payload()
+        # No furniture key at all
+        room2["candidate"].pop("furniture", None)
+        img2 = compose_plan_image("test_plan", [room2], 5.0)
+
+        import numpy as np
+        assert np.array_equal(np.array(img1), np.array(img2))
+
+    def test_cabinet_orientation_90(self, export_env):
+        """Cabinet at orientation 90 swaps width/depth (no crash)."""
+        from olm.server.services.export_service import compose_plan_image
+        plans_dir = export_env / "plans"
+        plan = {"rooms": {"101": {"surface": "14.40 m2",
+                                   "bbox_px": [10, 10, 60, 50]}}}
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+        room = _room_payload()
+        room["candidate"]["furniture"] = [
+            {"type": "CABINET", "x_cm": 100, "y_cm": 5, "orientation": 90},
+        ]
+        img = compose_plan_image("test_plan", [room], 5.0)
+        assert img.mode == "RGBA"
+
+
 class TestCartoucheSmokeExport:
     """Smoke test: compose_plan_image with cartouche runs without error."""
 
@@ -411,3 +479,118 @@ class TestCartoucheSmokeExport:
         # semi-opaque white background
         px = img.getpixel((13, 13))
         assert px != (200, 200, 200, 255), "Cartouche should be visible"
+
+
+# ---------------------------------------------------------------------------
+# Preview endpoint tests
+# ---------------------------------------------------------------------------
+
+
+class TestPreviewEndpoint:
+    """POST /api/floor-plan/preview — returns PNG bytes."""
+
+    def test_preview_returns_png(self, client, export_env):
+        """Happy path: valid payload returns a PNG image."""
+        # Write a minimal JSON plan so the cartouche has data
+        plans_dir = export_env / "plans"
+        plan = {
+            "rooms": {
+                "101": {"surface": "14.40 m2", "bbox_px": [10, 10, 60, 50]},
+            },
+        }
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+        payload = {
+            "plan_id": "test_plan",
+            "scale_cm_per_px": 5.0,
+            "rooms": [_room_payload()],
+        }
+        resp = client.post("/api/floor-plan/preview", json=payload)
+        assert resp.status_code == 200
+        assert resp.content_type == "image/png"
+        # Verify returned bytes are a valid PNG
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+        # Verify we can open the image
+        from io import BytesIO
+        img = Image.open(BytesIO(resp.data))
+        assert img.size == (100, 80)
+        assert img.mode == "RGBA"
+
+    def test_preview_no_data(self, client, export_env):
+        """No JSON body → 400."""
+        resp = client.post(
+            "/api/floor-plan/preview",
+            data="",
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_preview_missing_plan_id(self, client, export_env):
+        """Missing plan_id → 400."""
+        payload = {
+            "plan_id": "",
+            "scale_cm_per_px": 5.0,
+            "rooms": [_room_payload()],
+        }
+        resp = client.post("/api/floor-plan/preview", json=payload)
+        assert resp.status_code == 400
+        assert "plan_id" in resp.get_json()["error"].lower()
+
+    def test_preview_missing_rooms(self, client, export_env):
+        """Empty rooms list → 400."""
+        payload = {
+            "plan_id": "test_plan",
+            "scale_cm_per_px": 5.0,
+            "rooms": [],
+        }
+        resp = client.post("/api/floor-plan/preview", json=payload)
+        assert resp.status_code == 400
+
+    def test_preview_invalid_scale(self, client, export_env):
+        """Invalid scale → 400."""
+        payload = {
+            "plan_id": "test_plan",
+            "scale_cm_per_px": -1,
+            "rooms": [_room_payload()],
+        }
+        resp = client.post("/api/floor-plan/preview", json=payload)
+        assert resp.status_code == 400
+
+    def test_preview_missing_sd_png(self, client, export_env):
+        """Non-existent -SD.png → 404."""
+        payload = {
+            "plan_id": "nonexistent",
+            "scale_cm_per_px": 5.0,
+            "rooms": [_room_payload()],
+        }
+        resp = client.post("/api/floor-plan/preview", json=payload)
+        assert resp.status_code == 404
+        assert "not found" in resp.get_json()["error"]
+
+    def test_preview_no_disk_write(self, client, export_env):
+        """Preview must NOT write anything to disk."""
+        plans_dir = export_env / "plans"
+        plan = {
+            "rooms": {
+                "101": {"surface": "14.40 m2", "bbox_px": [10, 10, 60, 50]},
+            },
+        }
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+        # Count files before
+        exports_dir = export_env / "project" / "exports"
+        before = set(export_env.rglob("*")) - {plans_dir / "test_plan.json",
+                                                 plans_dir / "test_plan-SD.png"}
+        payload = {
+            "plan_id": "test_plan",
+            "scale_cm_per_px": 5.0,
+            "rooms": [_room_payload()],
+        }
+        resp = client.post("/api/floor-plan/preview", json=payload)
+        assert resp.status_code == 200
+        # No new files created
+        after = set(export_env.rglob("*")) - {plans_dir / "test_plan.json",
+                                               plans_dir / "test_plan-SD.png"}
+        assert before == after, "Preview should not write files to disk"

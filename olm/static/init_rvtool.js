@@ -1470,6 +1470,54 @@
         }
       }
 
+      // D-267: Block drag — select + start drag in one motion (amend mode)
+      if (state.amendMode) {
+        var blockTarget = e.target.closest("[data-row][data-block]");
+        if (blockTarget) {
+          var bri = parseInt(blockTarget.dataset.row, 10);
+          var bbi = parseInt(blockTarget.dataset.block, 10);
+          var bRow = (state.rows || [])[bri];
+          var bBlk = bRow && bRow.blocks && bRow.blocks[bbi];
+          if (bBlk) {
+            state.selectedRow = bri;
+            state.selectedBlock = bbi;
+            state.selectedExclusion = -1;
+            state.selectedFurniture = -1;
+            // Compute absolute position of this block
+            var bPositions = computeBlockPositions();
+            var bPos = null;
+            for (var bpi = 0; bpi < bPositions.length; bpi++) {
+              if (bPositions[bpi].rowIdx === bri &&
+                  bPositions[bpi].blockIdx === bbi) {
+                bPos = bPositions[bpi]; break;
+              }
+            }
+            if (bPos) {
+              var bpt = rvScreenToRoomCm(e);
+              rvTool.dragOffset = {
+                dx_cm: bpt.x_cm - bPos.x_cm,
+                dy_cm: bpt.y_cm - bPos.y_cm,
+              };
+              rvTool._blockDragStart = {
+                rowIdx: bri, blockIdx: bbi,
+                x_cm: bPos.x_cm, y_cm: bPos.y_cm,
+                w_cm: bPos.w_cm, h_cm: bPos.h_cm,
+              };
+              // Store ALL block positions for rebuild at release
+              rvTool._allBlockPositions = bPositions;
+              rvTool._blockDragMoved = false;
+              rvTool.mode = "blockDragging";
+              _renderActive();
+              e.preventDefault();
+              e.stopPropagation();
+              if (typeof e.stopImmediatePropagation === "function")
+                e.stopImmediatePropagation();
+              return;
+            }
+          }
+        }
+      }
+
       if (rvTool.mode === "placing") {
         var pt = rvScreenToRoomCm(e);
         rvTool.drawStart = pt;
@@ -1854,6 +1902,39 @@
         _renderActive();
         return;
       }
+      // D-267 + D-268: blockDragging — free drag of a workstation block
+      if (rvTool.mode === "blockDragging" && rvTool.dragOffset) {
+        var bpt2 = rvScreenToRoomCm(e);
+        var bds = rvTool._blockDragStart;
+        if (!bds) return;
+        // D-268: free position — no clamp to room bounds
+        var newBX = bpt2.x_cm - rvTool.dragOffset.dx_cm;
+        var newBY = bpt2.y_cm - rvTool.dragOffset.dy_cm;
+        // Snap to grid
+        newBX = Math.round(newBX / GRID_STEP_CM) * GRID_STEP_CM;
+        newBY = Math.round(newBY / GRID_STEP_CM) * GRID_STEP_CM;
+        // D-268: soft wall snap — attract to wall from INSIDE only
+        var eEdge = newBX + bds.w_cm;
+        var sEdge = newBY + bds.h_cm;
+        if (newBX > 0 && newBX <= GRID_STEP_CM) newBX = 0;
+        if (newBY > 0 && newBY <= GRID_STEP_CM) newBY = 0;
+        if (eEdge < state.room_width_cm &&
+            eEdge >= state.room_width_cm - GRID_STEP_CM)
+          newBX = state.room_width_cm - bds.w_cm;
+        if (sEdge < state.room_depth_cm &&
+            sEdge >= state.room_depth_cm - GRID_STEP_CM)
+          newBY = state.room_depth_cm - bds.h_cm;
+        // Update stored drag position for ghost rendering
+        rvTool._blockDragCurrent = { x_cm: newBX, y_cm: newBY };
+        rvTool._blockDragMoved = true;
+        // Show ghost rect at dragged position
+        var bdOffX = state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0;
+        var bdOffY = state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0;
+        rvShowGhostRect(
+          (newBX + bdOffX) * SCALE, (newBY + bdOffY) * SCALE,
+          bds.w_cm * SCALE, bds.h_cm * SCALE);
+        return;
+      }
       if (rvTool.mode === "drawing" && rvTool.drawStart) {
         var pt = rvScreenToRoomCm(e);
         var ds = rvTool.drawStart;
@@ -1987,6 +2068,72 @@
 
     // document mouseup: commit drawing or drag
     document.addEventListener("mouseup", function (e) {
+      // D-267: commit block drag — infer rows from positions
+      if (rvTool.mode === "blockDragging") {
+        rvRemoveGhostRect();
+        var bds2 = rvTool._blockDragStart;
+        var moved = rvTool._blockDragMoved && rvTool._blockDragCurrent;
+        rvTool.mode = "idle";
+        rvTool.dragOffset = null;
+        if (!moved || !bds2) {
+          // Click without move — just select, no inference
+          rvTool._blockDragStart = null;
+          rvTool._allBlockPositions = null;
+          rvTool._blockDragCurrent = null;
+          _renderActive();
+          if (typeof updateRowList === "function") updateRowList();
+          return;
+        }
+        // Build flat block list with absolute positions
+        var allPos = rvTool._allBlockPositions || [];
+        var flatBlocks = [];
+        for (var bpi2 = 0; bpi2 < allPos.length; bpi2++) {
+          var bp = allPos[bpi2];
+          var bSrc = state.rows[bp.rowIdx].blocks[bp.blockIdx];
+          var bCopy = {};
+          for (var bk in bSrc) {
+            if (Object.prototype.hasOwnProperty.call(bSrc, bk)) bCopy[bk] = bSrc[bk];
+          }
+          // Override with absolute position
+          if (bp.rowIdx === bds2.rowIdx && bp.blockIdx === bds2.blockIdx) {
+            bCopy.x_cm = rvTool._blockDragCurrent.x_cm;
+            bCopy.y_cm = rvTool._blockDragCurrent.y_cm;
+          } else {
+            bCopy.x_cm = bp.x_cm;
+            bCopy.y_cm = bp.y_cm;
+          }
+          flatBlocks.push(bCopy);
+        }
+        rvTool._blockDragStart = null;
+        rvTool._allBlockPositions = null;
+        rvTool._blockDragCurrent = null;
+        rvTool._blockDragMoved = false;
+        // Suppress the click event that fires after mouseup on the same SVG
+        window._blockDragJustReleased = true;
+        // Call server to infer rows
+        fetch("/api/patterns/infer-rows", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ blocks: flatBlocks }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.rows) {
+              state.rows = data.rows;
+              state.row_gaps_cm = data.row_gaps_cm || [];
+              state.selectedBlock = -1;
+              state.selectedRow = -1;
+              if (typeof markDirty === "function") markDirty();
+              render();
+              if (typeof updateDSL === "function") updateDSL();
+              if (typeof updateRowList === "function") updateRowList();
+            }
+          })
+          .catch(function (err) {
+            console.warn("infer-rows failed:", err);
+          });
+        return;
+      }
       // D-256 Lot 2: commit furniture drag
       if (rvTool.mode === "furnDragging") {
         rvTool.mode = "furnSelected";
@@ -2104,6 +2251,19 @@
             _getActiveSvg().style.cursor = "";
             var _ab = document.getElementById("btnAddCabinet");
             if (_ab) _ab.classList.remove("active");
+            e.preventDefault();
+            return;
+          }
+          // D-267: cancel block drag
+          if (rvTool.mode === "blockDragging") {
+            rvRemoveGhostRect();
+            rvTool.mode = "idle";
+            rvTool.dragOffset = null;
+            rvTool._blockDragStart = null;
+            rvTool._allBlockPositions = null;
+            rvTool._blockDragCurrent = null;
+            rvTool._blockDragMoved = false;
+            _renderActive();
             e.preventDefault();
             return;
           }

@@ -245,6 +245,62 @@ function _gapResidualCells(gapType, a, b, spacing, roomState) {
   }
 }
 
+// D-258 Lot 3: compute reduction of effective gap distance due to cabinets
+// in the residual rectangle of a passage.
+// rRect: {r0, r1, c0, c1, axis} from _gapResidualCells (cell coordinates).
+// Returns reduction in cm (0 if no cabinet intersects the residual).
+function _cabinetReductionCm(rRect, roomState) {
+  if (!rRect) return 0;
+  var furn = roomState.furniture;
+  if (!furn || !furn.length) return 0;
+  var cellCm = GRID_STEP_CM;
+  // Residual bounds in cm
+  var rx0 = rRect.c0 * cellCm;
+  var rx1 = rRect.c1 * cellCm;
+  var ry0 = rRect.r0 * cellCm;
+  var ry1 = rRect.r1 * cellCm;
+  if (rx1 <= rx0 || ry1 <= ry0) return 0;
+
+  var intervals = [];
+  for (var i = 0; i < furn.length; i++) {
+    var f = furn[i];
+    var dims = _furnitureEffectiveDims(f);
+    var fx0 = f.x_cm;
+    var fy0 = f.y_cm;
+    var fx1 = fx0 + dims.width_cm;
+    var fy1 = fy0 + dims.depth_cm;
+    // 2D intersection with residual
+    var ix0 = Math.max(rx0, fx0);
+    var ix1 = Math.min(rx1, fx1);
+    var iy0 = Math.max(ry0, fy0);
+    var iy1 = Math.min(ry1, fy1);
+    if (ix1 <= ix0 || iy1 <= iy0) continue;
+    // Project onto measurement axis
+    if (rRect.axis === "x") {
+      intervals.push([ix0, ix1]);
+    } else {
+      intervals.push([iy0, iy1]);
+    }
+  }
+  if (!intervals.length) return 0;
+  // Merge overlapping intervals (union)
+  intervals.sort(function(a, b) { return a[0] - b[0]; });
+  var merged = [intervals[0].slice()];
+  for (var j = 1; j < intervals.length; j++) {
+    var last = merged[merged.length - 1];
+    if (intervals[j][0] <= last[1]) {
+      last[1] = Math.max(last[1], intervals[j][1]);
+    } else {
+      merged.push(intervals[j].slice());
+    }
+  }
+  var total = 0;
+  for (var k = 0; k < merged.length; k++) {
+    total += merged[k][1] - merged[k][0];
+  }
+  return total;
+}
+
 let state = {
   name: "P_NEW",
   rows: [],
@@ -1297,6 +1353,7 @@ function _renderImpl(targetSvg) {
   let totalW = 0;
   let totalH = 0;
   let minX = MARGIN;  // track leftmost x coordinate (west zones)
+  let minY = MARGIN;  // D-268: track topmost y coordinate (north zones)
 
   if (!hasBlocks) {
     // No blocks: default viewBox based on room size
@@ -1362,6 +1419,9 @@ function _renderImpl(targetSvg) {
     // Opaque background full footprint (masks the grid under block + zones)
     var blockMinX = bx - wNSup - wCandPx;
     if (blockMinX < minX) minX = blockMinX;
+    // D-268: track topmost y (including north zones) for viewBox
+    var blockMinY = by - nNSup - nCandPx;
+    if (blockMinY < minY) minY = blockMinY;
     var wTotal = wNSup + wCandPx;
     var eTotal = eNSup + eCandPx;
     var nTotal = nNSup + nCandPx;
@@ -1578,7 +1638,9 @@ function _renderImpl(targetSvg) {
       var rRect = CURRENT_SPACING
         ? _gapResidualCells("right", a, nearestRight, CURRENT_SPACING, state) : null;
       var rPass = rRect ? _isPassage(_circCache, rRect, rRect.axis) : false;
-      pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm,
+      // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
+      var rReduce = rPass ? _cabinetReductionCm(rRect, state) : 0;
+      pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm - rReduce,
         getFacingFace(a.faces, "east"),
         getFacingFace(nearestRight.faces, "west"), zf, { passage: rPass });
     }
@@ -1593,7 +1655,9 @@ function _renderImpl(targetSvg) {
       var bRect = CURRENT_SPACING
         ? _gapResidualCells("below", a, nearestBelow, CURRENT_SPACING, state) : null;
       var bPass = bRect ? _isPassage(_circCache, bRect, bRect.axis) : false;
-      pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm,
+      // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
+      var bReduce = bPass ? _cabinetReductionCm(bRect, state) : 0;
+      pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm - bReduce,
         getFacingFace(a.faces, "south"),
         getFacingFace(nearestBelow.faces, "north"), zf, { passage: bPass });
     }
@@ -1648,7 +1712,9 @@ function _renderImpl(targetSvg) {
       var wRect = CURRENT_SPACING
         ? _gapResidualCells(dir.face, a, null, CURRENT_SPACING, state) : null;
       var wPass = wRect ? _isPassage(_circCache, wRect, wRect.axis) : false;
-      pushDistLabelWithGap(elements, tx, ty + 4, dcm,
+      // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
+      var wReduce = wPass ? _cabinetReductionCm(wRect, state) : 0;
+      pushDistLabelWithGap(elements, tx, ty + 4, dcm - wReduce,
         getFacingFace(a.faces, dir.face), null, undefined, { passage: wPass });
     }
   }
@@ -1978,6 +2044,7 @@ function _renderImpl(targetSvg) {
   state._lastContentW = totalW;
   state._lastContentH = totalH;
   state._lastMinX = minX;
+  state._lastMinY = minY;
   updateViewBox(svg);
   updateInfo();
   document.getElementById("canvasDims").textContent =
@@ -3210,7 +3277,7 @@ function zoomOut(targetSvg) {
   render(targetSvg);
 }
 
-function fitViewBoxToContent(svg, totalW, totalH, minX) {
+function fitViewBoxToContent(svg, totalW, totalH, minX, minY) {
   // Review/Design : zoom par défaut = pièce + 20% de sa hauteur en haut et
   // en bas, 20% de sa largeur à gauche et à droite. preserveAspectRatio="meet"
   // gère le letterboxing si le SVG a une autre aspect ratio.
@@ -3221,18 +3288,28 @@ function fitViewBoxToContent(svg, totalW, totalH, minX) {
     var padY = 0.2 * totalH;
     var padX = 0.2 * contentW;
     x = minX - padX;
-    y = -padY;
+    // D-268: top = min(default, minY - padY) so blocks north of room stay visible
+    var defaultTop = -padY;
+    var contentTop = (minY != null && minY < 0) ? minY - padY : defaultTop;
+    y = Math.min(defaultTop, contentTop);
+    // height covers both top and bottom
+    var bottom = totalH + padY;
     w = contentW + 2 * padX;
-    h = totalH + 2 * padY;
+    h = bottom - y;
   } else {
     var padLeft = 35;
     var padTop = 50;
     var padRight = 15;
     var padBottom = 30;
     x = minX - padLeft;
-    y = -padTop;
+    // D-268: top = min(default, minY - padTop) for north overflow
+    var defaultTopPE = -padTop;
+    var contentTopPE = (minY != null && minY < 0) ? minY - padTop : defaultTopPE;
+    y = Math.min(defaultTopPE, contentTopPE);
     w = totalW - minX + padLeft + padRight;
-    h = totalH + padTop + padBottom;
+    // height covers top to bottom
+    var bottomPE = totalH + padBottom;
+    h = bottomPE - y;
   }
 
   state.viewBox = { x: x, y: y, w: w, h: h };
@@ -3247,7 +3324,8 @@ function zoomFit(targetSvg) {
 
   // D-83: data already in local coords — standard zoomFit works for all angles
   fitViewBoxToContent(svg,
-    state._lastContentW || 100, state._lastContentH || 100, state._lastMinX || 0);
+    state._lastContentW || 100, state._lastContentH || 100,
+    state._lastMinX || 0, state._lastMinY || 0);
   // Re-render with corrected viewBox (for the grid)
   render(svg);
 }

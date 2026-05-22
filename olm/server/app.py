@@ -985,6 +985,25 @@ def api_pattern_canonicalize_inline():
     })
 
 
+@app.route("/api/patterns/infer-rows", methods=["POST"])
+def api_patterns_infer_rows():
+    """Rebuild rows/row_gaps_cm from flat block positions (D-267).
+
+    Expects JSON: {"blocks": [{"type", "orientation", "x_cm", "y_cm", ...}]}
+    Returns: {"rows": [...], "row_gaps_cm": [...], "n_rows": int}
+    """
+    from olm.core.pattern_canonicalize import infer_rows_from_positions
+    data = request.get_json(force=True)
+    if not data or "blocks" not in data:
+        return jsonify({"error": "Missing 'blocks' array"}), 400
+    result = infer_rows_from_positions(data["blocks"])
+    return jsonify({
+        "rows": result.rows,
+        "row_gaps_cm": result.row_gaps_cm,
+        "n_rows": result.n_rows,
+    })
+
+
 @app.route("/api/patterns/fit-all", methods=["POST"])
 def api_patterns_fit_all():
     """Fit all patterns in the catalogue."""
@@ -1155,6 +1174,37 @@ def api_coverage():
 # ===================================================================
 # E-bis — Export
 # ===================================================================
+
+
+@app.route("/api/floor-plan/preview", methods=["POST"])
+def api_floor_plan_preview():
+    """Return a PNG preview of the annotated plan (no disk write)."""
+    from io import BytesIO
+    from olm.server.services.export_service import compose_plan_image
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    plan_id = (data.get("plan_id") or "").strip()
+    if not plan_id:
+        return jsonify({"error": "Missing plan_id"}), 400
+    rooms = data.get("rooms")
+    if not rooms or not isinstance(rooms, list):
+        return jsonify({"error": "Missing or empty rooms list"}), 400
+    scale = data.get("scale_cm_per_px")
+    if not scale or scale <= 0:
+        return jsonify({"error": "Invalid scale_cm_per_px"}), 400
+    sd_path = os.path.join(get_plans_dir(), f"{plan_id}-SD.png")
+    if not os.path.isfile(sd_path):
+        return jsonify({"error": f"{plan_id}-SD.png not found"}), 404
+    try:
+        img = compose_plan_image(plan_id, rooms, scale)
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return send_file(buf, mimetype="image/png")
+    except Exception as e:
+        logger.exception("preview failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/floor-plan/export/<fmt>", methods=["POST"])

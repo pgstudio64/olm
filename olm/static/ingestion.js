@@ -223,7 +223,7 @@
       if (hdrEl) { hdrEl.textContent = planId; hdrEl.style.fontStyle = ''; hdrEl.style.fontWeight = ''; hdrEl.style.color = ''; }
     }
     [
-      'btnSavePlan', 'exportWrapper', 'btnClosePlan',
+      'btnSavePlan', 'btnPreviewPlan', 'exportWrapper', 'btnClosePlan',
       'eraseWrapper', 'ingToolbar',
     ].forEach(function (id) {
       var el = document.getElementById(id);

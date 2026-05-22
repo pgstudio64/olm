@@ -46,6 +46,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <span id="hdrActiveStandard" style="color:var(--text-dim);font-size:11px;position:relative;top:2px;"></span>
     <div id="planActions" style="display:flex;gap:8px;align-items:center;">
       <button class="btn" id="btnSavePlan" title="Save floor plan state" style="display:none;flex-shrink:0;">Save</button>
+      <button class="btn" id="btnPreviewPlan" title="Preview export" style="display:none;flex-shrink:0;">Preview</button>
       <div id="exportWrapper" style="display:none;position:relative;flex-shrink:0;">
         <button class="btn" id="btnExportPlan" title="Export plan and data">Export ▾</button>
         <div id="exportMenu" style="display:none;position:absolute;top:100%;left:0;z-index:100;min-width:140px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
@@ -848,6 +849,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
 <script src="/static/ingestion_serialize.js?v={{ v }}"></script>
 <script src="/static/ingestion.js?v={{ v }}"></script>
 <script src="/static/modal.js?v={{ v }}"></script>
+<script src="/static/preview_modal.js?v={{ v }}"></script>
 <script src="/static/diag.js?v={{ v }}"></script>
 <script src="/static/init.js?v={{ v }}"></script>
 <script src="/static/init_rvtool.js?v={{ v }}"></script>

@@ -163,6 +163,14 @@ function computeCirculationInfo() {
       for (var c = Math.max(0, c0); c < Math.min(cols, c1); c++) grid[r][c] = 2;
   });
 
+  // Furniture (cabinets): footprint as obstacle, no clearance zones (D-258 Lot 3)
+  var _furn = state.furniture || [];
+  for (var fi = 0; fi < _furn.length; fi++) {
+    var fDims = _furnitureEffectiveDims(_furn[fi]);
+    markGridRect(grid, _furn[fi].x_cm, _furn[fi].y_cm,
+      fDims.width_cm, fDims.depth_cm, cellCm, cols, rowsN, 1);
+  }
+
   // Blocks: footprint + chair setback zones as obstacles (BFS cannot traverse them)
   var deskCells = []; // {r, c, chairSide}
   var yRow = 0;
@@ -343,6 +351,12 @@ function computeCirculationInfo() {
     for (var r = Math.max(0, r0); r < Math.min(rowsN, r1); r++)
       for (var c = Math.max(0, c0); c < Math.min(cols, c1); c++) widthGrid[r][c] = 1;
   });
+  // Furniture (cabinets): solid obstacles also narrow passage width (D-258 Lot 3)
+  for (var fwi = 0; fwi < _furn.length; fwi++) {
+    var fwDims = _furnitureEffectiveDims(_furn[fwi]);
+    markGridRect(widthGrid, _furn[fwi].x_cm, _furn[fwi].y_cm,
+      fwDims.width_cm, fwDims.depth_cm, cellCm, cols, rowsN, 1);
+  }
   // Mark blocks only (not setback zones)
   var yRow2 = 0;
   for (var ri = 0; ri < state.rows.length; ri++) {

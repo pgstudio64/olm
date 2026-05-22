@@ -1117,3 +1117,42 @@
   .amend-layout-mode #btnAddCabinet { display: inline-block; }
   #btnRotateCabinet { display: none; }
   .amend-layout-mode #btnRotateCabinet { display: inline-block; }
+
+  /* ── Preview Lightbox ────────────────────────────────── */
+  .preview-lightbox {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9500;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex; flex-direction: column;
+  }
+  .preview-lightbox-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface2); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .preview-lightbox-title {
+    font-size: 14px; font-weight: 600; color: var(--text);
+  }
+  .preview-lightbox-controls {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .preview-lightbox-btn {
+    min-width: 32px; padding: 4px 8px; font-size: 13px;
+  }
+  .preview-lightbox-close {
+    font-size: 16px; font-weight: bold; margin-left: 12px;
+  }
+  .preview-lightbox-zoom-label {
+    min-width: 44px; text-align: center; font-size: 12px;
+    color: var(--text-dim); font-family: var(--font-mono);
+  }
+  .preview-lightbox-viewport {
+    flex: 1; overflow: hidden; position: relative; cursor: grab;
+  }
+  .preview-lightbox-img {
+    position: absolute; top: 0; left: 0;
+    transform-origin: 0 0;
+    image-rendering: auto;
+    user-select: none;
+  }
