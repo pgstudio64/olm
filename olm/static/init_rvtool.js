@@ -811,17 +811,16 @@
           var _canonFaceLen = (d.face === 'north' || d.face === 'south')
             ? _Wc : _Dc;
           var offAbs = d.offset_cm || 0;
-          var hingeAbs = d.hinge_side;
           var _ft = cio && cio._flipTo;
           var _flip = _ft
             ? _ft(cfAbsForZones, d.face)
             : (cfAbsForZones === 'north');
           if (_flip) {
             offAbs = _canonFaceLen - offAbs - (d.width_cm || 0);
-            if (d.hinge_side) {
-              hingeAbs = (d.hinge_side === 'left') ? 'right' : 'left';
-            }
           }
+          var hingeAbs = (cio && cio.flipHingeOnRotation)
+            ? cio.flipHingeOnRotation(d.hinge_side, d.face, absFace, _flip)
+            : d.hinge_side;
           var entry = {
             face: absFace,
             offset_cm: offAbs,

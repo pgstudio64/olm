@@ -19,6 +19,7 @@ import uuid
 import numpy as np
 from PIL import Image as PILImage
 
+from olm.core.canonical import canonicalize_room
 from olm.server.services.config_service import (
     atomic_write_json,
     get_corridor_rgb,
@@ -28,7 +29,7 @@ from olm.server.services.config_service import (
     get_plans_dir,
 )
 
-from olm.core.units import cm_to_px, parse_drawing_scale
+from olm.core.units import cm_to_px, parse_drawing_scale, px_to_cm
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +321,122 @@ def extract_rooms_debug(
 
 
 # ---------------------------------------------------------------------------
+# D-274 Passe 1.2 — canonicalisation features re-analyze
+# ---------------------------------------------------------------------------
+
+
+def _half_up(v: float) -> int:
+    """Arrondi half-up (floor(v+0.5)), parite avec Math.round JS."""
+    return int(math.floor(v + 0.5))
+
+
+def _canonicalize_features_for_client(
+    features: dict,
+    corridor_face_abs: str,
+    scale: float,
+) -> dict:
+    """Canonicalise les features de re-analyze avant envoi au client.
+
+    Applique canonicalize_room sur les features cm (windows, openings,
+    doors, auto_exclusion_zones) et ajoute width_cm / depth_cm /
+    corridor_face_abs.  Ne touche PAS aux champs px (hits, seed_px,
+    auto_door_masks_px, pillar_hits, coarse_hits).
+
+    Args:
+        features: dict retourne par extract_room_features (mute in-place).
+        corridor_face_abs: corridor absolu envoye par le client.
+        scale: cm/px (scale_cm_per_px).
+
+    Returns:
+        features mute (meme reference).
+    """
+    bbox = features.get("bbox_px")
+    if not bbox or len(bbox) < 4:
+        features["corridor_face_abs"] = corridor_face_abs or ""
+        return features
+
+    abs_w = px_to_cm(bbox[2] - bbox[0], scale)
+    abs_d = px_to_cm(bbox[3] - bbox[1], scale)
+
+    room = {
+        "width_cm": abs_w,
+        "depth_cm": abs_d,
+        "corridor_face": corridor_face_abs,
+        "windows": features.get("windows", []),
+        "openings": features.get("openings", []),
+        "doors": features.get("doors", []),
+        "exclusion_zones": features.get("auto_exclusion_zones", []),
+    }
+    canon = canonicalize_room(room)
+
+    features["windows"] = canon.get("windows", [])
+    features["openings"] = canon.get("openings", [])
+    features["doors"] = canon.get("doors", [])
+    features["width_cm"] = canon["width_cm"]
+    features["depth_cm"] = canon["depth_cm"]
+    features["corridor_face_abs"] = corridor_face_abs
+
+    # Auto exclusion zones canonicalisees + arrondi half-up defensif
+    # (parite avec Math.round JS lignes 393-395 de ingestion.js).
+    canon_zones = canon.get(
+        "exclusion_zones",
+        features.get("auto_exclusion_zones", []),
+    )
+    features["auto_exclusion_zones"] = [
+        {
+            "x_cm": _half_up(z.get("x_cm", 0)),
+            "y_cm": _half_up(z.get("y_cm", 0)),
+            "width_cm": _half_up(z.get("width_cm", 0)),
+            "depth_cm": _half_up(z.get("depth_cm", 0)),
+            "origin": z.get("origin", "auto"),
+        }
+        for z in canon_zones
+    ]
+
+    features.pop("_original_corridor_face", None)
+    return features
+
+
+# ---------------------------------------------------------------------------
+# D-274 Passe 1.1 — canonicalisation serveur pour imports
+# ---------------------------------------------------------------------------
+
+
+def _canonicalize_rooms_for_client(
+    rooms: list[dict],
+) -> list[dict]:
+    """Canonicalise les pièces (corridor au sud) avant envoi au client.
+
+    Applique canonicalize_room (rotation features cm) puis pose les champs
+    corridor_face='south' et corridor_face_abs=<original>. Le client
+    n'a plus qu'à hydrater (px, bbox_canon_cm, surface_m2_bbox).
+
+    Suppose des données post-D-204 (doors typées, door_seeds séparés).
+
+    Args:
+        rooms: liste de dicts pièces en repère absolu.
+
+    Returns:
+        Liste de dicts pièces en repère canonique (corridor au sud).
+    """
+    result = []
+    for room in rooms:
+        cf = room.get("corridor_face", "")
+        canon = canonicalize_room(room)
+        # canonicalize_room retourne le même objet pour ''/south —
+        # shallow copy pour éviter de muter l'input.
+        if canon is room:
+            canon = dict(room)
+        canon["corridor_face"] = "south"
+        canon["corridor_face_abs"] = cf
+        # _original_corridor_face est un champ interne de canonicalize_room,
+        # redondant avec corridor_face_abs — ne pas expédier au client.
+        canon.pop("_original_corridor_face", None)
+        result.append(canon)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Import OCR
 # ---------------------------------------------------------------------------
 
@@ -357,6 +474,9 @@ def import_ocr(
         result["image_path"] = overlay_path
     else:
         result["image_path"] = plan_path
+
+    # D-274 Passe 1.1 : canonicalisation serveur avant envoi au client.
+    result["rooms"] = _canonicalize_rooms_for_client(result["rooms"])
 
     result["mode"] = "ocr"
     return result
@@ -552,6 +672,9 @@ def import_preprocessed(
             if scale_samples else 0.0
         )
 
+    # D-274 Passe 1.1 : canonicalisation serveur avant envoi au client.
+    rooms = _canonicalize_rooms_for_client(rooms)
+
     return {
         "rooms": rooms,
         "mode": json_data.get("mode", "preprocessed"),
@@ -645,7 +768,7 @@ def reanalyze_room(data: dict) -> dict:
         from olm.ingestion.comb_detection import find_seeds_by_ocr
         _seeds, cart_bboxes_px = find_seeds_by_ocr(img)
 
-    return extract_room_features(
+    features = extract_room_features(
         img,
         (int(seed_px[0]), int(seed_px[1])),
         tuple(bbox_px) if bbox_px else None,
@@ -664,6 +787,9 @@ def reanalyze_room(data: dict) -> dict:
         window_mode=window_mode,
         corridor_face=corridor_face_abs,
     )
+    # D-274 Passe 1.2 : canonicalisation serveur avant envoi au client.
+    return _canonicalize_features_for_client(
+        features, corridor_face_abs, scale)
 
 
 # ---------------------------------------------------------------------------
@@ -1018,6 +1144,9 @@ def reanalyze_batch(data: dict) -> dict:
                 window_mode=window_mode,
                 corridor_face=r.get("corridor_face", "") or "",
             )
+            # D-274 Passe 1.2 : canonicalisation serveur.
+            cf_abs = r.get("corridor_face", "") or ""
+            _canonicalize_features_for_client(features, cf_abs, scale)
             results.append({"name": name, **features})
         except Exception as e:
             results.append({"name": name, "error": str(e)})

@@ -1,7 +1,7 @@
 // ============================================================================
 // canonical_io.js — Frontières abs ↔ canonique (R-12, D-117, D-122 P1)
 // ============================================================================
-// Expose window.canonicalIO = { fromStorage, toStorage, FACE_MAPS, INV_FACE_MAPS }
+// Expose window.canonicalIO = { fromStorage, hydrate, toStorage, FACE_MAPS, INV_FACE_MAPS }
 //
 // Deux fonctions frontière :
 //   fromStorage(roomStorage, scale) → roomCanon  : repère absolu → "south"
@@ -95,6 +95,31 @@
     if (ocf === "east") return isH;
     if (ocf === "west") return !isH;
     return false;
+  }
+
+  /**
+   * True si "left" correspond au côté low-coord sur cette face.
+   * Toutes les faces sauf "west" : left = low. "west" : left = high y.
+   */
+  function _leftIsLow(f) { return f !== "west"; }
+
+  /**
+   * Détermine si hinge_side doit être inversé lors d'une rotation (B-F5).
+   * flip = offset_flipped XOR (leftIsLow(src) != leftIsLow(dst)).
+   *
+   * @param {string} hingeSide       - "left"/"right" (ou falsy → retourné tel quel).
+   * @param {string} srcFace         - Face avant mapping.
+   * @param {string} dstFace         - Face après mapping.
+   * @param {boolean} offsetFlipped  - True si l'offset a été retourné.
+   * @returns {string} hinge corrigé.
+   */
+  function flipHingeOnRotation(hingeSide, srcFace, dstFace, offsetFlipped) {
+    if (!hingeSide) return hingeSide;
+    var polarityDiff = _leftIsLow(srcFace) !== _leftIsLow(dstFace);
+    if (offsetFlipped !== polarityDiff) {
+      return hingeSide === "left" ? "right" : "left";
+    }
+    return hingeSide;
   }
 
   /**
@@ -312,12 +337,14 @@
     // Transforme une ouverture (window / opening / door) + sync px
     function xformOpening(o) {
       var r = Object.assign({}, o);
-      r.face = faceMap[o.face] || o.face;
-      if (_flipFrom(cf, o.face)) {
+      var dst = faceMap[o.face] || o.face;
+      r.face = dst;
+      var offFlip = _flipFrom(cf, o.face);
+      if (offFlip) {
         r.offset_cm = _absLen(o.face, W, D) - (o.offset_cm || 0) - (o.width_cm || 0);
-        if (o.hinge_side) {
-          r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
-        }
+      }
+      if (o.hinge_side) {
+        r.hinge_side = flipHingeOnRotation(o.hinge_side, o.face, dst, offFlip);
       }
       _syncPx(r, pxPerCm);
       return r;
@@ -358,6 +385,42 @@
     copy.bbox_canon_cm    = { x: 0, y: 0, w: copy.width_cm, h: copy.depth_cm };
     copy.surface_m2_bbox  = Math.round(copy.width_cm * copy.depth_cm / 10000 * 100) / 100;
 
+    return copy;
+  }
+
+  // ── hydrate (D-274 Passe 1.1) ─────────────────────────────────────────────
+
+  /**
+   * Hydrate une pièce déjà canonicalisée par le serveur (corridor au sud).
+   *
+   * Contrairement à fromStorage, cette fonction ne fait PAS de rotation :
+   * les features cm sont déjà en repère canonique. Elle pose uniquement les
+   * champs dérivés (bbox_canon_cm, surface_m2_bbox) et recalcule les _px
+   * depuis offset_cm × pxPerCm.
+   *
+   * corridor_face_abs est PRÉSERVÉ tel que fourni par le serveur (pas
+   * dérivé de corridor_face comme dans fromStorage).
+   *
+   * @param {Object} room  - Pièce canonicalisée par le serveur.
+   * @param {number} [scale] - cm/px ; optionnel.
+   * @returns {Object} Copie profonde hydratée.
+   */
+  function hydrate(room, scale) {
+    var pxPerCm = (typeof scale === "number" && scale > 0) ? (1.0 / scale) : 0;
+    var copy = JSON.parse(JSON.stringify(room));
+    copy.corridor_face = "south";
+    copy.corridor_face_abs = (
+      room.corridor_face_abs !== undefined ? room.corridor_face_abs : ""
+    );
+    copy.bbox_canon_cm = {
+      x: 0, y: 0, w: copy.width_cm, h: copy.depth_cm
+    };
+    copy.surface_m2_bbox = Math.round(
+      copy.width_cm * copy.depth_cm / 10000 * 100
+    ) / 100;
+    (copy.windows  || []).forEach(function (o) { _syncPx(o, pxPerCm); });
+    (copy.openings || []).forEach(function (o) { _syncPx(o, pxPerCm); });
+    (copy.doors    || []).forEach(function (o) { _syncPx(o, pxPerCm); });
     return copy;
   }
 
@@ -416,12 +479,14 @@
     // Transforme en retour une ouverture + sync px
     function xformBack(o) {
       var r = Object.assign({}, o);
-      r.face = invMap[o.face] || o.face;
-      if (_flipTo(ocf, o.face)) {
+      var dst = invMap[o.face] || o.face;
+      r.face = dst;
+      var offFlip = _flipTo(ocf, o.face);
+      if (offFlip) {
         r.offset_cm = _canonLen(o.face, Wc, Dc) - (o.offset_cm || 0) - (o.width_cm || 0);
-        if (o.hinge_side) {
-          r.hinge_side = (o.hinge_side === "left") ? "right" : "left";
-        }
+      }
+      if (o.hinge_side) {
+        r.hinge_side = flipHingeOnRotation(o.hinge_side, o.face, dst, offFlip);
       }
       _syncPx(r, pxPerCm);
       return r;
@@ -683,6 +748,155 @@
         "expected face=west offset=" + t4oExpOff);
     }
 
+    // ── D-274 Passe 1.1 : tests hydrate ─────────────────────────────────
+    // hydrate sur une pièce south doit être équivalent à la branche identité
+    // de fromStorage (même champs canoniques, même _syncPx).
+    var hydrateRoom = {
+      name: "H1", corridor_face: "south", corridor_face_abs: "east",
+      width_cm: 300, depth_cm: 500,
+      bbox_px: [10, 20, 70, 120], seed_px: [40, 70],
+      windows:  [{ face: "north", offset_cm: 50,  width_cm: 120 }],
+      openings: [{ face: "south", offset_cm: 80,  width_cm: 90 }],
+      doors:    [{ face: "east",  offset_cm: 100, width_cm: 80 }],
+      door_seeds: [{ seed_x: 55, seed_y: 88 }],
+    };
+    var hyd = hydrate(hydrateRoom, SCALE);
+    // (a) corridor_face_abs preserved from server, not derived
+    if (hyd.corridor_face_abs === "east") {
+      console.log("[canonical_io] OK — hydrate preserves corridor_face_abs");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — hydrate corridor_face_abs",
+        "got", hyd.corridor_face_abs, "expected east");
+    }
+    // (b) no rotation on features (offset_cm untouched)
+    if (hyd.windows[0].offset_cm === 50 && hyd.doors[0].offset_cm === 100) {
+      console.log("[canonical_io] OK — hydrate no rotation on features");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — hydrate rotation altered offsets");
+    }
+    // (c) bbox_canon_cm and surface_m2_bbox set
+    if (hyd.bbox_canon_cm && hyd.bbox_canon_cm.w === 300 &&
+        hyd.bbox_canon_cm.h === 500 &&
+        hyd.surface_m2_bbox === 15) {
+      console.log("[canonical_io] OK — hydrate bbox_canon_cm + surface_m2_bbox");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — hydrate bbox/surface",
+        "bbox_canon_cm=", hyd.bbox_canon_cm,
+        "surface_m2_bbox=", hyd.surface_m2_bbox);
+    }
+    // (d) _syncPx recalculated: offset_px = round(offset_cm * pxPerCm)
+    var expOffPx = Math.round(50 * (1.0 / SCALE));
+    if (hyd.windows[0].offset_px === expOffPx) {
+      console.log("[canonical_io] OK — hydrate _syncPx offset_px");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — hydrate _syncPx",
+        "got", hyd.windows[0].offset_px, "expected", expOffPx);
+    }
+    // (e) door_seeds present in output
+    if (hyd.door_seeds && hyd.door_seeds.length === 1 &&
+        hyd.door_seeds[0].seed_x === 55) {
+      console.log("[canonical_io] OK — hydrate door_seeds passthrough");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — hydrate door_seeds missing/wrong",
+        "got", hyd.door_seeds);
+    }
+    // (f) hydrate vs fromStorage equivalence on a south room.
+    // corridor_face_abs differs by design: fromStorage derives it from
+    // corridor_face ("south" → "south"), hydrate preserves what the server
+    // sent. So we compare geometry fields only.
+    var fromSRoom = {
+      name: "FS1", corridor_face: "south", width_cm: 300, depth_cm: 500,
+      bbox_px: [10, 20, 70, 120], seed_px: [40, 70],
+      windows:  [{ face: "north", offset_cm: 50, width_cm: 120 }],
+      openings: [], doors: [],
+    };
+    var fromSResult = fromStorage(fromSRoom, SCALE);
+    var hydSRoom = JSON.parse(JSON.stringify(fromSRoom));
+    hydSRoom.corridor_face_abs = "south";
+    var hydSResult = hydrate(hydSRoom, SCALE);
+    var fsOk = (
+      hydSResult.corridor_face === fromSResult.corridor_face &&
+      hydSResult.bbox_canon_cm.w === fromSResult.bbox_canon_cm.w &&
+      hydSResult.surface_m2_bbox === fromSResult.surface_m2_bbox &&
+      hydSResult.windows[0].offset_px === fromSResult.windows[0].offset_px &&
+      hydSResult.windows[0].offset_cm === fromSResult.windows[0].offset_cm
+    );
+    if (fsOk) {
+      console.log("[canonical_io] OK — hydrate vs fromStorage equivalence (south)");
+    } else {
+      allOk = false;
+      console.error("[canonical_io] FAIL — hydrate vs fromStorage mismatch",
+        "hydrate=", JSON.stringify({
+          cf: hydSResult.corridor_face,
+          bbox: hydSResult.bbox_canon_cm,
+          surf: hydSResult.surface_m2_bbox,
+          wOff: hydSResult.windows[0].offset_px,
+        }),
+        "fromStorage=", JSON.stringify({
+          cf: fromSResult.corridor_face,
+          bbox: fromSResult.bbox_canon_cm,
+          surf: fromSResult.surface_m2_bbox,
+          wOff: fromSResult.windows[0].offset_px,
+        }));
+    }
+
+    // ── D-274 Passe 1.5a : canonWallFeatureToAbs ≡ toStorage par-feature ──
+    // Pour chaque fixture T1–T4, vérifier que canonWallFeatureToAbs(canon_feat)
+    // donne le même {face, offset_cm} que toStorage(roomCanon).feature[i].
+    SAMPLES.forEach(function (s) {
+      var canon = fromStorage(s.room, SCALE);
+      var stor  = toStorage(canon, SCALE);
+      var cfA   = canon.corridor_face_abs || "";
+      var swap  = (cfA === "east" || cfA === "west");
+      var aW    = swap ? canon.depth_cm : canon.width_cm;
+      var aD    = swap ? canon.width_cm : canon.depth_cm;
+      var featureTypes = ["windows", "openings"];
+      featureTypes.forEach(function (ft) {
+        (canon[ft] || []).forEach(function (cf, i) {
+          var geo = canonWallFeatureToAbs(
+            cf, cfA, canon.width_cm, canon.depth_cm, aW, aD);
+          var ref = stor[ft][i];
+          var fOk = (geo.face === ref.face);
+          var oOk = (Math.abs(geo.offset_cm - ref.offset_cm) <= 1);
+          if (fOk && oOk) {
+            console.log("[canonical_io] OK — canonWallFeatureToAbs "
+              + s.name + " " + ft + "[" + i + "]");
+          } else {
+            allOk = false;
+            console.error("[canonical_io] FAIL — canonWallFeatureToAbs "
+              + s.name + " " + ft + "[" + i + "]",
+              "geo:", JSON.stringify(geo), "ref:", JSON.stringify({
+                face: ref.face, offset_cm: ref.offset_cm }));
+          }
+        });
+      });
+      // Exclusion zones : rotateRectInv(canon_zone) ≡ toStorage zone
+      (canon.exclusion_zones || []).forEach(function (z, i) {
+        var rect = rotateRectInv(
+          { x: z.x_cm, y: z.y_cm, width: z.width_cm, depth: z.depth_cm },
+          cfA, aW, aD);
+        var ref = stor.exclusion_zones[i];
+        var zOk = (Math.abs(rect.x - ref.x_cm) <= 1 &&
+                   Math.abs(rect.y - ref.y_cm) <= 1 &&
+                   Math.abs(rect.width - ref.width_cm) <= 1 &&
+                   Math.abs(rect.depth - ref.depth_cm) <= 1);
+        if (zOk) {
+          console.log("[canonical_io] OK — rotateRectInv zone "
+            + s.name + "[" + i + "]");
+        } else {
+          allOk = false;
+          console.error("[canonical_io] FAIL — rotateRectInv zone "
+            + s.name + "[" + i + "]",
+            "got:", JSON.stringify(rect), "ref:", JSON.stringify(ref));
+        }
+      });
+    });
+
     if (allOk) {
       console.log("[canonical_io] ALL TESTS PASSED");
     } else {
@@ -726,9 +940,49 @@
     return diffs;
   }
 
+  // ── canonWallFeatureToAbs (D-274 Passe 1.5a) ────────────────────────────
+  // Convertit un wall feature canonique {face, offset_cm, width_cm} en
+  // absolu room-local via rotatePointInv (géométrique), sans passer par
+  // toStorage. Retourne {face, offset_cm, width_cm} en repère absolu.
+  //
+  // @param {Object} feat   - {face (long), offset_cm, width_cm} canonique.
+  // @param {string} cfAbs  - corridor_face absolu.
+  // @param {number} canonW - roomCanon.width_cm (dims canoniques).
+  // @param {number} canonD - roomCanon.depth_cm.
+  // @param {number} absW   - dims absolues cm (bbox_px width × scale).
+  // @param {number} absD   - dims absolues cm (bbox_px height × scale).
+  // @returns {Object} {face (long), offset_cm, width_cm} absolu.
+
+  function canonWallFeatureToAbs(feat, cfAbs, canonW, canonD, absW, absD) {
+    var f = feat.face;
+    var o = feat.offset_cm || 0;
+    var w = feat.width_cm || 0;
+    // Endpoints du segment en cm room-local CANONIQUE
+    var p1, p2;
+    if (f === "north")      { p1 = { x: o,     y: 0      }; p2 = { x: o + w, y: 0      }; }
+    else if (f === "south") { p1 = { x: o,     y: canonD  }; p2 = { x: o + w, y: canonD  }; }
+    else if (f === "west")  { p1 = { x: 0,     y: o       }; p2 = { x: 0,     y: o + w  }; }
+    else /* east */         { p1 = { x: canonW, y: o       }; p2 = { x: canonW, y: o + w  }; }
+    // Rotation vers absolu
+    var a1 = rotatePointInv(p1, cfAbs, absW, absD);
+    var a2 = rotatePointInv(p2, cfAbs, absW, absD);
+    // Face absolue via INV_FACE_MAPS (forme longue, pas de ping-pong short)
+    var invMap = INV_FACE_MAPS[cfAbs];
+    var faceAbs = invMap ? (invMap[f] || f) : f;
+    // Offset absolu = min sur l'axe pertinent
+    var offsetAbs;
+    if (faceAbs === "north" || faceAbs === "south") {
+      offsetAbs = Math.min(a1.x, a2.x);
+    } else {
+      offsetAbs = Math.min(a1.y, a2.y);
+    }
+    return { face: faceAbs, offset_cm: offsetAbs, width_cm: w };
+  }
+
   // ── Exposition publique ──────────────────────────────────────────────────
   window.canonicalIO = {
     fromStorage:    fromStorage,
+    hydrate:        hydrate,
     toStorage:      toStorage,
     rotateDir:      rotateDir,
     rotateDirInv:   rotateDirInv,
@@ -737,6 +991,8 @@
     rotateRect:     rotateRect,
     rotateRectInv:  rotateRectInv,
     canonAngle:     canonAngle,
+    canonWallFeatureToAbs: canonWallFeatureToAbs,
+    flipHingeOnRotation: flipHingeOnRotation,
     FACE_MAPS:      FACE_MAPS,
     INV_FACE_MAPS:  INV_FACE_MAPS,
     _flipFrom:      _flipFrom,

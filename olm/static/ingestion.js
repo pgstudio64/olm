@@ -258,41 +258,20 @@
   //   4) post-traitement des points / rectangles relatifs au bbox
   //      (hits / seed / auto_door_masks — non gérés par fromStorage).
   function computeCanonicalReanalyzeResult(data, prevCorridorFace, scale) {
-    // Preserve corridor_face from import (set by color detection).
-    // Only use door-based corridor if no previous value exists.
-    var corridor = prevCorridorFace
+    // D-274 Passe 1.2 : les features cm (windows, openings, doors,
+    // auto_exclusion_zones, width_cm, depth_cm) arrivent deja canoniques
+    // du serveur. Le client ne fait plus que la rotation des champs px
+    // (hits, seed, masks, pillar_hits, coarse_hits).
+
+    // corridor_face_abs : priorite serveur, puis precedent, puis porte.
+    var corridor = data.corridor_face_abs || prevCorridorFace
       || (data.doors && data.doors.length && data.doors[0].face)
       || '';
     var bbox = data.bbox_px || null;
     var absW = bbox ? (bbox[2] - bbox[0]) * scale : 0;
     var absD = bbox ? (bbox[3] - bbox[1]) * scale : 0;
 
-    // --- 1) Construction du room-like absolu + canonicalisation ---
-    function slim(o) {
-      return { face: o.face, offset_cm: o.offset_cm, width_cm: o.width_cm };
-    }
-    // D-204: doors[] is exclusively typed (has face) since D-204.
-    function slimDoor(d) {
-      return {
-        face: d.face, offset_cm: d.offset_cm, width_cm: d.width_cm,
-        hinge_side: d.hinge_side, opens_inward: d.opens_inward !== false,
-      };
-    }
-    var roomAbs = {
-      corridor_face: corridor,
-      width_cm: Math.round(absW),
-      depth_cm: Math.round(absD),
-      bbox_px: bbox,
-      seed_px: data.seed_px,
-      windows: (data.windows || []).map(slim),
-      openings: (data.openings || []).map(slim),
-      doors: (data.doors || []).map(slimDoor),
-    };
-    var canon = (window.canonicalIO && window.canonicalIO.fromStorage)
-      ? window.canonicalIO.fromStorage(roomAbs, scale)
-      : { width_cm: roomAbs.width_cm, depth_cm: roomAbs.depth_cm,
-          windows: [], openings: [], doors: [] };
-
+    // --- 1) Features cm : lues directement (canoniques serveur) ---
     function feat(e, extra) {
       return Object.assign({
         face: e.face,
@@ -301,13 +280,13 @@
         origin: 'auto',
       }, extra || {});
     }
-    // D-122 P4 : openings et doors sortent séparés (has_door banni du state).
-    var windowsCanon = (canon.windows || []).map(function (w) { return feat(w); });
-    var openingsCanon = (canon.openings || []).map(function (o) {
+    var windowsCanon = (data.windows || []).map(function (w) {
+      return feat(w);
+    });
+    var openingsCanon = (data.openings || []).map(function (o) {
       return feat(o);
     });
-    // D-204: doors[] is exclusively typed since D-204.
-    var doorsCanon = (canon.doors || []).map(function (d) {
+    var doorsCanon = (data.doors || []).map(function (d) {
       return feat(d, {
         hinge_side: d.hinge_side,
         opens_inward: d.opens_inward !== false,
@@ -315,9 +294,8 @@
     });
 
     // --- 2) Post-traitement points / rectangles relatifs au bbox ---
-    // fromStorage ne touche pas hits / seed / auto_door_masks_px (ils sont
-    // exprimés en px image, pas en cm room-local). Délégation à canonicalIO
-    // (D-122 P6 : source unique, plus de rotation ad-hoc locale).
+    // Les champs px (hits, seed, masks, pillar_hits, coarse_hits)
+    // restent rotes cote client (px image -> cm canon room-local).
     var _rotP = window.canonicalIO.rotatePoint;
     var _rotR = window.canonicalIO.rotateRect;
     var _rotD = window.canonicalIO.rotateDir;
@@ -375,8 +353,8 @@
     return {
       corridor_face: corridor,
       bbox_px: bbox,
-      width_cm: Math.round(canon.width_cm || 0),
-      depth_cm: Math.round(canon.depth_cm || 0),
+      width_cm: data.width_cm || 0,
+      depth_cm: data.depth_cm || 0,
       windows: windowsCanon,
       openings: openingsCanon,
       doors: doorsCanon,
@@ -385,13 +363,11 @@
       pillar_hits: pillarHits,
       seed_cm: seed_cm,
       auto_door_masks: masks,
+      // D-274 Passe 1.2 : zones deja canoniques serveur, lues telles quelles.
       auto_exclusion_zones: (data.auto_exclusion_zones || []).map(function (z) {
-        var rr = _rotR(
-          { x: z.x_cm || 0, y: z.y_cm || 0,
-            width: z.width_cm || 0, depth: z.depth_cm || 0 },
-          corridor, absW, absD);
-        return { x_cm: Math.round(rr.x), y_cm: Math.round(rr.y),
-                 width_cm: Math.round(rr.width), depth_cm: Math.round(rr.depth),
+        return { x_cm: Math.round(z.x_cm || 0), y_cm: Math.round(z.y_cm || 0),
+                 width_cm: Math.round(z.width_cm || 0),
+                 depth_cm: Math.round(z.depth_cm || 0),
                  origin: z.origin || 'auto' };
       }),
     };
@@ -906,7 +882,7 @@
                          data.scale_cm_per_px > 0)
           ? data.scale_cm_per_px : 0;
         ingState.rooms = (data.rooms || []).map(function (r) {
-          return window.canonicalIO.fromStorage(r, _ocrScale);
+          return window.canonicalIO.hydrate(r, _ocrScale);
         });
         // D-135 rider : snapshot immutable de la surface cartouche pour
         // l'affichage "Plan area (m²)". surface_m2 sera potentiellement
@@ -970,7 +946,8 @@
           imgW: ingState.planW,
           imgH: ingState.planH,
         };
-        if (window.syncOverlayToggle) window.syncOverlayToggle(true);
+        if (window.applyOverlayGridDefaults) window.applyOverlayGridDefaults();
+        else if (window.syncOverlayToggle) window.syncOverlayToggle(true);
         hideModal();
       })
       .catch(function (e) {
@@ -1499,24 +1476,32 @@
       }
 
       // Windows (cyan, round linecap — same as renderRoomElements)
+      // D-274 Passe 1.5a : lues depuis roomCanon via canonWallFeatureToAbs
       if (show.window) {
-        (room.windows || []).forEach(function (win) {
-          if (win.offset_px == null || win.width_px == null ||
-              isNaN(win.offset_px) || isNaN(win.width_px)) return;
-          drawWallFeature(els, x0, y0, x1, y1, win.face,
-            win.offset_px, win.width_px, '#50b8d0', sWin, '', ' stroke-linecap="round"', sFeatureOff);
+        (roomCanon.windows || []).forEach(function (win) {
+          if (win.offset_cm == null || win.width_cm == null) return;
+          var abs = window.canonicalIO.canonWallFeatureToAbs(
+            win, _cfAbs, roomCanon.width_cm, roomCanon.depth_cm, _absW, _absD);
+          var offPx = Math.round(abs.offset_cm / _sc);
+          var wPx   = Math.round(abs.width_cm / _sc);
+          drawWallFeature(els, x0, y0, x1, y1, abs.face,
+            offPx, wPx, '#50b8d0', sWin, '', ' stroke-linecap="round"', sFeatureOff);
         });
       }
 
       // Openings (light green dashed — same as renderRoomElements)
+      // D-274 Passe 1.5a : lues depuis roomCanon via canonWallFeatureToAbs
       if (show.opening) {
-        (room.openings || []).forEach(function (op) {
-          if (op.offset_px == null || op.width_px == null ||
-              isNaN(op.offset_px) || isNaN(op.width_px)) return;
-          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, op.face, op.offset_px, op.width_px, sEraseW);
+        (roomCanon.openings || []).forEach(function (op) {
+          if (op.offset_cm == null || op.width_cm == null) return;
+          var abs = window.canonicalIO.canonWallFeatureToAbs(
+            op, _cfAbs, roomCanon.width_cm, roomCanon.depth_cm, _absW, _absD);
+          var offPx = Math.round(abs.offset_cm / _sc);
+          var wPx   = Math.round(abs.width_cm / _sc);
+          if (show.bbox) eraseWallSegment(els, x0, y0, x1, y1, abs.face, offPx, wPx, sEraseW);
           var opDash = (4 * pxScale).toFixed(1) + ' ' + (3 * pxScale).toFixed(1);
-          drawWallFeature(els, x0, y0, x1, y1, op.face,
-            op.offset_px, op.width_px, '#80c060', sOpen, opDash, '', sFeatureOff);
+          drawWallFeature(els, x0, y0, x1, y1, abs.face,
+            offPx, wPx, '#80c060', sOpen, opDash, '', sFeatureOff);
         });
       }
 
@@ -1565,13 +1550,18 @@
       }
 
       // Exclusion zones (semi-transparent red rectangles)
-      if (show.bbox && ingState.scale) {
-        var sc = 1.0 / ingState.scale;  // px per cm
-        (room.exclusion_zones || []).forEach(function (z) {
-          var zx = x0 + (z.x_cm || 0) * sc;
-          var zy = y0 + (z.y_cm || 0) * sc;
-          var zw = (z.width_cm || 0) * sc;
-          var zd = (z.depth_cm || 0) * sc;
+      // D-274 Passe 1.5a : lues depuis roomCanon via rotateRectInv
+      if (show.bbox && _sc) {
+        var _rrInv = window.canonicalIO && window.canonicalIO.rotateRectInv;
+        var _pxCm = 1.0 / _sc;  // px per cm (same factor as old sc)
+        (roomCanon.exclusion_zones || []).forEach(function (z) {
+          var rect = { x: z.x_cm || 0, y: z.y_cm || 0,
+                       width: z.width_cm || 0, depth: z.depth_cm || 0 };
+          if (_rrInv) rect = _rrInv(rect, _cfAbs, _absW, _absD);
+          var zx = x0 + rect.x * _pxCm;
+          var zy = y0 + rect.y * _pxCm;
+          var zw = rect.width * _pxCm;
+          var zd = rect.depth * _pxCm;
           els.push('<rect x="' + zx.toFixed(1) + '" y="' + zy.toFixed(1) +
             '" width="' + zw.toFixed(1) + '" height="' + zd.toFixed(1) +
             '" fill="rgba(200,50,50,0.25)" stroke="#c05858"' +
@@ -2392,10 +2382,11 @@
             var _rWc = r.width_cm || 0;
             var _rDc = r.depth_cm || 0;
             var _cioFlipTo = window.canonicalIO && window.canonicalIO._flipTo;
+            var _cioFlipHinge = window.canonicalIO
+              && window.canonicalIO.flipHingeOnRotation;
             var absDoors = typedDoors.map(function (d) {
               var af = (invMap && invMap[d.face]) || d.face;
               var offAbs = d.offset_cm || 0;
-              var hingeAbs = d.hinge_side;
               var _needsFlip = _cioFlipTo
                 ? _cioFlipTo(rCfAbs, d.face)
                 : (rCfAbs === 'north' || rCfAbs === 'east');
@@ -2403,10 +2394,10 @@
                 var faceLen = (d.face === 'north' || d.face === 'south')
                   ? _rWc : _rDc;
                 offAbs = faceLen - offAbs - (d.width_cm || 0);
-                if (d.hinge_side) {
-                  hingeAbs = (d.hinge_side === 'left') ? 'right' : 'left';
-                }
               }
+              var hingeAbs = _cioFlipHinge
+                ? _cioFlipHinge(d.hinge_side, d.face, af, _needsFlip)
+                : d.hinge_side;
               var e = { face: af, offset_cm: offAbs,
                         width_cm: d.width_cm || 0 };
               if (hingeAbs) e.hinge_side = hingeAbs;
@@ -2641,7 +2632,7 @@
                          data.scale_cm_per_px > 0)
           ? data.scale_cm_per_px : 0;
         ingState.rooms = (data.rooms || []).map(function (r) {
-          return window.canonicalIO.fromStorage(r, _impScale);
+          return window.canonicalIO.hydrate(r, _impScale);
         });
         // Mode préprocessé : pas de cart_bboxes (cartouches déjà retirés
         // dans le PNG -SD). Reset pour ne pas hériter d'un import OCR
@@ -2754,7 +2745,8 @@
           imgW: ingState.planW,
           imgH: ingState.planH,
         };
-        if (window.syncOverlayToggle) window.syncOverlayToggle(true);
+        if (window.applyOverlayGridDefaults) window.applyOverlayGridDefaults();
+        else if (window.syncOverlayToggle) window.syncOverlayToggle(true);
         hideModal();
       })
       .catch(function (e) {

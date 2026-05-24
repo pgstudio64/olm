@@ -47,12 +47,30 @@
           "width_cm": 120
         }
       ],
+      "doors": [
+        {
+          "face": "south",
+          "offset_cm": 300,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 10,
           "y_cm": 20,
           "width_cm": 80,
           "depth_cm": 60
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 100,
+          "y_cm": 50,
+          "width_cm": 40,
+          "depth_cm": 30
         }
       ]
     },
@@ -101,12 +119,30 @@
           "width_cm": 120
         }
       ],
+      "doors": [
+        {
+          "face": "south",
+          "offset_cm": 300,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 10,
           "y_cm": 20,
           "width_cm": 80,
           "depth_cm": 60
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 100,
+          "y_cm": 50,
+          "width_cm": 40,
+          "depth_cm": 30
         }
       ]
     }
@@ -159,12 +195,30 @@
           "width_cm": 150
         }
       ],
+      "doors": [
+        {
+          "face": "north",
+          "offset_cm": 250,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": false
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 500,
           "y_cm": 300,
           "width_cm": 70,
           "depth_cm": 50
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 50,
+          "y_cm": 60,
+          "width_cm": 100,
+          "depth_cm": 80
         }
       ]
     },
@@ -213,12 +267,30 @@
           "width_cm": 150
         }
       ],
+      "doors": [
+        {
+          "face": "south",
+          "offset_cm": 270,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 30,
           "y_cm": 50,
           "width_cm": 70,
           "depth_cm": 50
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 450,
+          "y_cm": 260,
+          "width_cm": 100,
+          "depth_cm": 80
         }
       ]
     }
@@ -271,12 +343,30 @@
           "width_cm": 100
         }
       ],
+      "doors": [
+        {
+          "face": "east",
+          "offset_cm": 150,
+          "width_cm": 70,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": true
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 20,
           "y_cm": 10,
           "width_cm": 60,
           "depth_cm": 40
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 200,
+          "y_cm": 100,
+          "width_cm": 50,
+          "depth_cm": 30
         }
       ]
     },
@@ -325,12 +415,30 @@
           "width_cm": 100
         }
       ],
+      "doors": [
+        {
+          "face": "south",
+          "offset_cm": 80,
+          "width_cm": 70,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
       "exclusion_zones": [
         {
-          "x_cm": 10,
-          "y_cm": 420,
+          "x_cm": 250,
+          "y_cm": 20,
           "width_cm": 40,
           "depth_cm": 60
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 170,
+          "y_cm": 200,
+          "width_cm": 30,
+          "depth_cm": 50
         }
       ]
     }
@@ -383,12 +491,30 @@
           "width_cm": 80
         }
       ],
+      "doors": [
+        {
+          "face": "west",
+          "offset_cm": 200,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 400,
           "y_cm": 200,
           "width_cm": 50,
           "depth_cm": 70
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 60,
+          "y_cm": 40,
+          "width_cm": 80,
+          "depth_cm": 60
         }
       ]
     },
@@ -437,12 +563,30 @@
           "width_cm": 80
         }
       ],
+      "doors": [
+        {
+          "face": "south",
+          "offset_cm": 200,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
       "exclusion_zones": [
         {
-          "x_cm": 30,
-          "y_cm": 400,
+          "x_cm": 200,
+          "y_cm": 50,
           "width_cm": 70,
           "depth_cm": 50
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 40,
+          "y_cm": 360,
+          "width_cm": 60,
+          "depth_cm": 80
         }
       ]
     }
@@ -495,12 +639,30 @@
           "width_cm": 100
         }
       ],
+      "doors": [
+        {
+          "face": "north",
+          "offset_cm": 200,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
       "exclusion_zones": [
         {
           "x_cm": 30,
           "y_cm": 30,
           "width_cm": 50,
           "depth_cm": 50
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 300,
+          "y_cm": 200,
+          "width_cm": 60,
+          "depth_cm": 40
         }
       ]
     },
@@ -549,12 +711,30 @@
           "width_cm": 100
         }
       ],
+      "doors": [
+        {
+          "face": "east",
+          "offset_cm": 200,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
       "exclusion_zones": [
         {
-          "x_cm": 30,
-          "y_cm": 320,
+          "x_cm": 320,
+          "y_cm": 30,
           "width_cm": 50,
           "depth_cm": 50
+        }
+      ],
+      "transparent_zones": [
+        {
+          "x_cm": 160,
+          "y_cm": 300,
+          "width_cm": 40,
+          "depth_cm": 60
         }
       ]
     }

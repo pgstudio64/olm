@@ -3,6 +3,10 @@
 import pytest
 
 from olm.core.canonical import canonicalize_room, decanonicalize_room
+from olm.server.services.ingestion_service import (
+    _canonicalize_features_for_client,
+    _canonicalize_rooms_for_client,
+)
 
 # ── Fixture : pièce de référence avec tous les éléments ──────────────────
 
@@ -145,14 +149,15 @@ class TestCanonicalOffsetEast:
         assert op["offset_cm"] == 250
 
     def test_door_south_offset_preserved(self) -> None:
-        """Porte south abs → west canon. Offset préservé."""
+        """Porte south abs → west canon. Offset préservé, hinge flippé (B-F5)."""
         c = self._canon()
         door = [o for o in c["openings"] if o.get("has_door")][0]
         # south abs, offset=100, width=90 → west canon.
-        # south is horizontal, CW: no flip.
+        # south is horizontal, CW: no offset flip.
         assert door["face"] == "west"
         assert door["offset_cm"] == 100
-        assert door["hinge_side"] == "left"  # pas de flip
+        # B-F5 : south→west, polarity_diff=true, off_flip=false → flip hinge
+        assert door["hinge_side"] == "right"
 
 
 class TestCanonicalOffsetWest:
@@ -221,3 +226,268 @@ def test_minimal_room_round_trip(corridor_face: str) -> None:
     restored = decanonicalize_room(canonical, corridor_face)
     assert restored["width_cm"] == room["width_cm"]
     assert restored["depth_cm"] == room["depth_cm"]
+
+
+# ── D-274 Passe 1.1 : _canonicalize_rooms_for_client ────────────────────
+
+
+def _make_import_room(corridor_face: str) -> dict:
+    """Pièce simulant un résultat d'import (post-D-204)."""
+    return {
+        "name": "R1",
+        "width_cm": 600,
+        "depth_cm": 400,
+        "corridor_face": corridor_face,
+        "windows": [
+            {"face": "north", "offset_cm": 50, "width_cm": 200},
+        ],
+        "openings": [
+            {"face": "south", "offset_cm": 100, "width_cm": 90},
+        ],
+        "doors": [
+            {
+                "face": "south", "offset_cm": 80, "width_cm": 80,
+                "hinge_side": "left",
+            },
+        ],
+        "door_seeds": [{"seed_x": 100, "seed_y": 200}],
+        "exclusion_zones": [
+            {"x_cm": 10, "y_cm": 20, "width_cm": 80, "depth_cm": 60},
+        ],
+        "bbox_px": [50, 60, 170, 140],
+        "seed_px": [110, 100],
+    }
+
+
+@pytest.mark.parametrize("corridor_face", ["south", "north", "east", "west", ""])
+def test_canonicalize_rooms_corridor_face_south(corridor_face: str) -> None:
+    """Le helper pose corridor_face='south' pour tous les cas."""
+    rooms = [_make_import_room(corridor_face)]
+    result = _canonicalize_rooms_for_client(rooms)
+    assert len(result) == 1
+    assert result[0]["corridor_face"] == "south"
+
+
+@pytest.mark.parametrize("corridor_face", ["south", "north", "east", "west", ""])
+def test_canonicalize_rooms_corridor_face_abs(corridor_face: str) -> None:
+    """corridor_face_abs préserve la valeur d'origine."""
+    rooms = [_make_import_room(corridor_face)]
+    result = _canonicalize_rooms_for_client(rooms)
+    assert result[0]["corridor_face_abs"] == corridor_face
+
+
+@pytest.mark.parametrize("corridor_face", ["north", "east", "west"])
+def test_canonicalize_rooms_no_original_cf(corridor_face: str) -> None:
+    """_original_corridor_face supprimé (remplacé par corridor_face_abs)."""
+    rooms = [_make_import_room(corridor_face)]
+    result = _canonicalize_rooms_for_client(rooms)
+    assert "_original_corridor_face" not in result[0]
+
+
+@pytest.mark.parametrize("corridor_face", ["north", "east", "west"])
+def test_canonicalize_rooms_matches_canonicalize_room(
+    corridor_face: str,
+) -> None:
+    """Le helper produit les mêmes features cm que canonicalize_room."""
+    room = _make_import_room(corridor_face)
+    direct = canonicalize_room(room)
+    via_helper = _canonicalize_rooms_for_client([dict(room)])[0]
+    # Comparer les champs géométriques
+    assert via_helper["width_cm"] == direct["width_cm"]
+    assert via_helper["depth_cm"] == direct["depth_cm"]
+    assert via_helper["windows"] == direct["windows"]
+    assert via_helper["openings"] == direct["openings"]
+    assert via_helper["doors"] == direct["doors"]
+    if "exclusion_zones" in direct:
+        assert via_helper["exclusion_zones"] == direct["exclusion_zones"]
+
+
+def test_canonicalize_rooms_no_mutation() -> None:
+    """Le helper ne mute pas les rooms d'entrée."""
+    room = _make_import_room("east")
+    original_cf = room["corridor_face"]
+    original_w = room["width_cm"]
+    _canonicalize_rooms_for_client([room])
+    assert room["corridor_face"] == original_cf
+    assert room["width_cm"] == original_w
+
+
+def test_canonicalize_rooms_door_seeds_passthrough() -> None:
+    """door_seeds (image-absolute) sont préservés sans rotation."""
+    room = _make_import_room("east")
+    result = _canonicalize_rooms_for_client([room])[0]
+    assert result["door_seeds"] == [{"seed_x": 100, "seed_y": 200}]
+
+
+def test_canonicalize_rooms_bbox_px_passthrough() -> None:
+    """bbox_px (image-absolute) est préservé sans rotation."""
+    room = _make_import_room("west")
+    result = _canonicalize_rooms_for_client([room])[0]
+    assert result["bbox_px"] == [50, 60, 170, 140]
+
+
+# ── D-274 Passe 1.2 : _canonicalize_features_for_client ─────────────────
+
+
+def _make_features(corridor_face: str) -> dict:
+    """Simule le retour de extract_room_features pour une piece donnee.
+
+    Piece 600×400 cm (bbox 100×200 → 700×600 px, scale=3.0 cm/px).
+    scale=3.0 → absW = px_to_cm(600, 3.0) = 1800, absD = px_to_cm(400, 3.0) = 1200.
+    """
+    return {
+        "bbox_px": [100, 200, 700, 600],
+        "seed_px": [400, 400],
+        "windows": [
+            {"face": "north", "offset_cm": 50, "width_cm": 200},
+        ],
+        "openings": [
+            {"face": "south", "offset_cm": 100, "width_cm": 90},
+        ],
+        "doors": [
+            {
+                "face": "south", "offset_cm": 80, "width_cm": 80,
+                "hinge_side": "left", "opens_inward": True,
+            },
+        ],
+        "auto_exclusion_zones": [
+            {"x_cm": 10, "y_cm": 20, "width_cm": 80, "depth_cm": 60,
+             "origin": "auto"},
+        ],
+        "hits": [[150, 250, "n"], [200, 300, "s"]],
+        "pillar_hits": [[160, 260]],
+        "coarse_hits": [[170, 270, "e"]],
+        "auto_door_masks_px": [],
+    }
+
+
+_FEAT_SCALE = 3.0
+
+
+@pytest.mark.parametrize("corridor_face", ["south", "north", "east", "west"])
+def test_features_matches_canonicalize_room(corridor_face: str) -> None:
+    """Le helper produit les memes features que canonicalize_room."""
+    feat = _make_features(corridor_face)
+    _canonicalize_features_for_client(feat, corridor_face, _FEAT_SCALE)
+
+    # Verifier via canonicalize_room directe
+    from olm.core.units import px_to_cm
+    bbox = [100, 200, 700, 600]
+    abs_w = px_to_cm(bbox[2] - bbox[0], _FEAT_SCALE)
+    abs_d = px_to_cm(bbox[3] - bbox[1], _FEAT_SCALE)
+    room = {
+        "width_cm": abs_w,
+        "depth_cm": abs_d,
+        "corridor_face": corridor_face,
+        "windows": [{"face": "north", "offset_cm": 50, "width_cm": 200}],
+        "openings": [{"face": "south", "offset_cm": 100, "width_cm": 90}],
+        "doors": [
+            {"face": "south", "offset_cm": 80, "width_cm": 80,
+             "hinge_side": "left", "opens_inward": True},
+        ],
+        "exclusion_zones": [
+            {"x_cm": 10, "y_cm": 20, "width_cm": 80, "depth_cm": 60,
+             "origin": "auto"},
+        ],
+    }
+    canon = canonicalize_room(room)
+
+    assert feat["width_cm"] == canon["width_cm"]
+    assert feat["depth_cm"] == canon["depth_cm"]
+    assert feat["windows"] == canon.get("windows", [])
+    assert feat["openings"] == canon.get("openings", [])
+    assert feat["doors"] == canon.get("doors", [])
+
+
+@pytest.mark.parametrize("corridor_face", ["east", "west"])
+def test_features_dims_swapped(corridor_face: str) -> None:
+    """Pour east/west, width et depth sont echanges."""
+    from olm.core.units import px_to_cm
+    feat = _make_features(corridor_face)
+    _canonicalize_features_for_client(feat, corridor_face, _FEAT_SCALE)
+    bbox = [100, 200, 700, 600]
+    abs_w = px_to_cm(bbox[2] - bbox[0], _FEAT_SCALE)
+    abs_d = px_to_cm(bbox[3] - bbox[1], _FEAT_SCALE)
+    assert feat["width_cm"] == abs_d
+    assert feat["depth_cm"] == abs_w
+
+
+def test_features_dims_not_swapped_north() -> None:
+    """Pour north, width et depth restent identiques."""
+    from olm.core.units import px_to_cm
+    feat = _make_features("north")
+    _canonicalize_features_for_client(feat, "north", _FEAT_SCALE)
+    bbox = [100, 200, 700, 600]
+    assert feat["width_cm"] == px_to_cm(bbox[2] - bbox[0], _FEAT_SCALE)
+    assert feat["depth_cm"] == px_to_cm(bbox[3] - bbox[1], _FEAT_SCALE)
+
+
+@pytest.mark.parametrize("corridor_face", ["south", "north", "east", "west"])
+def test_features_hits_untouched(corridor_face: str) -> None:
+    """Les hits/pillar_hits/coarse_hits/seed_px restent en px image."""
+    feat = _make_features(corridor_face)
+    orig_hits = list(feat["hits"])
+    orig_pillar = list(feat["pillar_hits"])
+    orig_coarse = list(feat["coarse_hits"])
+    orig_seed = list(feat["seed_px"])
+    _canonicalize_features_for_client(feat, corridor_face, _FEAT_SCALE)
+    assert feat["hits"] == orig_hits
+    assert feat["pillar_hits"] == orig_pillar
+    assert feat["coarse_hits"] == orig_coarse
+    assert feat["seed_px"] == orig_seed
+
+
+@pytest.mark.parametrize("corridor_face", ["north", "east", "west"])
+def test_features_corridor_face_abs(corridor_face: str) -> None:
+    """corridor_face_abs est pose, _original_corridor_face supprime."""
+    feat = _make_features(corridor_face)
+    _canonicalize_features_for_client(feat, corridor_face, _FEAT_SCALE)
+    assert feat["corridor_face_abs"] == corridor_face
+    assert "_original_corridor_face" not in feat
+
+
+@pytest.mark.parametrize("corridor_face", ["north", "east", "west"])
+def test_features_exclusion_zones_canonicalized(corridor_face: str) -> None:
+    """auto_exclusion_zones sont canonicalisees (meme formule que zones)."""
+    feat = _make_features(corridor_face)
+    _canonicalize_features_for_client(feat, corridor_face, _FEAT_SCALE)
+    zones = feat["auto_exclusion_zones"]
+    assert len(zones) == 1
+    z = zones[0]
+    # Verifier que les valeurs sont entieres (arrondi half-up)
+    assert z["x_cm"] == int(z["x_cm"])
+    assert z["y_cm"] == int(z["y_cm"])
+    assert z["width_cm"] == int(z["width_cm"])
+    assert z["depth_cm"] == int(z["depth_cm"])
+    assert z["origin"] == "auto"
+
+
+def test_features_no_bbox() -> None:
+    """Sans bbox_px, le helper ajoute corridor_face_abs sans crash."""
+    feat = {"windows": [], "openings": [], "doors": []}
+    _canonicalize_features_for_client(feat, "east", _FEAT_SCALE)
+    assert feat["corridor_face_abs"] == "east"
+    assert "width_cm" not in feat
+
+
+def test_features_half_up_rounding() -> None:
+    """Arrondi half-up (pas banker's rounding) sur les zones."""
+    feat = {
+        "bbox_px": [0, 0, 200, 100],
+        "seed_px": [100, 50],
+        "windows": [],
+        "openings": [],
+        "doors": [],
+        "auto_exclusion_zones": [
+            {"x_cm": 10.5, "y_cm": 20.5, "width_cm": 30.5, "depth_cm": 40.5,
+             "origin": "auto"},
+        ],
+        "hits": [],
+    }
+    _canonicalize_features_for_client(feat, "south", 1.0)
+    z = feat["auto_exclusion_zones"][0]
+    # half-up: 0.5 arrondit vers le haut (11, 21, 31, 41)
+    assert z["x_cm"] == 11
+    assert z["y_cm"] == 21
+    assert z["width_cm"] == 31
+    assert z["depth_cm"] == 41

@@ -577,7 +577,7 @@
     if (window.fpOverlay && (fpOvChecked || rvOvChecked)) {
       var ov = window.fpOverlay;
       var fpOvOpacity = parseInt(document.getElementById("rvOverlayOpacity").value) ||
-        parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
+        parseInt(document.getElementById("fpOverlayOpacity").value) || 15;
       // bbox_px gives the room position in the plan image (pixels)
       var ovOffX = 0, ovOffY = 0;
       if (room.bbox_px) {
@@ -756,7 +756,7 @@
         roomOvX = room.bbox_px[0] / ov.pxPerCm;
         roomOvY = room.bbox_px[1] / ov.pxPerCm;
       }
-      var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 25;
+      var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 15;
       // Always use ov.dataUrl (-SD enhanced version, no detection colors).
       // User requirement 2026-05-19.
       state.overlay = {
@@ -1088,6 +1088,33 @@
       });
     }
     window.syncOverlayOpacity = syncOverlayOpacity;
+
+    // Default overlay/grid state applied on startup and on every plan load.
+    // Persisted in localStorage (Settings → Display). Defaults: overlay on,
+    // grid on, opacity 15%. User can re-toggle manually after load.
+    function _ovDefBool(key, dflt) {
+      try {
+        var v = localStorage.getItem(key);
+        return v === null ? dflt : (v === "1");
+      } catch (e) { return dflt; }
+    }
+    function _ovDefInt(key, dflt) {
+      try {
+        var n = parseInt(localStorage.getItem(key), 10);
+        return isNaN(n) ? dflt : n;
+      } catch (e) { return dflt; }
+    }
+    function applyOverlayGridDefaults() {
+      syncOverlayToggle(_ovDefBool("olm_defaultOverlayVisible", true));
+      syncGridToggle(_ovDefBool("olm_defaultGridVisible", true));
+      syncOverlayOpacity(_ovDefInt("olm_defaultOverlayOpacity", 15));
+      if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
+      if (typeof window.rvRenderCurrent === "function") window.rvRenderCurrent();
+    }
+    window.applyOverlayGridDefaults = applyOverlayGridDefaults;
+    // Apply once at startup so toggles/sliders reflect saved settings.
+    applyOverlayGridDefaults();
+
     document.getElementById("fpGridToggle").addEventListener("change", function(e) {
       syncGridToggle(e.target.checked);
       var room = fpCurrent();

@@ -1,26 +1,15 @@
-"""Tests de contrat canonical -- filet de non-regression D-274 Lot 0.
+"""Tests de contrat canonical -- filet de non-regression D-274 Lot 0 + Lot 2a/2b.
 
-Lacunes connues de canonical.py (prerequis du Lot 2 -- bascule Python
-autoritaire) :
-  (a) transparent_zones : non transformees par canonical.py alors que
-      canonical_io.js les transforme (lignes 349-351).
-  (b) Champ doors[] : inconnu de canonical.py ; canonical_io.js le
-      transforme separement (lignes 322-324).
-  (c) hinge_side B-F5 : inversion naive couplee au flip d'offset --
-      faux quand exactement une des faces src/dst est "west". Couvert
-      ici en xfail strict (test_canon_hinge_correct).
-  (d) Exclusion zones east/west B-F6 : les formules de rotation pour
-      corridor east et west sont permutees entre canonical.py et
-      canonical_io.js (Python applique la rotation dans le sens
-      oppose a sa propre face_map pour les exclusions east/west).
-      Le round-trip est preserve des deux cotes mais le resultat
-      canonique intermediaire differe. Le test de parite Py/JS
-      exclut les exclusion_zones pour cette raison.
+Lacunes resolues en Lot 2a :
+  (a) transparent_zones : transformees par canonical.py (parite JS).
+  (b) Champ doors[] : transforme par canonical.py (parite JS).
+  (d) Exclusion zones east/west B-F6 : formules alignees sur canonical_io.js.
+
+Lacune resolue en Lot 2b (Passe 1.5b-1) :
+  (c) hinge_side B-F5 : corrige via _flip_hinge_on_rotation / flipHingeOnRotation.
 
 Fixtures : olm/tests/fixtures/canonical_cases.json (5 pieces, 20
-ouvertures, 5 fenetres, 5 exclusions). Valeurs attendues golden
-generees par canonical.py (non-hinge) + override hinge via formule
-geometrique corrigee (cf. audit B-F5).
+ouvertures, 5 fenetres, 5 doors, 5 exclusions, 5 transparent_zones).
 """
 
 from __future__ import annotations
@@ -52,7 +41,8 @@ CASE_NAMES = [c["name"] for c in CASES]
 
 _ROUNDTRIP_FIELDS = (
     "width_cm", "depth_cm", "corridor_face",
-    "openings", "windows", "exclusion_zones",
+    "openings", "windows", "doors",
+    "exclusion_zones", "transparent_zones",
 )
 
 _OPENING_FIELDS_NO_HINGE = (
@@ -65,7 +55,7 @@ _OPENING_FIELDS_ALL = (
 )
 
 _WINDOW_FIELDS = ("face", "offset_cm", "width_cm")
-_EXCL_FIELDS = ("x_cm", "y_cm", "width_cm", "depth_cm")
+_ZONE_FIELDS = ("x_cm", "y_cm", "width_cm", "depth_cm")
 
 
 # -- Helpers ---------------------------------------------------------------
@@ -105,7 +95,7 @@ def test_roundtrip_identity(case_name: str) -> None:
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)
 def test_canon_golden_non_hinge(case_name: str) -> None:
-    """canon(input) == expected sur dims, faces, offsets, windows, exclusions.
+    """canon(input) == expected sur dims, faces, offsets, windows, zones.
 
     Hinge exclu -- teste separement dans test_canon_hinge_correct.
     """
@@ -149,30 +139,34 @@ def test_canon_golden_non_hinge(case_name: str) -> None:
 
     # Exclusion zones
     canon_excl = canon.get("exclusion_zones", [])
-    exp_excl = expected["exclusion_zones"]
+    exp_excl = expected.get("exclusion_zones", [])
     assert len(canon_excl) == len(exp_excl), (
         f"{case_name} exclusion count"
     )
     for i, (ce, ee) in enumerate(zip(canon_excl, exp_excl)):
-        assert _pick(ce, _EXCL_FIELDS) == _pick(ee, _EXCL_FIELDS), (
+        assert _pick(ce, _ZONE_FIELDS) == _pick(ee, _ZONE_FIELDS), (
             f"{case_name} exclusion[{i}]"
+        )
+
+    # Transparent zones
+    canon_tz = canon.get("transparent_zones", [])
+    exp_tz = expected.get("transparent_zones", [])
+    assert len(canon_tz) == len(exp_tz), (
+        f"{case_name} transparent count"
+    )
+    for i, (ct, et) in enumerate(zip(canon_tz, exp_tz)):
+        assert _pick(ct, _ZONE_FIELDS) == _pick(et, _ZONE_FIELDS), (
+            f"{case_name} transparent[{i}]"
         )
 
 
 # -- test_canon_hinge_correct ---------------------------------------------
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="B-F5: hinge inversion naive couplee au flip d'offset -- "
-           "corrige en D-274 Lot 3",
-)
 def test_canon_hinge_correct() -> None:
     """Tous les hinge canoniques correspondent a l'attendu geometrique.
 
-    Echoue aujourd'hui car canonical.py inverse hinge quand l'offset
-    est flippe, sans tenir compte de l'inversion de polarite de la
-    face west (left = high y, alors que north/south/east = low x ou
-    low y). 8 ouvertures sur 4 pieces non-south sont affectees.
+    B-F5 resolu (D-274 Passe 1.5b-1) : _flip_hinge_on_rotation tient
+    compte de l'inversion de polarite de la face west.
     """
     mismatches: list[str] = []
     for case in CASES:
@@ -200,8 +194,7 @@ def test_python_js_parity() -> None:
     """canonical.py et canonical_io.js produisent des resultats identiques.
 
     Compare dims, openings (face, offset, width, hinge, has_door,
-    opens_inward) et windows. Exclusion zones exclues a cause de
-    B-F6 (formules east/west permutees entre Py et JS).
+    opens_inward), windows, doors, exclusion_zones et transparent_zones.
     Skip si node absent.
     """
     node = shutil.which("node")
@@ -244,14 +237,14 @@ def test_python_js_parity() -> None:
                 f"{name} openings count: "
                 f"py={len(py_ops)} js={len(js_ops)}"
             )
-            continue
-        for i, (po, jo) in enumerate(zip(py_ops, js_ops)):
-            pp = _pick(po, _OPENING_FIELDS_ALL)
-            jp = _pick(jo, _OPENING_FIELDS_ALL)
-            if pp != jp:
-                mismatches.append(
-                    f"{name} opening[{i}]: py={pp} js={jp}"
-                )
+        else:
+            for i, (po, jo) in enumerate(zip(py_ops, js_ops)):
+                pp = _pick(po, _OPENING_FIELDS_ALL)
+                jp = _pick(jo, _OPENING_FIELDS_ALL)
+                if pp != jp:
+                    mismatches.append(
+                        f"{name} opening[{i}]: py={pp} js={jp}"
+                    )
 
         # Windows
         py_wins = py_canon.get("windows", [])
@@ -261,14 +254,65 @@ def test_python_js_parity() -> None:
                 f"{name} windows count: "
                 f"py={len(py_wins)} js={len(js_wins)}"
             )
-            continue
-        for i, (pw, jw) in enumerate(zip(py_wins, js_wins)):
-            pp = _pick(pw, _WINDOW_FIELDS)
-            jp = _pick(jw, _WINDOW_FIELDS)
-            if pp != jp:
-                mismatches.append(
-                    f"{name} window[{i}]: py={pp} js={jp}"
-                )
+        else:
+            for i, (pw, jw) in enumerate(zip(py_wins, js_wins)):
+                pp = _pick(pw, _WINDOW_FIELDS)
+                jp = _pick(jw, _WINDOW_FIELDS)
+                if pp != jp:
+                    mismatches.append(
+                        f"{name} window[{i}]: py={pp} js={jp}"
+                    )
+
+        # Doors
+        py_doors = py_canon.get("doors", [])
+        js_doors = js_canon.get("doors", [])
+        if len(py_doors) != len(js_doors):
+            mismatches.append(
+                f"{name} doors count: "
+                f"py={len(py_doors)} js={len(js_doors)}"
+            )
+        else:
+            for i, (pd, jd) in enumerate(zip(py_doors, js_doors)):
+                pp = _pick(pd, _OPENING_FIELDS_ALL)
+                jp = _pick(jd, _OPENING_FIELDS_ALL)
+                if pp != jp:
+                    mismatches.append(
+                        f"{name} door[{i}]: py={pp} js={jp}"
+                    )
+
+        # Exclusion zones
+        py_excl = py_canon.get("exclusion_zones", [])
+        js_excl = js_canon.get("exclusion_zones", [])
+        if len(py_excl) != len(js_excl):
+            mismatches.append(
+                f"{name} exclusion count: "
+                f"py={len(py_excl)} js={len(js_excl)}"
+            )
+        else:
+            for i, (pe, je) in enumerate(zip(py_excl, js_excl)):
+                pp = _pick(pe, _ZONE_FIELDS)
+                jp = _pick(je, _ZONE_FIELDS)
+                if pp != jp:
+                    mismatches.append(
+                        f"{name} exclusion[{i}]: py={pp} js={jp}"
+                    )
+
+        # Transparent zones
+        py_tz = py_canon.get("transparent_zones", [])
+        js_tz = js_canon.get("transparent_zones", [])
+        if len(py_tz) != len(js_tz):
+            mismatches.append(
+                f"{name} transparent count: "
+                f"py={len(py_tz)} js={len(js_tz)}"
+            )
+        else:
+            for i, (pt_, jt) in enumerate(zip(py_tz, js_tz)):
+                pp = _pick(pt_, _ZONE_FIELDS)
+                jp = _pick(jt, _ZONE_FIELDS)
+                if pp != jp:
+                    mismatches.append(
+                        f"{name} transparent[{i}]: py={pp} js={jp}"
+                    )
 
     assert not mismatches, (
         f"{len(mismatches)} parite mismatch(es):\n"

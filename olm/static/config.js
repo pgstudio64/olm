@@ -387,6 +387,51 @@ function renderFloorplanSettings() {
     };
   }
 
+  // Overlay / grid defaults (Floor / Room / Editor), persisted in localStorage.
+  function _lsBoolDefault(key, dflt) {
+    try {
+      var v = localStorage.getItem(key);
+      return v === null ? dflt : (v === "1");
+    } catch (e) { return dflt; }
+  }
+  function _applyOverlayDefaults() {
+    if (typeof window.applyOverlayGridDefaults === "function") {
+      window.applyOverlayGridDefaults();
+    }
+  }
+  var ovEl = document.getElementById("cfgDefaultOverlay");
+  if (ovEl) {
+    ovEl.checked = _lsBoolDefault("olm_defaultOverlayVisible", true);
+    ovEl.onchange = function () {
+      try { localStorage.setItem("olm_defaultOverlayVisible", this.checked ? "1" : "0"); }
+      catch (e) { /* ignore */ }
+      _applyOverlayDefaults();
+    };
+  }
+  var grEl = document.getElementById("cfgDefaultGrid");
+  if (grEl) {
+    grEl.checked = _lsBoolDefault("olm_defaultGridVisible", true);
+    grEl.onchange = function () {
+      try { localStorage.setItem("olm_defaultGridVisible", this.checked ? "1" : "0"); }
+      catch (e) { /* ignore */ }
+      _applyOverlayDefaults();
+    };
+  }
+  var ovOpEl = document.getElementById("cfgDefaultOverlayOpacity");
+  if (ovOpEl) {
+    var _savedOp = parseInt(localStorage.getItem("olm_defaultOverlayOpacity"), 10);
+    ovOpEl.value = isNaN(_savedOp) ? 15 : _savedOp;
+    ovOpEl.onchange = function () {
+      var v = parseInt(this.value, 10);
+      if (isNaN(v)) v = 15;
+      v = Math.max(5, Math.min(80, v));
+      this.value = v;
+      try { localStorage.setItem("olm_defaultOverlayOpacity", String(v)); }
+      catch (e) { /* ignore */ }
+      _applyOverlayDefaults();
+    };
+  }
+
   // OCR Detection overrides (D-155)
   var cmEl = document.getElementById("cfgCartoucheMargin");
   if (cmEl) {
