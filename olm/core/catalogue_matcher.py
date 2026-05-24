@@ -1,7 +1,7 @@
 """Catalogue pattern matching against real rooms.
 
 Pipeline (7 steps):
-    1. Selection: classify fit (fitting/tolere/hidden) + top/top-1 desks
+    1. Selection: 4-state classify fit + top/top-1 desks
     2. East-West mirror
     3. Stick clamping + homothety
     4. Individual desk removal in forbidden zones
@@ -35,7 +35,6 @@ from olm.core.pattern_generator import (
     DESK_W_CM,
 )
 from olm.core.exceptions import PatternStructurallyInvalid
-from olm.core.matching_config import FIT_TOLERANCE
 from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
 
@@ -85,6 +84,8 @@ class PatternCandidate:
     standard: str
     n_desks: int
     oversize: bool = False
+    fit_class: str = "fitting"
+    overflow_cm: float = 0.0
 
 
 @dataclass
@@ -275,19 +276,31 @@ def _classify_fit(
     pattern: dict,
     room: RoomSpec,
     spacing: "SpacingConfig | None" = None,
-) -> str:
-    """Classify how a pattern fits in a room.
-
-    D-244: three-state classification with FIT_TOLERANCE.
+    tol_1axis: float = 0.10,
+    tol_2axes: float = 0.10,
+) -> tuple[str, float]:
+    """Classify how a pattern fits in a room (4-state model).
 
     Returns:
-        "fitting" — footprint fits within the room.
-        "tolere" — footprint exceeds the room by <= FIT_TOLERANCE per axis.
-        "hidden" — footprint exceeds the room by > FIT_TOLERANCE on any axis.
+        Tuple (fit_class, overflow_cm) where fit_class is one of:
+        - "fitting" — footprint fits within the room on both axes.
+        - "oversize_1axis" — exactly one axis overflows, within tol_1axis.
+        - "oversize_2axes" — both axes overflow, each within tol_2axes.
+        - "hidden" — overflow exceeds tolerances.
+
+        overflow_cm is max(overflow_w, overflow_d) in cm (0 if fitting).
+
+    Note:
+        When effective dimensions are zero (exclusions cover the room),
+        any non-zero footprint yields "hidden" (no usable space).
 
     Args:
-        spacing: Spacing config for the pattern's standard. If None,
+        pattern: Pattern dict with room_width_cm / room_depth_cm.
+        room: Target room.
+        spacing: Spacing config for footprint computation. If None,
             falls back to declared room dimensions.
+        tol_1axis: Fraction tolerance for single-axis oversize.
+        tol_2axes: Fraction tolerance for dual-axis oversize.
     """
     ew, ed = effective_dimensions(room)
     if spacing is not None:
@@ -297,19 +310,39 @@ def _classify_fit(
                 pattern, spacing,
             )
         except Exception:
-            return "hidden"
+            return ("hidden", 0.0)
         fp_w = x_max - x_min
         fp_d = y_max - y_min
     else:
         fp_w = pattern.get("room_width_cm", 0)
         fp_d = pattern.get("room_depth_cm", 0)
 
-    if fp_w <= ew and fp_d <= ed:
-        return "fitting"
-    tol = FIT_TOLERANCE
-    if fp_w <= (1 + tol) * ew and fp_d <= (1 + tol) * ed:
-        return "tolere"
-    return "hidden"
+    overflow_w = max(0.0, fp_w - ew)
+    overflow_d = max(0.0, fp_d - ed)
+    overflow_cm = max(overflow_w, overflow_d)
+
+    if overflow_w == 0 and overflow_d == 0:
+        return ("fitting", 0.0)
+
+    w_over = overflow_w > 0
+    d_over = overflow_d > 0
+
+    if w_over and d_over:
+        # Both axes overflow — check each against tol_2axes
+        if (ew > 0 and overflow_w <= tol_2axes * ew
+                and ed > 0 and overflow_d <= tol_2axes * ed):
+            return ("oversize_2axes", overflow_cm)
+        return ("hidden", overflow_cm)
+
+    # Exactly one axis overflows
+    if w_over:
+        if ew > 0 and overflow_w <= tol_1axis * ew:
+            return ("oversize_1axis", overflow_cm)
+    else:
+        if ed > 0 and overflow_d <= tol_1axis * ed:
+            return ("oversize_1axis", overflow_cm)
+
+    return ("hidden", overflow_cm)
 
 
 def _select_top_desks(
@@ -339,8 +372,9 @@ def select_candidates(
 ) -> SelectionResult | list[SelectionResult]:
     """Select candidate patterns for a target room.
 
-    D-244: three-state classification (fitting / tolere / hidden) with
-    FIT_TOLERANCE, then top + top-1 desk selection on fittings.
+    4-state classification (fitting / oversize_1axis / oversize_2axes /
+    hidden) with configurable tolerances, then top + top-1 desk selection
+    on fittings.
 
     Args:
         catalogue: JSON patterns from the catalogue.
@@ -349,18 +383,26 @@ def select_candidates(
 
     Returns:
         SelectionResult or list of SelectionResult.
+        ``all_fitting`` contains all non-hidden candidates.
     """
+    from olm.core.matching_config import oversize_tol_1axis, oversize_tol_2axes
+    tol_1 = oversize_tol_1axis()
+    tol_2 = oversize_tol_2axes()
+
     standards = [standard] if standard else list(ALL_CONFIGS.keys())
     results = []
 
     for std in standards:
         spacing = ALL_CONFIGS.get(std)
-        fitting = []
-        oversize_extra = []
+        fitting: list[PatternCandidate] = []
+        oversize_1axis: list[PatternCandidate] = []
+        oversize_2axes: list[PatternCandidate] = []
         for p in catalogue:
             if p.get("standard") != std:
                 continue
-            cls = _classify_fit(p, room, spacing)
+            cls, overflow = _classify_fit(
+                p, room, spacing, tol_1, tol_2,
+            )
             if cls == "hidden":
                 continue
             candidate = PatternCandidate(
@@ -370,26 +412,37 @@ def select_candidates(
                 room_depth_cm=p["room_depth_cm"],
                 standard=std,
                 n_desks=count_desks(p),
-                oversize=(cls == "tolere"),
+                oversize=(cls != "fitting"),
+                fit_class=cls,
+                overflow_cm=overflow,
             )
             if cls == "fitting":
                 fitting.append(candidate)
+            elif cls == "oversize_1axis":
+                oversize_1axis.append(candidate)
             else:
-                oversize_extra.append(candidate)
+                oversize_2axes.append(candidate)
 
         top = _select_top_desks(fitting)
         top.sort(key=lambda c: c.n_desks, reverse=True)
-        oversize_extra.sort(key=lambda c: c.n_desks, reverse=True)
 
+        def _oversize_sort_key(c: PatternCandidate):
+            return (c.overflow_cm, -c.n_desks, c.name)
+
+        oversize_1axis.sort(key=_oversize_sort_key)
+        oversize_2axes.sort(key=_oversize_sort_key)
+
+        all_non_hidden = fitting + oversize_1axis + oversize_2axes
         results.append(SelectionResult(
             standard=std,
-            candidates=top + oversize_extra,
-            all_fitting=fitting + oversize_extra,
+            candidates=top + oversize_1axis + oversize_2axes,
+            all_fitting=all_non_hidden,
         ))
 
         logger.debug(
-            "Selection %s: %d fit, %d tolere, %d top desks",
-            std, len(fitting), len(oversize_extra), len(top),
+            "Selection %s: %d fit, %d 1axis, %d 2axes, %d top desks",
+            std, len(fitting), len(oversize_1axis),
+            len(oversize_2axes), len(top),
         )
 
     if standard:
@@ -1415,7 +1468,9 @@ def generate_mirrors(
             room_depth_cm=c.room_depth_cm,
             standard=c.standard,
             n_desks=c.n_desks,
-            oversize=c.oversize,  # D-242 hotfix: mirror inherits oversize flag
+            oversize=c.oversize,
+            fit_class=c.fit_class,
+            overflow_cm=c.overflow_cm,
         ))
     return result
 
@@ -1460,6 +1515,8 @@ class MatchScore:
     largest_free_rect_m2: float
     adapted_pattern: dict
     oversize: bool = False
+    fit_class: str = "fitting"
+    overflow_cm: float = 0.0
     dim_circulation: float | None = None
     dim_light: float | None = None
     dim_back_door: float | None = None
@@ -1730,6 +1787,8 @@ def _pattern_to_circulation_format(
 def score_candidate(
     pattern: dict, room: RoomSpec, standard: str,
     oversize: bool = False,
+    fit_class: str = "fitting",
+    overflow_cm: float = 0.0,
 ) -> MatchScore:
     """Compute the full score of an adapted candidate.
 
@@ -1814,6 +1873,8 @@ def score_candidate(
         largest_free_rect_m2=free_rect_m2,
         adapted_pattern=pattern,
         oversize=oversize,
+        fit_class=fit_class,
+        overflow_cm=overflow_cm,
         dim_circulation=dim_circulation,
         dim_light=dim_light,
         dim_back_door=dim_back_door,
@@ -2066,7 +2127,10 @@ def match_room(
 
             # Step 5: scoring
             score = score_candidate(
-                cleaned, room, std, oversize=candidate.oversize,
+                cleaned, room, std,
+                oversize=candidate.oversize,
+                fit_class=candidate.fit_class,
+                overflow_cm=candidate.overflow_cm,
             )
             std_scores.append(score)
             all_scores.append(score)

@@ -18,6 +18,26 @@ let catalogueData = [];
 var _catDelegationWired = false;
 // Card-view keyboard navigation: index of the highlighted card in DOM order.
 var _catSelIdx = -1;
+// D-286: pattern to select by name once the grid is (re)rendered. Set when
+// arriving on the Card view from Office with a selected candidate; consumed
+// in renderCatalogue (loadCatalogue is async, cards do not exist yet here).
+var _catPendingSelectName = null;
+
+window.catRequestSelectByName = function(name) {
+  _catPendingSelectName = name || null;
+};
+
+function _catConsumePendingSelection() {
+  if (!_catPendingSelectName) return;
+  var cards = _catGetCards();
+  for (var i = 0; i < cards.length; i++) {
+    if (cards[i].dataset.patternName === _catPendingSelectName) {
+      _catSetSelection(i);
+      break;
+    }
+  }
+  _catPendingSelectName = null;
+}
 
 function _catGetCards() {
   var grid = document.getElementById("catalogueGrid");
@@ -360,6 +380,8 @@ function renderCatalogue() {
   _wireCatDelegation();
   // Re-apply keyboard-nav highlight after the grid is rebuilt.
   _catApplySelection();
+  // D-286: honour a pending "select card by name" request (Office → Catalogue).
+  _catConsumePendingSelection();
 }
 
 function getFilteredPatterns() {
@@ -879,7 +901,14 @@ window.peNavigate = function(direction) {
   if (list.length === 0) return;
   var name = (typeof state !== "undefined" && state.name) ? state.name : "";
   var idx = list.findIndex(function(p) { return p.name === name; });
-  if (idx < 0) idx = 0;
-  else idx = (idx + direction + list.length) % list.length;
-  if (typeof loadPattern === "function") loadPattern(list[idx].name);
+  idx = (idx < 0) ? 0 : (idx + direction + list.length) % list.length;
+  function _go() {
+    if (typeof loadPattern === "function") loadPattern(list[idx].name);
+  }
+  // Guard unsaved pattern edits (prev/next buttons, arrows, PageUp/Down).
+  if (window._confirmDiscardPatternIfDirty) {
+    window._confirmDiscardPatternIfDirty().then(function(ok) { if (ok) _go(); });
+  } else {
+    _go();
+  }
 };

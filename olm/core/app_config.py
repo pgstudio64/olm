@@ -38,6 +38,8 @@ _EMBEDDED_DEFAULTS: dict = {
         "w_face_wall": 1.0,
         "w_distance": 1.0,
         "min_desks_drop_ratio": 0.30,
+        "oversize_tol_1axis_pct": 10,
+        "oversize_tol_2axes_pct": 10,
     },
     "standards": {},
     "current_standard": "",
@@ -170,7 +172,8 @@ def get_room_code() -> str:
 
 
 def get_matching() -> dict:
-    """Return matching configuration."""
+    """Return matching configuration (live — reloads config if changed)."""
+    reload_if_changed()
     return _cfg.get("matching", {"w_density": 0.5, "w_comfort": 0.5})
 
 

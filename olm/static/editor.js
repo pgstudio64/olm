@@ -3574,12 +3574,7 @@ function offsetSelectedBlock(deltaCm) {
         deltaCm = state.room_depth_cm - pos.h_cm - pos.y_cm;
       }
     }
-    // Clamp so the full emprise (body + clearance zones) stays in the room.
-    var ext = blockOuterExtentsCm(b.type, b.orientation);
-    if (pos.y_cm + deltaCm - ext.n < 0) deltaCm = ext.n - pos.y_cm;
-    if (pos.y_cm + deltaCm + pos.h_cm + ext.s > state.room_depth_cm) {
-      deltaCm = state.room_depth_cm - ext.s - pos.h_cm - pos.y_cm;
-    }
+    // D-268: free position — no clamp to room bounds (matches mouse drag).
   }
   if (deltaCm === 0) return;
   markDirty();
@@ -3624,12 +3619,7 @@ function offsetSelectedBlockEO(deltaCm) {
     }
   }
 
-  // Clamp so the full emprise (body + clearance zones) stays in the room.
-  var ext = blockOuterExtentsCm(b.type, b.orientation);
-  if (currentX + deltaCm - ext.w < 0) deltaCm = ext.w - currentX;
-  if (currentX + deltaCm + blockW + ext.e > state.room_width_cm) {
-    deltaCm = state.room_width_cm - ext.e - blockW - currentX;
-  }
+  // D-268: free position — no clamp to room bounds (matches mouse drag).
   if (deltaCm === 0) return;
 
   // Compute new absolute x for the selected block only

@@ -282,6 +282,11 @@ function renderGeneralSettings() {
   el = document.getElementById("cfgWFaceWall");
   if (el) { el.value = matching.w_face_wall != null ? matching.w_face_wall : 0; el.onchange = function() { saveConfigField(["matching", "w_face_wall"], parseFloat(this.value)||0); }; }
 
+  el = document.getElementById("cfgOversize1Axis");
+  if (el) { el.value = matching.oversize_tol_1axis_pct != null ? matching.oversize_tol_1axis_pct : 10; el.onchange = function() { saveConfigField(["matching", "oversize_tol_1axis_pct"], parseInt(this.value) >= 0 ? parseInt(this.value) : 10); }; }
+  el = document.getElementById("cfgOversize2Axes");
+  if (el) { el.value = matching.oversize_tol_2axes_pct != null ? matching.oversize_tol_2axes_pct : 10; el.onchange = function() { saveConfigField(["matching", "oversize_tol_2axes_pct"], parseInt(this.value) >= 0 ? parseInt(this.value) : 10); }; }
+
   var labelsDiv = document.getElementById("cfgStandardLabels");
   if (labelsDiv) {
     var current = getCurrentStandard();

@@ -545,11 +545,34 @@ async function init() {
     return Promise.resolve(true);
   }
 
+  var DISCARD_PATTERN_MSG = "Discard unsaved pattern changes?";
+
+  // True when the pattern editor is open with unsaved changes (and not in
+  // amend / room-amend mode). Shared condition for every navigation guard.
+  function _isEditingDirtyPattern() {
+    var editorSub = document.getElementById("subtabCatEditor");
+    return !!(state.dirty && !state.amendMode && !state.roomAmendMode
+              && editorSub && editorSub.classList.contains("active"));
+  }
+
+  // Confirm discard before leaving a dirty pattern. Promise<boolean>:
+  // true = proceed (editor clean, or user confirmed discard).
+  window._confirmDiscardPatternIfDirty = function() {
+    if (!_isEditingDirtyPattern()) return Promise.resolve(true);
+    return confirmModal(DISCARD_PATTERN_MSG).then(function(ok) {
+      if (ok) clearDirty();
+      return ok;
+    });
+  };
+
   // Tab descriptions (flat nav — 4 tabs)
 
   // Main tabs (flat nav)
   document.querySelectorAll(".tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
+      // Tab active BEFORE switching — used to special-case Office → Catalogue.
+      var _originTabEl = document.querySelector(".tab-btn.active");
+      var originTab = _originTabEl ? _originTabEl.dataset.tab : null;
       // v0.5.34 instrumentation : demarrer la capture du freeze des le clic
       // d'onglet vers Room (couvre tab-switch + paint, avant rvRenderCurrent).
       if (btn.dataset.tab === "fpReview" && window._perf) {
@@ -567,6 +590,17 @@ async function init() {
         });
         return;
       }
+      // Guard: leaving the pattern editor with unsaved changes → confirm
+      // discard. The Card-view sub-tab is already guarded; this covers
+      // main-tab switches to Floor/Room/Office.
+      if (btn.dataset.tab !== "lytCatalogue" && _isEditingDirtyPattern()) {
+        confirmModal(DISCARD_PATTERN_MSG).then(function(ok) {
+          if (!ok) return;
+          clearDirty();
+          btn.click();
+        });
+        return;
+      }
       function _doSwitch() {
         document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
         document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
@@ -576,7 +610,23 @@ async function init() {
         if (tab) tab.classList.add("active");
         if (isLayoutTab) {
           _restoreEditorState();
+        }
+        if (btn.dataset.tab === "lytDesign") {
           loadCatalogue();
+        }
+        if (btn.dataset.tab === "lytCatalogue") {
+          // D-286: clicking the Catalogue tab always lands on the Card view
+          // (not the last-used Editor sub-tab). When arriving from Office with
+          // a selected candidate, pre-select that pattern's card; otherwise
+          // (Office without selection, Room, Floor) just show the Card view.
+          if (originTab === "lytDesign" && window.fpGetSelectedPatternName) {
+            var _selName = window.fpGetSelectedPatternName();
+            if (_selName && window.catRequestSelectByName) {
+              window.catRequestSelectByName(_selName);
+            }
+          }
+          document.querySelector(
+            '.sub-tab-btn[data-subtab="catalogue"]').click();
         }
         if (btn.dataset.tab === "fpReview") {
           rvRenderCurrent();
@@ -626,11 +676,8 @@ async function init() {
       // Guard: leaving the pattern editor with unsaved changes → confirm
       // discard (same behaviour as Room/Office). _doSubSwitch reloads the
       // catalogue so Card view is never shown empty.
-      if (btn.dataset.subtab === "catalogue" && state.dirty
-          && !state.amendMode && !state.roomAmendMode
-          && document.getElementById("subtabCatEditor")
-               .classList.contains("active")) {
-        confirmModal("Discard unsaved pattern changes?").then(function(ok) {
+      if (btn.dataset.subtab === "catalogue" && _isEditingDirtyPattern()) {
+        confirmModal(DISCARD_PATTERN_MSG).then(function(ok) {
           if (!ok) return;
           clearDirty();
           _doSubSwitch();

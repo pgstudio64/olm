@@ -19,10 +19,30 @@ MIN_DESKS_DROP_RATIO: float = (
     _matching.get("min_desks_drop_ratio", 0.30) if isinstance(_matching, dict) else 0.30
 )
 
-# D-244: tolerance for oversize classification.
-# A pattern whose footprint exceeds the room by <= FIT_TOLERANCE (per axis)
-# is listed as "tolere" (grey). Beyond that it is hidden entirely.
-FIT_TOLERANCE: float = 0.10
+def oversize_tol_1axis() -> float:
+    """Tolerance fraction for single-axis oversize (live from config).
+
+    Returns:
+        Fraction (e.g. 0.10 for 10%). Read from
+        matching.oversize_tol_1axis_pct in config.json.
+    """
+    from olm.core.app_config import get_matching
+    m = get_matching()
+    pct = m.get("oversize_tol_1axis_pct", 10) if isinstance(m, dict) else 10
+    return pct / 100
+
+
+def oversize_tol_2axes() -> float:
+    """Tolerance fraction for dual-axis oversize (live from config).
+
+    Returns:
+        Fraction (e.g. 0.10 for 10%). Read from
+        matching.oversize_tol_2axes_pct in config.json.
+    """
+    from olm.core.app_config import get_matching
+    m = get_matching()
+    pct = m.get("oversize_tol_2axes_pct", 10) if isinstance(m, dict) else 10
+    return pct / 100
 
 # D-271: footprint guard tolerance after adapt_to_room.
 # Blocks must fit inside the room within this rounding margin (cm).

@@ -192,6 +192,8 @@ def floor_plan_match(data: dict) -> dict:
                 "worst_detour": score.worst_detour,
                 "largest_free_rect_m2": score.largest_free_rect_m2,
                 "oversize": score.oversize,
+                "fit_class": score.fit_class,
+                "overflow_cm": score.overflow_cm,
                 "dim_circulation": score.dim_circulation,
                 "dim_light": score.dim_light,
                 "dim_back_door": score.dim_back_door,

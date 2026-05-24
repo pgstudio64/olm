@@ -87,7 +87,8 @@ def _fitting_pairs() -> list[dict]:
             if spacing is None:
                 continue
             try:
-                if _classify_fit(pattern, room, spacing) != "fitting":
+                cls, _ = _classify_fit(pattern, room, spacing)
+                if cls != "fitting":
                     continue
             except Exception:
                 continue

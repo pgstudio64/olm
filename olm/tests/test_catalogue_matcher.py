@@ -197,33 +197,90 @@ class TestSelectTopDesks:
 
 
 class TestClassifyFit:
-    """D-244: three-state classification."""
+    """4-state classification: fitting / oversize_1axis / oversize_2axes / hidden."""
 
     def test_fitting(self):
         """Footprint smaller than room → fitting."""
-        from olm.core.room_model import RoomSpec
         p = _make_pattern([[{"type": "BLOCK_1"}]],
                           room_width_cm=200, room_depth_cm=200)
         room = RoomSpec(width_cm=400, depth_cm=400)
-        assert _classify_fit(p, room) == "fitting"
+        cls, overflow = _classify_fit(p, room)
+        assert cls == "fitting"
+        assert overflow == 0.0
 
-    def test_tolere(self):
-        """Footprint exceeds by < 10% → tolere."""
-        from olm.core.room_model import RoomSpec
+    def test_oversize_1axis_width(self):
+        """Width exceeds by < 10%, depth OK → oversize_1axis."""
         p = _make_pattern([[{"type": "BLOCK_1"}]],
                           room_width_cm=308, room_depth_cm=200)
         room = RoomSpec(width_cm=300, depth_cm=400)
-        # 308/300 = 2.7% < 10%, sans spacing → compare declared dims
-        assert _classify_fit(p, room) == "tolere"
+        # 308-300=8 <= 10%*300=30 → oversize_1axis
+        cls, overflow = _classify_fit(p, room)
+        assert cls == "oversize_1axis"
+        assert overflow == 8.0
 
-    def test_hidden(self):
-        """Footprint exceeds by > 10% → hidden."""
-        from olm.core.room_model import RoomSpec
+    def test_oversize_1axis_depth(self):
+        """Depth exceeds by < 10%, width OK → oversize_1axis."""
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=200, room_depth_cm=320)
+        room = RoomSpec(width_cm=400, depth_cm=300)
+        # 320-300=20 <= 10%*300=30 → oversize_1axis
+        cls, overflow = _classify_fit(p, room)
+        assert cls == "oversize_1axis"
+        assert overflow == 20.0
+
+    def test_oversize_2axes(self):
+        """Both axes exceed within tolerance → oversize_2axes."""
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=325, room_depth_cm=325)
+        room = RoomSpec(width_cm=300, depth_cm=300)
+        # 25/300 = 8.3% < 10% on each axis
+        cls, overflow = _classify_fit(p, room)
+        assert cls == "oversize_2axes"
+        assert overflow == 25.0
+
+    def test_hidden_1axis_exceeds_tolerance(self):
+        """Single axis exceeds tolerance → hidden."""
         p = _make_pattern([[{"type": "BLOCK_1"}]],
                           room_width_cm=400, room_depth_cm=200)
         room = RoomSpec(width_cm=300, depth_cm=400)
-        # 400/300 = 33% > 10%
-        assert _classify_fit(p, room) == "hidden"
+        # 400-300=100, 100/300=33% > 10%
+        cls, overflow = _classify_fit(p, room)
+        assert cls == "hidden"
+        assert overflow == 100.0
+
+    def test_hidden_2axes_one_exceeds(self):
+        """Both axes overflow but one exceeds tolerance → hidden."""
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=350, room_depth_cm=310)
+        room = RoomSpec(width_cm=300, depth_cm=300)
+        # width: 50/300=16.7% > 10%, depth: 10/300=3.3% < 10%
+        cls, _ = _classify_fit(p, room)
+        assert cls == "hidden"
+
+    def test_custom_tolerances(self):
+        """Custom tolerances respected."""
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=350, room_depth_cm=200)
+        room = RoomSpec(width_cm=300, depth_cm=400)
+        # 50/300=16.7% — hidden at 10%, but ok at 20%
+        cls_10, _ = _classify_fit(p, room, tol_1axis=0.10)
+        assert cls_10 == "hidden"
+        cls_20, _ = _classify_fit(p, room, tol_1axis=0.20)
+        assert cls_20 == "oversize_1axis"
+
+    def test_zero_effective_dimension(self):
+        """Room with zero effective dimension → hidden."""
+        p = _make_pattern([[{"type": "BLOCK_1"}]],
+                          room_width_cm=100, room_depth_cm=100)
+        room = RoomSpec(
+            width_cm=300, depth_cm=100,
+            exclusion_zones=[ExclusionZone(
+                x_cm=0, y_cm=0, width_cm=300, depth_cm=100,
+            )],
+        )
+        # effective depth = 0
+        cls, _ = _classify_fit(p, room)
+        assert cls == "hidden"
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +348,7 @@ class TestSelectCandidates:
                 ), f"{c.name} should be hidden for 50x50"
 
     def test_fitting_before_oversize_in_candidates(self, catalogue):
-        """D-242: fitting candidates come before oversize in the list."""
+        """Fitting candidates come before oversize in the list."""
         if not catalogue:
             pytest.skip("Empty catalogue")
         room = RoomSpec(width_cm=600, depth_cm=500)
@@ -305,6 +362,43 @@ class TestSelectCandidates:
                     pytest.fail(
                         f"Fitting candidate {c.name} appears after "
                         f"oversize in {sel.standard}"
+                    )
+
+    def test_oversize_order_by_overflow(self, catalogue):
+        """Oversize candidates sorted by overflow_cm ascending."""
+        if not catalogue:
+            pytest.skip("Empty catalogue")
+        room = RoomSpec(width_cm=600, depth_cm=500)
+        results = select_candidates(catalogue, room)
+        for sel in results:
+            oversize_cands = [c for c in sel.candidates if c.oversize]
+            # Within each fit_class group, overflow must be ascending
+            prev_cls = ""
+            prev_overflow = -1.0
+            for c in oversize_cands:
+                if c.fit_class != prev_cls:
+                    prev_overflow = -1.0
+                    prev_cls = c.fit_class
+                assert c.overflow_cm >= prev_overflow, (
+                    f"{c.name}: overflow {c.overflow_cm} < prev "
+                    f"{prev_overflow} in {sel.standard}"
+                )
+                prev_overflow = c.overflow_cm
+
+    def test_1axis_before_2axes(self, catalogue):
+        """oversize_1axis group appears before oversize_2axes."""
+        if not catalogue:
+            pytest.skip("Empty catalogue")
+        room = RoomSpec(width_cm=600, depth_cm=500)
+        results = select_candidates(catalogue, room)
+        for sel in results:
+            saw_2axes = False
+            for c in sel.candidates:
+                if c.fit_class == "oversize_2axes":
+                    saw_2axes = True
+                elif c.fit_class == "oversize_1axis" and saw_2axes:
+                    pytest.fail(
+                        f"1axis {c.name} after 2axes in {sel.standard}"
                     )
 
 
@@ -948,14 +1042,8 @@ class TestDedupeByFingerprint:
         result = dedupe_by_fingerprint(candidates)
         assert len(result) == 2
 
-    def test_mirror_inherits_oversize_flag(self):
-        """D-242 hotfix: mirror PatternCandidate must inherit oversize.
-
-        Avant ce fix, generate_mirrors n'incluait pas oversize dans le
-        PatternCandidate du mirror, donc tous les _MIX se retrouvaient avec
-        oversize=False (default), causant des patterns visiblement
-        oversize a apparaitre comme fitting (non grises) dans Office.
-        """
+    def test_mirror_inherits_oversize_and_fit_class(self):
+        """Mirror PatternCandidate inherits oversize, fit_class, overflow_cm."""
         p = _make_pattern(
             [[
                 {"type": "BLOCK_1", "gap_cm": 0, "sticks": ["W"]},
@@ -970,11 +1058,15 @@ class TestDedupeByFingerprint:
             room_width_cm=600, room_depth_cm=400,
             standard="standard1", n_desks=3,
             oversize=True,
+            fit_class="oversize_1axis",
+            overflow_cm=25.0,
         )
         candidates = generate_mirrors([orig])
         assert len(candidates) == 2
-        # Original + mirror both oversize=True
-        assert all(c.oversize for c in candidates)
+        for c in candidates:
+            assert c.oversize
+            assert c.fit_class == "oversize_1axis"
+            assert c.overflow_cm == 25.0
 
     def test_two_independent_patterns_same_layout_deduped(self):
         """Two catalogue patterns with identical block layout → 1 result."""

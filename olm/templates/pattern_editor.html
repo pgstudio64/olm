@@ -254,6 +254,15 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <input type="number" id="cfgWFaceWall" step="0.1" min="0" max="1" class="settings-input" title="Penalty for desks facing a blank wall">
       </div>
     </div>
+    <div class="settings-section">
+      <div class="section-title">Oversize candidates</div>
+      <div class="settings-grid">
+        <label class="settings-label">Oversize 1 axis (%)</label>
+        <input type="number" id="cfgOversize1Axis" step="1" min="0" max="100" class="settings-input" title="Max overflow % on a single axis to show as candidate">
+        <label class="settings-label">Oversize 2 axes (%)</label>
+        <input type="number" id="cfgOversize2Axes" step="1" min="0" max="100" class="settings-input" title="Max overflow % on each axis (both) to show as candidate">
+      </div>
+    </div>
   </div>
 
   <!-- CATALOGUE -->
@@ -557,9 +566,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <div id="fpSelectedEmpty" style="color:var(--text-dim);font-size:var(--fs-xs);padding:4px 0;">No layout saved yet</div>
         </div>
         <div class="section-title">Candidate solutions</div>
-        <div style="margin-bottom:4px;">
-          <span id="candidateHelpToggle" class="help-link">Scoring help</span>
-        </div>
         <div id="fpCandidatesList"></div>
       </div>
       <div class="fp-resize-handle" id="fpDesignLeftResize" style="order:-1;"></div>
@@ -577,8 +583,13 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <tr><td>Desks</td><td id="fpInfoDesks">-</td></tr>
           <tr><td>Area/desk (m²)</td><td id="fpInfoM2">-</td></tr>
           <tr><td>Grade</td><td id="fpInfoCirc" style="cursor:help;">-</td></tr>
+          <tr><td>Composite</td><td id="fpInfoComposite">-</td></tr>
           <tr><td>Min passage</td><td id="fpInfoPassage">-</td></tr>
         </table>
+        <div class="section-title">Scores <span id="candidateHelpToggle" class="help-link" style="text-transform:none;letter-spacing:0;font-weight:normal;margin-left:6px;">Scoring help</span></div>
+        <div id="fpScores"></div>
+        <div class="section-title">Metrics</div>
+        <div id="fpMetrics"></div>
         <div class="section-title">Workstations</div>
         <div id="fpDeskList" style="flex:1;overflow-y:auto;font-size:13px;"></div>
       </div>

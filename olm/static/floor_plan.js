@@ -628,11 +628,17 @@
 
     var gradeOrd = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
     function gradeVal(g) { return g in gradeOrd ? gradeOrd[g] : 6; }
+    var fitOrd = {fitting: 0, oversize_1axis: 1, oversize_2axes: 2};
+    function fitVal(c) { return fitOrd[c.fit_class] != null ? fitOrd[c.fit_class] : (c.oversize ? 1 : 0); }
     candidates.sort(function(a, b) {
-      // D-242: fitting before oversize
-      var oa = a.oversize ? 1 : 0;
-      var ob = b.oversize ? 1 : 0;
-      if (oa !== ob) return oa - ob;
+      // Fitting first, then oversize_1axis, then oversize_2axes
+      var fa = fitVal(a), fb = fitVal(b);
+      if (fa !== fb) return fa - fb;
+      // Within oversize groups: overflow ascending
+      if (fa > 0) {
+        var od = (a.overflow_cm || 0) - (b.overflow_cm || 0);
+        if (od !== 0) return od;
+      }
       if (b.n_desks !== a.n_desks) return b.n_desks - a.n_desks;
       var gd = gradeVal(a.room_grade || a.circulation_grade) - gradeVal(b.room_grade || b.circulation_grade);
       if (gd !== 0) return gd;
@@ -665,6 +671,8 @@
         '<div class="fp-c-stats">' +
           c.n_desks + ' desks &middot; ' + c.m2_per_desk + ' m&sup2;/d &middot; ' +
           '<span class="fp-c-grade ' + gradeClass + '">' + rg + '</span>' +
+          (c.fit_class === "oversize_1axis" ? ' &middot; +' + Math.round(c.overflow_cm) + 'cm (1 axis)' : '') +
+          (c.fit_class === "oversize_2axes" ? ' &middot; +' + Math.round(c.overflow_cm) + 'cm (2 axes)' : '') +
         '</div>' +
       '</div>';
     }).join("");
@@ -687,6 +695,13 @@
   // ── SVG rendering ──────────────────────────────────────────────────────
   // Currently displayed candidate (for keyboard navigation in list)
   var fpCurrentCandidate = null;
+
+  // D-286: source catalogue name of the currently selected candidate (or
+  // null). Reset to null on every Office room render (see fpRenderRoom).
+  // Used by the Catalogue tab to pre-select the matching card.
+  window.fpGetSelectedPatternName = function() {
+    return (fpCurrentCandidate && fpCurrentCandidate.pattern_name) || null;
+  };
 
   function fpRenderSvg(room, candidate) {
     if (!candidate || !candidate.pattern) return;
@@ -767,6 +782,48 @@
 
   function _fmtDim(v) { return v == null ? "n/a" : v.toFixed(2); }
 
+  // Green / orange / red by value, aligned with the grade thresholds
+  // (A/B ≥ 0.75, C/D ≥ 0.45, E/F below).
+  function _scoreColor(v) {
+    if (v >= 0.75) return "var(--ok)";
+    if (v >= 0.45) return "var(--warn)";
+    return "var(--bad)";
+  }
+
+  // One score row: label + coloured mini-bar + value. v is a 0–1 note that
+  // drives the bar width and colour; text overrides the printed value
+  // (e.g. "82 %"). v == null → "n/a" (dimension not applicable).
+  function _scoreRow(label, v, text) {
+    if (v == null) {
+      return '<div class="fp-score-row"><span class="fp-score-label">' +
+        label + '</span><span class="fp-score-na">' + (text || "n/a") +
+        '</span></div>';
+    }
+    var pct = Math.max(0, Math.min(100, Math.round(v * 100)));
+    return '<div class="fp-score-row"><span class="fp-score-label">' +
+      label + '</span><span class="fp-score-bar"><span class="fp-score-fill" ' +
+      'style="width:' + pct + '%;background:' + _scoreColor(v) + ';"></span>' +
+      '</span><span class="fp-score-val">' + (text || v.toFixed(2)) +
+      '</span></div>';
+  }
+
+  // Row without a bar — for unbounded / categorical metrics (no 0→max scale).
+  function _valueRow(label, text) {
+    return '<div class="fp-score-row"><span class="fp-score-label">' +
+      label + '</span><span class="fp-row-val">' + text + '</span></div>';
+  }
+
+  // Fit summary from the 4-state classification (D-285/oversize).
+  function _fmtFit(c) {
+    if (c.fit_class === "oversize_1axis") {
+      return "+" + Math.round(c.overflow_cm || 0) + "cm (1 axis)";
+    }
+    if (c.fit_class === "oversize_2axes") {
+      return "+" + Math.round(c.overflow_cm || 0) + "cm (2 axes)";
+    }
+    return c.oversize ? "oversize" : "fits";
+  }
+
   function _gradeTooltip(c) {
     var rg = c.room_grade || c.circulation_grade || "F";
     var cs = c.composite_score != null ? c.composite_score.toFixed(2) : "?";
@@ -794,9 +851,34 @@
     document.getElementById("fpInfoM2").textContent = candidate.m2_per_desk ? candidate.m2_per_desk.toFixed(1) : "-";
     var gradeEl = document.getElementById("fpInfoCirc");
     var rg = candidate.room_grade || candidate.circulation_grade || "-";
-    gradeEl.textContent = rg;
+    gradeEl.innerHTML = (rg === "-") ? "-" :
+      '<span class="fp-c-grade fp-grade-' + rg + '">' + rg + '</span>';
     gradeEl.title = _gradeTooltip(candidate);
+    document.getElementById("fpInfoComposite").textContent =
+      candidate.composite_score != null
+        ? candidate.composite_score.toFixed(2) : "-";
     document.getElementById("fpInfoPassage").textContent = candidate.min_passage_cm ? candidate.min_passage_cm + " cm" : "-";
+
+    // Score breakdown (per-criterion notes 0–1) as coloured mini-bars.
+    document.getElementById("fpScores").innerHTML =
+      _scoreRow("Circulation", candidate.dim_circulation) +
+      _scoreRow("Natural light", candidate.dim_light) +
+      _scoreRow("Back to door", candidate.dim_back_door) +
+      _scoreRow("Face to wall", candidate.dim_face_wall) +
+      _scoreRow("Distance", candidate.dim_distance);
+
+    // Metrics: Connectivity is a 0–100 % → coloured bar; the others are
+    // unbounded ratios / areas / categorical → plain values (no bar).
+    var conn = candidate.connectivity_pct;
+    var det = candidate.worst_detour;
+    var fr = candidate.largest_free_rect_m2;
+    document.getElementById("fpMetrics").innerHTML =
+      _scoreRow("Connectivity", conn != null ? conn / 100 : null,
+                conn != null ? Math.round(conn) + " %" : null) +
+      _valueRow("Worst detour",
+                (det != null && isFinite(det)) ? det.toFixed(2) : "n/a") +
+      _valueRow("Free area", fr != null ? fr.toFixed(1) + " m²" : "-") +
+      _valueRow("Fit", _fmtFit(candidate));
 
     // Workstation list
     var deskList = document.getElementById("fpDeskList");

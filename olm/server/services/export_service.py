@@ -23,6 +23,7 @@ from olm.server.services.config_service import (
     get_corridor_rgb,
     get_exterior_rgb,
     get_plans_dir,
+    is_dev_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -323,8 +324,9 @@ def _draw_chair(
 
 
 # D-264 (temporary): per-export diagnostic capture. export_plan clears this
-# at the start and writes it to {plan}_DEBUG.txt next to the PNG, so a remote
-# user can paste the exact desk coordinates without server log access.
+# at the start and, in --dev only, writes it to {plan}_DEBUG.txt next to the
+# PNG, so a remote dev can paste the exact desk coordinates without server log
+# access. Never written in a client (non-dev) export folder.
 _EXPORT_DEBUG: list[str] = []
 
 
@@ -769,13 +771,15 @@ def export_plan(
 
     _EXPORT_DEBUG.clear()
     img = compose_plan_image(plan_id, rooms_payload, scale_cm_per_px)
-    # D-264 diagnostic file (temporary) — dropped next to the export.
-    try:
-        with open(os.path.join(output_dir, f"{plan_id}_DEBUG.txt"),
-                  "w", encoding="utf-8") as _df:
-            _df.write("\n".join(_EXPORT_DEBUG) + "\n")
-    except OSError:
-        pass
+    # D-264 diagnostic file (temporary) — only in --dev, so a client export
+    # folder is never polluted by {plan}_DEBUG.txt.
+    if is_dev_mode():
+        try:
+            with open(os.path.join(output_dir, f"{plan_id}_DEBUG.txt"),
+                      "w", encoding="utf-8") as _df:
+                _df.write("\n".join(_EXPORT_DEBUG) + "\n")
+        except OSError:
+            pass
 
     if fmt == "png":
         plan_path = os.path.join(output_dir, f"{plan_id}.png")
