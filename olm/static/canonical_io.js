@@ -101,6 +101,10 @@
    * Recalcule offset_px / width_px depuis offset_cm × pxPerCm.
    * Si pxPerCm <= 0 ou offset_cm absent, laisse la valeur en l'état.
    * D-122 P1 : toStorage/fromStorage deviennent la source unique des px.
+   *
+   * NOTE D-274 Lot 1 : garde la convention pxPerCm (px par cm) plutôt que
+   * cmPerPx (units.js) — inverser changerait 10 sites d'appel internes et
+   * risquerait un bug d'unité. Math.round est déjà half-up (cohérent).
    */
   function _syncPx(o, pxPerCm) {
     if (!(pxPerCm > 0)) return;

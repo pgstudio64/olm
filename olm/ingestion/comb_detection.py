@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
+
+from olm.core.units import px_to_cm
 from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
@@ -2400,8 +2402,8 @@ def extract_all_rooms(image_path, scale_cm_per_px=None, threshold=None,
 
     # Apply scale to all rooms
     for r in rooms:
-        r['width_cm'] = round(r['width_px'] * s)
-        r['depth_cm'] = round(r['height_px'] * s)
+        r['width_cm'] = px_to_cm(r['width_px'], s)
+        r['depth_cm'] = px_to_cm(r['height_px'], s)
 
     logger.info(
         "Ingestion: SUCCESS — %d room(s), scale=%.3f cm/px",

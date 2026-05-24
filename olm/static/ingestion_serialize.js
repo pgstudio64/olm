@@ -270,8 +270,9 @@
     if (ingState.scale && ingState.scale > 0) {
       var dpiExp = window.olmScale.getRenderDpi();
       if (dpiExp > 0) {
-        var scaleNumExp = Math.round(ingState.scale * dpiExp / 2.54);
-        if (scaleNumExp > 0) out.drawing_scale_text = '1 : ' + scaleNumExp;
+        // D-274 Lot 1 : formule « 1:N » centralisée (units.js).
+        var scaleTxtExp = window.cmPerPxToScaleText(ingState.scale, dpiExp);
+        if (scaleTxtExp) out.drawing_scale_text = scaleTxtExp;
       }
       out.drawing_scale_measured = ingState.scale.toFixed(4) + ' cm/px';
     }

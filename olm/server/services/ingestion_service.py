@@ -28,19 +28,19 @@ from olm.server.services.config_service import (
     get_plans_dir,
 )
 
-logger = logging.getLogger(__name__)
+from olm.core.units import cm_to_px, parse_drawing_scale
 
-_INCH_TO_CM = 2.54
+logger = logging.getLogger(__name__)
 
 
 def drawing_scale_to_cm_per_px(
     text: str, render_dpi: int,
 ) -> float | None:
-    """Convert a '1 : N' text to cm/px via render DPI."""
-    m = re.match(r"1\s*:\s*(\d+(?:\.\d+)?)", text.strip())
-    if not m or render_dpi <= 0:
-        return None
-    return _INCH_TO_CM * float(m.group(1)) / render_dpi
+    """Convert a '1 : N' text to cm/px via render DPI.
+
+    Thin alias for ``parse_drawing_scale`` (source unique dans units.py).
+    """
+    return parse_drawing_scale(text, render_dpi)
 
 
 # ---------------------------------------------------------------------------
@@ -749,7 +749,7 @@ def room_diagnostic(data: dict) -> dict:
         window_mode=window_mode,
     )
     diag['binarize_threshold'] = threshold
-    diag['door_width_px'] = int(round(door_width_cm / scale))
+    diag['door_width_px'] = cm_to_px(door_width_cm, scale)
     result["diag"] = diag
     result["other_seeds_count"] = len(other_seeds_px)
 

@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from olm.core.units import cm_to_px
+
 logger = logging.getLogger(__name__)
 
 
@@ -198,8 +200,6 @@ def check_windows_exterior(
     face_map = _CANON_TO_ABS.get(ocf, _CANON_TO_ABS[""])
     img = np.array(Image.open(enhanced_png_path).convert("RGB"))
     bx0, by0, bx1, by1 = (int(v) for v in bbox_px)
-    px_per_cm = 1.0 / scale_cm_per_px if scale_cm_per_px > 0 else 0.0
-
     # Dimensions absolues en cm pour rotations d'offset (canon ↔ abs).
     abs_w_cm = (bx1 - bx0) * scale_cm_per_px
     abs_d_cm = (by1 - by0) * scale_cm_per_px
@@ -231,8 +231,8 @@ def check_windows_exterior(
         else:
             off_abs_cm = off_canon_cm
 
-        off_px = int(round(off_abs_cm * px_per_cm))
-        w_px = int(round(w_cm * px_per_cm))
+        off_px = cm_to_px(off_abs_cm, scale_cm_per_px)
+        w_px = cm_to_px(w_cm, scale_cm_per_px)
 
         if face_abs == "north":
             y_lo = max(0, by0 - band_px)

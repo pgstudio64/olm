@@ -35,16 +35,13 @@
   }
 
   function computeCmPerPx(scaleNumber, renderDpi) {
-    if (!scaleNumber || scaleNumber <= 0 || !renderDpi || renderDpi <= 0) {
-      return 0;
-    }
-    return 2.54 * scaleNumber / renderDpi;
+    // Delegate to units.js source unique (D-274 Lot 1).
+    return window.drawingScaleToCmPerPx(scaleNumber, renderDpi);
   }
 
   function cmPerPxToScaleText(cmPerPx, dpi) {
-    if (!cmPerPx || cmPerPx <= 0 || !dpi || dpi <= 0) return '';
-    var n = Math.round(cmPerPx * dpi / 2.54);
-    return n > 0 ? '1 : ' + n : '';
+    // Delegate to units.js source unique (D-274 Lot 1).
+    return window.cmPerPxToScaleText(cmPerPx, dpi);
   }
 
   function getRenderDpi() { return _renderDpi; }

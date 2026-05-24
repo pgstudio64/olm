@@ -452,10 +452,9 @@ def detect_room_three_phase(binary: np.ndarray, binary_raw: np.ndarray,
           bbox = (x0, y0, x1, y1) in pixels
           walls = dict of direction → list[WallSegment]
     """
-    px_per_cm = 1.0 / scale_cm_per_px
-    phase1_step = max(1, round(PHASE1_STEP_CM * px_per_cm))
-    phase2_step = max(1, round(PHASE2_STEP_CM * px_per_cm))
-    phase3_step = max(1, round(PHASE3_STEP_CM * px_per_cm))
+    phase1_step = max(1, cm_to_px(PHASE1_STEP_CM, scale_cm_per_px))
+    phase2_step = max(1, cm_to_px(PHASE2_STEP_CM, scale_cm_per_px))
+    phase3_step = max(1, cm_to_px(PHASE3_STEP_CM, scale_cm_per_px))
 
     # === Phase 1: Coarse bbox ===
     coarse_fan = 800
@@ -691,16 +690,16 @@ def rooms_to_olo_json(rooms: list[DetectedRoom],
     olo_rooms = []
     for room in rooms:
         x0, y0, x1, y1 = room.bbox_px
-        width_cm = round((x1 - x0) * scale_cm_per_px)
-        depth_cm = round((y1 - y0) * scale_cm_per_px)
+        width_cm = px_to_cm(x1 - x0, scale_cm_per_px)
+        depth_cm = px_to_cm(y1 - y0, scale_cm_per_px)
 
         windows = []
         openings = []
         for face, segments in room.walls.items():
             for seg in segments:
-                seg_offset_cm = round(seg.start_px * scale_cm_per_px)
-                seg_width_cm = round((seg.end_px - seg.start_px)
-                                     * scale_cm_per_px)
+                seg_offset_cm = px_to_cm(seg.start_px, scale_cm_per_px)
+                seg_width_cm = px_to_cm(
+                    seg.end_px - seg.start_px, scale_cm_per_px)
                 if seg.kind == "window":
                     windows.append({
                         "face": face,
@@ -741,8 +740,9 @@ def rooms_to_olo_json(rooms: list[DetectedRoom],
 _RE_SURFACE_M2 = re.compile(r"(\d+[.,]?\d*)\s*m[²2]", re.IGNORECASE)
 # Regex pour parser plan_scale (ex: "1:100", "1 : 50")
 _RE_PLAN_SCALE = re.compile(r"1\s*:\s*(\d+)")
-# Constante de conversion inch → cm
-_INCH_TO_CM = 2.54
+# Conversion inch → cm et formules d'échelle : source unique dans units.py.
+from olm.core.units import INCH_TO_CM, parse_drawing_scale, scale_from_dpi_ratio
+from olm.core.units import px_to_cm, cm_to_px
 
 
 def _parse_surface_m2(text: str) -> float:
@@ -764,15 +764,8 @@ def _parse_plan_scale_ratio(plan_scale: str) -> float:
 
 
 def _cm_per_px_from_metadata(dpi: int, plan_scale_ratio: float) -> float:
-    """Calcule le facteur cm réel / pixel depuis dpi + ratio plan_scale.
-
-    Formule : cm_per_px = (2.54 / dpi) * plan_scale_ratio
-      - 2.54 / dpi : cm de plan imprimé par pixel
-      - * plan_scale_ratio : conversion cm plan → cm réel (ex: 1:100 → ×100)
-    """
-    if dpi <= 0 or plan_scale_ratio <= 0:
-        return 0.0
-    return (_INCH_TO_CM / float(dpi)) * plan_scale_ratio
+    """Calcule le facteur cm reel / pixel depuis dpi + ratio plan_scale."""
+    return scale_from_dpi_ratio(dpi, plan_scale_ratio)
 
 
 def _room_center_from_lines(line1: dict, line2: dict, line3: dict) -> tuple[float, float]:
@@ -1243,9 +1236,9 @@ def extract_rooms_from_preprocessed(
     dst_raw = str(json_data.get("drawing_scale_text", "")).strip()
     render_dpi = int(json_data.get("render_dpi", 0))
     if dst_raw and render_dpi > 0:
-        _dst_match = re.match(r"1\s*:\s*(\d+(?:\.\d+)?)", dst_raw)
-        if _dst_match:
-            notation_scale = 2.54 * float(_dst_match.group(1)) / render_dpi
+        _parsed = parse_drawing_scale(dst_raw, render_dpi)
+        if _parsed is not None:
+            notation_scale = _parsed
 
     # Ruler Scale: drawing_scale_measured (already in cm/px)
     ruler_scale = 0.0
@@ -1346,14 +1339,14 @@ def extract_rooms_from_preprocessed(
         if bbox_px:
             w_px = max(1, bbox_px[2] - bbox_px[0])
             h_px = max(1, bbox_px[3] - bbox_px[1])
-            width_cm = int(round(w_px * scale_cm_per_px))
-            depth_cm = int(round(h_px * scale_cm_per_px))
+            width_cm = px_to_cm(w_px, scale_cm_per_px)
+            depth_cm = px_to_cm(h_px, scale_cm_per_px)
         else:
             # Fallback ultime (ne devrait plus arriver grâce au ray-cast).
             area_cm2 = surface_m2 * 10_000.0
             side_cm = math.sqrt(max(area_cm2, 1.0))
-            width_cm = int(round(side_cm))
-            depth_cm = int(round(side_cm))
+            width_cm = px_to_cm(side_cm, 1.0)
+            depth_cm = px_to_cm(side_cm, 1.0)
             bbox_px = (seed_x, seed_y, seed_x, seed_y)
 
         # Doors : transfère tels quels s'ils ont déjà les champs enrichis (face,
@@ -1385,9 +1378,9 @@ def extract_rooms_from_preprocessed(
             """
             out = dict(e)
             if "offset_cm" not in out and "offset_px" in out:
-                out["offset_cm"] = int(round(out["offset_px"] * scale_cm_per_px))
+                out["offset_cm"] = px_to_cm(out["offset_px"], scale_cm_per_px)
             if "width_cm" not in out and "width_px" in out:
-                out["width_cm"] = int(round(out["width_px"] * scale_cm_per_px))
+                out["width_cm"] = px_to_cm(out["width_px"], scale_cm_per_px)
             return out
 
         openings = [_enrich_px_cm(o) for o in p["openings_raw"] if isinstance(o, dict)]
@@ -1569,8 +1562,8 @@ def _filter_impossible_openings(
 
     x0, y0, x1, y1 = (int(v) for v in bbox_px)
     h, w = binary.shape
-    probe_depth_px = max(1, int(round(probe_depth_cm / scale_cm_per_px)))
-    step_px = max(1, int(round(5.0 / scale_cm_per_px)))  # sonde ~5 cm
+    probe_depth_px = max(1, cm_to_px(probe_depth_cm, scale_cm_per_px))
+    step_px = max(1, cm_to_px(5.0, scale_cm_per_px))  # sonde ~5 cm
 
     # Regrouper les ouvertures par face.
     by_face: dict[str, list[dict]] = {}
@@ -1799,8 +1792,6 @@ def extract_room_features(
     if image.mode != "L":
         image = image.convert("L")
     seed_x, seed_y = int(seed_px[0]), int(seed_px[1])
-    px_per_cm = 1.0 / scale_cm_per_px
-
     # --- 1. Collecte des rectangles de masque (zones transparentes user) ---
     # D-145 : `doors_px` ne crée plus de masques — ils supprimaient les
     # arcs et rendaient la détection de portes impossible.
@@ -1816,10 +1807,10 @@ def extract_room_features(
     if bbox_px and transparent_zones_cm:
         bx0, by0 = bbox_px[0], bbox_px[1]
         for z in transparent_zones_cm:
-            zx_abs = int(round(z.get("x_cm", 0) * px_per_cm)) + bx0
-            zy_abs = int(round(z.get("y_cm", 0) * px_per_cm)) + by0
-            zw = int(round(z.get("width_cm", 0) * px_per_cm))
-            zh = int(round(z.get("depth_cm", 0) * px_per_cm))
+            zx_abs = cm_to_px(z.get("x_cm", 0), scale_cm_per_px) + bx0
+            zy_abs = cm_to_px(z.get("y_cm", 0), scale_cm_per_px) + by0
+            zw = cm_to_px(z.get("width_cm", 0), scale_cm_per_px)
+            zh = cm_to_px(z.get("depth_cm", 0), scale_cm_per_px)
             if zw > 0 and zh > 0:
                 mask_rects_px.append(
                     (zx_abs, zy_abs, zx_abs + zw, zy_abs + zh))
@@ -1907,10 +1898,9 @@ def extract_room_features(
     # expand_door_arcs utilise la binaire pré-clean et scope le scan
     # autour des seeds de portes connus.
     from olm.ingestion.comb_detection import detect_room as _comb_detect_room
-    px_per_cm_f = 1.0 / scale_cm_per_px
     from olm.ingestion.comb_detection import COMB_STEP_PX
     comb_step_px = COMB_STEP_PX
-    door_px = max(1, int(round(door_width_cm * px_per_cm_f)))
+    door_px = max(1, cm_to_px(door_width_cm, scale_cm_per_px))
 
     # Construire door_seeds à partir de doors_px. Deux formes acceptées :
     # - {face, seed_x, seed_y} : seed enrichi (Rescan, pillar exclusion)
@@ -1946,7 +1936,7 @@ def extract_room_features(
     # --- Classification murs sur le bbox détecté ---
     # step_px dérivé de classify_step_cm au scale courant (D-108 : tous
     # les paramètres de détection en cm, convertis à l'exécution).
-    step_px = max(1, int(round(classify_step_cm * px_per_cm_f)))
+    step_px = max(1, cm_to_px(classify_step_cm, scale_cm_per_px))
     walls: dict[str, list] = {}
     for face in ("north", "south", "east", "west"):
         segs, _ = _classify_wall_direct(
@@ -2002,7 +1992,7 @@ def extract_room_features(
                     "offset_px": 0,
                     "width_px": int(face_len_px),
                     "offset_cm": 0,
-                    "width_cm": int(round(face_len_px * scale_cm_per_px)),
+                    "width_cm": px_to_cm(face_len_px, scale_cm_per_px),
                 })
             # Openings : garder celles détectées par texture (portes, passages)
             for seg in segs:
@@ -2014,8 +2004,8 @@ def extract_room_features(
                             "face": face,
                             "offset_px": int(off),
                             "width_px": int(w),
-                            "offset_cm": int(round(off * scale_cm_per_px)),
-                            "width_cm": int(round(w * scale_cm_per_px)),
+                            "offset_cm": px_to_cm(off, scale_cm_per_px),
+                            "width_cm": px_to_cm(w, scale_cm_per_px),
                         })
         else:
             # Mode détaillé : algo texture existant.
@@ -2030,8 +2020,8 @@ def extract_room_features(
                     "face": face,
                     "offset_px": int(off),
                     "width_px": int(w),
-                    "offset_cm": int(round(off * scale_cm_per_px)),
-                    "width_cm": int(round(w * scale_cm_per_px)),
+                    "offset_cm": px_to_cm(off, scale_cm_per_px),
+                    "width_cm": px_to_cm(w, scale_cm_per_px),
                 }
                 if seg.kind == "window":
                     if rgb_arr is None or face_is_exterior:
@@ -2085,8 +2075,8 @@ def extract_room_features(
                 "face": d.get("face"),
                 "offset_px": off,
                 "width_px": wpx,
-                "offset_cm": int(round(off * scale_cm_per_px)),
-                "width_cm": int(round(wpx * scale_cm_per_px)),
+                "offset_cm": px_to_cm(off, scale_cm_per_px),
+                "width_cm": px_to_cm(wpx, scale_cm_per_px),
                 "hinge_side": d.get("hinge_side"),
                 "opens_inward": bool(d.get("opens_inward", True)),
             }
@@ -2144,10 +2134,10 @@ def extract_room_features(
         if cx1 <= cx0 or cy1 <= cy0:
             continue
         auto_exclusions.append({
-            "x_cm": int(round(cx0 * scale_cm_per_px)),
-            "y_cm": int(round(cy0 * scale_cm_per_px)),
-            "width_cm": max(1, int(round((cx1 - cx0) * scale_cm_per_px))),
-            "depth_cm": max(1, int(round((cy1 - cy0) * scale_cm_per_px))),
+            "x_cm": px_to_cm(cx0, scale_cm_per_px),
+            "y_cm": px_to_cm(cy0, scale_cm_per_px),
+            "width_cm": max(1, px_to_cm(cx1 - cx0, scale_cm_per_px)),
+            "depth_cm": max(1, px_to_cm(cy1 - cy0, scale_cm_per_px)),
             "origin": "auto",
         })
 

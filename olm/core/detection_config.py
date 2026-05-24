@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
 
+from olm.core.units import cm_to_px
+
 
 @dataclass(frozen=True)
 class DetectionConfigCm:
@@ -123,9 +125,8 @@ class DetectionConfigCm:
 
     def to_px(self, scale_cm_per_px: float) -> DetectionConfigPx:
         """Convertit les valeurs cm en px au scale courant."""
-        px_per_cm = 1.0 / scale_cm_per_px
         def _px(cm: float) -> int:
-            return max(1, int(round(cm * px_per_cm)))
+            return max(1, cm_to_px(cm, scale_cm_per_px))
         return DetectionConfigPx(
             binarize_threshold=self.binarize_threshold,
             ortho_angle_tolerance_deg=self.ortho_angle_tolerance_deg,
