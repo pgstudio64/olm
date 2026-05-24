@@ -1,0 +1,562 @@
+[
+  {
+    "name": "south_600x400",
+    "input_room": {
+      "name": "south_600x400",
+      "width_cm": 600,
+      "depth_cm": 400,
+      "corridor_face": "south",
+      "openings": [
+        {
+          "face": "north",
+          "offset_cm": 50,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "south",
+          "offset_cm": 200,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "east",
+          "offset_cm": 100,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 150,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
+      "windows": [
+        {
+          "face": "north",
+          "offset_cm": 200,
+          "width_cm": 120
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 10,
+          "y_cm": 20,
+          "width_cm": 80,
+          "depth_cm": 60
+        }
+      ]
+    },
+    "expected_canon": {
+      "width_cm": 600,
+      "depth_cm": 400,
+      "corridor_face": "south",
+      "openings": [
+        {
+          "face": "north",
+          "offset_cm": 50,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "south",
+          "offset_cm": 200,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "east",
+          "offset_cm": 100,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 150,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
+      "windows": [
+        {
+          "face": "north",
+          "offset_cm": 200,
+          "width_cm": 120
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 10,
+          "y_cm": 20,
+          "width_cm": 80,
+          "depth_cm": 60
+        }
+      ]
+    }
+  },
+  {
+    "name": "north_600x400",
+    "input_room": {
+      "name": "north_600x400",
+      "width_cm": 600,
+      "depth_cm": 400,
+      "corridor_face": "north",
+      "openings": [
+        {
+          "face": "north",
+          "offset_cm": 100,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "south",
+          "offset_cm": 50,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "east",
+          "offset_cm": 80,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "west",
+          "offset_cm": 120,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
+      "windows": [
+        {
+          "face": "south",
+          "offset_cm": 150,
+          "width_cm": 150
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 500,
+          "y_cm": 300,
+          "width_cm": 70,
+          "depth_cm": 50
+        }
+      ]
+    },
+    "expected_canon": {
+      "width_cm": 600,
+      "depth_cm": 400,
+      "corridor_face": "south",
+      "openings": [
+        {
+          "face": "south",
+          "offset_cm": 410,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": false
+        },
+        {
+          "face": "north",
+          "offset_cm": 460,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 240,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "east",
+          "offset_cm": 200,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
+      "windows": [
+        {
+          "face": "north",
+          "offset_cm": 300,
+          "width_cm": 150
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 30,
+          "y_cm": 50,
+          "width_cm": 70,
+          "depth_cm": 50
+        }
+      ]
+    }
+  },
+  {
+    "name": "east_500x300",
+    "input_room": {
+      "name": "east_500x300",
+      "width_cm": 500,
+      "depth_cm": 300,
+      "corridor_face": "east",
+      "openings": [
+        {
+          "face": "north",
+          "offset_cm": 40,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "south",
+          "offset_cm": 100,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "east",
+          "offset_cm": 60,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 80,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
+      "windows": [
+        {
+          "face": "west",
+          "offset_cm": 30,
+          "width_cm": 100
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 20,
+          "y_cm": 10,
+          "width_cm": 60,
+          "depth_cm": 40
+        }
+      ]
+    },
+    "expected_canon": {
+      "width_cm": 300,
+      "depth_cm": 500,
+      "corridor_face": "south",
+      "openings": [
+        {
+          "face": "east",
+          "offset_cm": 40,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 100,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": false
+        },
+        {
+          "face": "south",
+          "offset_cm": 160,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": true
+        },
+        {
+          "face": "north",
+          "offset_cm": 140,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
+      "windows": [
+        {
+          "face": "north",
+          "offset_cm": 170,
+          "width_cm": 100
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 10,
+          "y_cm": 420,
+          "width_cm": 40,
+          "depth_cm": 60
+        }
+      ]
+    }
+  },
+  {
+    "name": "west_500x300",
+    "input_room": {
+      "name": "west_500x300",
+      "width_cm": 500,
+      "depth_cm": 300,
+      "corridor_face": "west",
+      "openings": [
+        {
+          "face": "north",
+          "offset_cm": 60,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "south",
+          "offset_cm": 150,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "east",
+          "offset_cm": 50,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "west",
+          "offset_cm": 100,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        }
+      ],
+      "windows": [
+        {
+          "face": "east",
+          "offset_cm": 70,
+          "width_cm": 80
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 400,
+          "y_cm": 200,
+          "width_cm": 50,
+          "depth_cm": 70
+        }
+      ]
+    },
+    "expected_canon": {
+      "width_cm": 300,
+      "depth_cm": 500,
+      "corridor_face": "south",
+      "openings": [
+        {
+          "face": "west",
+          "offset_cm": 350,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "east",
+          "offset_cm": 260,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": true
+        },
+        {
+          "face": "north",
+          "offset_cm": 50,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "south",
+          "offset_cm": 100,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": true
+        }
+      ],
+      "windows": [
+        {
+          "face": "north",
+          "offset_cm": 70,
+          "width_cm": 80
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 30,
+          "y_cm": 400,
+          "width_cm": 70,
+          "depth_cm": 50
+        }
+      ]
+    }
+  },
+  {
+    "name": "east_400x400_square",
+    "input_room": {
+      "name": "east_400x400_square",
+      "width_cm": 400,
+      "depth_cm": 400,
+      "corridor_face": "east",
+      "openings": [
+        {
+          "face": "north",
+          "offset_cm": 50,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "south",
+          "offset_cm": 80,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        },
+        {
+          "face": "east",
+          "offset_cm": 100,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 120,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
+      "windows": [
+        {
+          "face": "south",
+          "offset_cm": 60,
+          "width_cm": 100
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 30,
+          "y_cm": 30,
+          "width_cm": 50,
+          "depth_cm": 50
+        }
+      ]
+    },
+    "expected_canon": {
+      "width_cm": 400,
+      "depth_cm": 400,
+      "corridor_face": "south",
+      "openings": [
+        {
+          "face": "east",
+          "offset_cm": 50,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": true
+        },
+        {
+          "face": "west",
+          "offset_cm": 80,
+          "width_cm": 90,
+          "has_door": true,
+          "hinge_side": "left",
+          "opens_inward": false
+        },
+        {
+          "face": "south",
+          "offset_cm": 220,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": true
+        },
+        {
+          "face": "north",
+          "offset_cm": 200,
+          "width_cm": 80,
+          "has_door": true,
+          "hinge_side": "right",
+          "opens_inward": false
+        }
+      ],
+      "windows": [
+        {
+          "face": "west",
+          "offset_cm": 60,
+          "width_cm": 100
+        }
+      ],
+      "exclusion_zones": [
+        {
+          "x_cm": 30,
+          "y_cm": 320,
+          "width_cm": 50,
+          "depth_cm": 50
+        }
+      ]
+    }
+  }
+]

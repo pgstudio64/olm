@@ -47,7 +47,16 @@
           be.preDragBbox = room.bbox_px.slice();
           be.mode = 'resizing';
           be.handle = handle;
-          be.dragStart = { mouseX: p.x, mouseY: p.y, bbox: room.bbox_px.slice() };
+          be.dragStart = {
+            mouseX: p.x, mouseY: p.y, bbox: room.bbox_px.slice(),
+            // D-291: snapshot room-local features to re-anchor them when the
+            // NW origin moves (keep absolute raster position).
+            windows: JSON.parse(JSON.stringify(room.windows || [])),
+            openings: JSON.parse(JSON.stringify(room.openings || [])),
+            doors: JSON.parse(JSON.stringify(room.doors || [])),
+            exclusions: JSON.parse(JSON.stringify(room.exclusion_zones || [])),
+            transparents: JSON.parse(JSON.stringify(room.transparent_zones || [])),
+          };
           return;
         }
         // bbox body: select or start move
@@ -2124,6 +2133,51 @@
         }
       }
       room.bbox_px = [nx0, ny0, nx1, ny1];
+      // D-291: re-anchor room-local features so they keep their ABSOLUTE
+      // raster position when the NW origin moves (north/west resize). For
+      // south/east handles the origin is fixed → shX/shY = 0 (no-op). Move
+      // mode is untouched: features move with the bbox. Mirrors the
+      // Room-amend resize (rvTool).
+      if (be.mode === 'resizing' && be.dragStart.exclusions) {
+        var ds = be.dragStart;
+        var sc = ingState.scale || 0;
+        var shX = (orig[0] - nx0) * sc;
+        var shY = (orig[1] - ny0) * sc;
+        var _shiftOff = function (arr) {
+          return (arr || []).map(function (o) {
+            var c = Object.assign({}, o);
+            if (c.face === 'north' || c.face === 'south') {
+              c.offset_cm = (c.offset_cm || 0) + shX;
+            } else {
+              c.offset_cm = (c.offset_cm || 0) + shY;
+            }
+            return c;
+          });
+        };
+        var _shiftZone = function (arr) {
+          return (arr || []).map(function (z) {
+            return Object.assign({}, z, {
+              x_cm: (z.x_cm || 0) + shX, y_cm: (z.y_cm || 0) + shY,
+            });
+          });
+        };
+        room.windows = _shiftOff(ds.windows);
+        room.openings = _shiftOff(ds.openings);
+        room.doors = _shiftOff(ds.doors);
+        room.exclusion_zones = _shiftZone(ds.exclusions);
+        room.transparent_zones = _shiftZone(ds.transparents);
+        // D-291b: clamp the re-anchored features to the NEW dims LIVE (same as
+        // the mouseup clamp), so a feature pushed past a shrinking wall stays
+        // visible/consistent instead of disappearing until the Room view.
+        // Non-cumulative: recomputed from the snapshot every frame.
+        var _nWcm = Math.round((nx1 - nx0) * sc);
+        var _nDcm = Math.round((ny1 - ny0) * sc);
+        room.windows = clampOpeningsToDims(room.windows, _nWcm, _nDcm);
+        room.openings = clampOpeningsToDims(room.openings, _nWcm, _nDcm);
+        room.doors = clampOpeningsToDims(room.doors, _nWcm, _nDcm);
+        room.exclusion_zones = clampZonesToDims(room.exclusion_zones, _nWcm, _nDcm);
+        room.transparent_zones = clampZonesToDims(room.transparent_zones, _nWcm, _nDcm);
+      }
       // Update derived fields live
       var wPx = nx1 - nx0;
       var hPx = ny1 - ny0;

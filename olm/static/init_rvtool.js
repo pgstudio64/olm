@@ -74,7 +74,7 @@
       if (dslEl) dslEl.value = _stateToDsl();
     }
 
-    function rvScreenToRoomCm(evt, customSnapCm) {
+    function rvScreenToRoomCm(evt, customSnapCm, ignoreOffset) {
       var svg = _getActiveSvg();
       var pt = svg.createSVGPoint();
       pt.x = evt.clientX;
@@ -83,8 +83,12 @@
       var snap = (typeof customSnapCm === "number" && customSnapCm > 0) ? customSnapCm : GRID_STEP_CM;
       // D-243 F2: subtract roomRenderOffset BEFORE snap so coords are
       // relative to room NW (not SVG NW) after resize.
-      var offX = (state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0);
-      var offY = (state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0);
+      // D-292: during a room resize the offset is itself driven by the mouse,
+      // so subtracting the LIVE offset creates a feedback loop (oscillation +
+      // halved enlargement). The resize path passes ignoreOffset=true to
+      // measure the raw mouse delta against the drag-start frame instead.
+      var offX = (ignoreOffset || !state.roomRenderOffset) ? 0 : state.roomRenderOffset.x_cm;
+      var offY = (ignoreOffset || !state.roomRenderOffset) ? 0 : state.roomRenderOffset.y_cm;
       var rawX = svgPt.x / SCALE - offX;
       var rawY = svgPt.y / SCALE - offY;
       return {
@@ -1362,7 +1366,9 @@
       // Room corner handle click → start resizing the whole room (D-99).
       // Snapshot contents deep so mousemove recomputes translations cleanly.
       if (roomHandleTarget !== null) {
-        var roomPt = rvScreenToRoomCm(e, ROOM_RESIZE_SNAP_CM);
+        // D-292: ignoreOffset=true → raw mouse frame (no feedback with the
+        // resize-driven roomRenderOffset).
+        var roomPt = rvScreenToRoomCm(e, ROOM_RESIZE_SNAP_CM, true);
         rvTool.mode = "roomResizing";
         rvTool.selectedIndex = -1;
         state.selectedExclusion = -1;
@@ -1999,7 +2005,9 @@
         return;
       }
       if (rvTool.mode === "roomResizing" && rvTool.roomResizeStart) {
-        var ptRoom = rvScreenToRoomCm(e, ROOM_RESIZE_SNAP_CM);
+        // D-292: ignoreOffset=true → measure the raw mouse delta against the
+        // drag-start frame (no feedback loop with roomRenderOffset).
+        var ptRoom = rvScreenToRoomCm(e, ROOM_RESIZE_SNAP_CM, true);
         var rrs = rvTool.roomResizeStart;
         // Raw mouse deltas (snapped to GRID_STEP_CM by rvScreenToRoomCm).
         var mdx = ptRoom.x_cm - rrs.mouse_x_cm;
