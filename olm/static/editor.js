@@ -380,11 +380,8 @@ function computePatternFootprint(p, opts) {
         var b = blocks[bi];
         if (b.gap_cm) x_cm += b.gap_cm;
         var g = getEffectiveGeom(b.type, b.orientation);
-        var f = g.faces || {};
-        var fw = (f.west && !f.west.internal) ? (f.west.non_superposable_cm || 0) + (f.west.candidate_cm || 0) : 0;
-        var fe = (f.east && !f.east.internal) ? (f.east.non_superposable_cm || 0) + (f.east.candidate_cm || 0) : 0;
-        var fn = (f.north && !f.north.internal) ? (f.north.non_superposable_cm || 0) + (f.north.candidate_cm || 0) : 0;
-        var fs = (f.south && !f.south.internal) ? (f.south.non_superposable_cm || 0) + (f.south.candidate_cm || 0) : 0;
+        var _oe = blockOuterExtentsCm(b.type, b.orientation);
+        var fw = _oe.w, fe = _oe.e, fn = _oe.n, fs = _oe.s;
         var pos = {
           x: x_cm, y: y_cm + (b.offset_ns_cm || 0),
           w: g.eo, h: g.ns,
@@ -1118,6 +1115,126 @@ function computeBlockPositions() {
 }
 
 /**
+ * Outer setback extent (cm) of a block's footprint on each side: the
+ * non_superposable + candidate clearance drawn beyond the body, excluding
+ * internal-void faces (D-241). This is the block's total footprint margin
+ * ("emprise totale"). Shared by the pattern-bounds computation and the
+ * drag ghost (D-267) so both show the same limits.
+ *
+ * @param {string} type - block type
+ * @param {number} orientation - 0/90/180/270
+ * @returns {{w:number, e:number, n:number, s:number}} extents in cm
+ */
+function blockOuterExtentsCm(type, orientation) {
+  var g = getEffectiveGeom(type, orientation);
+  var f = g.faces || {};
+  var ext = function (face) {
+    return (face && !face.internal)
+      ? ((face.non_superposable_cm || 0) + (face.candidate_cm || 0)) : 0;
+  };
+  return { w: ext(f.west), e: ext(f.east), n: ext(f.north), s: ext(f.south) };
+}
+
+// Placement-conflict coloring: touching (overlap <= tol) is OK; any positive
+// overlap beyond it turns the block's dashed emprise red.
+const PLACEMENT_OVERLAP_TOL_CM = 0.5;
+
+/** Rect overlap test in cm. Rects are {x_cm, y_cm, w_cm, h_cm}. */
+function _rectsOverlapCm(a, b, tol) {
+  var t = tol || 0;
+  var ox = Math.min(a.x_cm + a.w_cm, b.x_cm + b.w_cm) - Math.max(a.x_cm, b.x_cm);
+  var oy = Math.min(a.y_cm + a.h_cm, b.y_cm + b.h_cm) - Math.max(a.y_cm, b.y_cm);
+  return ox > t && oy > t;
+}
+
+/**
+ * Full emprise rect (body + outer clearance zones) of a block in cm.
+ * @param {{x_cm:number,y_cm:number,w_cm:number,h_cm:number}} pos - body rect
+ */
+function blockEmpriseCm(pos, type, orientation) {
+  var ext = blockOuterExtentsCm(type, orientation);
+  return {
+    x_cm: pos.x_cm - ext.w, y_cm: pos.y_cm - ext.n,
+    w_cm: pos.w_cm + ext.w + ext.e, h_cm: pos.h_cm + ext.n + ext.s,
+  };
+}
+
+/**
+ * Absolute desk surfaces (oriented) of a block in cm, mirroring
+ * renderBlockDesks. Excludes the chair void of ORTHO L-blocks.
+ */
+function blockDeskRectsCm(type, orientation, originX, originY) {
+  var desks = getDeskRects(type);
+  var orient = orientation || 0;
+  if (orient !== 0) {
+    var g0 = getBlockGeom(type);
+    desks = transformDeskRects(desks, g0.eo, g0.ns, orient);
+  }
+  return desks.map(function (d) {
+    return { x_cm: originX + d.x, y_cm: originY + d.y, w_cm: d.w, h_cm: d.h };
+  });
+}
+
+/**
+ * True when a block's placement is in conflict: its full emprise overlaps
+ * another block's emprise, OR one of its desk surfaces overlaps a door
+ * exclusion zone (clearance/slip-in overlaps with exclusions are tolerated).
+ *
+ * @param {number} rowIdx
+ * @param {number} blockIdx
+ * @param {?{x_cm:number,y_cm:number}} posOverride - tentative position (drag)
+ * @returns {boolean}
+ */
+function blockHasPlacementConflict(rowIdx, blockIdx, posOverride) {
+  var positions = computeBlockPositions();
+  var self = null;
+  var others = [];
+  for (var i = 0; i < positions.length; i++) {
+    var p = positions[i];
+    if (p.rowIdx === rowIdx && p.blockIdx === blockIdx) self = p;
+    else others.push(p);
+  }
+  if (!self) return false;
+  var blk = state.rows[rowIdx].blocks[blockIdx];
+  var selfX = posOverride ? posOverride.x_cm : self.x_cm;
+  var selfY = posOverride ? posOverride.y_cm : self.y_cm;
+  // 1) emprise vs other blocks' emprises
+  var selfEmp = blockEmpriseCm(
+    { x_cm: selfX, y_cm: selfY, w_cm: self.w_cm, h_cm: self.h_cm },
+    blk.type, blk.orientation);
+  for (var j = 0; j < others.length; j++) {
+    var o = others[j];
+    var ob = state.rows[o.rowIdx].blocks[o.blockIdx];
+    var oEmp = blockEmpriseCm(o, ob.type, ob.orientation);
+    if (_rectsOverlapCm(selfEmp, oEmp, PLACEMENT_OVERLAP_TOL_CM)) return true;
+  }
+  // 2) self desks vs exclusion zones: explicit room exclusions + door swing
+  // zones derived from the room's doors (the door-associated exclusion).
+  var exclRects = (state.room_exclusions || []).map(function (e) {
+    return { x_cm: e.x_cm, y_cm: e.y_cm, w_cm: e.width_cm, h_cm: e.depth_cm };
+  });
+  if (typeof computeDoorExclusionRectsCm === "function") {
+    var doorRects = computeDoorExclusionRectsCm(
+      (state.room_doors || []).map(function (d) {
+        return Object.assign({}, d, { has_door: true });
+      }),
+      state.standard, state.room_width_cm, state.room_depth_cm);
+    exclRects = exclRects.concat(doorRects);
+  }
+  if (exclRects.length) {
+    var deskRects = blockDeskRectsCm(blk.type, blk.orientation, selfX, selfY);
+    for (var k = 0; k < exclRects.length; k++) {
+      for (var di = 0; di < deskRects.length; di++) {
+        if (_rectsOverlapCm(deskRects[di], exclRects[k], PLACEMENT_OVERLAP_TOL_CM)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Test whether a specific face of a block (including setback zones)
  * touches the room wall. Uses strict cm equality (no tolerance).
  *
@@ -1168,19 +1285,13 @@ function wouldDetachAnyStick(axis, deltaCm) {
   var b = state.rows[ri] && state.rows[ri].blocks[bi];
   if (!b) return false;
 
-  // D-214: collect sticks that are CURRENTLY valid (touching their wall).
-  // Phantom sticks (block not touching the wall) are excluded so they
-  // do not block movement. A phantom stick can become valid again if
-  // the user moves the block back to the wall.
+  // D-272: only check the selected block's own sticks (decoupled movement).
+  // A stick is relevant only if currently valid (face touches its wall).
   var validBefore = [];
-  var row = state.rows[ri];
-  for (var bi2 = 0; bi2 < row.blocks.length; bi2++) {
-    var blk = row.blocks[bi2];
-    var sticks = blk.sticks || [];
-    for (var si = 0; si < sticks.length; si++) {
-      if (faceTouchesWall(ri, bi2, sticks[si])) {
-        validBefore.push({ bi: bi2, face: sticks[si] });
-      }
+  var sticks = b.sticks || [];
+  for (var si = 0; si < sticks.length; si++) {
+    if (faceTouchesWall(ri, bi, sticks[si])) {
+      validBefore.push(sticks[si]);
     }
   }
   if (validBefore.length === 0) return false;
@@ -1195,10 +1306,10 @@ function wouldDetachAnyStick(axis, deltaCm) {
     b.gap_cm = oldVal + deltaCm;
   }
 
-  // Check only the sticks that were valid before the move
+  // Check only the selected block's sticks that were valid before the move
   var detached = false;
   for (var vi = 0; vi < validBefore.length; vi++) {
-    if (!faceTouchesWall(ri, validBefore[vi].bi, validBefore[vi].face)) {
+    if (!faceTouchesWall(ri, bi, validBefore[vi])) {
       detached = true;
       break;
     }
@@ -1440,12 +1551,22 @@ function _renderImpl(targetSvg) {
     // Highlight selected block
     var isSelected = (state.selectedRow === ri && state.selectedBlock === bi);
     if (isSelected) {
-      elements.push({ z: 8, s: '<rect x="' + bx + '" y="' + by +
-        '" width="' + bw + '" height="' + bh +
-        '" fill="none" stroke="' + COLOR_GOOD + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
+      // Selection box = total footprint (body + clearance zones), identical to
+      // the drag ghost (init_rvtool.js) in size, colour and dash. Red when the
+      // block's placement conflicts (emprise overlap or desk on exclusion).
+      var selColor = blockHasPlacementConflict(ri, bi) ? COLOR_DANGER : COLOR_GOOD;
+      elements.push({ z: 8, s: '<rect x="' + (bx - wTotal) + '" y="' + (by - nTotal) +
+        '" width="' + (bw + wTotal + eTotal) + '" height="' + (bh + nTotal + sTotal) +
+        '" fill="none" stroke="' + selColor + '" stroke-width="1.5" stroke-dasharray="6 3"/>' });
     }
 
-    // Clickable zone
+    // Clickable zones. Full footprint (z 8.9, below cabinets/exclusions at z 9
+    // so they keep selection priority) makes the whole emprise selectable/
+    // draggable; the desk body on top (z 9) ensures a desk always selects its
+    // own block even where a neighbour's clearance zone overlaps it.
+    elements.push({ z: 8.9, s: '<rect x="' + (bx - wTotal) + '" y="' + (by - nTotal) +
+      '" width="' + (bw + wTotal + eTotal) + '" height="' + (bh + nTotal + sTotal) +
+      '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
     elements.push({ z: 9, s: '<rect x="' + bx + '" y="' + by +
       '" width="' + bw + '" height="' + bh +
       '" fill="transparent" data-row="' + ri + '" data-block="' + bi + '"/>' });
@@ -2365,6 +2486,12 @@ function buildPatternPayload() {
 function addBlock(blockType) {
   markDirty();
   if (state.rows.length === 0) addRow(false);
+  // Selection may be cleared (e.g. after a free drag re-infers rows, D-267:
+  // selectedRow = -1) → state.rows[-1] is undefined and the add would crash.
+  // Fall back to the last row so "Add block" always targets a valid row.
+  if (state.selectedRow < 0 || state.selectedRow >= state.rows.length) {
+    state.selectedRow = state.rows.length - 1;
+  }
   const row = state.rows[state.selectedRow];
   const block = { type: blockType, orientation: 0, offset_ns_cm: 0 };
   if (row.blocks.length > 0) {
@@ -2438,6 +2565,50 @@ function _doCanonicalizeState() {
     .catch(function (err) {
       console.warn("canonicalize-inline failed:", err);
     });
+}
+
+/**
+ * Delete the selected block while keeping every OTHER block at its current
+ * absolute position (Office / Amend layout free-placement model, D-267).
+ * Re-infers rows from the remaining absolute positions so the row+gap reflow
+ * does not shift neighbours.
+ */
+function deleteSelectedBlockKeepPositions() {
+  var positions = computeBlockPositions();
+  var flatBlocks = [];
+  positions.forEach(function (p) {
+    if (p.rowIdx === state.selectedRow && p.blockIdx === state.selectedBlock) return;
+    var src = state.rows[p.rowIdx].blocks[p.blockIdx];
+    var copy = {};
+    for (var k in src) {
+      if (Object.prototype.hasOwnProperty.call(src, k)) copy[k] = src[k];
+    }
+    copy.x_cm = p.x_cm;
+    copy.y_cm = p.y_cm;
+    flatBlocks.push(copy);
+  });
+  state.selectedBlock = -1;
+  state.selectedRow = -1;
+  if (!flatBlocks.length) {
+    state.rows = [];
+    state.row_gaps_cm = [];
+    render(); updateDSL(); updateRowList();
+    return;
+  }
+  fetch("/api/patterns/infer-rows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ blocks: flatBlocks }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.rows) {
+        state.rows = data.rows;
+        state.row_gaps_cm = data.row_gaps_cm || [];
+        render(); updateDSL(); updateRowList();
+      }
+    })
+    .catch(function (err) { console.warn("infer-rows (delete) failed:", err); });
 }
 
 async function save() {
@@ -3172,12 +3343,25 @@ async function deletePattern() {
     return;
   }
   if (!(await confirmModal("Delete pattern \"" + name + "\" from catalogue?"))) return;
+  // Pattern to select after deletion: the previous one in the nav list
+  // (else the new first if we deleted the first; else none → blank).
+  var targetName = null;
+  if (typeof _peSortedPatternsForStandard === "function") {
+    var list = _peSortedPatternsForStandard();
+    var idx = list.findIndex(function (p) { return p.name === name; });
+    if (idx > 0) targetName = list[idx - 1].name;
+    else if (list.length > 1) targetName = list[1].name;
+  }
   try {
     const resp = await fetch("/api/patterns/" + encodeURIComponent(name), { method: "DELETE" });
     if (!resp.ok) throw new Error(await resp.text());
     setStatus("Pattern \"" + name + "\" deleted.");
-    resetState();
-    loadCatalogue();
+    await loadCatalogue();
+    if (targetName && typeof loadPattern === "function") {
+      loadPattern(targetName);
+    } else {
+      resetState();
+    }
   } catch (err) {
     setStatus("Delete error: " + err.message);
   }
@@ -3390,7 +3574,14 @@ function offsetSelectedBlock(deltaCm) {
         deltaCm = state.room_depth_cm - pos.h_cm - pos.y_cm;
       }
     }
+    // Clamp so the full emprise (body + clearance zones) stays in the room.
+    var ext = blockOuterExtentsCm(b.type, b.orientation);
+    if (pos.y_cm + deltaCm - ext.n < 0) deltaCm = ext.n - pos.y_cm;
+    if (pos.y_cm + deltaCm + pos.h_cm + ext.s > state.room_depth_cm) {
+      deltaCm = state.room_depth_cm - ext.s - pos.h_cm - pos.y_cm;
+    }
   }
+  if (deltaCm === 0) return;
   markDirty();
   b.offset_ns_cm = (b.offset_ns_cm || 0) + deltaCm;
   render(); updateDSL();
@@ -3400,30 +3591,59 @@ function offsetSelectedBlockEO(deltaCm) {
   const b = getSelectedBlock();
   if (!b) return;
   if (wouldDetachAnyStick("EO", deltaCm)) return;
-  var pos = _findBlockPos(state.selectedRow, state.selectedBlock);
-  if (pos) {
-    var step = GRID_STEP_CM;
-    var snapped = _snapStep(pos.x_cm, deltaCm, step);
-    if (snapped !== deltaCm) {
-      deltaCm = snapped;
-    } else {
-      var newX = pos.x_cm + deltaCm;
-      var eastEdge = newX + pos.w_cm;
-      if (deltaCm < 0 && newX > 0 && newX < step) {
-        deltaCm = -pos.x_cm;
-      } else if (deltaCm > 0 && eastEdge < state.room_width_cm
-                 && state.room_width_cm - eastEdge < step) {
-        deltaCm = state.room_width_cm - pos.w_cm - pos.x_cm;
-      }
+
+  // D-272: decoupled movement — capture absolute positions BEFORE modification
+  var allPos = computeBlockPositions();
+  var ri = state.selectedRow;
+  var bi = state.selectedBlock;
+  var row = state.rows[ri];
+  // Collect absolute x and width for each block in this row (ordered by index)
+  var rowAbs = [];  // [{x_cm, w_cm}]
+  for (var i = 0; i < allPos.length; i++) {
+    if (allPos[i].rowIdx === ri) {
+      rowAbs.push({ x_cm: allPos[i].x_cm, w_cm: allPos[i].w_cm });
     }
   }
+
+  var currentX = rowAbs[bi].x_cm;
+  var blockW = rowAbs[bi].w_cm;
+
+  // Grid snap + wall snap (same logic as before)
+  var step = GRID_STEP_CM;
+  var snapped = _snapStep(currentX, deltaCm, step);
+  if (snapped !== deltaCm) {
+    deltaCm = snapped;
+  } else {
+    var newX = currentX + deltaCm;
+    var eastEdge = newX + blockW;
+    if (deltaCm < 0 && newX > 0 && newX < step) {
+      deltaCm = -currentX;
+    } else if (deltaCm > 0 && eastEdge < state.room_width_cm
+               && state.room_width_cm - eastEdge < step) {
+      deltaCm = state.room_width_cm - blockW - currentX;
+    }
+  }
+
+  // Clamp so the full emprise (body + clearance zones) stays in the room.
+  var ext = blockOuterExtentsCm(b.type, b.orientation);
+  if (currentX + deltaCm - ext.w < 0) deltaCm = ext.w - currentX;
+  if (currentX + deltaCm + blockW + ext.e > state.room_width_cm) {
+    deltaCm = state.room_width_cm - ext.e - blockW - currentX;
+  }
+  if (deltaCm === 0) return;
+
+  // Compute new absolute x for the selected block only
+  var newAbsX = currentX + deltaCm;
+  rowAbs[bi].x_cm = newAbsX;
+
+  // Recompute gap_cm for ALL blocks in the row from absolute positions
   markDirty();
-  b.gap_cm = (b.gap_cm || 0) + deltaCm;
-  // Compensate on the next block so it stays in place
-  var row = state.rows[state.selectedRow];
-  var nextIdx = state.selectedBlock + 1;
-  if (row && nextIdx < row.blocks.length) {
-    row.blocks[nextIdx].gap_cm = (row.blocks[nextIdx].gap_cm || 0) - deltaCm;
+  for (var i = 0; i < row.blocks.length; i++) {
+    if (i === 0) {
+      row.blocks[i].gap_cm = rowAbs[i].x_cm;
+    } else {
+      row.blocks[i].gap_cm = rowAbs[i].x_cm - (rowAbs[i - 1].x_cm + rowAbs[i - 1].w_cm);
+    }
   }
   render(); updateDSL();
 }

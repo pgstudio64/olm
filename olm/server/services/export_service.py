@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from olm.core.catalogue_matcher import compute_desk_positions
-from olm.core.pattern_generator import CABINET_D_CM, CABINET_W_CM
+import olm.core.pattern_generator as _pg
 from olm.server.services.config_service import (
     PROJECT_ROOT,
     get_corridor_rgb,
@@ -447,8 +447,8 @@ def _draw_room_desks(
     for item in furniture:
         if item.get("type") != "CABINET":
             continue
-        f_w = CABINET_W_CM
-        f_d = CABINET_D_CM
+        f_w = _pg.CABINET_W_CM
+        f_d = _pg.CABINET_D_CM
         if item.get("orientation") == 90:
             f_w, f_d = f_d, f_w
         ax, ay, aw, ad = _decanon_rect(

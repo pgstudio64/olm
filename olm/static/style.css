@@ -726,67 +726,43 @@
 
   /* Catalogue tab */
   .catalogue-grid {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-sm);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    align-content: start;
+    gap: 8px;
     padding: var(--sp-lg);
     overflow-y: auto;
     flex: 1;
   }
-  .catalogue-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  .catalogue-row-label {
-    writing-mode: vertical-lr;
-    transform: rotate(180deg);
-    color: var(--text-dim);
-    font-size: var(--fs-sm);
-    padding: 4px 2px;
-    white-space: nowrap;
-    min-width: 20px;
-    text-align: center;
-  }
-  .catalogue-row-cards {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    flex: 1;
-  }
   .catalogue-card {
-    --card-w: 200px;
     background: var(--surface2);
     border: 1px solid var(--border);
     padding: var(--sp-sm);
-    cursor: pointer;
-    width: var(--card-w);
     min-height: 100px;
     display: flex;
     flex-direction: column;
   }
   .catalogue-card:hover { border-color: var(--accent); }
+  .catalogue-card.card-selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
   .catalogue-card { position: relative; }
   .catalogue-card.card-overflow { border-color: var(--bad); }
   .catalogue-card.card-overflow .card-title { color: var(--bad); }
   .catalogue-card.card-tolere { border-color: #888; }
   .catalogue-card.card-tolere .card-title { color: #888; }
-  .card-warning {
-    color: var(--bad);
+  .card-fit {
     font-size: var(--fs-xs);
     margin-top: 2px;
-  }
-  .card-warning-tolere {
-    color: #888;
-  }
-  .dev-mode .card-warning {
     cursor: pointer;
     text-decoration: underline;
     text-decoration-style: dotted;
   }
-  .dev-mode .card-warning:hover {
-    color: var(--accent);
-  }
+  .card-fit:hover { color: var(--accent); }
+  .card-fit-ok { color: var(--text-dim); }
+  .card-fit-tight { color: #888; }
+  .card-fit-overflow { color: var(--bad); }
   .card-delete {
     position: absolute;
     top: 4px;
@@ -859,17 +835,12 @@
     background: #111;
     border-radius: 2px;
     margin-bottom: 4px;
+    cursor: pointer;
   }
   .card-mini-svg svg {
     display: block;
     width: 100%;
     height: auto;
-  }
-
-  /* Enlarged card in-place (single card, flexbox reflow) */
-  .catalogue-card.card-enlarged {
-    /* 3x card width + 2 gaps from .catalogue-row-cards (gap: 8px) */
-    width: calc(var(--card-w, 200px) * 3 + 8px * 2);
   }
 
   /* Zoom rectangle selection */

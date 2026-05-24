@@ -5,7 +5,26 @@ from typing import Any
 
 import pytest
 
+import olm.core.pattern_generator as _pg
+from olm.core.catalogue_matcher import rebuild_block_registry
 from olm.server.app import app
+
+# ---------------------------------------------------------------------------
+# Pin desk dimensions to 160x80 for deterministic tests (D-270)
+# ---------------------------------------------------------------------------
+
+_PIN_W, _PIN_D = 160, 80
+
+
+@pytest.fixture(autouse=True)
+def _pin_desk_dims():
+    """Pin desk dimensions to 160x80 before each test, restore after."""
+    orig_w, orig_d = _pg.DESK_W_CM, _pg.DESK_D_CM
+    _pg.refresh_desk_dims(_PIN_W, _PIN_D)
+    rebuild_block_registry()
+    yield
+    _pg.refresh_desk_dims(orig_w, orig_d)
+    rebuild_block_registry()
 
 
 @pytest.fixture()
@@ -106,10 +125,11 @@ def tiny_plan_png(tmp_path) -> str:
 @pytest.fixture()
 def monkeypatch_catalogue(monkeypatch):
     """Remplace le catalogue par un pattern minimal."""
-    # Block positioned so its west chair clearance stays inside the room
-    # (gap_cm=70 = chair_clearance_cm; foots block at x=70, west zone
-    # ends at x=0). Door at x=[100,190] sits between the block east edge
-    # and the east wall, so no pushback on south wall.
+    # Block positioned so its full west face zone (chair clearance +
+    # slip-in = 100 cm for standard1) stays inside the room
+    # (gap_cm=100 → block at x=100, west zone ends at x=0).
+    # Door at x=[100,190] sits between the block east edge and the
+    # east wall, so no pushback on south wall.
     fake_catalogue = [
         {
             "name": "300x480_TEST_1",
@@ -117,7 +137,7 @@ def monkeypatch_catalogue(monkeypatch):
                 {"blocks": []},
                 {"blocks": [
                     {"type": "BLOCK_1", "orientation": 0,
-                     "offset_ns_cm": -180, "gap_cm": 70},
+                     "offset_ns_cm": -180, "gap_cm": 100},
                 ]},
             ],
             "row_gaps_cm": [180],

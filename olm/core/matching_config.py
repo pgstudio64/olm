@@ -24,4 +24,8 @@ MIN_DESKS_DROP_RATIO: float = (
 # is listed as "tolere" (grey). Beyond that it is hidden entirely.
 FIT_TOLERANCE: float = 0.10
 
+# D-271: footprint guard tolerance after adapt_to_room.
+# Blocks must fit inside the room within this rounding margin (cm).
+FOOTPRINT_GUARD_TOL_CM: int = 1
+
 # D-242: OVERSIZE_MARGIN removed — no hard filter, all patterns proposed.

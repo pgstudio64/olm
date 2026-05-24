@@ -9,6 +9,7 @@ import copy
 
 import pytest
 
+import olm.core.pattern_generator as pg
 from olm.core.pattern_canonicalize import CanonicalizeResult, canonicalize_blocks
 
 
@@ -221,15 +222,15 @@ class TestCanonicalizeWithOrient:
         assert result.n_reorderings == 1
 
         blocks = pat["rows"][0]["blocks"]
-        # orient-0 block at x=180 is first
+        # orient-0 block at x=W is first (W = ns of orient-90 BLOCK_1)
         assert blocks[0]["orientation"] == 0
-        assert blocks[0]["gap_cm"] == 180
+        assert blocks[0]["gap_cm"] == pg.DESK_W_CM
 
         # orient-90 block at x=300 is second
-        # eo of orient-0 BLOCK_1 = 80
-        # gap = 300 - (180 + 80) = 40
+        # eo of orient-0 BLOCK_1 = D
+        # gap = 300 - (W + D)
         assert blocks[1]["orientation"] == 90
-        assert blocks[1]["gap_cm"] == 40
+        assert blocks[1]["gap_cm"] == 300 - pg.DESK_W_CM - pg.DESK_D_CM
 
 
 class TestCanonicalizeEmptyRow:

@@ -487,14 +487,15 @@ class TestAdaptDimensions:
 
 
 # ---------------------------------------------------------------------------
-# 5c. D-244 — proportional EO stretching (no locks)
+# 5c. D-271 — no-lock hug-walls placement
 # ---------------------------------------------------------------------------
 
-class TestHomothetyNoLock:
-    """D-244: without locks, gaps are stretched proportionally."""
+class TestNoLockHugWalls:
+    """Sans lock, les blocs sont collés aux cloisons et le surplus
+    est réparti dans les écarts entre blocs (D-271)."""
 
-    def test_double_width_doubles_gaps(self):
-        """Pattern 270-wide in 540-wide room: gaps doubled."""
+    def test_double_width_hugs_walls(self):
+        """Pattern 270-wide in 540-wide room: blocks hug walls."""
         # BLOCK_1 eo = 80 (DESK_D). gap=90 + 80 + gap=100 = 270
         p = _make_pattern([
             [{"type": "BLOCK_1", "gap_cm": 90},
@@ -502,14 +503,18 @@ class TestHomothetyNoLock:
         ], room_width_cm=270, room_depth_cm=300)
         target = RoomSpec(width_cm=540, depth_cm=300)
         adapted = adapt_to_room(p, target)
+        from olm.core.spacing_config import ALL_CONFIGS
+        from olm.core.pattern_fit import compute_pattern_footprint
+        x_min, x_max, _, _ = compute_pattern_footprint(
+            adapted, ALL_CONFIGS["standard1"],
+        )
+        # First block flush with west wall (face zone included)
+        assert x_min == 0
+        # Last block flush with east wall (face zone included)
+        assert x_max == 540
+        # Surplus went into the inter-block gap, not the head gap
         blocks = adapted["rows"][0]["blocks"]
-        # Total gaps + blocks must equal target width
-        total = 0
-        for b in blocks:
-            total += b.get("gap_cm", 0)
-            from olm.core.catalogue_matcher import _block_eo_extent
-            total += _block_eo_extent(b)
-        assert total == 540
+        assert blocks[1]["gap_cm"] > 100
 
     def test_lock_w_preserves_position(self):
         """With lock W, block stays at its position, extra space at right."""

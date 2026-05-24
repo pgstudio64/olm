@@ -1055,6 +1055,19 @@
       };
     }
 
+    // Add pattern: a catalogue pattern keeps the room's doors but drops plain
+    // openings and exclusion zones (room-specific, not part of a reusable
+    // pattern). Doors are merged into room_openings with has_door=true.
+    function _stripRoomFeatures(pattern) {
+      var doorsOnly = (pattern.room_openings || []).filter(function(o) {
+        return o.has_door;
+      });
+      return Object.assign({}, pattern, {
+        room_openings: doorsOnly,
+        room_exclusions: [],
+      });
+    }
+
     // Review tab — Adjust room (same function as before, now in Review)
     document.getElementById("rvBtnAdjustRoom").addEventListener("click", function() {
       var room = fpCurrent();
@@ -1065,13 +1078,13 @@
     });
     document.getElementById("fpBtnEditPattern").addEventListener("click", function() {
       if (fpCurrentCandidate && fpCurrentCandidate.pattern) {
-        switchToEditorWithPattern(fpCurrentCandidate.pattern);
+        switchToEditorWithPattern(_stripRoomFeatures(fpCurrentCandidate.pattern));
         return;
       }
       // No candidate → open editor with a blank pattern dimensioned to the room.
       var room = fpCurrent();
       if (room) {
-        switchToEditorWithPattern(_blankPatternFromRoom(room));
+        switchToEditorWithPattern(_stripRoomFeatures(_blankPatternFromRoom(room)));
       }
     });
     document.getElementById("fpBtnAdjustLayout").addEventListener("click", function() {
@@ -1196,6 +1209,9 @@
     };
     document.getElementById("rvBtnBack").addEventListener("click", function() {
       window.ingShowPlanView();
+    });
+    document.getElementById("fpBtnBackRoom").addEventListener("click", function() {
+      window.ingShowRoomView();
     });
 
     document.getElementById("fpBtnSaveLayout").addEventListener("click", function() {

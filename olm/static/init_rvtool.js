@@ -182,16 +182,17 @@
       else if (key === "ArrowUp") rect.y_cm = Math.max(0, rect.y_cm - step);
     }
 
-    function rvShowGhostRect(x_svg, y_svg, w_svg, h_svg) {
+    function rvShowGhostRect(x_svg, y_svg, w_svg, h_svg, color, dash, strokeW) {
       var svg = _getActiveSvg();
       if (!_rvGhostRect) {
         _rvGhostRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         _rvGhostRect.setAttribute("fill", "none");
-        _rvGhostRect.setAttribute("stroke", GHOST_RECT_COLOR);
-        _rvGhostRect.setAttribute("stroke-width", "1");
-        _rvGhostRect.setAttribute("stroke-dasharray", GHOST_RECT_DASH);
         _rvGhostRect.setAttribute("pointer-events", "none");
       }
+      // Style set on every call (the element is reused across ghost types).
+      _rvGhostRect.setAttribute("stroke", color || GHOST_RECT_COLOR);
+      _rvGhostRect.setAttribute("stroke-width", strokeW || "1");
+      _rvGhostRect.setAttribute("stroke-dasharray", dash || GHOST_RECT_DASH);
       _rvGhostRect.setAttribute("x", x_svg);
       _rvGhostRect.setAttribute("y", y_svg);
       _rvGhostRect.setAttribute("width", w_svg);
@@ -1498,10 +1499,16 @@
                 dx_cm: bpt.x_cm - bPos.x_cm,
                 dy_cm: bpt.y_cm - bPos.y_cm,
               };
+              // D-267: total footprint extents (body + clearance zones) so the
+              // drag ghost shows the block's real limits, not just the body.
+              var bExt = (typeof blockOuterExtentsCm === "function")
+                ? blockOuterExtentsCm(bBlk.type, bBlk.orientation)
+                : { w: 0, e: 0, n: 0, s: 0 };
               rvTool._blockDragStart = {
                 rowIdx: bri, blockIdx: bbi,
                 x_cm: bPos.x_cm, y_cm: bPos.y_cm,
                 w_cm: bPos.w_cm, h_cm: bPos.h_cm,
+                zW: bExt.w, zE: bExt.e, zN: bExt.n, zS: bExt.s,
               };
               // Store ALL block positions for rebuild at release
               rvTool._allBlockPositions = bPositions;
@@ -1927,12 +1934,22 @@
         // Update stored drag position for ghost rendering
         rvTool._blockDragCurrent = { x_cm: newBX, y_cm: newBY };
         rvTool._blockDragMoved = true;
-        // Show ghost rect at dragged position
+        // Show ghost rect at dragged position — total footprint (body +
+        // clearance zones) so the user sees the block's real limits (D-267).
         var bdOffX = state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0;
         var bdOffY = state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0;
+        var zW = bds.zW || 0, zE = bds.zE || 0, zN = bds.zN || 0, zS = bds.zS || 0;
+        // Same total footprint, colour and dash as the selection box (editor.js).
+        // Red when the dragged position conflicts (emprise overlap or desk on
+        // a door exclusion zone).
+        var ghostConflict = (typeof blockHasPlacementConflict === "function")
+          ? blockHasPlacementConflict(bds.rowIdx, bds.blockIdx,
+              { x_cm: newBX, y_cm: newBY })
+          : false;
         rvShowGhostRect(
-          (newBX + bdOffX) * SCALE, (newBY + bdOffY) * SCALE,
-          bds.w_cm * SCALE, bds.h_cm * SCALE);
+          (newBX - zW + bdOffX) * SCALE, (newBY - zN + bdOffY) * SCALE,
+          (bds.w_cm + zW + zE) * SCALE, (bds.h_cm + zN + zS) * SCALE,
+          ghostConflict ? COLOR_DANGER : COLOR_GOOD, "6 3", "1.5");
         return;
       }
       if (rvTool.mode === "drawing" && rvTool.drawStart) {

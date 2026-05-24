@@ -3,18 +3,120 @@
 
 // Breathing ratio for card miniature viewBox (fraction of largest dimension)
 var MINI_VIEWBOX_BREATH = 0.04;
+// Max zoom of a small pattern relative to the largest-pattern (uniform) scale.
+// Each card fits its own pattern, but never larger than this factor so a
+// 1-desk pattern does not blow up. 1.0 = uniform scale, larger = more fill.
+var MINI_MAX_ZOOM = 1.8;
 
 let catalogueData = [];
 
 
 // --- Event delegation (P1.4) ---
 // Single click handler on #catalogueGrid dispatches:
-//   delete > warning > miniature (open) > card body (enlarge/shrink).
+//   delete > warning > miniature (open).
 // Session-life: bound once, never re-bound.
 var _catDelegationWired = false;
+// Card-view keyboard navigation: index of the highlighted card in DOM order.
+var _catSelIdx = -1;
+
+function _catGetCards() {
+  var grid = document.getElementById("catalogueGrid");
+  return grid ? Array.prototype.slice.call(
+    grid.querySelectorAll(".catalogue-card")) : [];
+}
+
+// Re-apply the highlight after a render; clamp the stored index to range.
+function _catApplySelection() {
+  var cards = _catGetCards();
+  cards.forEach(function (c) { c.classList.remove("card-selected"); });
+  if (_catSelIdx < 0 || !cards.length) return;
+  if (_catSelIdx >= cards.length) _catSelIdx = cards.length - 1;
+  cards[_catSelIdx].classList.add("card-selected");
+}
+
+// Scroll the highlighted card into view (used by Esc-return from the editor).
+window.catScrollSelectedIntoView = function() {
+  var cards = _catGetCards();
+  if (_catSelIdx >= 0 && _catSelIdx < cards.length) {
+    cards[_catSelIdx].scrollIntoView({ block: "nearest" });
+  }
+};
+
+function _catSetSelection(idx) {
+  var cards = _catGetCards();
+  if (!cards.length) return;
+  _catSelIdx = Math.max(0, Math.min(idx, cards.length - 1));
+  cards.forEach(function (c) { c.classList.remove("card-selected"); });
+  var el = cards[_catSelIdx];
+  el.classList.add("card-selected");
+  el.scrollIntoView({ block: "nearest" });
+}
+
+// Nearest card in the row above (dir<0) or below (dir>0), aligned by column.
+function _catNavVertical(cards, curIdx, dir) {
+  var cur = cards[curIdx];
+  var curLeft = cur.offsetLeft, curTop = cur.offsetTop;
+  var best = -1, bestDy = Infinity, bestDx = Infinity;
+  for (var i = 0; i < cards.length; i++) {
+    if (i === curIdx) continue;
+    var c = cards[i];
+    if (dir > 0 && c.offsetTop <= curTop) continue;
+    if (dir < 0 && c.offsetTop >= curTop) continue;
+    var dy = Math.abs(c.offsetTop - curTop);
+    var dx = Math.abs(c.offsetLeft - curLeft);
+    if (dy < bestDy || (dy === bestDy && dx < bestDx)) {
+      bestDy = dy; bestDx = dx; best = i;
+    }
+  }
+  return best;
+}
+
+function _catOpenSelected() {
+  var cards = _catGetCards();
+  if (_catSelIdx < 0 || _catSelIdx >= cards.length) return;
+  var name = cards[_catSelIdx].dataset.patternName;
+  if (!name) return;
+  document.querySelector('.sub-tab-btn[data-subtab="catEditor"]').click();
+  loadPattern(name);
+}
+
+function _onCatKeydown(e) {
+  var sub = document.getElementById("subtabCatalogue");
+  if (!sub || !sub.classList.contains("active")) return;
+  var tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "select" || tag === "textarea") return;
+  var cards = _catGetCards();
+  if (!cards.length) return;
+  switch (e.key) {
+    case "ArrowRight":
+      _catSetSelection(_catSelIdx < 0 ? 0 : _catSelIdx + 1); break;
+    case "ArrowLeft":
+      _catSetSelection(_catSelIdx < 0 ? 0 : _catSelIdx - 1); break;
+    case "ArrowDown": {
+      if (_catSelIdx < 0) { _catSetSelection(0); break; }
+      var down = _catNavVertical(cards, _catSelIdx, 1);
+      if (down >= 0) _catSetSelection(down);
+      break;
+    }
+    case "ArrowUp": {
+      if (_catSelIdx < 0) { _catSetSelection(0); break; }
+      var up = _catNavVertical(cards, _catSelIdx, -1);
+      if (up >= 0) _catSetSelection(up);
+      break;
+    }
+    case "Enter":
+      _catOpenSelected(); break;
+    default:
+      return;
+  }
+  e.preventDefault();
+}
+
 function _wireCatDelegation() {
   if (_catDelegationWired) return;
   _catDelegationWired = true;
+
+  document.addEventListener("keydown", _onCatKeydown);
 
   var grid = document.getElementById("catalogueGrid");
   if (grid) {
@@ -40,11 +142,11 @@ function _wireCatDelegation() {
           });
         return;
       }
-      // 2. Overflow badge diagnostic (dev-mode only, D-240)
-      var warn = e.target.closest(".card-warning");
-      if (warn && APP_CONFIG.dev_mode) {
+      // 2. Fit-status line → footprint diagnostic (all users, educational).
+      var fitLine = e.target.closest(".card-fit");
+      if (fitLine) {
         e.stopPropagation();
-        var card = warn.closest(".catalogue-card");
+        var card = fitLine.closest(".catalogue-card");
         if (card) {
           var pName = card.dataset.patternName;
           var pat = catalogueData.find(function(p) {
@@ -59,6 +161,8 @@ function _wireCatDelegation() {
       if (mini) {
         var card = mini.closest(".catalogue-card");
         if (card) {
+          var idx = _catGetCards().indexOf(card);
+          if (idx >= 0) _catSetSelection(idx);
           var name = card.dataset.patternName;
           if (name) {
             document.querySelector(
@@ -67,14 +171,6 @@ function _wireCatDelegation() {
           }
         }
         return;
-      }
-      // 4. Click elsewhere on card → toggle enlarge in-place
-      var card = e.target.closest(".catalogue-card");
-      if (card) {
-        // Collapse any other enlarged card first
-        var prev = grid.querySelector(".catalogue-card.card-enlarged");
-        if (prev && prev !== card) prev.classList.remove("card-enlarged");
-        card.classList.toggle("card-enlarged");
       }
     });
   }
@@ -134,6 +230,35 @@ function _patternExtent(p) {
   return { xMin: xMin, yMin: yMin, xMax: xMax, yMax: yMax };
 }
 
+// Educational fit-status line shown on every card. Category from fit_class
+// (matches the border colour); amounts from the real footprint vs the
+// pattern's declared room. Clickable → pattern.footprint diagnostic.
+function _cardFitStatusHtml(p, fitClass) {
+  if (typeof computePatternFootprint !== "function") return "";
+  var roomW = p.room_width_cm || 0;
+  var roomD = p.room_depth_cm || 0;
+  var fp = computePatternFootprint(p);
+  var over = Math.round(Math.max(
+    0, -fp.xMin, -fp.yMin, fp.xMax - roomW, fp.yMax - roomD));
+  var cls, label;
+  if (fitClass === "reject") {
+    cls = "card-fit card-fit-overflow";
+    label = "Overflow: +" + over + " cm";
+  } else if (fitClass === "tolere") {
+    cls = "card-fit card-fit-tight";
+    label = "Tight: +" + over + " cm";
+  } else {
+    cls = "card-fit card-fit-ok";
+    var spareW = Math.round(Math.max(0, roomW - (fp.xMax - fp.xMin)));
+    var spareD = Math.round(Math.max(0, roomD - (fp.yMax - fp.yMin)));
+    label = (spareW <= 0 && spareD <= 0)
+      ? "Exact fit"
+      : "Room to spare: " + spareW + " × " + spareD + " cm";
+  }
+  return '<div class="' + cls + '" title="Click for footprint details">' +
+    label + '</div>';
+}
+
 function renderCatalogue() {
   var grid = document.getElementById("catalogueGrid");
   var filtered = getFilteredPatterns();
@@ -161,9 +286,10 @@ function renderCatalogue() {
     return;
   }
 
-  // Uniform miniature scale: one square sized to the largest pattern extent,
-  // so every desk renders at the same pixel size across all cards. Small
-  // patterns sit centered with margin; the largest fills the square.
+  // Capped-fit miniature scale: each card fits its own pattern, but the
+  // viewBox never shrinks below miniSideCm / MINI_MAX_ZOOM, so a tiny pattern
+  // (e.g. 1 desk) is enlarged at most MINI_MAX_ZOOM× the largest-pattern scale
+  // instead of blowing up to fill the card. The largest pattern still fills.
   var extByPattern = new Map();
   var maxExtentCm = 1;
   filtered.forEach(function(p) {
@@ -172,25 +298,12 @@ function renderCatalogue() {
     maxExtentCm = Math.max(maxExtentCm, e.xMax - e.xMin, e.yMax - e.yMin);
   });
   var miniSideCm = maxExtentCm * (1 + MINI_VIEWBOX_BREATH * 2);
+  var miniFloorCm = miniSideCm / MINI_MAX_ZOOM;
 
-  // Group by depth to display one row per depth
-  var groups = [];
-  var currentDepth = null;
-  filtered.forEach(function(p) {
-    var d = p.room_depth_cm || 0;
-    if (d !== currentDepth) {
-      groups.push({ depth: d, patterns: [] });
-      currentDepth = d;
-    }
-    groups[groups.length - 1].patterns.push(p);
-  });
-
+  // Flat responsive mosaic: all cards flow in the grid container (no depth
+  // grouping). The sort above keeps similar depths/widths visually adjacent.
   var html = "";
-  groups.forEach(function(group) {
-    html += '<div class="catalogue-row">';
-    html += '<div class="catalogue-row-label">' + group.depth + ' cm</div>';
-    html += '<div class="catalogue-row-cards">';
-    group.patterns.forEach(function(p) {
+  filtered.forEach(function(p) {
       var nDesks = 0;
       var nBlocks = 0;
       (p.rows || []).forEach(function(r) {
@@ -212,15 +325,19 @@ function renderCatalogue() {
       html += '<button class="card-delete" data-del-name="' +
         (p.name || "") + '" title="Delete">&times;</button>';
 
-      // Miniature SVG: uniform square viewBox, pattern centered (noLabels)
+      // Miniature SVG: per-card square viewBox, capped so small patterns do
+      // not blow up (>= miniFloorCm); pattern centered (noLabels).
       var ext = extByPattern.get(p);
-      var offX = miniSideCm / 2 - (ext.xMin + ext.xMax) / 2;
-      var offY = miniSideCm / 2 - (ext.yMin + ext.yMax) / 2;
+      var patExtCm = Math.max(ext.xMax - ext.xMin, ext.yMax - ext.yMin)
+        * (1 + MINI_VIEWBOX_BREATH * 2);
+      var viewBoxCm = Math.max(patExtCm, miniFloorCm);
+      var offX = viewBoxCm / 2 - (ext.xMin + ext.xMax) / 2;
+      var offY = viewBoxCm / 2 - (ext.yMin + ext.yMax) / 2;
       var svgContent = renderPatternMiniSvg(
         p, 1, offX, offY, { noLabels: true }
       );
       html += '<div class="card-mini-svg"><svg viewBox="0 0 ' +
-        miniSideCm + ' ' + miniSideCm +
+        viewBoxCm + ' ' + viewBoxCm +
         '" preserveAspectRatio="xMidYMid meet">' +
         svgContent + '</svg></div>';
 
@@ -231,18 +348,15 @@ function renderCatalogue() {
       if (sc.nDesks > 0) {
         html += '<div class="card-info">' + scoringHtml(sc) + '</div>';
       }
-      if (fitClass === "reject")
-        html += '<div class="card-warning">Overflow</div>';
-      else if (fitClass === "tolere")
-        html += '<div class="card-warning card-warning-tolere">Tight</div>';
+      html += _cardFitStatusHtml(p, fitClass);
       html += '</div>';
-    });
-    html += '</div></div>';
   });
   grid.innerHTML = html;
 
   // Event delegation handles card interactions (P1.4)
   _wireCatDelegation();
+  // Re-apply keyboard-nav highlight after the grid is rebuilt.
+  _catApplySelection();
 }
 
 function getFilteredPatterns() {

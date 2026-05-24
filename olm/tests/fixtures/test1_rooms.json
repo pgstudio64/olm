@@ -1,0 +1,166 @@
+{
+  "_meta": {
+    "source": "test 1 (test_office_1) — extracted floor plan",
+    "derivation": "width/depth derived from each room bbox_px aspect ratio and OCR surface (m2): depth=sqrt(area/aspect), width=aspect*depth; axes swapped when canonical_top_face is east/west; snapped to 10 cm.",
+    "purpose": "Office pattern-placement invariants (footprint fits, locks preserved, balanced margins).",
+    "units": "cm",
+    "n_rooms": 31
+  },
+  "rooms": [
+    {
+      "name": "305",
+      "width_cm": 750,
+      "depth_cm": 950
+    },
+    {
+      "name": "900",
+      "width_cm": 310,
+      "depth_cm": 720
+    },
+    {
+      "name": "901",
+      "width_cm": 350,
+      "depth_cm": 750
+    },
+    {
+      "name": "902",
+      "width_cm": 340,
+      "depth_cm": 430
+    },
+    {
+      "name": "903",
+      "width_cm": 320,
+      "depth_cm": 760
+    },
+    {
+      "name": "904",
+      "width_cm": 450,
+      "depth_cm": 580
+    },
+    {
+      "name": "905",
+      "width_cm": 250,
+      "depth_cm": 610
+    },
+    {
+      "name": "906",
+      "width_cm": 470,
+      "depth_cm": 490
+    },
+    {
+      "name": "907",
+      "width_cm": 370,
+      "depth_cm": 760
+    },
+    {
+      "name": "908",
+      "width_cm": 340,
+      "depth_cm": 750
+    },
+    {
+      "name": "909",
+      "width_cm": 650,
+      "depth_cm": 480
+    },
+    {
+      "name": "911",
+      "width_cm": 310,
+      "depth_cm": 780
+    },
+    {
+      "name": "912",
+      "width_cm": 400,
+      "depth_cm": 750
+    },
+    {
+      "name": "913",
+      "width_cm": 610,
+      "depth_cm": 690
+    },
+    {
+      "name": "914",
+      "width_cm": 880,
+      "depth_cm": 420
+    },
+    {
+      "name": "915",
+      "width_cm": 280,
+      "depth_cm": 590
+    },
+    {
+      "name": "916",
+      "width_cm": 340,
+      "depth_cm": 440
+    },
+    {
+      "name": "917",
+      "width_cm": 310,
+      "depth_cm": 600
+    },
+    {
+      "name": "918",
+      "width_cm": 310,
+      "depth_cm": 760
+    },
+    {
+      "name": "919",
+      "width_cm": 340,
+      "depth_cm": 760
+    },
+    {
+      "name": "920",
+      "width_cm": 430,
+      "depth_cm": 540
+    },
+    {
+      "name": "921",
+      "width_cm": 300,
+      "depth_cm": 590
+    },
+    {
+      "name": "922",
+      "width_cm": 250,
+      "depth_cm": 630
+    },
+    {
+      "name": "923",
+      "width_cm": 410,
+      "depth_cm": 600
+    },
+    {
+      "name": "924",
+      "width_cm": 360,
+      "depth_cm": 750
+    },
+    {
+      "name": "926",
+      "width_cm": 400,
+      "depth_cm": 750
+    },
+    {
+      "name": "927",
+      "width_cm": 630,
+      "depth_cm": 740
+    },
+    {
+      "name": "928",
+      "width_cm": 590,
+      "depth_cm": 690
+    },
+    {
+      "name": "929",
+      "width_cm": 500,
+      "depth_cm": 740
+    },
+    {
+      "name": "1000",
+      "width_cm": 670,
+      "depth_cm": 590
+    },
+    {
+      "name": "1001",
+      "width_cm": 670,
+      "depth_cm": 830
+    }
+  ]
+}

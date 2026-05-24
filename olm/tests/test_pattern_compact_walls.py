@@ -9,6 +9,7 @@ import copy
 
 import pytest
 
+import olm.core.pattern_generator as pg
 from olm.core.pattern_normalize import normalize_pattern
 from olm.core.spacing_config import SpacingConfig
 
@@ -93,15 +94,16 @@ class TestUserCase480x500Site1:
     """Reproduce the bug: room should shrink to 340x360, all locks valid."""
 
     def test_room_shrinks_to_360x360(self):
-        """D-244: chair+slip zones → room 360x360."""
+        """D-244: chair+slip zones → room 360 x (W+180)."""
         pat = _pattern_480x500_site_1()
         result = normalize_pattern(pat, STD3)
 
         # D-244: W/E face = chair(70)+slip(30) = 100.
         # Gap WS01-WS02 = E(100) + W(100) = 200.
         # Width = 0 + 80 + 200 + 80 + 0 = 360.
+        # Depth = block_ns(W) + row_gap(180) = W+180.
         assert pat["room_width_cm"] == 360
-        assert pat["room_depth_cm"] == 360
+        assert pat["room_depth_cm"] == pg.DESK_W_CM + 180
 
     def test_ws02_still_touches_east(self):
         """WS02 (row 0, block 1) must remain at east wall."""
@@ -297,9 +299,9 @@ class TestNoCompactPossible:
         }
         normalize_pattern(pat, STD3)
 
-        # D-244: W face=100 (chair+slip). width=100+80=180. depth=180.
+        # D-244: W face=100 (chair+slip). width=100+80=180. depth=W.
         assert pat["room_width_cm"] == 180
-        assert pat["room_depth_cm"] == 180
+        assert pat["room_depth_cm"] == pg.DESK_W_CM
 
 
 # ---------------------------------------------------------------------------
@@ -355,13 +357,9 @@ class TestDoorExclusionAfterCompact:
         # The door exclusion checks if any block's south effective edge
         # falls in the door's X band and adds clearance.
         # For this specific case, door_exclusion should not prevent
-        # the expected 340x360 because blocks are far from the door band.
-        # (Door at x=10..100, blocks at x≈0..340 with bodies at 80..170
-        #  for WS01 and 260..340 for WS02/WS3).
-        # WS01 body [0,80], eff_s=0. In band [10,100]? overlap [10,80]. Yes!
-        # So door exclusion extends y_max: WS01 y_max(180) + 120 = 300.
-        # But bbox_y_max after compact is 360 (from WS3). 300 < 360 → no ext.
-        assert pat["room_depth_cm"] == 360
+        # the expected depth because blocks are far from the door band.
+        # Depth = block_ns(W) + row_gap(180).
+        assert pat["room_depth_cm"] == pg.DESK_W_CM + 180
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +435,7 @@ class TestCompactSouthUnaffectedByEastOffset:
         """room_depth_cm must be 360 (same as base 480x500 case)."""
         pat = _pattern_offset_east()
         normalize_pattern(pat, STD3)
-        assert pat["room_depth_cm"] == 360
+        assert pat["room_depth_cm"] == pg.DESK_W_CM + 180
 
 
 # ---------------------------------------------------------------------------

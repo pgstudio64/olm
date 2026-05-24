@@ -42,8 +42,8 @@ def test_bloc_1_chair_only():
 
 
 def test_bloc_2_face_dimensions():
-    assert BLOCK_2_FACE.eo_cm == 160
-    assert BLOCK_2_FACE.ns_cm == 180
+    assert BLOCK_2_FACE.eo_cm == DESK_D_CM * 2
+    assert BLOCK_2_FACE.ns_cm == DESK_W_CM
     # E/W: chair clearance only, candidate=0 (D-229)
     assert BLOCK_2_FACE.faces.east.non_superposable_cm == CHAIR_CLEARANCE_CM
     assert BLOCK_2_FACE.faces.east.candidate_cm == 0
@@ -234,3 +234,72 @@ def test_ortho_l_west_internal():
     assert BLOCK_2_ORTHO_L.faces.west.outer_cm == 0
     assert BLOCK_2_ORTHO_L.faces.north.internal is False
     assert BLOCK_2_ORTHO_L.faces.north.outer_cm == CHAIR_CLEARANCE_CM
+
+
+# ---------------------------------------------------------------------------
+# Hot-reload coherence (Lot 1 / D-270)
+# ---------------------------------------------------------------------------
+
+
+def test_hot_reload_coherence():
+    """After refresh_desk_dims + rebuild, registry/defs/layouts are coherent."""
+    import olm.core.pattern_generator as pg
+    from olm.core.catalogue_matcher import (
+        _BLOCK_REGISTRY, _DESK_LAYOUTS, rebuild_block_registry,
+    )
+    from olm.core.spacing_config import ALL_CONFIGS, build_block_defs
+
+    # Save original values
+    orig_w, orig_d = pg.DESK_W_CM, pg.DESK_D_CM
+    orig_eo = pg.BLOCK_2_FACE.eo_cm
+    orig_ns = pg.BLOCK_2_FACE.ns_cm
+
+    try:
+        # Apply exotic dimensions
+        pg.refresh_desk_dims(140, 70)
+        rebuild_block_registry()
+
+        # 1. Module-level scalars updated
+        assert pg.DESK_W_CM == 140
+        assert pg.DESK_D_CM == 70
+
+        # 2. Block objects mutated in place (same identity)
+        assert BLOCK_2_FACE.eo_cm == 140  # 2 * depth
+        assert BLOCK_2_FACE.ns_cm == 140  # 1 * width
+        assert BLOCK_1.eo_cm == 70
+        assert BLOCK_1.ns_cm == 140
+        assert BLOCK_2_ORTHO_R.eo_cm == 140  # width
+        assert BLOCK_2_ORTHO_R.ns_cm == 210  # depth + width
+
+        # 3. _BLOCK_REGISTRY rebuilt
+        assert _BLOCK_REGISTRY["BLOCK_2_FACE"] == (140, 140, 2)
+        assert _BLOCK_REGISTRY["BLOCK_1"] == (70, 140, 1)
+        assert _BLOCK_REGISTRY["BLOCK_2_ORTHO_R"] == (140, 210, 2)
+
+        # 4. _DESK_LAYOUTS rebuilt
+        assert _DESK_LAYOUTS["BLOCK_1"] == [(0, 0, 70, 140)]
+        assert _DESK_LAYOUTS["BLOCK_2_FACE"] == [
+            (0, 0, 70, 140), (70, 0, 70, 140),
+        ]
+        assert _DESK_LAYOUTS["BLOCK_2_ORTHO_L"] == [
+            (0, 0, 140, 70), (70, 70, 70, 140),
+        ]
+
+        # 5. build_block_defs agrees with _BLOCK_REGISTRY
+        for std, cfg in ALL_CONFIGS.items():
+            defs = build_block_defs(cfg)
+            for name, (eo, ns, _) in _BLOCK_REGISTRY.items():
+                if name in defs:
+                    assert defs[name]["eo_cm"] == eo, (
+                        f"{name} eo mismatch: defs={defs[name]['eo_cm']} "
+                        f"vs registry={eo}"
+                    )
+                    assert defs[name]["ns_cm"] == ns, (
+                        f"{name} ns mismatch: defs={defs[name]['ns_cm']} "
+                        f"vs registry={ns}"
+                    )
+            break  # one standard is enough to verify
+    finally:
+        # Restore
+        pg.refresh_desk_dims(orig_w, orig_d)
+        rebuild_block_registry()

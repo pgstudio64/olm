@@ -140,6 +140,78 @@ _BLOCK_REGISTRY = {
 
 _BLOCK_N_DESKS = {k: v[2] for k, v in _BLOCK_REGISTRY.items()}
 
+
+def rebuild_block_registry() -> None:
+    """Rebuild _BLOCK_REGISTRY, _BLOCK_N_DESKS and _DESK_LAYOUTS from current dims.
+
+    Mutates the existing dicts in place so that any code holding a reference
+    to them sees the updated values.
+
+    Must be called AFTER pattern_generator.refresh_desk_dims() so that the
+    Block objects carry up-to-date eo_cm / ns_cm values.
+    """
+    import olm.core.pattern_generator as pg
+
+    _BLOCK_REGISTRY.clear()
+    _BLOCK_REGISTRY.update({
+        "BLOCK_1":          (pg.BLOCK_1.eo_cm, pg.BLOCK_1.ns_cm, 1),
+        "BLOCK_2_FACE":     (pg.BLOCK_2_FACE.eo_cm, pg.BLOCK_2_FACE.ns_cm, 2),
+        "BLOCK_2_SIDE":     (pg.BLOCK_2_SIDE.eo_cm, pg.BLOCK_2_SIDE.ns_cm, 2),
+        "BLOCK_3_SIDE":     (pg.BLOCK_3_SIDE.eo_cm, pg.BLOCK_3_SIDE.ns_cm, 3),
+        "BLOCK_4_FACE":     (pg.BLOCK_4_FACE.eo_cm, pg.BLOCK_4_FACE.ns_cm, 4),
+        "BLOCK_6_FACE":     (pg.BLOCK_6_FACE.eo_cm, pg.BLOCK_6_FACE.ns_cm, 6),
+        "BLOCK_2_ORTHO_R":  (pg.BLOCK_2_ORTHO_R.eo_cm, pg.BLOCK_2_ORTHO_R.ns_cm, 2),
+        "BLOCK_2_ORTHO_L":  (pg.BLOCK_2_ORTHO_L.eo_cm, pg.BLOCK_2_ORTHO_L.ns_cm, 2),
+        "CABINET":          (pg.CABINET.eo_cm, pg.CABINET.ns_cm, 0),
+    })
+    _BLOCK_N_DESKS.clear()
+    _BLOCK_N_DESKS.update({k: v[2] for k, v in _BLOCK_REGISTRY.items()})
+
+    w = pg.DESK_W_CM
+    d = pg.DESK_D_CM
+    _DESK_LAYOUTS.clear()
+    _DESK_LAYOUTS.update({
+        "BLOCK_1": [
+            (0, 0, d, w),
+        ],
+        "BLOCK_2_FACE": [
+            (0, 0, d, w),
+            (d, 0, d, w),
+        ],
+        "BLOCK_2_SIDE": [
+            (0, 0, d, w),
+            (0, w, d, w),
+        ],
+        "BLOCK_3_SIDE": [
+            (0, 0, d, w),
+            (0, w, d, w),
+            (0, 2 * w, d, w),
+        ],
+        "BLOCK_4_FACE": [
+            (0, 0, d, w),
+            (d, 0, d, w),
+            (0, w, d, w),
+            (d, w, d, w),
+        ],
+        "BLOCK_6_FACE": [
+            (0, 0, d, w),
+            (d, 0, d, w),
+            (0, w, d, w),
+            (d, w, d, w),
+            (0, 2 * w, d, w),
+            (d, 2 * w, d, w),
+        ],
+        "BLOCK_2_ORTHO_R": [
+            (0, 0, w, d),
+            (0, d, d, w),
+        ],
+        "BLOCK_2_ORTHO_L": [
+            (0, 0, w, d),
+            (w - d, d, d, w),
+        ],
+    })
+
+
 # Ortho block types (mirror = swap R↔L)
 _ORTHO_MIRROR = {
     "BLOCK_2_ORTHO_R": "BLOCK_2_ORTHO_L",
@@ -543,19 +615,23 @@ def _ns_intervals_overlap(b1: dict, b2: dict) -> bool:
 
 def _adapt_row_eo(
     row: dict, orig_width: int, target_width: int,
+    block_defs: dict[str, dict],
 ) -> dict:
     """Adapt a row to a target room width.
 
     Algorithm:
     - Blocks with stick O: fixed position (distance to west wall preserved)
     - Blocks with stick E: shifted by dw (distance to east wall preserved)
-    - Blocks without EO stick: linear interpolation between neighbouring anchors
-    - No anchor: positions unchanged (extra space on the right)
+    - Blocks without EO stick: linear interpolation between neighbouring
+      anchors
+    - D-271: no anchor — blocks hug walls (first against west, last
+      against east, surplus distributed into inter-block gaps)
 
     Args:
         row: Original JSON row.
         orig_width: Pattern room width.
         target_width: Target room width.
+        block_defs: Block definitions from ``build_block_defs``.
 
     Returns:
         New row with adapted gaps.
@@ -587,22 +663,64 @@ def _adapt_row_eo(
     new_x = [positions[i][0] for i in range(len(blocks))]
 
     if not anchors:
-        # D-244: proportional stretching of all gaps
-        orig_total = x  # total used width (gaps + blocks)
-        if orig_total > 0 and target_width != orig_total:
-            ratio = target_width / orig_total
-            gaps = [b.get("gap_cm", 0) for b in blocks]
-            scaled_gaps = [int(round(g * ratio)) for g in gaps]
-            # Absorb rounding residual on the last gap
-            total_blocks_eo = sum(positions[i][1] for i in range(len(blocks)))
-            residual = target_width - sum(scaled_gaps) - total_blocks_eo
-            scaled_gaps[-1] += residual
-            # Recompute positions from scaled gaps
-            cx = 0
-            for i in range(len(blocks)):
-                cx += scaled_gaps[i]
+        # D-271: hug-walls placement — first block against west wall,
+        # last against east wall, surplus distributed into inter-block
+        # gaps. Face zones of the extreme blocks are kept inside the
+        # room (west0 / eastN account for outer clearance).
+        from olm.core.pattern_fit import get_face_zones
+        n = len(blocks)
+        fc_first = get_face_zones(
+            blocks[0].get("type", ""),
+            blocks[0].get("orientation", 0),
+            block_defs,
+        )
+        fc_last = get_face_zones(
+            blocks[-1].get("type", ""),
+            blocks[-1].get("orientation", 0),
+            block_defs,
+        )
+        west0 = fc_first.west.outer_cm
+        eastN = fc_last.east.outer_cm
+        widths = [positions[i][1] for i in range(n)]
+        interior = [
+            blocks[i].get("gap_cm", 0) for i in range(1, n)
+        ]
+        emprise_min = (
+            west0 + sum(widths) + sum(interior) + eastN
+        )
+        surplus = target_width - emprise_min
+        if n == 1:
+            new_x[0] = west0
+        else:
+            if surplus > 0:
+                base, rem = divmod(surplus, n - 1)
+                add = [
+                    base + (1 if k < rem else 0)
+                    for k in range(n - 1)
+                ]
+            else:
+                add = [0] * (n - 1)
+            cx = west0
+            new_x[0] = cx
+            cx += widths[0]
+            for i in range(1, n):
+                cx += interior[i - 1] + add[i - 1]
                 new_x[i] = cx
-                cx += positions[i][1]
+                cx += widths[i]
+        # D-270: ensure no block's west face zone extends past x=0.
+        # A negative gap can place an intermediate block west of block[0].
+        min_left = min(
+            new_x[i] - get_face_zones(
+                blocks[i].get("type", ""),
+                blocks[i].get("orientation", 0),
+                block_defs,
+            ).west.outer_cm
+            for i in range(n)
+        )
+        if min_left < 0:
+            shift = -min_left
+            for i in range(n):
+                new_x[i] += shift
     elif len(anchors) == 1:
         idx, ax = anchors[0]
         shift = ax - positions[idx][0]
@@ -704,16 +822,6 @@ def _adapt_ns(
         return p
 
     # Multiple rows: distribute dd into row_gaps
-    # Identify if first row has stick N or last row has stick S
-    def _row_has_stick(row, stick_dir):
-        for b in row.get("blocks", []):
-            if stick_dir in set(b.get("sticks", [])):
-                return True
-        return False
-
-    first_has_n = _row_has_stick(rows[0], "N")
-    last_has_s = _row_has_stick(rows[-1], "S")
-
     if not row_gaps:
         # No gaps between rows -> dd goes below
         p["row_gaps_cm"] = row_gaps
@@ -769,7 +877,7 @@ def adapt_to_room(
     """Adapt a catalogue pattern to a target room.
 
     Clamping: stick blocks stay anchored to their wall.
-    Homothety: non-stick blocks are redistributed proportionally.
+    D-271: no-lock rows hug walls (surplus in inter-block gaps).
 
     D-244: raises PatternAdaptOverlap if the adaptation produces
     overlapping blocks.
@@ -783,7 +891,17 @@ def adapt_to_room(
 
     Raises:
         PatternAdaptOverlap: Blocks overlap after adaptation.
+        ValueError: Pattern has no valid ``standard``.
     """
+    std = pattern.get("standard")
+    if not std or std not in ALL_CONFIGS:
+        name = pattern.get("name", "<unnamed>")
+        raise ValueError(
+            f"pattern '{name}' has no valid 'standard': {std!r}"
+        )
+    from olm.core.spacing_config import build_block_defs
+    block_defs = build_block_defs(ALL_CONFIGS[std])
+
     orig_w = pattern.get("room_width_cm", 0)
     orig_d = pattern.get("room_depth_cm", 0)
     target_w = target_room.width_cm
@@ -792,7 +910,7 @@ def adapt_to_room(
     # EO adaptation (per row)
     adapted = copy.deepcopy(pattern)
     adapted["rows"] = [
-        _adapt_row_eo(row, orig_w, target_w)
+        _adapt_row_eo(row, orig_w, target_w, block_defs)
         for row in pattern.get("rows", [])
     ]
     adapted["room_width_cm"] = target_w
@@ -837,13 +955,25 @@ def adapt_dimensions(
 
     Returns:
         New pattern dict with adjusted gaps and updated dimensions.
+
+    Raises:
+        ValueError: Pattern has no valid ``standard``.
     """
+    std = pattern.get("standard")
+    if not std or std not in ALL_CONFIGS:
+        name = pattern.get("name", "<unnamed>")
+        raise ValueError(
+            f"pattern '{name}' has no valid 'standard': {std!r}"
+        )
+    from olm.core.spacing_config import build_block_defs
+    block_defs = build_block_defs(ALL_CONFIGS[std])
+
     orig_w = pattern.get("room_width_cm", 0)
     orig_d = pattern.get("room_depth_cm", 0)
 
     adapted = copy.deepcopy(pattern)
     adapted["rows"] = [
-        _adapt_row_eo(row, orig_w, target_width)
+        _adapt_row_eo(row, orig_w, target_width, block_defs)
         for row in pattern.get("rows", [])
     ]
     adapted["room_width_cm"] = target_width
@@ -1826,6 +1956,44 @@ class MatchingResult:
     all_scores: list[MatchScore]
 
 
+def _footprint_within_room(
+    pattern: dict,
+    room: RoomSpec,
+    spacing: "SpacingConfig | None",
+) -> bool:
+    """Check that the adapted pattern footprint fits inside the room.
+
+    D-271: guard applied in ``match_room`` after ``adapt_to_room``
+    to reject non-oversize candidates whose face zones overflow.
+
+    Args:
+        pattern: Adapted pattern dict.
+        room: Target room.
+        spacing: Spacing config for the pattern's standard.
+
+    Returns:
+        True if footprint is within room bounds (with rounding
+        tolerance ``FOOTPRINT_GUARD_TOL_CM``).
+    """
+    from olm.core.matching_config import FOOTPRINT_GUARD_TOL_CM
+    if spacing is None:
+        return True
+    from olm.core.pattern_fit import compute_pattern_footprint
+    try:
+        x_min, x_max, y_min, y_max = compute_pattern_footprint(
+            pattern, spacing,
+        )
+    except Exception:
+        return False
+    tol = FOOTPRINT_GUARD_TOL_CM
+    return (
+        x_min >= -tol
+        and y_min >= -tol
+        and x_max <= room.width_cm + tol
+        and y_max <= room.depth_cm + tol
+    )
+
+
 def match_room(
     catalogue: list[dict], room: RoomSpec,
 ) -> MatchingResult:
@@ -1866,6 +2034,18 @@ def match_room(
             except PatternAdaptOverlap:
                 logger.warning(
                     "Skipping %s: blocks overlap after adaptation",
+                    candidate.name,
+                )
+                continue
+            # D-271: skip non-oversize candidates whose footprint
+            # overflows the room after adaptation.
+            if not candidate.oversize and not _footprint_within_room(
+                adapted, room,
+                ALL_CONFIGS.get(std),
+            ):
+                logger.warning(
+                    "Skipping %s: footprint overflows room after "
+                    "adaptation",
                     candidate.name,
                 )
                 continue

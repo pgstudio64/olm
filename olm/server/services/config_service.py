@@ -11,18 +11,7 @@ import logging
 import os
 import shutil
 
-from olm.core.pattern_generator import (
-    BLOCK_1,
-    BLOCK_2_FACE,
-    BLOCK_2_ORTHO_L,
-    BLOCK_2_ORTHO_R,
-    BLOCK_2_SIDE,
-    BLOCK_3_SIDE,
-    BLOCK_4_FACE,
-    BLOCK_6_FACE,
-    DESK_D_CM,
-    DESK_W_CM,
-)
+import olm.core.pattern_generator as _pg
 from olm.core.spacing_config import ALL_CONFIGS
 
 logger = logging.getLogger(__name__)
@@ -246,17 +235,23 @@ def update_config(data: dict) -> dict:
         app_config.update(data["key"], data["value"])
     else:
         raise ValueError("Missing 'key' or 'path'")
-    # Invalidate block defs cache when desk/cabinet dimensions change
+    # Propagate desk/cabinet dimension changes to all dependent structures
     key = data.get("key", "")
     if key in ("desk_width_cm", "desk_depth_cm"):
-        import olm.core.pattern_generator as pg
-        pg.DESK_W_CM = app_config.get("desk_width_cm", 180)
-        pg.DESK_D_CM = app_config.get("desk_depth_cm", 80)
+        from olm.core.catalogue_matcher import rebuild_block_registry
+        _pg.refresh_desk_dims(
+            app_config.get("desk_width_cm", 180),
+            app_config.get("desk_depth_cm", 80),
+        )
+        rebuild_block_registry()
         invalidate_block_cache()
     elif key in ("cabinet_width_cm", "cabinet_depth_cm"):
-        import olm.core.pattern_generator as pg
-        pg.CABINET_W_CM = app_config.get("cabinet_width_cm", 70)
-        pg.CABINET_D_CM = app_config.get("cabinet_depth_cm", 40)
+        from olm.core.catalogue_matcher import rebuild_block_registry
+        _pg.refresh_cabinet_dims(
+            app_config.get("cabinet_width_cm", 70),
+            app_config.get("cabinet_depth_cm", 40),
+        )
+        rebuild_block_registry()
         invalidate_block_cache()
     return {"ok": True}
 
@@ -275,7 +270,6 @@ def get_blocks(standard: str | None = None) -> dict:
     Returns:
         Dict with ``blocks``, ``standard``, and ``constants``.
     """
-    import olm.core.pattern_generator as pg
     from olm.core.app_config import get_current_standard
     from olm.core.spacing_config import get_default
     std = standard or get_current_standard()
@@ -285,8 +279,8 @@ def get_blocks(standard: str | None = None) -> dict:
         "blocks": block_defs,
         "standard": std,
         "constants": {
-            "DESK_W_CM": pg.DESK_W_CM,
-            "DESK_D_CM": pg.DESK_D_CM,
+            "DESK_W_CM": _pg.DESK_W_CM,
+            "DESK_D_CM": _pg.DESK_D_CM,
             "CHAIR_CLEARANCE_CM": cfg.chair_clearance_cm,
             "WALKING_MARGIN_CM": cfg.walking_margin_cm,
             "SLIP_IN_MARGIN_CM": cfg.slip_in_margin_cm,

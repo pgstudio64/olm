@@ -1007,6 +1007,7 @@ class TestAdaptRoomSize:
         """Stick E block stays flush with east wall after width increase."""
         pattern = {
             "name": "test",
+            "standard": "standard1",
             "rows": [{"blocks": [
                 {"type": "BLOCK_1", "orientation": 0, "gap_cm": 220,
                  "sticks": ["E"]},

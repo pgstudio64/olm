@@ -328,19 +328,11 @@ async function init() {
   // (they need access to fpCurrent/fpCurrentCandidate to re-render correctly)
 
   // Room dimensions
-  function onRoomChange() {
-    var oldW = state.room_width_cm;
-    var oldD = state.room_depth_cm;
-    var rawW = parseInt(document.getElementById("roomWidth").value) || 300;
-    var rawD = parseInt(document.getElementById("roomDepth").value) || 480;
-    var newW = Math.round(rawW / GRID_STEP_CM) * GRID_STEP_CM;
-    var newD = Math.round(rawD / GRID_STEP_CM) * GRID_STEP_CM;
-    document.getElementById("roomWidth").value = newW;
-    document.getElementById("roomDepth").value = newD;
-    markDirty();
-    state.room_width_cm = newW;
-    state.room_depth_cm = newD;
-    // Update full-width windows
+  // Resize tolerance: a block whose body extends past the room edge by more
+  // than this is "outside" (float-noise guard; positions snap to the grid).
+  var ROOM_RESIZE_TOL_CM = 0.5;
+
+  function _applyFullWidthWindows(oldW, oldD, newW, newD) {
     state.room_windows.forEach(function(w) {
       var wallOld = (w.face === "north" || w.face === "south") ? oldW : oldD;
       var wallNew = (w.face === "north" || w.face === "south") ? newW : newD;
@@ -348,38 +340,93 @@ async function init() {
         w.width_cm = wallNew;
       }
     });
-    // Adapt block positions via backend if dimensions changed and blocks exist
-    if ((newW !== oldW || newD !== oldD) && state.rows.length > 0 && totalBlocks() > 0) {
-      var payload = {
-        pattern: {
-          rows: state.rows,
-          row_gaps_cm: state.row_gaps_cm,
-          room_width_cm: oldW,
-          room_depth_cm: oldD,
-        },
-        new_width_cm: newW,
-        new_depth_cm: newD,
-      };
-      fetch("/api/pattern/adapt-room-size", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.pattern) {
-            state.rows = data.pattern.rows || state.rows;
-            state.row_gaps_cm = data.pattern.row_gaps_cm || state.row_gaps_cm;
-            updateDSL();
-            render();
-          }
-        })
-        .catch(function(err) {
-          console.error("adapt-room-size failed:", err);
-        });
-    }
+  }
+
+  function _anyBlockOutside(newW, newD) {
+    var positions = computeBlockPositions();
+    var t = ROOM_RESIZE_TOL_CM;
+    return positions.some(function(p) {
+      // Use the full emprise (body + clearance zones), not just the body.
+      var blk = state.rows[p.rowIdx].blocks[p.blockIdx];
+      var emp = blockEmpriseCm(p, blk.type, blk.orientation);
+      return emp.x_cm < -t || emp.y_cm < -t ||
+        (emp.x_cm + emp.w_cm) > newW + t || (emp.y_cm + emp.h_cm) > newD + t;
+    });
+  }
+
+  function _commitRoomSize(oldW, oldD, newW, newD) {
+    markDirty();
+    state.room_width_cm = newW;
+    state.room_depth_cm = newD;
+    _applyFullWidthWindows(oldW, oldD, newW, newD);
+    document.getElementById("roomWidth").value = newW;
+    document.getElementById("roomDepth").value = newD;
+    updateDSL();
     updateAutoName();
+    render();
     zoomFit();
+  }
+
+  function _revertRoomSizeFields(oldW, oldD) {
+    document.getElementById("roomWidth").value = oldW;
+    document.getElementById("roomDepth").value = oldD;
+  }
+
+  function onRoomChange() {
+    var oldW = state.room_width_cm;
+    var oldD = state.room_depth_cm;
+    var rawW = parseInt(document.getElementById("roomWidth").value) || 300;
+    var rawD = parseInt(document.getElementById("roomDepth").value) || 480;
+    var newW = Math.round(rawW / GRID_STEP_CM) * GRID_STEP_CM;
+    var newD = Math.round(rawD / GRID_STEP_CM) * GRID_STEP_CM;
+
+    var dimsChanged = (newW !== oldW || newD !== oldD);
+    var hasBlocks = state.rows.length > 0 && totalBlocks() > 0;
+
+    // No blocks (or no change): apply directly, nothing can fall outside.
+    if (!dimsChanged || !hasBlocks) {
+      _commitRoomSize(oldW, oldD, newW, newD);
+      return;
+    }
+
+    // Blocks present: adapt on the backend, then commit ONLY if every block
+    // still fits. Otherwise reject the resize (a block would fall outside).
+    var payload = {
+      pattern: {
+        rows: state.rows,
+        row_gaps_cm: state.row_gaps_cm,
+        room_width_cm: oldW,
+        room_depth_cm: oldD,
+      },
+      new_width_cm: newW,
+      new_depth_cm: newD,
+    };
+    fetch("/api/pattern/adapt-room-size", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.pattern) { _revertRoomSizeFields(oldW, oldD); return; }
+        var savedRows = state.rows;
+        var savedGaps = state.row_gaps_cm;
+        state.rows = data.pattern.rows || state.rows;
+        state.row_gaps_cm = data.pattern.row_gaps_cm || state.row_gaps_cm;
+        if (_anyBlockOutside(newW, newD)) {
+          // Reject: keep the old room and block layout.
+          state.rows = savedRows;
+          state.row_gaps_cm = savedGaps;
+          _revertRoomSizeFields(oldW, oldD);
+          setStatus("Réduction impossible : des blocs sortiraient de la pièce.");
+          return;
+        }
+        _commitRoomSize(oldW, oldD, newW, newD);
+      })
+      .catch(function(err) {
+        console.error("adapt-room-size failed:", err);
+        _revertRoomSizeFields(oldW, oldD);
+      });
   }
   document.getElementById("roomWidth").addEventListener("change", onRoomChange);
   document.getElementById("roomDepth").addEventListener("change", onRoomChange);
@@ -1111,6 +1158,14 @@ async function init() {
     if (!inAmend && (!editorSub || !editorSub.classList.contains("active"))) return;
     const step = e.shiftKey ? GRID_STEP_CM * 5 : GRID_STEP_CM;
 
+    // Esc in the pattern editor → back to Card view at the same card.
+    if (e.key === "Escape" && !inAmend) {
+      e.preventDefault();
+      document.querySelector('.sub-tab-btn[data-subtab="catalogue"]').click();
+      if (window.catScrollSelectedIntoView) window.catScrollSelectedIntoView();
+      return;
+    }
+
     // Exclusion selected
     if (state.selectedExclusion >= 0) {
       var excl = state.room_exclusions[state.selectedExclusion];
@@ -1133,8 +1188,20 @@ async function init() {
       return;
     }
 
+    // No block selected (PE, not amend): arrow keys navigate prev/next
+    // pattern. PageUp/PageDown keep working too.
+    if (state.selectedBlock < 0) {
+      if (!inAmend && (e.key === "ArrowLeft" || e.key === "ArrowRight" ||
+                       e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        if (window.peNavigate) {
+          window.peNavigate(
+            (e.key === "ArrowLeft" || e.key === "ArrowUp") ? -1 : 1);
+        }
+      }
+      return;
+    }
     // Selected block
-    if (state.selectedBlock < 0) return;
     const row = state.rows[state.selectedRow];
     if (!row) return;
     const block = row.blocks[state.selectedBlock];
@@ -1158,10 +1225,16 @@ async function init() {
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
       markDirty();
-      row.blocks.splice(state.selectedBlock, 1);
-      state.selectedBlock = -1;
-      render(); updateDSL(); updateRowList();
-      canonicalizeState();
+      if (state.amendMode &&
+          typeof deleteSelectedBlockKeepPositions === "function") {
+        // Office / Amend layout: deleting a block must not move the others.
+        deleteSelectedBlockKeepPositions();
+      } else {
+        row.blocks.splice(state.selectedBlock, 1);
+        state.selectedBlock = -1;
+        render(); updateDSL(); updateRowList();
+        canonicalizeState();
+      }
     }
   });
 

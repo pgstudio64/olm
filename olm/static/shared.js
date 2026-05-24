@@ -783,36 +783,48 @@ function pxToSvg(clientX, clientY, domRect, viewBox) {
  * @param {number} roomHPx  room height in SVG units
  * @param {number} scale    cm-to-SVG scale factor
  */
+/**
+ * Door exclusion zones in cm for a room, one rect per door opening.
+ * Single source of truth for both the drawn rects and the placement-conflict
+ * test (editor.js blockHasPlacementConflict).
+ *
+ * @param {Array} openings  openings with has_door (or room_doors entries)
+ * @param {string} standard pattern standard slot
+ * @param {number} roomWcm  room width in cm
+ * @param {number} roomDcm  room depth in cm
+ * @returns {Array<{x_cm:number,y_cm:number,w_cm:number,h_cm:number}>}
+ */
+function computeDoorExclusionRectsCm(openings, standard, roomWcm, roomDcm) {
+  var spacing = SPACING_CONFIGS ? SPACING_CONFIGS[standard] : null;
+  if (!spacing) return [];
+  var depth = spacing.door_exclusion_depth_cm;
+  if (!depth || depth <= 0) return [];
+  var rects = [];
+  (openings || []).forEach(function(o) {
+    if (!o.has_door && !o._isDoor) return;
+    var off = o.offset_cm || 0;
+    var w = o.width_cm || 0;
+    switch (o.face) {
+      case "south": rects.push({ x_cm: off, y_cm: roomDcm - depth, w_cm: w, h_cm: depth }); break;
+      case "north": rects.push({ x_cm: off, y_cm: 0, w_cm: w, h_cm: depth }); break;
+      case "east":  rects.push({ x_cm: roomWcm - depth, y_cm: off, w_cm: depth, h_cm: w }); break;
+      case "west":  rects.push({ x_cm: 0, y_cm: off, w_cm: depth, h_cm: w }); break;
+      default: break;
+    }
+  });
+  return rects;
+}
+
 function drawDoorExclusionRects(
   elements, openings, standard, roomX, roomY, roomWPx, roomHPx, scale
 ) {
-  var spacing = SPACING_CONFIGS ? SPACING_CONFIGS[standard] : null;
-  if (!spacing) return;
-  var depth = spacing.door_exclusion_depth_cm;
-  if (!depth || depth <= 0) return;
-  var depthPx = depth * scale;
-
-  (openings || []).forEach(function(o) {
-    if (!o.has_door && !o._isDoor) return;
-    var face = o.face;
-    var off = (o.offset_cm || 0) * scale;
-    var w = (o.width_cm || 0) * scale;
-    var rx, ry, rw, rh;
-    if (face === "south") {
-      rx = roomX + off; ry = roomY + roomHPx - depthPx;
-      rw = w; rh = depthPx;
-    } else if (face === "north") {
-      rx = roomX + off; ry = roomY;
-      rw = w; rh = depthPx;
-    } else if (face === "east") {
-      rx = roomX + roomWPx - depthPx; ry = roomY + off;
-      rw = depthPx; rh = w;
-    } else if (face === "west") {
-      rx = roomX; ry = roomY + off;
-      rw = depthPx; rh = w;
-    } else {
-      return;
-    }
+  var rects = computeDoorExclusionRectsCm(
+    openings, standard, roomWPx / scale, roomHPx / scale);
+  rects.forEach(function(r) {
+    var rx = roomX + r.x_cm * scale;
+    var ry = roomY + r.y_cm * scale;
+    var rw = r.w_cm * scale;
+    var rh = r.h_cm * scale;
     elements.push({ z: 5.8, s:
       '<rect x="' + rx.toFixed(1) + '" y="' + ry.toFixed(1) +
       '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) +

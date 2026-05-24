@@ -131,7 +131,11 @@ OLM_DIAGS.register("pattern.footprint", function (pattern) {
   // Summary
   var summary;
   if (!overflows) {
-    summary = "Footprint fits in room";
+    var spareW = roomW - (fp.xMax - fp.xMin);
+    var spareD = roomD - (fp.yMax - fp.yMin);
+    summary = (spareW <= 0 && spareD <= 0)
+      ? "Exact fit — no room to spare"
+      : "Fits — room to spare: " + spareW + " × " + spareD + " cm";
   } else {
     var parts = [];
     if (fp.xMin < 0) parts.push("WEST " + fp.xMin + " cm");

@@ -257,6 +257,62 @@ CABINET = Block(
 )
 
 
+def refresh_desk_dims(width_cm: int, depth_cm: int) -> None:
+    """Update desk dimensions and mutate all Block objects in place.
+
+    Must be called BEFORE rebuild_block_registry() in catalogue_matcher.
+
+    Args:
+        width_cm: New desk width (large side).
+        depth_cm: New desk depth (front-to-back).
+    """
+    global DESK_W_CM, DESK_D_CM
+    DESK_W_CM = width_cm
+    DESK_D_CM = depth_cm
+
+    # Mutate block dimensions in place (same object references everywhere)
+    BLOCK_1.eo_cm = depth_cm
+    BLOCK_1.ns_cm = width_cm
+
+    BLOCK_2_FACE.eo_cm = depth_cm * 2
+    BLOCK_2_FACE.ns_cm = width_cm
+
+    BLOCK_2_SIDE.eo_cm = depth_cm
+    BLOCK_2_SIDE.ns_cm = width_cm * 2
+
+    BLOCK_3_SIDE.eo_cm = depth_cm
+    BLOCK_3_SIDE.ns_cm = width_cm * 3
+
+    BLOCK_4_FACE.eo_cm = depth_cm * 2
+    BLOCK_4_FACE.ns_cm = width_cm * 2
+
+    BLOCK_6_FACE.eo_cm = depth_cm * 2
+    BLOCK_6_FACE.ns_cm = width_cm * 3
+
+    BLOCK_2_ORTHO_R.eo_cm = width_cm
+    BLOCK_2_ORTHO_R.ns_cm = depth_cm + width_cm
+
+    BLOCK_2_ORTHO_L.eo_cm = width_cm
+    BLOCK_2_ORTHO_L.ns_cm = depth_cm + width_cm
+
+    CABINET.eo_cm = CABINET_W_CM
+    CABINET.ns_cm = CABINET_D_CM
+
+
+def refresh_cabinet_dims(width_cm: int, depth_cm: int) -> None:
+    """Update cabinet dimensions and mutate the CABINET Block in place.
+
+    Args:
+        width_cm: New cabinet width.
+        depth_cm: New cabinet depth.
+    """
+    global CABINET_W_CM, CABINET_D_CM
+    CABINET_W_CM = width_cm
+    CABINET_D_CM = depth_cm
+    CABINET.eo_cm = width_cm
+    CABINET.ns_cm = depth_cm
+
+
 @dataclass
 class DoubleRowPattern:
     name: str
