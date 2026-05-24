@@ -16,6 +16,23 @@ from olm.server.app import app
 _PIN_W, _PIN_D = 160, 80
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _preserve_config_json():
+    """Snapshot project/config.json before the suite and restore it after.
+
+    Some endpoint tests POST config mutations that persist to the real
+    config.json (e.g. /api/current-standard writes current_standard).
+    Without this, running the suite leaves the user's config.json mutated
+    on disk (the « current_standard reverts to standard2 » bug).
+    """
+    from olm.core import app_config
+    path = app_config._CONFIG_PATH
+    backup = path.read_text(encoding="utf-8") if path.exists() else None
+    yield
+    if backup is not None:
+        path.write_text(backup, encoding="utf-8")
+
+
 @pytest.fixture(autouse=True)
 def _pin_desk_dims():
     """Pin desk dimensions to 160x80 before each test, restore after."""

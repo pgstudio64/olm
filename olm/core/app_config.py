@@ -99,21 +99,6 @@ def _save() -> None:
     """Persist config to disk atomically with .bak."""
     global _cfg_mtime
     path = str(_CONFIG_PATH)
-    # CS-DIAG (temporaire) — tracer tout changement de current_standard
-    # persisté, avec la pile d'appel (révèle quel chemin l'écrit).
-    try:
-        if _CONFIG_PATH.exists():
-            with open(path, encoding="utf-8") as _f:
-                _old_cs = json.load(_f).get("current_standard")
-            _new_cs = _cfg.get("current_standard")
-            if _old_cs != _new_cs:
-                import traceback
-                import logging
-                logging.getLogger("olm").warning(
-                    "[CS-DIAG] current_standard %r -> %r\n%s",
-                    _old_cs, _new_cs, "".join(traceback.format_stack()))
-    except Exception:
-        pass
     if _CONFIG_PATH.exists():
         shutil.copy2(path, path + '.bak')
     tmp = path + ".tmp"

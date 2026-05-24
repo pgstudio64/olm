@@ -1471,8 +1471,10 @@
         }
       }
 
-      // D-267: Block drag — select + start drag in one motion (amend mode)
-      if (state.amendMode) {
+      // D-267: Block drag — select + start drag in one motion
+      // Active in amend (Office, free drag) and PE (lock-aware drag).
+      var _peActiveDrag = _isPatternEditorActive() && !state.roomAmendMode;
+      if (state.amendMode || _peActiveDrag) {
         var blockTarget = e.target.closest("[data-row][data-block]");
         if (blockTarget) {
           var bri = parseInt(blockTarget.dataset.row, 10);
@@ -1510,6 +1512,21 @@
                 w_cm: bPos.w_cm, h_cm: bPos.h_cm,
                 zW: bExt.w, zE: bExt.e, zN: bExt.n, zS: bExt.s,
               };
+              // PE lock-aware drag: capture valid sticks at mousedown so
+              // locked axes stay fixed for the entire gesture.
+              if (_peActiveDrag && typeof faceTouchesWall === "function") {
+                var stks = bBlk.sticks || [];
+                var lockX = false, lockY = false;
+                for (var si = 0; si < stks.length; si++) {
+                  if (faceTouchesWall(bri, bbi, stks[si])) {
+                    if (stks[si] === "E" || stks[si] === "W") lockX = true;
+                    if (stks[si] === "N" || stks[si] === "S") lockY = true;
+                  }
+                }
+                rvTool._blockDragStart.lockedAxes = { x: lockX, y: lockY };
+              } else {
+                rvTool._blockDragStart.lockedAxes = null;
+              }
               // Store ALL block positions for rebuild at release
               rvTool._allBlockPositions = bPositions;
               rvTool._blockDragMoved = false;
@@ -1931,6 +1948,11 @@
         if (sEdge < state.room_depth_cm &&
             sEdge >= state.room_depth_cm - GRID_STEP_CM)
           newBY = state.room_depth_cm - bds.h_cm;
+        // PE lock-aware: freeze locked axes to origin (after snap, last word)
+        if (bds.lockedAxes) {
+          if (bds.lockedAxes.x) newBX = bds.x_cm;
+          if (bds.lockedAxes.y) newBY = bds.y_cm;
+        }
         // Update stored drag position for ghost rendering
         rvTool._blockDragCurrent = { x_cm: newBX, y_cm: newBY };
         rvTool._blockDragMoved = true;
