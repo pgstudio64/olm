@@ -1667,9 +1667,13 @@ def _pattern_to_circulation_format(
     Returns:
         (room_dict, blocks_list) au format attendu par circulation_analysis.analyse().
     """
-    # Room dict in legacy format
+    # Room dict in legacy format.
+    # D-280: if the room has at least one real door, only doors are used as
+    # circulation entries (people enter through doors, not open bays);
+    # otherwise fall back to all openings.
+    entries = [o for o in room.openings if o.has_door] or list(room.openings)
     doors = []
-    for o in room.openings:
+    for o in entries:
         doors.append({
             "wall": o.face.value,
             "position_cm": o.offset_cm,

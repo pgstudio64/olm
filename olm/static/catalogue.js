@@ -87,11 +87,14 @@ function _onCatKeydown(e) {
   if (tag === "input" || tag === "select" || tag === "textarea") return;
   var cards = _catGetCards();
   if (!cards.length) return;
+  var n = cards.length;
   switch (e.key) {
     case "ArrowRight":
-      _catSetSelection(_catSelIdx < 0 ? 0 : _catSelIdx + 1); break;
+      // Next; wrap from the last card to the first.
+      _catSetSelection(_catSelIdx < 0 ? 0 : (_catSelIdx + 1) % n); break;
     case "ArrowLeft":
-      _catSetSelection(_catSelIdx < 0 ? 0 : _catSelIdx - 1); break;
+      // Previous; wrap from the first card to the last.
+      _catSetSelection(_catSelIdx < 0 ? 0 : (_catSelIdx - 1 + n) % n); break;
     case "ArrowDown": {
       if (_catSelIdx < 0) { _catSetSelection(0); break; }
       var down = _catNavVertical(cards, _catSelIdx, 1);
@@ -205,19 +208,18 @@ async function loadCatalogue() {
   }
 }
 
-// Compute the drawing extent of a pattern in cm (footprint + outward door
-// arcs, with an empty-pattern fallback to room dimensions). The breathing
-// margin and the uniform square framing are applied globally in
-// renderCatalogue so that a desk renders at the same pixel size on every card.
+// Compute the drawing extent of a pattern in cm. Always includes the FULL
+// room rectangle [0,roomW]x[0,roomH] (so the whole room is shown, never
+// truncated), unioned with the pattern footprint and any outward door arcs
+// that extend beyond the walls. The breathing margin and the uniform square
+// framing are applied globally in renderCatalogue.
 function _patternExtent(p) {
   var fp = computePatternFootprint(p);
   var roomW = p.room_width_cm || 300;
   var roomH = p.room_depth_cm || 400;
-  // Fallback: empty pattern → use room dimensions
-  var xMin = fp.xMin, xMax = fp.xMax, yMin = fp.yMin, yMax = fp.yMax;
-  if (xMin === 0 && xMax === 0 && yMin === 0 && yMax === 0) {
-    xMin = 0; yMin = 0; xMax = roomW; yMax = roomH;
-  }
+  // Union the footprint with the full room so walls are never cropped.
+  var xMin = Math.min(0, fp.xMin), xMax = Math.max(roomW, fp.xMax);
+  var yMin = Math.min(0, fp.yMin), yMax = Math.max(roomH, fp.yMax);
   // Extend for outward door arcs (radius = opening width, extends beyond room wall)
   (p.room_openings || []).forEach(function(o) {
     if (o.opens_inward || !o.has_door) return;
@@ -263,12 +265,13 @@ function renderCatalogue() {
   var grid = document.getElementById("catalogueGrid");
   var filtered = getFilteredPatterns();
 
-  // Sort: depth ascending, width ascending, then name ascending
+  // Sort: width ascending, then depth ascending, then name (homogeneous with
+  // the Pattern editor nav, _peSortedPatternsForStandard).
   filtered.sort(function(a, b) {
-    var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
-    if (da !== 0) return da;
     var wa = (a.room_width_cm || 0) - (b.room_width_cm || 0);
     if (wa !== 0) return wa;
+    var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
+    if (da !== 0) return da;
     return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
   });
 
@@ -365,20 +368,20 @@ function getFilteredPatterns() {
   var maxW = parseInt(document.getElementById("catFilterMaxW").value) || Infinity;
   var minD = parseInt(document.getElementById("catFilterMinD").value) || 0;
   var maxD = parseInt(document.getElementById("catFilterMaxD").value) || Infinity;
-  var minDesks = parseInt(document.getElementById("catFilterMinDesks").value) || 0;
-  var maxDesks = parseInt(document.getElementById("catFilterMaxDesks").value) || Infinity;
+  var deskEl = document.getElementById("catFilterDesks");
+  var exactDesks = deskEl && deskEl.value !== "" ? parseInt(deskEl.value) : null;
   return catalogueData.filter(function(p) {
     if (stdFilter && p.standard !== stdFilter) return false;
     var w = p.room_width_cm || 0;
     var d = p.room_depth_cm || 0;
     if (w < minW || w > maxW) return false;
     if (d < minD || d > maxD) return false;
-    if (minDesks > 0 || maxDesks < Infinity) {
+    if (exactDesks !== null && !isNaN(exactDesks)) {
       var nd = 0;
       (p.rows || []).forEach(function(r) {
         (r.blocks || []).forEach(function(b) { nd += countDesksInBlock(b.type) || 0; });
       });
-      if (nd < minDesks || nd > maxDesks) return false;
+      if (nd !== exactDesks) return false;
     }
     return true;
   });
@@ -842,7 +845,7 @@ function _peSortedPatternsForStandard() {
     var ad = a.room_depth_cm || 0;
     var bd = b.room_depth_cm || 0;
     if (ad !== bd) return ad - bd;
-    return (a.name || "").localeCompare(b.name || "");
+    return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
   });
   return list;
 }

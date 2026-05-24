@@ -343,14 +343,16 @@ async function init() {
   }
 
   function _anyBlockOutside(newW, newD) {
+    // Test block BODIES (not the emprise): in the body coordinate frame the
+    // north/west clearance zones legitimately sit at negative coordinates
+    // (handled by the room viewBox), so an emprise test would false-positive
+    // on every top-row block and block all resizes. Bodies must stay within
+    // [0, room] — that is the "blocs à l'extérieur" constraint.
     var positions = computeBlockPositions();
     var t = ROOM_RESIZE_TOL_CM;
     return positions.some(function(p) {
-      // Use the full emprise (body + clearance zones), not just the body.
-      var blk = state.rows[p.rowIdx].blocks[p.blockIdx];
-      var emp = blockEmpriseCm(p, blk.type, blk.orientation);
-      return emp.x_cm < -t || emp.y_cm < -t ||
-        (emp.x_cm + emp.w_cm) > newW + t || (emp.y_cm + emp.h_cm) > newD + t;
+      return p.x_cm < -t || p.y_cm < -t ||
+        (p.x_cm + p.w_cm) > newW + t || (p.y_cm + p.h_cm) > newD + t;
     });
   }
 
@@ -372,6 +374,26 @@ async function init() {
     document.getElementById("roomDepth").value = oldD;
   }
 
+  // Commit a shrink only if no block body falls outside the new room. Tests
+  // the adapted rows when available, otherwise the current rows (covers the
+  // case where adaptation failed, e.g. a pattern with no standard yet).
+  function _finishShrink(adaptedRows, adaptedGaps, oldW, oldD, newW, newD) {
+    var savedRows = state.rows;
+    var savedGaps = state.row_gaps_cm;
+    if (adaptedRows) {
+      state.rows = adaptedRows;
+      state.row_gaps_cm = adaptedGaps;
+    }
+    if (_anyBlockOutside(newW, newD)) {
+      state.rows = savedRows;
+      state.row_gaps_cm = savedGaps;
+      _revertRoomSizeFields(oldW, oldD);
+      setStatus("Réduction impossible : des blocs sortiraient de la pièce.");
+      return;
+    }
+    _commitRoomSize(oldW, oldD, newW, newD);
+  }
+
   function onRoomChange() {
     var oldW = state.room_width_cm;
     var oldD = state.room_depth_cm;
@@ -382,15 +404,18 @@ async function init() {
 
     var dimsChanged = (newW !== oldW || newD !== oldD);
     var hasBlocks = state.rows.length > 0 && totalBlocks() > 0;
+    // A resize can only push a block outside when a dimension SHRINKS.
+    var isShrink = (newW < oldW || newD < oldD);
 
-    // No blocks (or no change): apply directly, nothing can fall outside.
+    // No change, no blocks, or pure enlarge: apply directly (nothing can fall
+    // outside). Still adapt block positions in the background.
     if (!dimsChanged || !hasBlocks) {
       _commitRoomSize(oldW, oldD, newW, newD);
       return;
     }
 
-    // Blocks present: adapt on the backend, then commit ONLY if every block
-    // still fits. Otherwise reject the resize (a block would fall outside).
+    // Blocks present: adapt on the backend. For a shrink, commit ONLY if every
+    // block body still fits; otherwise reject. For an enlarge, always commit.
     var payload = {
       pattern: {
         rows: state.rows,
@@ -408,24 +433,28 @@ async function init() {
     })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (!data.pattern) { _revertRoomSizeFields(oldW, oldD); return; }
-        var savedRows = state.rows;
-        var savedGaps = state.row_gaps_cm;
-        state.rows = data.pattern.rows || state.rows;
-        state.row_gaps_cm = data.pattern.row_gaps_cm || state.row_gaps_cm;
-        if (_anyBlockOutside(newW, newD)) {
-          // Reject: keep the old room and block layout.
-          state.rows = savedRows;
-          state.row_gaps_cm = savedGaps;
-          _revertRoomSizeFields(oldW, oldD);
-          setStatus("Réduction impossible : des blocs sortiraient de la pièce.");
+        var pat = data && data.pattern;
+        if (!isShrink) {
+          // Enlarge: apply adapted positions if any, always commit.
+          if (pat) {
+            state.rows = pat.rows || state.rows;
+            state.row_gaps_cm = pat.row_gaps_cm || state.row_gaps_cm;
+          }
+          _commitRoomSize(oldW, oldD, newW, newD);
           return;
         }
-        _commitRoomSize(oldW, oldD, newW, newD);
+        // Shrink: enforce that no block falls outside (adapted rows if any).
+        _finishShrink(
+          pat ? (pat.rows || state.rows) : null,
+          pat ? (pat.row_gaps_cm || state.row_gaps_cm) : null,
+          oldW, oldD, newW, newD);
       })
       .catch(function(err) {
+        // Adaptation failed (e.g. pattern without a standard).
         console.error("adapt-room-size failed:", err);
-        _revertRoomSizeFields(oldW, oldD);
+        if (!isShrink) { _commitRoomSize(oldW, oldD, newW, newD); return; }
+        // Shrink: still enforce the constraint on the current (unadapted) rows.
+        _finishShrink(null, null, oldW, oldD, newW, newD);
       });
   }
   document.getElementById("roomWidth").addEventListener("change", onRoomChange);
@@ -593,6 +622,20 @@ async function init() {
         var subtab = document.getElementById("subtab" + btn.dataset.subtab.charAt(0).toUpperCase() + btn.dataset.subtab.slice(1));
         if (subtab) subtab.classList.add("active");
         if (btn.dataset.subtab === "catalogue") { loadCatalogue(); }
+      }
+      // Guard: leaving the pattern editor with unsaved changes → confirm
+      // discard (same behaviour as Room/Office). _doSubSwitch reloads the
+      // catalogue so Card view is never shown empty.
+      if (btn.dataset.subtab === "catalogue" && state.dirty
+          && !state.amendMode && !state.roomAmendMode
+          && document.getElementById("subtabCatEditor")
+               .classList.contains("active")) {
+        confirmModal("Discard unsaved pattern changes?").then(function(ok) {
+          if (!ok) return;
+          clearDirty();
+          _doSubSwitch();
+        });
+        return;
       }
       // Guard: pattern room amend active — confirm discard
       if (state.roomAmendMode && state.roomAmendMode.context === "pattern"
@@ -980,8 +1023,7 @@ async function init() {
   document.getElementById("catFilterMaxW").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMinD").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMaxD").addEventListener("change", onCatalogueFilterChange);
-  document.getElementById("catFilterMinDesks").addEventListener("change", onCatalogueFilterChange);
-  document.getElementById("catFilterMaxDesks").addEventListener("change", onCatalogueFilterChange);
+  document.getElementById("catFilterDesks").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("btnRotate").addEventListener("click", rotateSelectedBlock);
   document.getElementById("btnOffsetN").addEventListener("click", function() { offsetSelectedBlock(-GRID_STEP_CM); });
   document.getElementById("btnOffsetS").addEventListener("click", function() { offsetSelectedBlock(GRID_STEP_CM); });

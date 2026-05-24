@@ -195,6 +195,34 @@ def invalidate_block_cache(standard_name: str | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _sync_runtime_dims() -> None:
+    """Keep pattern_generator desk/cabinet dims in sync with config.json.
+
+    ``update_config`` propagates desk/cabinet changes made via the UI, but a
+    change made by any other means (direct file edit, or a server started
+    before the value was set) would leave ``_pg.DESK_W_CM`` and the block-defs
+    cache stale while the frontend reads the fresh value — producing a body
+    (server ``eo_cm``) that no longer matches the desks (JS ``DESK_W``). This
+    re-propagates on mismatch so both sides agree.
+    """
+    from olm.core import app_config
+    dw = app_config.get("desk_width_cm", 180)
+    dd = app_config.get("desk_depth_cm", 80)
+    cw = app_config.get("cabinet_width_cm", 70)
+    cd = app_config.get("cabinet_depth_cm", 40)
+    changed = False
+    if _pg.DESK_W_CM != dw or _pg.DESK_D_CM != dd:
+        _pg.refresh_desk_dims(dw, dd)
+        changed = True
+    if _pg.CABINET_W_CM != cw or _pg.CABINET_D_CM != cd:
+        _pg.refresh_cabinet_dims(cw, cd)
+        changed = True
+    if changed:
+        from olm.core.catalogue_matcher import rebuild_block_registry
+        rebuild_block_registry()
+        invalidate_block_cache()
+
+
 def get_config() -> dict:
     """Return full config dict augmented with olm_version and dev_mode.
 
@@ -205,6 +233,7 @@ def get_config() -> dict:
     from olm import __version__
     from olm.core import app_config
     app_config.reload_if_changed()
+    _sync_runtime_dims()
     cfg = dict(app_config._cfg)
     cfg["olm_version"] = __version__
     cfg["dev_mode"] = _DEV_MODE
