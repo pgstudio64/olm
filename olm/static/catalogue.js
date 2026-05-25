@@ -255,8 +255,10 @@ function _patternExtent(p) {
 // Educational fit-status line shown on every card. Category from fit_class
 // (matches the border colour); amounts from the real footprint vs the
 // pattern's declared room. Clickable → pattern.footprint diagnostic.
-function _cardFitStatusHtml(p, fitClass) {
-  if (typeof computePatternFootprint !== "function") return "";
+// Fit-status data (category + label), shared by the HTML card and the PNG
+// export. Returns null when footprint computation is unavailable.
+function _cardFitStatus(p, fitClass) {
+  if (typeof computePatternFootprint !== "function") return null;
   var roomW = p.room_width_cm || 0;
   var roomD = p.room_depth_cm || 0;
   var fp = computePatternFootprint(p);
@@ -280,8 +282,229 @@ function _cardFitStatusHtml(p, fitClass) {
       ? "Exact fit"
       : "Room to spare: " + spareW + " × " + spareD + " cm";
   }
-  return '<div class="' + cls + '" title="Click for footprint details">' +
-    label + '</div>';
+  return { cls: cls, label: label };
+}
+
+function _cardFitStatusHtml(p, fitClass) {
+  var s = _cardFitStatus(p, fitClass);
+  if (!s) return "";
+  return '<div class="' + s.cls + '" title="Click for footprint details">' +
+    s.label + '</div>';
+}
+
+// Card metadata (counts + standard + dims), shared by card view and export.
+function _cardMeta(p) {
+  var nDesks = 0, nBlocks = 0;
+  (p.rows || []).forEach(function(r) {
+    (r.blocks || []).forEach(function(b) {
+      nBlocks++;
+      nDesks += countDesksInBlock(b.type) || 0;
+    });
+  });
+  return {
+    nDesks: nDesks,
+    nBlocks: nBlocks,
+    std: getStdLabel(p.standard) || "?",
+    w: p.room_width_cm || "?",
+    d: p.room_depth_cm || "?",
+  };
+}
+
+// ── PNG export of the catalogue card view ────────────────────────────────
+// Renders the whole catalogue as one large SVG grid (6 columns, white
+// background) reusing renderPatternMiniSvg + the card helpers, then
+// rasterises it to a PNG download. Pure browser APIs (works offline).
+
+function _xmlEsc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Layout constants (px) for the exported PNG card grid.
+var PNG_COLS = 6;
+var PNG_THUMB = 200;     // square miniature box
+var PNG_PAD = 14;        // inner card padding
+var PNG_GAP = 16;        // gap between cards
+var PNG_OUTER = 24;      // image margin
+var PNG_HEADER = 40;     // top title band
+var PNG_TEXT_H = 84;     // text block height (4 lines)
+// Card wider than the thumbnail so the info/scoring/fit lines fit; the
+// miniature is centered in the upper part.
+var PNG_CARD_W = 300;
+var PNG_THUMB_X = (PNG_CARD_W - PNG_THUMB) / 2;
+var PNG_TEXT_W = PNG_CARD_W - PNG_PAD * 2;   // available width for text lines
+var PNG_CARD_H = PNG_PAD + PNG_THUMB + 8 + PNG_TEXT_H + PNG_PAD;
+var PNG_FIT_COLOR = {
+  "card-fit-ok": "#2e7d32",
+  "card-fit-tight": "#b8860b",
+  "card-fit-overflow": "#c0392b",
+};
+var PNG_BORDER_COLOR = { ok: "#2e7d32", tolere: "#b8860b", reject: "#c0392b" };
+
+// One SVG <text> line; squished to maxW (via textLength) only when the
+// estimated monospace width would overflow, so no line ever exceeds the card.
+function _pngTextSvg(x, y, text, fontSize, color, bold, maxW) {
+  var est = String(text).length * fontSize * 0.6;
+  var fit = (maxW && est > maxW)
+    ? ' textLength="' + Math.round(maxW) + '" lengthAdjust="spacingAndGlyphs"'
+    : '';
+  return '<text x="' + x + '" y="' + y + '" fill="' + color +
+    '" font-size="' + fontSize + '"' + (bold ? ' font-weight="bold"' : '') +
+    ' font-family="monospace"' + fit + '>' + _xmlEsc(text) + '</text>';
+}
+
+function _pngCardSvg(p, idx, extByPattern, miniFloorCm) {
+  var fitClass = p.fit_class || "ok";
+  var bc = PNG_BORDER_COLOR[fitClass] || "#cccccc";
+  var parts = [];
+  // Card frame.
+  parts.push('<rect x="0.5" y="0.5" width="' + (PNG_CARD_W - 1) +
+    '" height="' + (PNG_CARD_H - 1) + '" rx="6" fill="#fafafa" stroke="' +
+    bc + '" stroke-width="2"/>');
+
+  // Miniature: centered & capped in the thumb box (same rule as the cards).
+  var ext = extByPattern.get(p);
+  var patExtCm = Math.max(ext.xMax - ext.xMin, ext.yMax - ext.yMin)
+    * (1 + MINI_VIEWBOX_BREATH * 2);
+  var viewBoxCm = Math.max(patExtCm, miniFloorCm);
+  var scale = PNG_THUMB / viewBoxCm;
+  var offX = scale * (viewBoxCm / 2 - (ext.xMin + ext.xMax) / 2);
+  var offY = scale * (viewBoxCm / 2 - (ext.yMin + ext.yMax) / 2);
+  var clipId = "pngclip" + idx;
+  parts.push('<clipPath id="' + clipId + '"><rect x="' + PNG_THUMB_X + '" y="' +
+    PNG_PAD + '" width="' + PNG_THUMB + '" height="' + PNG_THUMB + '"/></clipPath>');
+  // Clip on an OUTER group (card-local coords) and translate on an INNER group:
+  // a userSpaceOnUse clip on the same element as the transform would be
+  // resolved AFTER the transform (double-offset → the bbox gets truncated).
+  parts.push('<g clip-path="url(#' + clipId + ')">');
+  parts.push('<g transform="translate(' + PNG_THUMB_X + ',' + PNG_PAD + ')">');
+  parts.push(renderPatternMiniSvg(p, scale, offX, offY, { noLabels: true }));
+  parts.push('</g>');
+  parts.push('</g>');
+
+  // Text block (dark text on white); each line squished to fit the card.
+  var meta = _cardMeta(p);
+  var tx = PNG_PAD;
+  var ty = PNG_PAD + PNG_THUMB + 8;
+  parts.push(_pngTextSvg(tx, ty + 14, p.name || "Unnamed", 14, "#111111",
+    true, PNG_TEXT_W));
+  parts.push(_pngTextSvg(tx, ty + 32,
+    meta.nDesks + ' desks · ' + meta.nBlocks + ' blocks · ' +
+    meta.std + ' · ' + meta.w + 'x' + meta.d, 12, "#444444", false, PNG_TEXT_W));
+  var sc = computePatternScoring(p);
+  if (sc.nDesks > 0) {
+    parts.push(_pngTextSvg(tx, ty + 50, scoringText(sc), 12, "#1565c0",
+      false, PNG_TEXT_W));
+  }
+  var fit = _cardFitStatus(p, fitClass);
+  if (fit) {
+    var fcolor = PNG_FIT_COLOR[fit.cls.split(" ").pop()] || "#333333";
+    parts.push(_pngTextSvg(tx, ty + 68, fit.label, 12, fcolor, false,
+      PNG_TEXT_W));
+  }
+  return parts.join("");
+}
+
+function exportCatalogueToPng() {
+  if (!catalogueData || !catalogueData.length) {
+    if (typeof alertModal === "function") alertModal("Catalogue is empty.");
+    return;
+  }
+  // Whole catalogue, sorted like the card view (width, depth, name).
+  var patterns = catalogueData.slice().sort(function(a, b) {
+    var wa = (a.room_width_cm || 0) - (b.room_width_cm || 0);
+    if (wa !== 0) return wa;
+    var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
+    if (da !== 0) return da;
+    return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
+  });
+
+  // Capped miniature scale (same rule as renderCatalogue) over ALL patterns.
+  var extByPattern = new Map();
+  var maxExtentCm = 1;
+  patterns.forEach(function(p) {
+    var e = _patternExtent(p);
+    extByPattern.set(p, e);
+    maxExtentCm = Math.max(maxExtentCm, e.xMax - e.xMin, e.yMax - e.yMin);
+  });
+  var miniSideCm = maxExtentCm * (1 + MINI_VIEWBOX_BREATH * 2);
+  var miniFloorCm = miniSideCm / MINI_MAX_ZOOM;
+
+  var rows = Math.ceil(patterns.length / PNG_COLS);
+  var imgW = PNG_OUTER * 2 + PNG_COLS * PNG_CARD_W + (PNG_COLS - 1) * PNG_GAP;
+  var imgH = PNG_OUTER * 2 + PNG_HEADER + rows * PNG_CARD_H
+    + (rows - 1) * PNG_GAP;
+
+  var parts = [];
+  parts.push('<rect x="0" y="0" width="' + imgW + '" height="' + imgH +
+    '" fill="#ffffff"/>');
+  parts.push('<text x="' + PNG_OUTER + '" y="' + (PNG_OUTER + 22) +
+    '" fill="#111111" font-size="22" font-weight="bold" font-family="monospace">' +
+    'Pattern catalogue — ' + patterns.length + ' pattern(s)</text>');
+
+  patterns.forEach(function(p, i) {
+    var col = i % PNG_COLS, row = Math.floor(i / PNG_COLS);
+    var cx = PNG_OUTER + col * (PNG_CARD_W + PNG_GAP);
+    var cy = PNG_OUTER + PNG_HEADER + row * (PNG_CARD_H + PNG_GAP);
+    parts.push('<g transform="translate(' + cx + ',' + cy + ')">' +
+      _pngCardSvg(p, i, extByPattern, miniFloorCm) + '</g>');
+  });
+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + imgW +
+    '" height="' + imgH + '" viewBox="0 0 ' + imgW + ' ' + imgH + '">' +
+    parts.join("") + '</svg>';
+
+  // Show the result in the preview lightbox first; the user downloads from
+  // there (mirrors the floor-plan export preview).
+  _svgToPngBlob(svg, imgW, imgH, function(blob) {
+    if (!blob) {
+      if (typeof alertModal === "function") alertModal("PNG export failed.");
+      return;
+    }
+    var blobUrl = URL.createObjectURL(blob);
+    var tmp = new Image();
+    tmp.onload = function() {
+      if (typeof window.openPreviewLightbox === "function") {
+        window.openPreviewLightbox(blobUrl, tmp.naturalWidth, tmp.naturalHeight,
+          { downloadName: "catalogue_cards.png", title: "Catalogue preview" });
+      } else {
+        var a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = "catalogue_cards.png";
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+    tmp.onerror = function() {
+      URL.revokeObjectURL(blobUrl);
+      if (typeof alertModal === "function") alertModal("Failed to decode PNG.");
+    };
+    tmp.src = blobUrl;
+  });
+}
+
+// Rasterise an SVG string to a PNG Blob via an offscreen canvas. Supersamples
+// for crispness while staying within canvas dimension limits. Pure browser
+// APIs (no external resources → canvas not tainted → toBlob works offline).
+function _svgToPngBlob(svgString, w, h, cb) {
+  var ss = 2;
+  if (w * ss > 16000 || h * ss > 16000) ss = 1;
+  var img = new Image();
+  img.onload = function() {
+    var canvas = document.createElement("canvas");
+    canvas.width = w * ss;
+    canvas.height = h * ss;
+    var ctx = canvas.getContext("2d");
+    ctx.setTransform(ss, 0, 0, ss, 0, 0);
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob(function(blob) { cb(blob); }, "image/png");
+  };
+  img.onerror = function() {
+    if (typeof alertModal === "function") alertModal("PNG export failed (SVG render).");
+    cb(null);
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
 }
 
 function renderCatalogue() {
@@ -330,17 +553,12 @@ function renderCatalogue() {
   // grouping). The sort above keeps similar depths/widths visually adjacent.
   var html = "";
   filtered.forEach(function(p) {
-      var nDesks = 0;
-      var nBlocks = 0;
-      (p.rows || []).forEach(function(r) {
-        (r.blocks || []).forEach(function(b) {
-          nBlocks++;
-          nDesks += countDesksInBlock(b.type) || 0;
-        });
-      });
-      var std = getStdLabel(p.standard) || "?";
-      var w = p.room_width_cm || "?";
-      var d = p.room_depth_cm || "?";
+      var meta = _cardMeta(p);
+      var nDesks = meta.nDesks;
+      var nBlocks = meta.nBlocks;
+      var std = meta.std;
+      var w = meta.w;
+      var d = meta.d;
 
       var fitClass = p.fit_class || "ok";
       var cardClass = "catalogue-card" +

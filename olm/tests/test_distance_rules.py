@@ -19,10 +19,14 @@ def _classify_gap_side(face):
     return "other"
 
 
-def _gap_side_emprise(side_type, spacing):
-    """Reserved cm for one side."""
+def _gap_side_emprise(side_type, spacing, passage):
+    """Reserved cm for one side.
+
+    D-312: in a passage, slip-in is not cumulated with walking.
+    """
     if side_type == "chair":
-        return spacing["chair_clearance_cm"] + spacing["slip_in_margin_cm"]
+        chair = spacing["chair_clearance_cm"]
+        return chair if passage else chair + spacing["slip_in_margin_cm"]
     return 0
 
 
@@ -32,9 +36,9 @@ def analyze_gap(raw_dist_cm, face_a, face_b, spacing, opts=None):
         return {"color": "#c8a050", "marge": raw_dist_cm}
     side_a = _classify_gap_side(face_a)
     side_b = _classify_gap_side(face_b)
-    emprise_a = _gap_side_emprise(side_a, spacing)
-    emprise_b = _gap_side_emprise(side_b, spacing)
     passage = opts.get("passage", False) if opts else False
+    emprise_a = _gap_side_emprise(side_a, spacing, passage)
+    emprise_b = _gap_side_emprise(side_b, spacing, passage)
     walking = spacing["walking_margin_cm"] if passage else 0
     requis = emprise_a + emprise_b + walking
     marge = raw_dist_cm - requis
@@ -68,33 +72,32 @@ class TestAnalyzeGapPassageTrue:
     """Gaps with passage=True (walking margin added)."""
 
     def test_two_chairs_face_to_face_green(self):
-        """290 cm between two chair faces, passage: plenty of room."""
-        # requis = 100 + 100 + 90 = 290, marge = 0 => amber (±tol)
-        # Try 300 => marge = +10 > tol=5 => green
+        """300 cm between two chair faces, passage: plenty of room."""
+        # D-312: requis = 70 + 70 + 90 = 230, marge = 300 - 230 = 70 => green
         gap = analyze_gap(300, CHAIR_FACE, CHAIR_FACE, SPACING_STD1,
                           {"passage": True})
         assert gap["color"] == "#58c080"
-        assert gap["marge"] == 10
+        assert gap["marge"] == 70
 
     def test_two_chairs_face_to_face_amber(self):
-        """290 cm exactly => marge=0 => amber."""
+        """D-312: 290 cm => requis 230, marge=+60 => green."""
         gap = analyze_gap(290, CHAIR_FACE, CHAIR_FACE, SPACING_STD1,
                           {"passage": True})
-        assert gap["color"] == "#c8a050"
-        assert gap["marge"] == 0
+        assert gap["color"] == "#58c080"
+        assert gap["marge"] == 60
 
     def test_two_chairs_face_to_face_red(self):
-        """270 cm => marge = -20 < -5 => red."""
+        """D-312: 270 cm => requis 230, marge=+40 => green."""
         gap = analyze_gap(270, CHAIR_FACE, CHAIR_FACE, SPACING_STD1,
                           {"passage": True})
-        assert gap["color"] == "#d88080"
-        assert gap["marge"] == -20
+        assert gap["color"] == "#58c080"
+        assert gap["marge"] == 40
 
     def test_chair_vs_wall_passage(self):
-        """Chair facing wall with passage: requis = 100 + 0 + 90 = 190."""
+        """D-312: chair vs wall passage: requis = 70 + 0 + 90 = 160."""
         gap = analyze_gap(200, CHAIR_FACE, WALL, SPACING_STD1,
                           {"passage": True})
-        assert gap["marge"] == 10
+        assert gap["marge"] == 40
         assert gap["color"] == "#58c080"
 
 
@@ -138,8 +141,8 @@ class TestAnalyzeGapEdgeCases:
         """Emprises overlap massively => very negative, red."""
         gap = analyze_gap(50, CHAIR_FACE, CHAIR_FACE, SPACING_STD1,
                           {"passage": True})
-        # requis = 100 + 100 + 90 = 290, marge = 50 - 290 = -240
-        assert gap["marge"] == -240
+        # D-312: requis = 70 + 70 + 90 = 230, marge = 50 - 230 = -180
+        assert gap["marge"] == -180
         assert gap["color"] == "#d88080"
 
     def test_no_spacing_fallback(self):

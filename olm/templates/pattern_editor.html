@@ -540,6 +540,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <button class="btn" id="fpBtnEditPattern" title="Open this pattern in the editor to add a variant to the catalogue" disabled>Add pattern</button>
               <button class="btn" id="fpBtnAdjustLayout" title="Amend layout in room" disabled>Amend layout</button>
               <button class="btn" id="fpBtnDiscard" style="display:none;" title="Revert to original matching result">Revert amendment</button>
+              <button class="btn btn-toolbar dev-only dev-ctrl" id="fpBtnDiag" style="background:var(--surface);opacity:0.7;" title="Diagnostic: why does this room get N candidates?">Diag</button>
             </td>
           </tr></table>
         </div>
@@ -799,6 +800,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <button class="view-toggle" id="btnCatExport" title="Export catalogue">&#x2B06; Export &#x25BE;</button>
         <div id="catExportMenu" style="display:none;position:absolute;top:100%;right:0;z-index:100;min-width:220px;background:var(--surface2);border:1px solid var(--border);padding:2px 0;">
           <button class="btn" id="btnCatExportFile" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to file (.json)</button>
+          <button class="btn" id="btnCatExportPng" style="display:block;width:100%;text-align:left;border:none;padding:4px 12px;">Export to PNG (card view)</button>
           <button class="btn" id="btnCatSaveAsDefault" style="display:none;width:100%;text-align:left;border:none;padding:4px 12px;">Save as default catalogue</button>
         </div>
       </div>

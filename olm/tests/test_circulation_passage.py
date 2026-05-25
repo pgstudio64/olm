@@ -19,10 +19,10 @@ import pytest
 
 _RUNNER = Path(__file__).parent / "js" / "circulation" / "circulation_runner.js"
 
-# Couleur attendue côté chaise selon la largeur de couloir (cm) :
-# 90/130 -> RED (couloir < emprise chaise 90 + walking 70 = 160),
-# 160 -> AMBER (= 160), 200 -> GREEN (> 160).
-_COLOR_BY_WIDTH = {90: "RED", 130: "RED", 160: "AMBER", 200: "GREEN"}
+# D-312: couleur attendue cote chaise selon la largeur de couloir (cm).
+# Passage => emprise chaise = chair_clearance (70), requis = 70 + walking 70 = 140.
+# 90/130 -> RED (< 140 - tol), 160/200 -> GREEN (>= 140 + tol).
+_COLOR_BY_WIDTH = {90: "RED", 130: "RED", 160: "GREEN", 200: "GREEN"}
 
 _SIDE_BLOCKS = ("BLOCK_2_SIDE", "BLOCK_3_SIDE")
 _FACE_BLOCKS = ("BLOCK_4_FACE", "BLOCK_6_FACE")
@@ -98,6 +98,7 @@ def test_stacked_back_not_passage(results):
     e = results[("STACKED_BLOCK_1", 160, "west", "back")]
     assert e["prod"] is False
     assert e["color"] == "GREEN"
+    # D-312: dead-end emprise = chair(70) + slip(20) = 90, marge = 160 - 90 = 70
     assert e["marge"] == 70
 
 
@@ -105,24 +106,28 @@ def test_stacked_front_is_passage(results):
     """STACKED 2x BLOCK_1 : desk PROCHE (front) = trafic vers le fond, passage."""
     e = results[("STACKED_BLOCK_1", 160, "west", "front")]
     assert e["prod"] is True
-    assert e["color"] == "AMBER"
-    assert e["marge"] == 0
+    # D-312: passage emprise = chair(70), requis = 70 + walking(70) = 140,
+    # marge = 160 - 140 = 20 => GREEN
+    assert e["color"] == "GREEN"
+    assert e["marge"] == 20
 
 
 def test_stacked3_front_is_passage(results):
     """STACKED3 3x BLOCK_1 : desk PROCHE (front) = passage (trafic vers mid+back)."""
     e = results[("STACKED3_BLOCK_1", 160, "west", "front")]
     assert e["prod"] is True
-    assert e["color"] == "AMBER"
-    assert e["marge"] == 0
+    # D-312: passage => requis 140, marge = 160 - 140 = 20 => GREEN
+    assert e["color"] == "GREEN"
+    assert e["marge"] == 20
 
 
 def test_stacked3_mid_is_passage(results):
     """STACKED3 3x BLOCK_1 : desk MILIEU (mid) = passage (trafic vers back)."""
     e = results[("STACKED3_BLOCK_1", 160, "west", "mid")]
     assert e["prod"] is True
-    assert e["color"] == "AMBER"
-    assert e["marge"] == 0
+    # D-312: passage => requis 140, marge = 160 - 140 = 20 => GREEN
+    assert e["color"] == "GREEN"
+    assert e["marge"] == 20
 
 
 def test_stacked3_back_not_passage(results):
@@ -130,6 +135,7 @@ def test_stacked3_back_not_passage(results):
     e = results[("STACKED3_BLOCK_1", 160, "west", "back")]
     assert e["prod"] is False
     assert e["color"] == "GREEN"
+    # D-312: dead-end emprise = chair(70) + slip(20) = 90, marge = 160 - 90 = 70
     assert e["marge"] == 70
 
 
@@ -137,7 +143,8 @@ def test_two_columns_end_of_corridor(results):
     """Deux colonnes : colB_front (proche porte) = passage, colB_back (fond) = non."""
     front = results[("TWOCOL_BLOCK_1", 160, "west", "colB_front")]
     assert front["prod"] is True, "colB front devrait être passage (trafic vers back)"
-    assert front["color"] == "AMBER"
+    # D-312: passage => requis 140, marge = 160 - 140 = 20 => GREEN
+    assert front["color"] == "GREEN"
     back = results[("TWOCOL_BLOCK_1", 160, "west", "colB_back")]
     assert back["prod"] is False, "colB back = bout du couloir, non-passage"
     assert back["color"] == "GREEN"

@@ -1,8 +1,10 @@
 "use strict";
 
-// D-257: signed-margin model for distance coloring.
+// D-257 + D-312: signed-margin model for distance coloring.
 // Each gap's margin = rawDist - emprise(A) - emprise(B) - walking (if passage).
-// Emprise chair side = chair_clearance_cm + slip_in_margin_cm (from spacing).
+// Emprise chair side:
+//   - passage (Dijkstra traversal): chair_clearance_cm only (AFNOR fig 8/9).
+//   - dead-end (no passage): chair_clearance_cm + slip_in_margin_cm (AFNOR fig 7).
 // Emprise non-chair/wall = 0.
 // Passage = determined by Dijkstra (caller provides opts.passage boolean).
 // Tolerance = spacing.distance_tolerance_cm (per standard, default 5).
@@ -27,13 +29,19 @@ function classifyGapSide(faceInfo) {
 /**
  * Compute the emprise (reserved space) for one side of a gap.
  *
+ * D-312: in a passage, slip-in is not cumulated with walking
+ * (seated person does not stand while someone walks by — AFNOR fig 8/9).
+ * In a dead-end, slip-in is required to access the seat (AFNOR fig 7).
+ *
  * @param {{type: string}} side - Output of classifyGapSide.
  * @param {object} spacing - CURRENT_SPACING object.
+ * @param {boolean} passage - Whether this gap is a passage.
  * @returns {number} Reserved cm for this side.
  */
-function _gapSideEmprise(side, spacing) {
+function _gapSideEmprise(side, spacing, passage) {
   if (side.type === "chair") {
-    return (spacing.chair_clearance_cm || 0) + (spacing.slip_in_margin_cm || 0);
+    var chair = spacing.chair_clearance_cm || 0;
+    return passage ? chair : chair + (spacing.slip_in_margin_cm || 0);
   }
   return 0;
 }
@@ -68,9 +76,9 @@ function analyzeGap(rawDistCm, faceA, faceB, spacing, opts) {
   }
   var sideA = classifyGapSide(faceA);
   var sideB = classifyGapSide(faceB);
-  var empriseA = _gapSideEmprise(sideA, spacing);
-  var empriseB = _gapSideEmprise(sideB, spacing);
   var passage = opts && opts.passage;
+  var empriseA = _gapSideEmprise(sideA, spacing, passage);
+  var empriseB = _gapSideEmprise(sideB, spacing, passage);
   var walking = passage ? (spacing.walking_margin_cm || 0) : 0;
   var requis = empriseA + empriseB + walking;
   var marge = rawDistCm - requis;

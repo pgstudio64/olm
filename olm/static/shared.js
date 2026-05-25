@@ -631,10 +631,15 @@ function computePatternScoring(p) {
   return { nDesks: nDesks, m2pp: m2pp, freePct: freePct, minPassageCm: minPassageCm };
 }
 
+// Plain-text scoring summary (shared by HTML cards and the PNG export).
+function scoringText(sc) {
+  return sc.m2pp.toFixed(1) + ' m²/d' +
+    ' · min passage ' + sc.minPassageCm + ' cm';
+}
+
 function scoringHtml(sc) {
   if (sc.nDesks === 0) return "";
-  return '<span style="color:var(--accent2);">' + sc.m2pp.toFixed(1) + ' m\u00b2/d' +
-    ' · min passage ' + sc.minPassageCm + ' cm</span>';
+  return '<span style="color:var(--accent2);">' + scoringText(sc) + '</span>';
 }
 
 // D-257: catalogue cards wrapper — returns {color, marge} for gap coloring.

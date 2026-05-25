@@ -855,6 +855,10 @@ async function init() {
 
   // -- Export actions --
   _bindPair(["btnCatExportFile"], _catExportFile);
+  _bindPair(["btnCatExportPng"], function() {
+    _hideAllCatMenus();
+    if (typeof exportCatalogueToPng === "function") exportCatalogueToPng();
+  });
   _bindPair(["btnCatSaveAsDefault"], _catSaveAsDefault);
 
   // -- Import from file --

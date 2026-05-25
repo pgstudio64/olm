@@ -792,6 +792,11 @@ def _apply_feature_constraints(
     Full-width features (offset=0, width=face_length) are treated as
     extensible: they shrink/expand with the room and do not block fit.
 
+    D-314: only openings/doors are placement constraints (they need wall
+    width and create exclusion zones). Windows are a *preference* (desks
+    near windows score higher via _compute_dim_light), never a constraint —
+    so room_windows is excluded here.
+
     Returns:
         (adjusted_width, adjusted_depth, warnings)
     """
@@ -799,7 +804,7 @@ def _apply_feature_constraints(
     room_w = pattern.get("room_width_cm", 0)
     room_d = pattern.get("room_depth_cm", 0)
 
-    for feature_key in ("room_windows", "room_openings"):
+    for feature_key in ("room_openings",):
         for feat in pattern.get(feature_key, []):
             face = feat.get("face", "")
             offset = feat.get("offset_cm", 0)

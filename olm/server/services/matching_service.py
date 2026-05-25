@@ -12,6 +12,8 @@ from olm.core.catalogue_matcher import (
     best_pattern_per_standard,
     candidate_category,
     compute_desk_positions,
+    diagnose_room,
+    effective_dimensions,
     filter_and_rank_candidates,
     match_room,
     max_working_desks,
@@ -275,3 +277,63 @@ def coverage_report(data: dict) -> dict:
     catalogue = load_catalogue()
     report = analyse_coverage(rooms, catalogue)
     return report_to_dict(report)
+
+
+# ---------------------------------------------------------------------------
+# Diagnose candidates (office.candidates diag)
+# ---------------------------------------------------------------------------
+
+
+def diagnose_candidates(data: dict) -> dict:
+    """Run diagnostic pipeline for a single room.
+
+    Returns room_context (server-side fields), step_counts, and
+    per-pattern verdicts.
+
+    Args:
+        data: dict with ``room`` (single room, same format as
+            in /api/floor-plan/match).
+
+    Returns:
+        ``{"room_context": {...}, "step_counts": {...},
+          "patterns": [...]}``.
+
+    Raises:
+        ValueError: if ``room`` is missing.
+    """
+    if not data or "room" not in data:
+        raise ValueError("Required field: room")
+
+    from olm.core.app_config import get_current_standard, get_matching
+
+    room_json = data["room"]
+    room = room_from_json(room_json)
+    catalogue = load_catalogue()
+
+    matching_cfg = get_matching()
+    removal_pct = matching_cfg.get("passage_removal_margin_pct", 20)
+
+    result = diagnose_room(catalogue, room, removal_pct)
+
+    ew, ed = effective_dimensions(room)
+    doors = [o for o in room.openings if o.has_door]
+    passages = [o for o in room.openings if not o.has_door]
+
+    room_context = {
+        "name": room.name,
+        "width_cm": room.width_cm,
+        "depth_cm": room.depth_cm,
+        "effective_width_cm": ew,
+        "effective_depth_cm": ed,
+        "current_standard": get_current_standard(),
+        "n_windows": len(room.windows),
+        "n_doors": len(doors),
+        "n_passages": len(passages),
+        "n_exclusion_zones": len(room.exclusion_zones),
+    }
+
+    return {
+        "room_context": room_context,
+        "step_counts": result["step_counts"],
+        "patterns": result["patterns"],
+    }

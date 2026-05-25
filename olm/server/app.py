@@ -1173,6 +1173,19 @@ def api_coverage():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/office/diagnose", methods=["POST"])
+def api_office_diagnose():
+    """Diagnostic pipeline for a single room (office.candidates diag)."""
+    from olm.server.services.matching_service import diagnose_candidates
+    try:
+        return jsonify(diagnose_candidates(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("office diagnose failed")
+        return jsonify({"error": str(e)}), 500
+
+
 # ===================================================================
 # E-bis — Export
 # ===================================================================

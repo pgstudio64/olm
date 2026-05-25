@@ -200,5 +200,6 @@
   "UX: padding-top colonnes 20→22px": "UX: columns padding-top 20→22px",
   "UX: padding-top colonnes 32px→20px": "UX: columns padding-top 32px→20px",
   "Fix: Focus room shows ONLY selected room + seeds/rays": "Fix: Focus room shows ONLY selected room + seeds/rays",
-  "v0.5.70 — vague circulation/liste 3 catégories + zones d'ouverture + ergonomie (D-301→D-310)": "v0.5.70 — 3-category candidate list + opening forbidden zones + ergonomics (D-301->D-310)"
+  "v0.5.70 — vague circulation/liste 3 catégories + zones d'ouverture + ergonomie (D-301→D-310)": "v0.5.70 — 3-category candidate list + opening forbidden zones + ergonomics (D-301->D-310)",
+  "v0.5.71 — export PNG card view + diag Office (D-313) + slip/walking (D-312) + fenêtres préférence (D-314)": "v0.5.71 — card view PNG export + Office diag (D-313) + slip/walking rule (D-312) + windows preference (D-314)"
 }

@@ -365,3 +365,148 @@ OLM_DIAGS.register("perf.transition", function () {
     ],
   };
 });
+
+
+// ========== DIAG: office.candidates (async — server-side) ==========
+// Fetches /api/office/diagnose for the current room and renders
+// room_context + step_counts + per-pattern table in diagModal.
+
+/**
+ * Run the office.candidates diagnostic for a room.
+ *
+ * @param {Object} room - The client-side room object (fpCurrent()).
+ * @param {Function} buildApiRoom - Function to build the API payload.
+ */
+OLM_DIAGS.runOfficeDiag = function (room, buildApiRoom) {
+  if (!room) {
+    alertModal("No room selected.");
+    return;
+  }
+  var apiRoom = buildApiRoom(room);
+  fetch("/api/office/diagnose", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room: apiRoom }),
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (data) {
+    if (data.error) {
+      alertModal("Diag error: " + data.error);
+      return;
+    }
+    var result = _buildOfficeDiagResult(data, room);
+    OLM_DIAGS.renderModal(result);
+  })
+  .catch(function (e) {
+    alertModal("Diag network error: " + e.message);
+  });
+};
+
+
+function _buildOfficeDiagResult(data, room) {
+  var ctx = data.room_context || {};
+  var counts = data.step_counts || {};
+  var patterns = data.patterns || [];
+
+  // Overall verdict.
+  var kept = counts.kept || 0;
+  var verdict = kept > 0 ? "ok" : "error";
+  var summary = kept + " candidate(s) kept out of "
+    + (counts.total_catalogue || 0) + " in catalogue";
+
+  var sections = [];
+
+  // --- Section 1: Room context (server + client fields) ---
+  var ctxRows = [
+    { label: "Name", value: ctx.name || "(unnamed)" },
+    { label: "Dimensions", value: ctx.width_cm + " x " + ctx.depth_cm + " cm" },
+    { label: "Effective dims", value: ctx.effective_width_cm + " x "
+      + ctx.effective_depth_cm + " cm",
+      status: (ctx.effective_width_cm < ctx.width_cm
+        || ctx.effective_depth_cm < ctx.depth_cm) ? "warning" : "ok" },
+    { label: "Current standard", value: ctx.current_standard || "(none)" },
+    { label: "Windows", value: String(ctx.n_windows) },
+    { label: "Doors", value: String(ctx.n_doors) },
+    { label: "Passages (no door)", value: String(ctx.n_passages) },
+    { label: "Exclusion zones", value: String(ctx.n_exclusion_zones),
+      status: ctx.n_exclusion_zones > 0 ? "warning" : "ok" },
+  ];
+  // Client-only fields.
+  ctxRows.push({
+    label: "corridor_face_abs",
+    value: room.corridor_face_abs || "(none)",
+  });
+  ctxRows.push({
+    label: "saved_layout",
+    value: room.saved_layout ? "yes" : "no",
+    status: room.saved_layout ? "warning" : "ok",
+    note: room.saved_layout ? "room uses saved layout, not re-matched" : "",
+  });
+  ctxRows.push({
+    label: "room_amended",
+    value: room.room_amended ? "yes" : "no",
+  });
+  ctxRows.push({
+    label: "source_mode",
+    value: room.source_mode || "(default)",
+  });
+  sections.push({ title: "Room context", rows: ctxRows });
+
+  // --- Section 2: Pipeline step counts ---
+  var stepRows = [
+    { label: "Total catalogue", value: String(counts.total_catalogue || 0) },
+    { label: "After standard + fit", value: String(counts.after_standard_fit || 0),
+      status: (counts.after_standard_fit || 0) === 0 ? "error" : "ok" },
+    { label: "After adapt / overflow", value: String(counts.after_adapt || 0),
+      status: (counts.after_adapt || 0) === 0 && (counts.after_standard_fit || 0) > 0
+        ? "error" : "ok" },
+    { label: "After 6bis (reach/passage)", value: String(counts.after_6bis || 0),
+      status: (counts.after_6bis || 0) === 0 && (counts.after_adapt || 0) > 0
+        ? "error" : "ok" },
+    { label: "After 6ter (dominated)", value: String(counts.after_6ter || 0),
+      status: (counts.after_6ter || 0) === 0 && (counts.after_6bis || 0) > 0
+        ? "warning" : "ok" },
+    { label: "Kept", value: String(kept),
+      status: kept === 0 ? "error" : "ok" },
+  ];
+  sections.push({ title: "Pipeline step counts", rows: stepRows });
+
+  // --- Section 3: Per-pattern table ---
+  var _STATUS_STYLE = {
+    kept: "ok",
+    removed_6ter: "warning",
+    removed_6bis_passage: "warning",
+    removed_6bis_reach: "error",
+    no_fit: "error",
+    hidden: "error",
+    wrong_standard: "error",
+  };
+  var patRows = [];
+  for (var i = 0; i < patterns.length; i++) {
+    var p = patterns[i];
+    var lbl = (p.standard || "?") + "  " + (p.pattern_name || "?");
+    var parts = [p.status || "?"];
+    if (p.fit_class && p.fit_class !== p.status) parts.push("fit:" + p.fit_class);
+    if (p.n_desks != null) parts.push(p.n_desks + "d");
+    if (p.dim_reachability != null) parts.push("reach:" + p.dim_reachability);
+    if (p.min_passage_cm != null) parts.push("pass:" + p.min_passage_cm + "cm");
+    if (p.passage_grade) parts.push("grade:" + p.passage_grade);
+    if (p.category) parts.push("cat:" + p.category);
+    patRows.push({
+      label: lbl,
+      value: parts.join(" | "),
+      status: _STATUS_STYLE[p.status] || undefined,
+    });
+  }
+  if (!patRows.length) {
+    patRows.push({ label: "No patterns in catalogue", value: "-" });
+  }
+  sections.push({ title: "Patterns (" + patterns.length + ")", rows: patRows });
+
+  return {
+    name: "office.candidates",
+    verdict: verdict,
+    summary: summary,
+    sections: sections,
+  };
+}

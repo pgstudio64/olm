@@ -281,16 +281,21 @@
   }
 
   // Save to disk via server endpoint.
+  var _saveFlashTimer = null;
   function _flashSaveBtn(text, color) {
     var btn = document.getElementById('btnSavePlan');
     if (!btn) return;
-    var orig = btn.textContent;
-    var origColor = btn.style.color;
+    // Capture the resting label once. Overlapping flashes (e.g. a second save
+    // within the 2 s window) must NOT restore a transient "Saved"/green state
+    // as if it were the baseline — otherwise the button stays green.
+    if (btn.dataset.restText === undefined) btn.dataset.restText = btn.textContent;
+    if (_saveFlashTimer) clearTimeout(_saveFlashTimer);
     btn.textContent = text;
     btn.style.color = color || '';
-    setTimeout(function () {
-      btn.textContent = orig;
-      btn.style.color = origColor;
+    _saveFlashTimer = setTimeout(function () {
+      btn.textContent = btn.dataset.restText;
+      btn.style.color = '';
+      _saveFlashTimer = null;
     }, 2000);
   }
 

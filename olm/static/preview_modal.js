@@ -81,6 +81,15 @@
   btnFit.textContent = 'Fit';
   btnFit.title = 'Fit to viewport';
 
+  // Optional download button — shown only when openPreviewLightbox is called
+  // with a downloadName (lets the user save the previewed image).
+  var btnDownload = document.createElement('button');
+  btnDownload.className = 'btn preview-lightbox-btn';
+  btnDownload.textContent = '⬇ Download';
+  btnDownload.title = 'Download image';
+  btnDownload.style.display = 'none';
+  var _downloadName = null;
+
   var btnClose = document.createElement('button');
   btnClose.className = 'btn preview-lightbox-btn preview-lightbox-close';
   btnClose.textContent = '\u2715'; // multiplication sign (x)
@@ -90,6 +99,7 @@
   controls.appendChild(zoomLabel);
   controls.appendChild(btnZoomIn);
   controls.appendChild(btnFit);
+  controls.appendChild(btnDownload);
   controls.appendChild(btnClose);
 
   header.appendChild(title);
@@ -156,6 +166,13 @@
   btnZoomIn.addEventListener('click', function () { _zoomCenter(ZOOM_BUTTON_FACTOR); });
   btnZoomOut.addEventListener('click', function () { _zoomCenter(1 / ZOOM_BUTTON_FACTOR); });
   btnFit.addEventListener('click', function () { _fitToViewport(); });
+  btnDownload.addEventListener('click', function () {
+    if (!_blobUrl || !_downloadName) return;
+    var a = document.createElement('a');
+    a.href = _blobUrl;
+    a.download = _downloadName;
+    a.click();
+  });
   btnClose.addEventListener('click', function () { _close(); });
 
   // Click on backdrop (viewport outside image) closes — but not after a pan
@@ -270,8 +287,10 @@
    * @param {string} blobUrl — URL.createObjectURL result
    * @param {number} imgW — natural image width in pixels
    * @param {number} imgH — natural image height in pixels
+   * @param {object} [opts] — { downloadName, title } to enable the Download
+   *   button (saves the previewed blob) and override the header title.
    */
-  window.openPreviewLightbox = function (blobUrl, imgW, imgH) {
+  window.openPreviewLightbox = function (blobUrl, imgW, imgH, opts) {
     // Revoke previous URL if any
     if (_blobUrl) {
       URL.revokeObjectURL(_blobUrl);
@@ -279,6 +298,10 @@
     _blobUrl = blobUrl;
     _imgW = imgW;
     _imgH = imgH;
+
+    _downloadName = (opts && opts.downloadName) || null;
+    btnDownload.style.display = _downloadName ? '' : 'none';
+    title.textContent = (opts && opts.title) || 'Preview';
 
     img.src = blobUrl;
     overlay.style.display = '';

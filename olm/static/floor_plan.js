@@ -1405,6 +1405,15 @@
         fpRenderCurrent();
       }
     });
+    // Diag button (dev-mode only, gated by dev-ctrl CSS class).
+    var btnDiag = document.getElementById("fpBtnDiag");
+    if (btnDiag) {
+      btnDiag.addEventListener("click", function () {
+        var room = fpCurrent();
+        OLM_DIAGS.runOfficeDiag(room, _buildApiRoom);
+      });
+    }
+
     var btnExport = document.getElementById("fpBtnExport");
     if (btnExport) btnExport.addEventListener("click", fpExport);
 

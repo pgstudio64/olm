@@ -2079,6 +2079,67 @@ def select_best(scores: list[MatchScore]) -> MatchScore | None:
     return min(scores, key=lambda s: _candidate_sort_key(s, mw))
 
 
+def classify_candidate_status(
+    score: MatchScore,
+    passage_threshold: float | None,
+    max_working_kept: int,
+) -> str:
+    """Classify a candidate's filter status (6bis + 6ter).
+
+    Pure decision function shared by ``filter_and_rank_candidates``
+    (production) and ``diagnose_room`` (diagnostic).
+
+    Checks are applied in pipeline order:
+        1. 6bis reachability (dim_reachability == 0)
+        2. 6bis passage (min_passage_cm < threshold)
+        3. 6ter dominated (too_tight with n_desks <= max_working)
+
+    When called for the 6bis pass only, pass ``max_working_kept=0``
+    so the 6ter guard (``max_working_kept > 0``) is disabled.
+
+    Args:
+        score: Scored candidate.
+        passage_threshold: ``walking_margin * (1 - removal_pct/100)``
+            for the candidate's standard, or None if no config.
+        max_working_kept: Max working desks among 6bis survivors
+            for this standard (0 disables 6ter check).
+
+    Returns:
+        One of ``'kept'``, ``'removed_6bis_reach'``,
+        ``'removed_6bis_passage'``, ``'removed_6ter'``.
+    """
+    if score.dim_reachability == 0:
+        return "removed_6bis_reach"
+    if (passage_threshold is not None
+            and score.min_passage_cm < passage_threshold):
+        return "removed_6bis_passage"
+    cat = candidate_category(score, max_working_kept)
+    if cat == "too_tight" and max_working_kept > 0 and score.n_desks <= max_working_kept:
+        return "removed_6ter"
+    return "kept"
+
+
+def _passage_thresholds(
+    configs: dict, removal_pct: int,
+) -> dict[str, float]:
+    """Compute passage removal thresholds per standard.
+
+    Args:
+        configs: Standard → SpacingConfig lookup.
+        removal_pct: Margin percentage.
+
+    Returns:
+        ``{standard: threshold_cm}``.
+    """
+    thresholds: dict[str, float] = {}
+    for std_key, cfg in configs.items():
+        if cfg:
+            thresholds[std_key] = (
+                cfg.walking_margin_cm * (1 - removal_pct / 100)
+            )
+    return thresholds
+
+
 def filter_and_rank_candidates(
     scores: list[MatchScore],
     removal_pct: int = 20,
@@ -2088,12 +2149,11 @@ def filter_and_rank_candidates(
 
     Pipeline:
         1. Sort by ``_candidate_sort_key`` (max_working per standard).
-        2. **6bis** — remove truly impossible candidates:
-           ``dim_reachability == 0`` (unreachable desk) or
-           ``min_passage_cm < walking_margin * (1 - removal_pct/100)``.
+        2. **6bis** — remove truly impossible candidates via
+           ``classify_candidate_status`` (reachability / passage).
         3. Recalculate ``max_working`` on survivors.
-        4. **6ter** — remove dominated *too_tight* candidates whose
-           ``n_desks <= max_working`` (not worth amending).
+        4. **6ter** — remove dominated *too_tight* candidates via
+           ``classify_candidate_status`` (n_desks <= max_working).
 
     Args:
         scores: All scored candidates (any number of standards).
@@ -2119,16 +2179,15 @@ def filter_and_rank_candidates(
         key=lambda s: _candidate_sort_key(s, mw_by_std[s.standard]),
     )
 
-    # 6bis: remove truly impossible candidates.
+    thresholds = _passage_thresholds(configs, removal_pct)
+
+    # 6bis: remove truly impossible candidates (max_working=0 disables 6ter).
     kept: list[MatchScore] = []
     for s in sorted_scores:
-        if s.dim_reachability == 0:
+        threshold = thresholds.get(s.standard)
+        status = classify_candidate_status(s, threshold, 0)
+        if status != "kept":
             continue
-        std_cfg = configs.get(s.standard)
-        if std_cfg:
-            threshold = std_cfg.walking_margin_cm * (1 - removal_pct / 100)
-            if s.min_passage_cm < threshold:
-                continue
         kept.append(s)
 
     # Recalculate max_working on survivors.
@@ -2143,8 +2202,9 @@ def filter_and_rank_candidates(
     final: list[MatchScore] = []
     for s in kept:
         mw = mw_kept.get(s.standard, 0)
-        cat = candidate_category(s, mw)
-        if cat == "too_tight" and mw > 0 and s.n_desks <= mw:
+        threshold = thresholds.get(s.standard)
+        status = classify_candidate_status(s, threshold, mw)
+        if status == "removed_6ter":
             continue
         final.append(s)
 
@@ -2408,6 +2468,245 @@ def match_room(
         by_standard=by_standard,
         all_scores=all_scores,
     )
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic pipeline (office.candidates diag)
+# ---------------------------------------------------------------------------
+
+# Status ordering from worst (0) to best (6) — used to deduplicate mirrors.
+_STATUS_RANK: dict[str, int] = {
+    "wrong_standard": 0,
+    "hidden": 1,
+    "no_fit": 2,
+    "removed_6bis_reach": 3,
+    "removed_6bis_passage": 4,
+    "removed_6ter": 5,
+    "kept": 6,
+}
+
+
+def diagnose_room(
+    catalogue: list[dict],
+    room: RoomSpec,
+    removal_pct: int = 20,
+) -> dict:
+    """Diagnostic pipeline: same steps as ``match_room`` but captures
+    a per-pattern verdict instead of silently dropping eliminated ones.
+
+    Reuses the same pure functions as the production pipeline — no
+    duplicated logic.
+
+    Args:
+        catalogue: JSON patterns from the catalogue.
+        room: Target room (canonical coordinates).
+        removal_pct: Passage removal margin percentage.
+
+    Returns:
+        ``{"step_counts": {...}, "patterns": [...]}``.
+    """
+    from olm.core.matching_config import oversize_tol_1axis, oversize_tol_2axes
+
+    tol_1 = oversize_tol_1axis()
+    tol_2 = oversize_tol_2axes()
+
+    # Accumulate one entry per (pattern_name, standard). When mirrors
+    # produce two entries with the same key, keep the best status.
+    entries: dict[tuple[str, str], dict] = {}
+    step_survivors: dict[str, set[tuple[str, str]]] = {
+        "after_standard_fit": set(),
+        "after_adapt": set(),
+        "after_6bis": set(),
+        "after_6ter": set(),
+    }
+
+    def _upsert(key: tuple[str, str], entry: dict) -> None:
+        """Keep the entry with the best (highest-rank) status."""
+        prev = entries.get(key)
+        if prev is None or (
+            _STATUS_RANK.get(entry["status"], -1)
+            > _STATUS_RANK.get(prev["status"], -1)
+        ):
+            entries[key] = entry
+
+    # ------------------------------------------------------------------
+    # Phase 1 — standard + fit classification (reuses _classify_fit)
+    # ------------------------------------------------------------------
+    phase1_by_std: dict[str, list[PatternCandidate]] = {}
+
+    for p in catalogue:
+        name = p.get("name", "?")
+        std = p.get("standard", "")
+        key = (name, std)
+        n_desks = count_desks(p)
+
+        if std not in ALL_CONFIGS:
+            _upsert(key, {
+                "pattern_name": name, "standard": std,
+                "status": "wrong_standard", "fit_class": None,
+                "n_desks": n_desks, "overflow_cm": 0.0,
+            })
+            continue
+
+        spacing = ALL_CONFIGS.get(std)
+        cls, overflow = _classify_fit(p, room, spacing, tol_1, tol_2)
+
+        if cls == "hidden":
+            _upsert(key, {
+                "pattern_name": name, "standard": std,
+                "status": "hidden", "fit_class": "hidden",
+                "n_desks": n_desks, "overflow_cm": overflow,
+            })
+            continue
+
+        candidate = PatternCandidate(
+            pattern=p, name=name,
+            room_width_cm=p.get("room_width_cm", 0),
+            room_depth_cm=p.get("room_depth_cm", 0),
+            standard=std, n_desks=n_desks,
+            oversize=(cls != "fitting"),
+            fit_class=cls, overflow_cm=overflow,
+        )
+        phase1_by_std.setdefault(std, []).append(candidate)
+        step_survivors["after_standard_fit"].add(key)
+
+    # ------------------------------------------------------------------
+    # Phase 2 — mirrors + adapt + footprint + score
+    #           (reuses generate_mirrors, adapt_to_room,
+    #            _footprint_within_room, remove_conflicting_desks,
+    #            score_candidate, _pattern_fingerprint)
+    # ------------------------------------------------------------------
+    all_scores: list[MatchScore] = []
+
+    for std, candidates in phase1_by_std.items():
+        with_mirrors = generate_mirrors(candidates)
+        std_cfg = ALL_CONFIGS.get(std)
+        std_walking = std_cfg.walking_margin_cm if std_cfg else 0
+        seen_fps: set[tuple] = set()
+
+        for candidate in with_mirrors:
+            key = (candidate.name, std)
+            try:
+                adapted = adapt_to_room(candidate.pattern, room)
+            except PatternAdaptOverlap:
+                _upsert(key, {
+                    "pattern_name": candidate.name, "standard": std,
+                    "status": "no_fit", "fit_class": candidate.fit_class,
+                    "n_desks": candidate.n_desks,
+                    "overflow_cm": candidate.overflow_cm,
+                })
+                continue
+
+            if not candidate.oversize and not _footprint_within_room(
+                adapted, room, std_cfg,
+            ):
+                _upsert(key, {
+                    "pattern_name": candidate.name, "standard": std,
+                    "status": "no_fit", "fit_class": candidate.fit_class,
+                    "n_desks": candidate.n_desks,
+                    "overflow_cm": candidate.overflow_cm,
+                })
+                continue
+
+            fp = _pattern_fingerprint(adapted)
+            if fp in seen_fps:
+                continue
+            seen_fps.add(fp)
+
+            cleaned, _removed = remove_conflicting_desks(
+                adapted, room, std_walking,
+            )
+            score = score_candidate(
+                cleaned, room, std,
+                oversize=candidate.oversize,
+                fit_class=candidate.fit_class,
+                overflow_cm=candidate.overflow_cm,
+            )
+            all_scores.append(score)
+            step_survivors["after_adapt"].add(key)
+
+    # ------------------------------------------------------------------
+    # Phase 3 — 6bis / 6ter (reuses classify_candidate_status)
+    # ------------------------------------------------------------------
+    thresholds = _passage_thresholds(ALL_CONFIGS, removal_pct)
+
+    # 6bis pass.
+    bis_survivors: list[MatchScore] = []
+    for s in all_scores:
+        key = (s.pattern_name, s.standard)
+        threshold = thresholds.get(s.standard)
+        status = classify_candidate_status(s, threshold, 0)
+        if status != "kept":
+            _upsert(key, {
+                "pattern_name": s.pattern_name, "standard": s.standard,
+                "status": status, "fit_class": s.fit_class,
+                "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
+                "dim_reachability": s.dim_reachability,
+                "min_passage_cm": s.min_passage_cm,
+                "passage_grade": s.passage_grade,
+            })
+            continue
+        bis_survivors.append(s)
+        step_survivors["after_6bis"].add(key)
+
+    # Recompute max_working on 6bis survivors.
+    kept_by_std: dict[str, list[MatchScore]] = {}
+    for s in bis_survivors:
+        kept_by_std.setdefault(s.standard, []).append(s)
+    mw_kept = {
+        std: max_working_desks(ss) for std, ss in kept_by_std.items()
+    }
+
+    # 6ter pass.
+    for s in bis_survivors:
+        key = (s.pattern_name, s.standard)
+        mw = mw_kept.get(s.standard, 0)
+        threshold = thresholds.get(s.standard)
+        status = classify_candidate_status(s, threshold, mw)
+        if status == "removed_6ter":
+            _upsert(key, {
+                "pattern_name": s.pattern_name, "standard": s.standard,
+                "status": "removed_6ter", "fit_class": s.fit_class,
+                "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
+                "dim_reachability": s.dim_reachability,
+                "min_passage_cm": s.min_passage_cm,
+                "passage_grade": s.passage_grade,
+            })
+            continue
+        step_survivors["after_6ter"].add(key)
+        cat = candidate_category(s, mw)
+        _upsert(key, {
+            "pattern_name": s.pattern_name, "standard": s.standard,
+            "status": "kept", "fit_class": s.fit_class,
+            "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
+            "dim_reachability": s.dim_reachability,
+            "min_passage_cm": s.min_passage_cm,
+            "passage_grade": s.passage_grade,
+            "category": cat,
+        })
+
+    # ------------------------------------------------------------------
+    # Assemble result
+    # ------------------------------------------------------------------
+    step_counts = {
+        "total_catalogue": len(catalogue),
+        "after_standard_fit": len(step_survivors["after_standard_fit"]),
+        "after_adapt": len(step_survivors["after_adapt"]),
+        "after_6bis": len(step_survivors["after_6bis"]),
+        "after_6ter": len(step_survivors["after_6ter"]),
+        "kept": len(step_survivors["after_6ter"]),
+    }
+
+    # Sort entries by status rank then name.
+    pattern_list = sorted(
+        entries.values(),
+        key=lambda e: (
+            _STATUS_RANK.get(e["status"], -1),
+            e["pattern_name"],
+        ),
+    )
+
+    return {"step_counts": step_counts, "patterns": pattern_list}
 
 
 # ---------------------------------------------------------------------------
