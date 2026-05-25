@@ -5,6 +5,7 @@ import pytest
 
 from olm.core.catalogue_matcher import (
     _GRADE_TO_DIM,
+    MatchScore,
     PatternAdaptOverlap,
     PatternCandidate,
     SelectionResult,
@@ -30,6 +31,7 @@ from olm.core.catalogue_matcher import (
     mirror_pattern,
     remove_conflicting_desks,
     score_candidate,
+    select_best,
     select_candidates,
 )
 from olm.core.pattern_generator import DESK_D_CM, DESK_W_CM
@@ -1523,3 +1525,54 @@ class TestCirculationEntries:
         """No openings at all → no entries."""
         room = RoomSpec(width_cm=400, depth_cm=400, openings=[])
         assert self._walls(room) == set()
+
+
+# ---------------------------------------------------------------------------
+# D-299 — select_best demotes infeasible candidates
+# ---------------------------------------------------------------------------
+
+def _make_score(
+    m2: float, min_passage: float = 120.0,
+    grade: str | None = "C", name: str = "P",
+) -> MatchScore:
+    """Minimal MatchScore for select_best tests."""
+    return MatchScore(
+        pattern_name=name, standard="s1", n_desks=4,
+        m2_per_desk=m2, circulation_grade="A",
+        connectivity_pct=100.0, min_passage_cm=min_passage,
+        worst_detour=1.0, largest_free_rect_m2=1.0,
+        adapted_pattern={}, passage_grade=grade,
+    )
+
+
+class TestSelectBestInfeasible:
+    """D-299: feasible candidate beats denser infeasible one."""
+
+    def test_feasible_beats_denser_infeasible_passage_zero(self):
+        """Infeasible (min_passage=0) demoted behind less-dense feasible."""
+        infeasible = _make_score(m2=12.0, min_passage=0.0, grade=None,
+                                 name="dense_dead")
+        feasible = _make_score(m2=10.0, min_passage=90.0, grade="C",
+                               name="less_dense_ok")
+        best = select_best([infeasible, feasible])
+        assert best is feasible
+
+    def test_feasible_beats_denser_infeasible_grade_f(self):
+        """Infeasible (passage_grade=F) demoted behind less-dense feasible."""
+        infeasible = _make_score(m2=12.0, min_passage=30.0, grade="F",
+                                 name="dense_F")
+        feasible = _make_score(m2=10.0, min_passage=90.0, grade="C",
+                               name="ok")
+        best = select_best([infeasible, feasible])
+        assert best is feasible
+
+    def test_all_infeasible_returns_densest(self):
+        """When all candidates are infeasible, select_best returns the
+        densest (highest m2_per_desk) — never None."""
+        dense = _make_score(m2=12.0, min_passage=0.0, grade=None,
+                            name="dense")
+        sparse = _make_score(m2=8.0, min_passage=0.0, grade=None,
+                             name="sparse")
+        best = select_best([sparse, dense])
+        assert best is dense
+        assert best is not None

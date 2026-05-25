@@ -631,6 +631,10 @@
     var fitOrd = {fitting: 0, oversize_1axis: 1, oversize_2axes: 2};
     function fitVal(c) { return fitOrd[c.fit_class] != null ? fitOrd[c.fit_class] : (c.oversize ? 1 : 0); }
     candidates.sort(function(a, b) {
+      // D-299: feasible before infeasible (unreachable desks or critical passage)
+      var ia = (a.min_passage_cm <= 0) || a.passage_grade === "F" ? 1 : 0;
+      var ib = (b.min_passage_cm <= 0) || b.passage_grade === "F" ? 1 : 0;
+      if (ia !== ib) return ia - ib;
       // Fitting first, then oversize_1axis, then oversize_2axes
       var fa = fitVal(a), fb = fitVal(b);
       if (fa !== fb) return fa - fb;

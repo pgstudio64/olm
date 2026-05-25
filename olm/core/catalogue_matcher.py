@@ -1953,14 +1953,16 @@ def score_candidate(
 # Step 6 — Best selection per standard
 # ---------------------------------------------------------------------------
 
-def _score_key(s: MatchScore) -> float:
+def _score_key(s: MatchScore) -> tuple[bool, float]:
     """Sort key for best candidate selection.
 
-    D-238: density only (m²/desk descending = less dense = better).
-    The multi-dimensional grade informs but does not drive sorting.
+    D-299: infeasible candidates (unreachable desks or critical passage)
+    are demoted after all feasible ones.  Among same feasibility, density
+    wins (m²/desk descending = less dense = better).
     Lower key = better candidate (used with min()).
     """
-    return -s.m2_per_desk
+    infeasible = s.min_passage_cm <= 0 or s.passage_grade == "F"
+    return (infeasible, -s.m2_per_desk)
 
 
 def select_best(scores: list[MatchScore]) -> MatchScore | None:
