@@ -839,7 +839,6 @@
       "Natural light   : " + _fmtDim(c.dim_light),
       "Back to door    : " + _fmtDim(c.dim_back_door),
       "Face to wall    : " + _fmtDim(c.dim_face_wall),
-      "Distance        : " + _fmtDim(c.dim_distance),
       "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
       "A \u2265 0.90 \u00b7 B \u2265 0.75 \u00b7 C \u2265 0.60 \u00b7 D \u2265 0.45 \u00b7 E \u2265 0.30",
     ];
@@ -872,8 +871,7 @@
       _scoreRow("Passage comfort", candidate.dim_passage) +
       _scoreRow("Natural light", candidate.dim_light) +
       _scoreRow("Back to door", candidate.dim_back_door) +
-      _scoreRow("Face to wall", candidate.dim_face_wall) +
-      _scoreRow("Distance", candidate.dim_distance);
+      _scoreRow("Face to wall", candidate.dim_face_wall);
 
     // Metrics: Connectivity is a 0–100 % → coloured bar; the others are
     // unbounded ratios / areas / categorical → plain values (no bar).
@@ -1381,7 +1379,6 @@
         dim_light: c.dim_light,
         dim_back_door: c.dim_back_door,
         dim_face_wall: c.dim_face_wall,
-        dim_distance: c.dim_distance,
         connectivity_pct: c.connectivity_pct,
         min_passage_cm: c.min_passage_cm,
         worst_detour: c.worst_detour,

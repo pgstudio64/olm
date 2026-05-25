@@ -1505,8 +1505,6 @@ class MatchScore:
         dim_light: D-238 dimension — window proximity [0,1] or None.
         dim_back_door: D-238 dimension — back-to-door [0,1] or None.
         dim_face_wall: D-238 dimension — face-wall [0,1] or None.
-        dim_distance: D-238 dimension — inter-desk distance [0,1] or None.
-            v1: always None (computed frontend-side, not replicated yet).
         composite_score: Weighted average of active dimensions.
         room_grade: Composite letter grade (A-F).
     """
@@ -1529,7 +1527,6 @@ class MatchScore:
     dim_light: float | None = None
     dim_back_door: float | None = None
     dim_face_wall: float | None = None
-    dim_distance: float | None = None
     composite_score: float = 0.0
     room_grade: str = "F"
 
@@ -1898,8 +1895,6 @@ def score_candidate(
     dim_face_wall = _compute_dim_face_wall(
         active_desks, room, walking_margin,
     )
-    # v1: dim_distance not computed backend-side (D-238 limitation)
-    dim_distance = None
 
     # D-293 composite grade — w_comfort/w_density legacy, replaced by
     # w_reachability + w_passage
@@ -1911,7 +1906,6 @@ def score_candidate(
         "light": matching.get("w_light", 1.0),
         "back_door": matching.get("w_back_door", 1.0),
         "face_wall": matching.get("w_face_wall", 1.0),
-        "distance": matching.get("w_distance", 1.0),
     }
     dims = {
         "reachability": dim_reachability,
@@ -1919,7 +1913,6 @@ def score_candidate(
         "light": dim_light,
         "back_door": dim_back_door,
         "face_wall": dim_face_wall,
-        "distance": dim_distance,
     }
     composite, room_grade = _compute_composite_and_grade(dims, dim_weights)
 
@@ -1943,7 +1936,6 @@ def score_candidate(
         dim_light=dim_light,
         dim_back_door=dim_back_door,
         dim_face_wall=dim_face_wall,
-        dim_distance=dim_distance,
         composite_score=composite,
         room_grade=room_grade,
     )

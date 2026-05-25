@@ -1390,7 +1390,6 @@ class TestScoreCandidateGrade:
         assert score.dim_light is not None
         assert score.dim_back_door is not None
         assert score.dim_face_wall is not None
-        assert score.dim_distance is None  # v1 limitation
         # dim_passage is None when min_passage_cm <= 0 (no passage found)
         if score.min_passage_cm > 0:
             assert score.dim_passage is not None

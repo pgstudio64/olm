@@ -200,7 +200,6 @@ def floor_plan_match(data: dict) -> dict:
                 "dim_light": score.dim_light,
                 "dim_back_door": score.dim_back_door,
                 "dim_face_wall": score.dim_face_wall,
-                "dim_distance": score.dim_distance,
                 "composite_score": score.composite_score,
                 "room_grade": score.room_grade,
                 "desks": desk_list,
