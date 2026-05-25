@@ -794,9 +794,8 @@
     font-size: var(--fs-base);
     color: var(--accent);
     margin-bottom: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .catalogue-card .card-info {
     font-size: var(--fs-sm);

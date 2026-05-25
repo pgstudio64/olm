@@ -844,14 +844,33 @@ class TestOpeningForbiddenZones:
         )
         assert compute_opening_forbidden_zones(room, 90)
 
-    def test_exterior_bay_excluded(self):
-        """A north bay without door is not an entry → no zone."""
+    def test_exterior_bay_excluded_when_door_exists(self):
+        """D-317: north bay is not an entry when a door exists → no zone
+        for the bay (only for the door)."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[
+                OpeningSpec(face=Face.NORTH, offset_cm=0,
+                            width_cm=90, has_door=False),
+                OpeningSpec(face=Face.SOUTH, offset_cm=100,
+                            width_cm=90, has_door=True),
+            ],
+        )
+        zones = compute_opening_forbidden_zones(room, 90)
+        # Only the south door gets a zone, not the north bay.
+        assert len(zones) == 1
+        assert zones[0][1] == 400 - 90  # south zone y
+
+    def test_exterior_bay_fallback_when_no_door(self):
+        """D-317: north bay becomes entry via fallback when room has
+        no door and no corridor opening → zone IS created."""
         room = RoomSpec(
             width_cm=400, depth_cm=400,
             openings=[OpeningSpec(face=Face.NORTH, offset_cm=0,
                                   width_cm=90, has_door=False)],
         )
-        assert compute_opening_forbidden_zones(room, 90) == []
+        zones = compute_opening_forbidden_zones(room, 90)
+        assert len(zones) == 1
 
     def test_zero_margin_no_zone(self):
         room = RoomSpec(
@@ -880,13 +899,18 @@ class TestRemoveDesksOnOpening:
         _, removed1 = remove_conflicting_desks(p, room, 90)
         assert len(removed1) == 1
 
-    def test_desk_on_exterior_bay_kept(self):
+    def test_desk_on_exterior_bay_kept_when_door_exists(self):
+        """D-317: bay is not entry when a real door exists → desk kept."""
         p = _make_pattern([[{"type": "BLOCK_1", "gap_cm": 0}]],
                           room_width_cm=400, room_depth_cm=400)
         room = RoomSpec(
             width_cm=400, depth_cm=400,
-            openings=[OpeningSpec(face=Face.NORTH, offset_cm=0,
-                                  width_cm=90, has_door=False)],
+            openings=[
+                OpeningSpec(face=Face.NORTH, offset_cm=0,
+                            width_cm=90, has_door=False),
+                OpeningSpec(face=Face.SOUTH, offset_cm=200,
+                            width_cm=90, has_door=True),
+            ],
         )
         _, removed = remove_conflicting_desks(p, room, 90)
         assert len(removed) == 0

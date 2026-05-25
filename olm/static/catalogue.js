@@ -327,7 +327,7 @@ var PNG_THUMB = 200;     // square miniature box
 var PNG_PAD = 14;        // inner card padding
 var PNG_GAP = 16;        // gap between cards
 var PNG_OUTER = 24;      // image margin
-var PNG_HEADER = 40;     // top title band
+var PNG_HEADER = 58;     // top title band (2 lines: standard + print date)
 var PNG_TEXT_H = 84;     // text block height (4 lines)
 // Card wider than the thumbnail so the info/scoring/fit lines fit; the
 // miniature is centered in the upper part.
@@ -411,16 +411,33 @@ function exportCatalogueToPng() {
     if (typeof alertModal === "function") alertModal("Catalogue is empty.");
     return;
   }
-  // Whole catalogue, sorted like the card view (width, depth, name).
-  var patterns = catalogueData.slice().sort(function(a, b) {
-    var wa = (a.room_width_cm || 0) - (b.room_width_cm || 0);
-    if (wa !== 0) return wa;
-    var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
-    if (da !== 0) return da;
-    return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
-  });
+  // Current standard only (matches the on-screen card view filter).
+  var std = (typeof getCurrentStandard === "function") ? getCurrentStandard() : "";
+  var stdLabel = (typeof getStdLabel === "function" && std)
+    ? (getStdLabel(std) || std) : (std || "?");
+  var patterns = catalogueData
+    .filter(function(p) { return !std || p.standard === std; })
+    .sort(function(a, b) {
+      var wa = (a.room_width_cm || 0) - (b.room_width_cm || 0);
+      if (wa !== 0) return wa;
+      var da = (a.room_depth_cm || 0) - (b.room_depth_cm || 0);
+      if (da !== 0) return da;
+      return (a.name || "").localeCompare(b.name || "", undefined, { numeric: true });
+    });
+  if (!patterns.length) {
+    if (typeof alertModal === "function") {
+      alertModal("No patterns for the current standard.");
+    }
+    return;
+  }
 
-  // Capped miniature scale (same rule as renderCatalogue) over ALL patterns.
+  // Print date (YYYY-MM-DD).
+  var _now = new Date();
+  var _pad = function(n) { return (n < 10 ? "0" : "") + n; };
+  var dateStr = _now.getFullYear() + "-" + _pad(_now.getMonth() + 1)
+    + "-" + _pad(_now.getDate());
+
+  // Capped miniature scale (same rule as renderCatalogue) over the patterns.
   var extByPattern = new Map();
   var maxExtentCm = 1;
   patterns.forEach(function(p) {
@@ -439,9 +456,13 @@ function exportCatalogueToPng() {
   var parts = [];
   parts.push('<rect x="0" y="0" width="' + imgW + '" height="' + imgH +
     '" fill="#ffffff"/>');
-  parts.push('<text x="' + PNG_OUTER + '" y="' + (PNG_OUTER + 22) +
+  parts.push('<text x="' + PNG_OUTER + '" y="' + (PNG_OUTER + 20) +
     '" fill="#111111" font-size="22" font-weight="bold" font-family="monospace">' +
-    'Pattern catalogue — ' + patterns.length + ' pattern(s)</text>');
+    _xmlEsc('Pattern catalogue — Standard: ' + stdLabel
+      + ' (' + patterns.length + ' patterns)') + '</text>');
+  parts.push('<text x="' + PNG_OUTER + '" y="' + (PNG_OUTER + 40) +
+    '" fill="#555555" font-size="13" font-family="monospace">' +
+    _xmlEsc('Printed: ' + dateStr) + '</text>');
 
   patterns.forEach(function(p, i) {
     var col = i % PNG_COLS, row = Math.floor(i / PNG_COLS);
@@ -465,13 +486,15 @@ function exportCatalogueToPng() {
     var blobUrl = URL.createObjectURL(blob);
     var tmp = new Image();
     tmp.onload = function() {
+      var fname = "catalogue_"
+        + String(stdLabel).replace(/[^A-Za-z0-9_-]+/g, "_") + ".png";
       if (typeof window.openPreviewLightbox === "function") {
         window.openPreviewLightbox(blobUrl, tmp.naturalWidth, tmp.naturalHeight,
-          { downloadName: "catalogue_cards.png", title: "Catalogue preview" });
+          { downloadName: fname, title: "Catalogue — " + stdLabel });
       } else {
         var a = document.createElement("a");
         a.href = blobUrl;
-        a.download = "catalogue_cards.png";
+        a.download = fname;
         a.click();
         URL.revokeObjectURL(blobUrl);
       }

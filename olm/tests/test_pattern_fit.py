@@ -627,44 +627,47 @@ class TestIsPatternValid:
 class TestOrthoInternalFaceZones:
     """ORTHO blocks with internal faces pass is_pattern_valid."""
 
-    def test_ortho_r_no_east_outer_clearance(self):
-        """ORTHO_R east face is internal → does NOT extend footprint east."""
-        # BLOCK_2_ORTHO_R: eo=W, ns=D+W. chair+slip=100.
-        # North face (external): extends 100 north
-        # East face (internal): 0 outer → NO east extension
+    def test_ortho_r_east_overhang(self):
+        """ORTHO_R east face is internal with overhang (D-316).
+
+        chair+slip=100, void_depth=W-D=80 → overhang=20.
+        """
         pat = _pattern(
             block_type="BLOCK_2_ORTHO_R",
-            room_w=pg.DESK_W_CM, room_d=400,
+            room_w=pg.DESK_W_CM + 20, room_d=400,
         )
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
         assert x_min == 0
-        assert x_max == pg.DESK_W_CM  # no east clearance (internal)
+        overhang = max(0, 100 - (pg.DESK_W_CM - pg.DESK_D_CM))
+        assert x_max == pg.DESK_W_CM + overhang
         assert y_min == -100  # north chair+slip clearance
         assert y_max == pg.DESK_D_CM + pg.DESK_W_CM  # no south clearance
 
     def test_ortho_r_valid_tight_room(self):
-        """ORTHO_R fits in a room with no east margin."""
+        """ORTHO_R fits in a room with east overhang margin (D-316)."""
+        overhang = max(0, 100 - (pg.DESK_W_CM - pg.DESK_D_CM))
         pat = _pattern(
             block_type="BLOCK_2_ORTHO_R",
-            room_w=pg.DESK_W_CM, room_d=400,
+            room_w=pg.DESK_W_CM + overhang, room_d=400,
         )
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
-        fp_w = x_max - x_min  # W
+        fp_w = x_max - x_min  # W + overhang
         fp_d = y_max - y_min  # D+W+100
-        assert fp_w <= pg.DESK_W_CM
+        assert fp_w <= pg.DESK_W_CM + overhang
         assert fp_d <= pg.DESK_D_CM + pg.DESK_W_CM + 100
 
-    def test_ortho_l_no_west_outer_clearance(self):
-        """ORTHO_L west face is internal → does NOT extend footprint west."""
+    def test_ortho_l_west_overhang(self):
+        """ORTHO_L west face is internal with overhang (D-316)."""
+        overhang = max(0, 100 - (pg.DESK_W_CM - pg.DESK_D_CM))
         pat = _pattern(
             block_type="BLOCK_2_ORTHO_L",
-            room_w=pg.DESK_W_CM, room_d=400,
+            room_w=pg.DESK_W_CM + overhang, room_d=400,
         )
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
-        assert x_min == 0   # no west clearance (internal)
+        assert x_min == -overhang   # west overhang (D-316)
         assert x_max == pg.DESK_W_CM
         assert y_min == -100  # north chair+slip clearance
         assert y_max == pg.DESK_D_CM + pg.DESK_W_CM

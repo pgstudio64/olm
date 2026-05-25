@@ -1929,17 +1929,22 @@
         // Snap to grid
         newBX = Math.round(newBX / GRID_STEP_CM) * GRID_STEP_CM;
         newBY = Math.round(newBY / GRID_STEP_CM) * GRID_STEP_CM;
-        // D-268: soft wall snap — attract to wall from INSIDE only
-        var eEdge = newBX + bds.w_cm;
-        var sEdge = newBY + bds.h_cm;
-        if (newBX > 0 && newBX <= GRID_STEP_CM) newBX = 0;
-        if (newBY > 0 && newBY <= GRID_STEP_CM) newBY = 0;
+        // D-268 + D-316: soft wall snap — attract the EMPRISE edge (body +
+        // outer extent) to the wall from INSIDE only, so the lock position
+        // (emprise touching wall, per faceTouchesWall) is the magnetic target.
+        var zW = bds.zW || 0, zE = bds.zE || 0, zN = bds.zN || 0, zS = bds.zS || 0;
+        var wEdge = newBX - zW;
+        var nEdge = newBY - zN;
+        var eEdge = newBX + bds.w_cm + zE;
+        var sEdge = newBY + bds.h_cm + zS;
+        if (wEdge > 0 && wEdge <= GRID_STEP_CM) newBX = zW;
+        if (nEdge > 0 && nEdge <= GRID_STEP_CM) newBY = zN;
         if (eEdge < state.room_width_cm &&
             eEdge >= state.room_width_cm - GRID_STEP_CM)
-          newBX = state.room_width_cm - bds.w_cm;
+          newBX = state.room_width_cm - bds.w_cm - zE;
         if (sEdge < state.room_depth_cm &&
             sEdge >= state.room_depth_cm - GRID_STEP_CM)
-          newBY = state.room_depth_cm - bds.h_cm;
+          newBY = state.room_depth_cm - bds.h_cm - zS;
         // PE lock-aware: freeze locked axes to origin (after snap, last word)
         if (bds.lockedAxes) {
           if (bds.lockedAxes.x) newBX = bds.x_cm;
@@ -1952,7 +1957,6 @@
         // clearance zones) so the user sees the block's real limits (D-267).
         var bdOffX = state.roomRenderOffset ? state.roomRenderOffset.x_cm : 0;
         var bdOffY = state.roomRenderOffset ? state.roomRenderOffset.y_cm : 0;
-        var zW = bds.zW || 0, zE = bds.zE || 0, zN = bds.zN || 0, zS = bds.zS || 0;
         // Same total footprint, colour and dash as the selection box (editor.js).
         // Red when the dragged position conflicts (emprise overlap or desk on
         // a door exclusion zone).

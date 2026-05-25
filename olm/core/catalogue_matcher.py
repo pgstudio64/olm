@@ -18,7 +18,7 @@ import json
 import logging
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from olm.core.app_config import get_standard_label
@@ -36,7 +36,7 @@ from olm.core.pattern_generator import (
     DESK_D_CM,
     DESK_W_CM,
 )
-from olm.core.room_model import RoomSpec
+from olm.core.room_model import OpeningSpec, RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
 
 if TYPE_CHECKING:
@@ -1322,9 +1322,7 @@ def compute_opening_forbidden_zones(
     rw, rd = room.width_cm, room.depth_cm
     d = walking_margin_cm
     zones: list[tuple[int, int, int, int]] = []
-    for o in room.openings:
-        if not (o.has_door or o.face.value == _CANONICAL_CORRIDOR_FACE):
-            continue
+    for o in _entry_openings(room):
         face = o.face.value
         if face in ("north", "south"):
             x = max(0, o.offset_cm)
@@ -1568,6 +1566,8 @@ class MatchScore:
     dim_light: float | None = None
     dim_back_door: float | None = None
     dim_face_wall: float | None = None
+    all_desks_reachable: bool = True
+    best_effort: bool = False
     composite_score: float = 0.0
     room_grade: str = "F"
 
@@ -1635,6 +1635,26 @@ _OPPOSITE_FACE = {
     "east": "west", "west": "east",
     "N": "S", "S": "N", "E": "W", "W": "E",
 }
+
+
+def _entry_openings(room: RoomSpec) -> list[OpeningSpec]:
+    """Openings used as circulation entries (D-280/D-296/D-317).
+
+    Predicate: real doors + openings on the canonical corridor face.
+    Fallback: ALL openings when neither is present (rooms without a
+    corridor door still need an entry point for Dijkstra and a clear
+    strip for 912.4).
+
+    Used in BOTH _pattern_to_circulation_format (Dijkstra entries)
+    AND compute_opening_forbidden_zones (clear strips), so the two
+    always agree on what counts as an entry.
+    """
+    entries = [
+        o for o in room.openings
+        if o.has_door or o.face.value == _CANONICAL_CORRIDOR_FACE
+    ]
+    return entries or list(room.openings)
+
 
 # D-238 composite thresholds
 _GRADE_THRESHOLDS: list[tuple[str, float]] = [
@@ -1817,20 +1837,18 @@ def _pattern_to_circulation_format(
         (room_dict, blocks_list) au format attendu par circulation_analysis.analyse().
     """
     # Room dict in legacy format.
-    # D-280/D-296: circulation entries = real doors + openings on the corridor
-    # face (south in the canonical frame). People enter through doors or the
-    # corridor opening, never through an exterior bay. When the room has neither,
-    # fall back to all openings. Mirrors computeCirculationInfo (shared.js).
-    entries = [
-        o for o in room.openings
-        if o.has_door or o.face.value == _CANONICAL_CORRIDOR_FACE
-    ] or list(room.openings)
+    # D-280/D-296/D-317: unified entry predicate (shared with
+    # compute_opening_forbidden_zones via _entry_openings).
+    entries = _entry_openings(room)
     doors = []
     for o in entries:
+        wall = room.width_cm if o.face.value in ("north", "south") else room.depth_cm
+        off = max(0, o.offset_cm)
+        w = min(o.width_cm, max(0, wall - off))
         doors.append({
             "wall": o.face.value,
-            "position_cm": o.offset_cm,
-            "width_cm": o.width_cm,
+            "position_cm": off,
+            "width_cm": w,
         })
     room_dict = {
         "eo_cm": room.width_cm,
@@ -1884,6 +1902,21 @@ def score_candidate(
 
     # Minimum passage (via desk paths)
     min_passage = min(circ.path_widths) if circ.path_widths else 0.0
+
+    # D-317: true desk reachability — does every targeted desk have a
+    # BFS path from the door?  circ.paths contains one entry per
+    # targeted desk (those NOT dropped by 912.4 forbidden zones).
+    # A desk is unreachable when its path is empty (BFS found no route).
+    #
+    # Vacuous case: when n_targeted == 0 (room has no door clusters,
+    # or all desks were dropped by 912.4), all_desks_reachable is True
+    # by convention.  This is safe because min_passage == 0 in that
+    # case, so the 6bis *passage* filter will catch it (or best_effort
+    # fallback will recover it).  The two filters stay semantically
+    # distinct: reach = no path at all; passage = path too narrow.
+    n_targeted = len(circ.paths)
+    n_reachable = sum(1 for p in circ.paths if p)
+    all_desks_reachable = (n_targeted == 0) or (n_targeted == n_reachable)
 
     # Residual free rectangle
     free_rect_m2 = largest_free_rectangle_m2(pattern, room)
@@ -1955,6 +1988,7 @@ def score_candidate(
         dim_light=dim_light,
         dim_back_door=dim_back_door,
         dim_face_wall=dim_face_wall,
+        all_desks_reachable=all_desks_reachable,
         composite_score=composite,
         room_grade=room_grade,
     )
@@ -2090,7 +2124,8 @@ def classify_candidate_status(
     (production) and ``diagnose_room`` (diagnostic).
 
     Checks are applied in pipeline order:
-        1. 6bis reachability (dim_reachability == 0)
+        1. 6bis reachability (D-317: at least one active desk has
+           no BFS path from any door)
         2. 6bis passage (min_passage_cm < threshold)
         3. 6ter dominated (too_tight with n_desks <= max_working)
 
@@ -2108,7 +2143,7 @@ def classify_candidate_status(
         One of ``'kept'``, ``'removed_6bis_reach'``,
         ``'removed_6bis_passage'``, ``'removed_6ter'``.
     """
-    if score.dim_reachability == 0:
+    if not score.all_desks_reachable:
         return "removed_6bis_reach"
     if (passage_threshold is not None
             and score.min_passage_cm < passage_threshold):
@@ -2207,6 +2242,12 @@ def filter_and_rank_candidates(
         if status == "removed_6ter":
             continue
         final.append(s)
+
+    # D-317: fallback — never return an empty list when candidates exist.
+    # If 6bis+6ter removed everything, keep the best candidate (first in
+    # sorted order) marked as best_effort so the UI can flag it.
+    if not final and sorted_scores:
+        final = [replace(sorted_scores[0], best_effort=True)]
 
     return final
 
@@ -2642,6 +2683,7 @@ def diagnose_room(
                 "status": status, "fit_class": s.fit_class,
                 "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
                 "dim_reachability": s.dim_reachability,
+                "all_desks_reachable": s.all_desks_reachable,
                 "min_passage_cm": s.min_passage_cm,
                 "passage_grade": s.passage_grade,
             })
@@ -2669,6 +2711,7 @@ def diagnose_room(
                 "status": "removed_6ter", "fit_class": s.fit_class,
                 "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
                 "dim_reachability": s.dim_reachability,
+                "all_desks_reachable": s.all_desks_reachable,
                 "min_passage_cm": s.min_passage_cm,
                 "passage_grade": s.passage_grade,
             })
@@ -2680,6 +2723,7 @@ def diagnose_room(
             "status": "kept", "fit_class": s.fit_class,
             "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
             "dim_reachability": s.dim_reachability,
+            "all_desks_reachable": s.all_desks_reachable,
             "min_passage_cm": s.min_passage_cm,
             "passage_grade": s.passage_grade,
             "category": cat,

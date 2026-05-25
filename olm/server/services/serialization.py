@@ -28,26 +28,34 @@ def room_from_json(data: dict) -> RoomSpec:
     Returns:
         Fully constructed ``RoomSpec``.
     """
-    windows = [
-        WindowSpec(
-            Face(w["face"]), w["offset_cm"], w["width_cm"],
-            origin=w.get("origin"),
-        )
-        for w in data.get("windows", [])
-        if "face" in w and "offset_cm" in w and "width_cm" in w
-    ]
-    openings = [
-        OpeningSpec(
-            Face(o["face"]), o["offset_cm"],
-            o.get("width_cm", 90),
+    room_w = data["width_cm"]
+    room_d = data["depth_cm"]
+
+    windows = []
+    for w in data.get("windows", []):
+        if "face" not in w or "offset_cm" not in w or "width_cm" not in w:
+            continue
+        face = Face(w["face"])
+        wall = room_w if face in (Face.NORTH, Face.SOUTH) else room_d
+        width = min(w["width_cm"], wall)
+        offset = max(0, min(w["offset_cm"], wall - width))
+        windows.append(WindowSpec(face, offset, width, origin=w.get("origin")))
+
+    openings = []
+    for o in data.get("openings", []):
+        if "face" not in o or "offset_cm" not in o:
+            continue
+        face = Face(o["face"])
+        wall = room_w if face in (Face.NORTH, Face.SOUTH) else room_d
+        width = min(o.get("width_cm", 90), wall)
+        offset = max(0, min(o["offset_cm"], wall - width))
+        openings.append(OpeningSpec(
+            face, offset, width,
             o.get("has_door", True),
             o.get("opens_inward", True),
             HingeSide(o.get("hinge_side", "left")),
             origin=o.get("origin"),
-        )
-        for o in data.get("openings", [])
-        if "face" in o and "offset_cm" in o
-    ]
+        ))
     exclusions = [
         ExclusionZone(
             x_cm=z["x_cm"], y_cm=z["y_cm"],

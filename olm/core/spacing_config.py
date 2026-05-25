@@ -216,12 +216,27 @@ def build_block_defs(cfg: SpacingConfig) -> dict[str, dict]:
     defs: dict[str, dict] = {}
     for block in _BASE_BLOCKS:
         d = _block_def_to_json(block)
-        for face in ("north", "south", "east", "west"):
-            has_chair = d["faces"][face]["non_superposable_cm"] > 0
+        for face_dir in ("north", "south", "east", "west"):
+            fd = d["faces"][face_dir]
+            has_chair = fd["non_superposable_cm"] > 0
             if has_chair:
-                d["faces"][face]["non_superposable_cm"] = chair
-                d["faces"][face]["candidate_cm"] = slip_in
+                fd["non_superposable_cm"] = chair
+                fd["candidate_cm"] = slip_in
             else:
-                d["faces"][face]["candidate_cm"] = 0
+                fd["candidate_cm"] = 0
+            # D-316: pre-compute outer_extent_cm (overhang for internal
+            # faces, total_cm for normal faces).
+            total = fd["non_superposable_cm"] + fd["candidate_cm"]
+            if not fd.get("internal", False):
+                fd["outer_extent_cm"] = total
+            else:
+                # Void depth: block edge minus desk edge on the
+                # internal face's axis.  Derived from block geometry,
+                # reactive to desk dimension changes.
+                if face_dir in ("east", "west"):
+                    void_depth = d["eo_cm"] - _pg.DESK_D_CM
+                else:
+                    void_depth = d["ns_cm"] - _pg.DESK_D_CM
+                fd["outer_extent_cm"] = max(0, total - void_depth)
         defs[block.name] = d
     return defs

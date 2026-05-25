@@ -39,17 +39,24 @@ class FaceZone:
       but not reducible. Scoring/rebalancing may increase it.
 
     D-241: internal=True means the chair sits inside the block's void
-    (e.g. ORTHO L-shape) and does NOT extend the outer footprint.
+    (e.g. ORTHO L-shape).  The zone may partially overflow the void;
+    the actual outer contribution is stored in ``outer_extent_cm``.
+
+    D-316: ``outer_extent_cm`` is the real outer footprint, computed
+    as ``max(0, total_cm - void_depth)`` for internal faces and
+    ``total_cm`` for normal faces.  Set by ``build_block_defs``.
 
     Attributes:
         non_superposable_cm: Thickness of the fixed zone (chair clearance).
         candidate_cm: Thickness of the minimum circulation zone.
         internal: True if the chair zone is inside the block bbox.
+        outer_extent_cm: Pre-computed outer footprint (None = legacy).
     """
 
     non_superposable_cm: int = 0
     candidate_cm: int = 0
     internal: bool = False
+    outer_extent_cm: int | None = None
 
     @property
     def total_cm(self) -> int:
@@ -58,7 +65,14 @@ class FaceZone:
 
     @property
     def outer_cm(self) -> int:
-        """Outer footprint contribution (0 if internal, total_cm otherwise)."""
+        """Outer footprint contribution.
+
+        D-316: delegates to ``outer_extent_cm`` when available (set by
+        ``build_block_defs``).  Falls back to legacy behaviour for
+        backward compatibility with raw Block definitions.
+        """
+        if self.outer_extent_cm is not None:
+            return self.outer_extent_cm
         return 0 if self.internal else self.total_cm
 
     @classmethod

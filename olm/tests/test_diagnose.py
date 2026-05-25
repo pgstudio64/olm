@@ -41,6 +41,7 @@ def _make_score(
     passage_grade: str | None = "A",
     min_passage_cm: float = 100.0,
     dim_reachability: float = 1.0,
+    all_desks_reachable: bool = True,
     room_grade: str = "B",
     overflow_cm: float = 0.0,
     oversize: bool = False,
@@ -61,6 +62,7 @@ def _make_score(
         fit_class=fit_class,
         overflow_cm=overflow_cm,
         dim_reachability=dim_reachability,
+        all_desks_reachable=all_desks_reachable,
         dim_passage=0.8 if passage_grade else None,
         passage_grade=passage_grade,
         dim_light=1.0,
@@ -83,7 +85,7 @@ class TestClassifyCandidateStatus:
         assert classify_candidate_status(s, 56.0, 0) == "kept"
 
     def test_removed_6bis_reach(self):
-        s = _make_score(dim_reachability=0)
+        s = _make_score(dim_reachability=0, all_desks_reachable=False)
         assert classify_candidate_status(s, 56.0, 0) == "removed_6bis_reach"
 
     def test_removed_6bis_passage(self):
@@ -133,7 +135,9 @@ class TestFilterRefactorRegression:
     """Ensure the refactored filter_and_rank_candidates is identical."""
 
     def test_6bis_reach_removed(self):
-        impossible = _make_score(name="imp", dim_reachability=0)
+        impossible = _make_score(
+            name="imp", dim_reachability=0, all_desks_reachable=False,
+        )
         good = _make_score(name="good")
         final = filter_and_rank_candidates(
             [impossible, good], configs=_TEST_CONFIGS,
@@ -142,7 +146,9 @@ class TestFilterRefactorRegression:
         assert "imp" not in names
         assert "good" in names
 
-    def test_6bis_passage_removed(self):
+    def test_6bis_passage_removed_fallback(self):
+        """D-317: sole candidate removed by 6bis-passage is recovered
+        as best_effort (fallback guarantees non-empty result)."""
         narrow = _make_score(
             name="narrow", min_passage_cm=50.0,
             passage_grade="F", dim_reachability=0.4,
@@ -150,7 +156,8 @@ class TestFilterRefactorRegression:
         final = filter_and_rank_candidates(
             [narrow], configs=_TEST_CONFIGS,
         )
-        assert len(final) == 0
+        assert len(final) == 1
+        assert final[0].best_effort is True
 
     def test_6ter_dominated_removed(self):
         fw = _make_score(
@@ -181,6 +188,66 @@ class TestFilterRefactorRegression:
             [tight_a, tight_b], configs=_TEST_CONFIGS,
         )
         assert len(final) == 2
+
+
+# ---------------------------------------------------------------------------
+# D-317 — reachability fix + best_effort fallback
+# ---------------------------------------------------------------------------
+
+class TestD317ReachabilityFix:
+    """4 cases for D-317: true desk reachability replaces circ.grade."""
+
+    def test_a_feasible_low_connectivity_kept(self):
+        """(a) Desk reachable despite circ.grade=F (low connectivity)
+        → candidate is KEPT (not removed by 6bis_reach)."""
+        s = _make_score(
+            dim_reachability=0.0,       # grade F → dim=0
+            all_desks_reachable=True,   # but desk HAS a path
+            min_passage_cm=90.0,
+            passage_grade="A",
+        )
+        assert classify_candidate_status(s, 56.0, 0) == "kept"
+
+    def test_b_truly_unreachable_removed(self):
+        """(b) Desk truly unreachable (no BFS path)
+        → removed_6bis_reach."""
+        s = _make_score(
+            dim_reachability=0.0,
+            all_desks_reachable=False,
+            min_passage_cm=0.0,
+            passage_grade="F",
+        )
+        assert classify_candidate_status(s, 56.0, 0) == "removed_6bis_reach"
+
+    def test_c_no_door_vacuous_passage_filter(self):
+        """(c) No door → n_targeted=0, all_desks_reachable=True (vacuous),
+        but min_passage=0 → removed_6bis_passage (NOT reach)."""
+        s = _make_score(
+            dim_reachability=0.0,
+            all_desks_reachable=True,   # vacuous: no targeted desk
+            min_passage_cm=0.0,
+            passage_grade="F",
+        )
+        status = classify_candidate_status(s, 56.0, 0)
+        assert status == "removed_6bis_passage"
+        assert status != "removed_6bis_reach"
+
+    def test_d_all_removed_fallback_best_effort(self):
+        """(d) All candidates removed by 6bis → fallback best_effort,
+        result list is never empty."""
+        unreachable = _make_score(
+            name="unreach", dim_reachability=0.0,
+            all_desks_reachable=False,
+        )
+        narrow = _make_score(
+            name="narrow", dim_reachability=0.4,
+            min_passage_cm=10.0, passage_grade="F",
+        )
+        final = filter_and_rank_candidates(
+            [unreachable, narrow], configs=_TEST_CONFIGS,
+        )
+        assert len(final) >= 1
+        assert final[0].best_effort is True
 
 
 # ---------------------------------------------------------------------------

@@ -681,27 +681,20 @@ def get_face_zones(
             west=FaceZone.absent(),
         )
     faces = bd["faces"]
+
+    def _make_fz(fd: dict) -> FaceZone:
+        return FaceZone(
+            fd["non_superposable_cm"],
+            fd["candidate_cm"],
+            internal=fd.get("internal", False),
+            outer_extent_cm=fd.get("outer_extent_cm"),
+        )
+
     fc = FaceCandidates(
-        north=FaceZone(
-            faces["north"]["non_superposable_cm"],
-            faces["north"]["candidate_cm"],
-            internal=faces["north"].get("internal", False),
-        ),
-        south=FaceZone(
-            faces["south"]["non_superposable_cm"],
-            faces["south"]["candidate_cm"],
-            internal=faces["south"].get("internal", False),
-        ),
-        east=FaceZone(
-            faces["east"]["non_superposable_cm"],
-            faces["east"]["candidate_cm"],
-            internal=faces["east"].get("internal", False),
-        ),
-        west=FaceZone(
-            faces["west"]["non_superposable_cm"],
-            faces["west"]["candidate_cm"],
-            internal=faces["west"].get("internal", False),
-        ),
+        north=_make_fz(faces["north"]),
+        south=_make_fz(faces["south"]),
+        east=_make_fz(faces["east"]),
+        west=_make_fz(faces["west"]),
     )
     if orientation != 0:
         fc = rotate_face_candidates(fc, orientation)

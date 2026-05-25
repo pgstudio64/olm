@@ -1202,9 +1202,13 @@ function computeBlockPositions() {
 function blockOuterExtentsCm(type, orientation) {
   var g = getEffectiveGeom(type, orientation);
   var f = g.faces || {};
+  // D-316: use pre-computed outer_extent_cm (handles internal overhang).
   var ext = function (face) {
-    return (face && !face.internal)
-      ? ((face.non_superposable_cm || 0) + (face.candidate_cm || 0)) : 0;
+    if (!face) return 0;
+    if (face.outer_extent_cm != null) return face.outer_extent_cm;
+    // Legacy fallback (raw block defs without outer_extent_cm).
+    return face.internal
+      ? 0 : ((face.non_superposable_cm || 0) + (face.candidate_cm || 0));
   };
   return { w: ext(f.west), e: ext(f.east), n: ext(f.north), s: ext(f.south) };
 }
@@ -1326,9 +1330,12 @@ function faceTouchesWall(rowIdx, blockIdx, face) {
   var faceDir = face === "N" ? "north" : face === "S" ? "south"
               : face === "E" ? "east" : "west";
   var fd = f[faceDir];
+  // D-316: use outer_extent_cm (accounts for internal overhang).
   var zone = 0;
-  if (fd && !fd.internal) {
-    zone = (fd.non_superposable_cm || 0) + (fd.candidate_cm || 0);
+  if (fd) {
+    zone = (fd.outer_extent_cm != null) ? fd.outer_extent_cm
+      : (fd.internal ? 0
+        : ((fd.non_superposable_cm || 0) + (fd.candidate_cm || 0)));
   }
   var positions = computeBlockPositions();
   for (var i = 0; i < positions.length; i++) {
@@ -1586,31 +1593,27 @@ function _renderImpl(targetSvg) {
     const bh = pos.h_cm * SCALE;
     rowBlockPos[ri].push({ x: bx, y: by, w: bw, h: bh, gap_cm: b.gap_cm || 0 });
 
-    // Setback zone dimensions (always computed for the opaque background)
-    function _faceOuter(fd, attr) {
-      return (fd && !fd.internal && fd[attr]) ? fd[attr] * SCALE : 0;
+    // D-316: outer extent per face (handles internal overhang via
+    // outer_extent_cm, falls back to legacy non_superposable + candidate).
+    function _faceOuterTotal(fd) {
+      if (!fd) return 0;
+      if (fd.outer_extent_cm != null) return fd.outer_extent_cm * SCALE;
+      return fd.internal ? 0
+        : ((fd.non_superposable_cm || 0) + (fd.candidate_cm || 0)) * SCALE;
     }
-    var wNSup = _faceOuter(f.west, 'non_superposable_cm');
-    var eNSup = _faceOuter(f.east, 'non_superposable_cm');
-    var nNSup = _faceOuter(f.north, 'non_superposable_cm');
-    var sNSup = _faceOuter(f.south, 'non_superposable_cm');
-    var wCandPx = _faceOuter(f.west, 'candidate_cm');
-    var eCandPx = _faceOuter(f.east, 'candidate_cm');
-    var nCandPx = _faceOuter(f.north, 'candidate_cm');
-    var sCandPx = _faceOuter(f.south, 'candidate_cm');
 
     renderBlockZones(elements, bx, by, bw, bh, b.type, b.orientation, f, SCALE, 0.5);
 
     // Opaque background full footprint (masks the grid under block + zones)
-    var blockMinX = bx - wNSup - wCandPx;
+    var wTotal = _faceOuterTotal(f.west);
+    var eTotal = _faceOuterTotal(f.east);
+    var nTotal = _faceOuterTotal(f.north);
+    var sTotal = _faceOuterTotal(f.south);
+    var blockMinX = bx - wTotal;
     if (blockMinX < minX) minX = blockMinX;
     // D-268: track topmost y (including north zones) for viewBox
-    var blockMinY = by - nNSup - nCandPx;
+    var blockMinY = by - nTotal;
     if (blockMinY < minY) minY = blockMinY;
-    var wTotal = wNSup + wCandPx;
-    var eTotal = eNSup + eCandPx;
-    var nTotal = nNSup + nCandPx;
-    var sTotal = sNSup + sCandPx;
     elements.push({ z: 0.5, s: '<rect x="' + (bx - wTotal) + '" y="' + (by - nTotal) +
       '" width="' + (bw + wTotal + eTotal) + '" height="' + (bh + nTotal + sTotal) +
       '" fill="' + COLOR_WALL_STROKE + '"/>' });
@@ -2942,6 +2945,10 @@ async function save() {
     };
     state.amendMode = null;
     state.overlay = null;
+    // clearDirty() BEFORE exitAmendUI(): exitAmendUI clicks the catalogue
+    // sub-tab, which runs the unsaved-pattern guard; with amendMode already
+    // null, a still-dirty state would wrongly trigger the discard prompt.
+    clearDirty();
     exitAmendUI();
     setStatus("Amendment saved for room \"" + amend.roomName + "\".");
     // Switch back to Design — use setTimeout to ensure exitAmendUI

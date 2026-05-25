@@ -37,6 +37,7 @@ def _make_score(
     passage_grade: str | None = "A",
     min_passage_cm: float = 100.0,
     dim_reachability: float = 1.0,
+    all_desks_reachable: bool = True,
     room_grade: str = "B",
     composite_score: float = 0.7,
     overflow_cm: float = 0.0,
@@ -58,6 +59,7 @@ def _make_score(
         fit_class=fit_class,
         overflow_cm=overflow_cm,
         dim_reachability=dim_reachability,
+        all_desks_reachable=all_desks_reachable,
         dim_passage=0.8 if passage_grade else None,
         passage_grade=passage_grade,
         dim_light=1.0,
@@ -117,17 +119,28 @@ def _filter_with_by_std(
 # ---------------------------------------------------------------------------
 
 class Test6bisReachability:
-    """Candidates with dim_reachability == 0 are removed."""
+    """Candidates with all_desks_reachable=False are removed (D-317)."""
 
-    def test_reachability_zero_removed(self):
+    def test_unreachable_desk_removed(self):
         impossible = _make_score(
-            name="impossible", dim_reachability=0, room_grade="F",
+            name="impossible", dim_reachability=0,
+            all_desks_reachable=False, room_grade="F",
         )
         good = _make_score(name="good", dim_reachability=1.0)
         final = _filter([impossible, good])
         names = [s.pattern_name for s in final]
         assert "impossible" not in names
         assert "good" in names
+
+    def test_reachable_low_connectivity_kept(self):
+        """D-317: dim_reachability=0 (grade F) but desk IS reachable."""
+        score = _make_score(
+            dim_reachability=0.0, all_desks_reachable=True,
+            passage_grade="A", min_passage_cm=90.0,
+        )
+        final = _filter([score])
+        assert len(final) == 1
+        assert final[0].best_effort is False
 
     def test_reachability_nonzero_kept(self):
         score = _make_score(dim_reachability=0.4, passage_grade="D")
@@ -142,14 +155,16 @@ class Test6bisReachability:
 class Test6bisPassage:
     """Candidates below the passage removal threshold are removed."""
 
-    def test_passage_below_threshold_removed(self):
+    def test_passage_below_threshold_fallback(self):
+        """D-317: sole narrow candidate recovered as best_effort."""
         # std3: walking_margin=70, 20% -> threshold=56.
         narrow = _make_score(
             name="narrow", min_passage_cm=50.0,
             passage_grade="F", dim_reachability=0.4,
         )
         final = _filter([narrow])
-        assert len(final) == 0
+        assert len(final) == 1
+        assert final[0].best_effort is True
 
     def test_passage_at_threshold_kept(self):
         # Exactly at threshold (56.0) -> kept (strict <).
@@ -168,14 +183,16 @@ class Test6bisPassage:
         final = _filter([above])
         assert len(final) == 1
 
-    def test_custom_removal_pct(self):
-        # 50% of 70 = 35. 30 < 35 -> removed.
+    def test_custom_removal_pct_fallback(self):
+        """D-317: sole narrow candidate at custom threshold → best_effort."""
+        # 50% of 70 = 35. 30 < 35 -> removed, then fallback.
         narrow = _make_score(
             name="narrow", min_passage_cm=30.0,
             passage_grade="F", dim_reachability=0.4,
         )
         final = _filter([narrow], removal_pct=50)
-        assert len(final) == 0
+        assert len(final) == 1
+        assert final[0].best_effort is True
 
 
 # ---------------------------------------------------------------------------
@@ -395,8 +412,8 @@ class TestByStandard:
 
     def test_by_standard_from_survivors(self):
         impossible = _make_score(
-            name="best_orig", dim_reachability=0, room_grade="F",
-            n_desks=4,
+            name="best_orig", dim_reachability=0,
+            all_desks_reachable=False, room_grade="F", n_desks=4,
         )
         good = _make_score(
             name="fallback", dim_reachability=1.0, n_desks=2,
@@ -405,24 +422,32 @@ class TestByStandard:
         _, by_std = _filter_with_by_std([impossible, good])
         assert by_std["standard3"] == "fallback"
 
-    def test_by_standard_none_when_all_removed(self):
+    def test_by_standard_best_effort_when_all_removed(self):
+        """D-317: sole impossible → best_effort fallback, not None."""
         impossible = _make_score(
-            name="only", dim_reachability=0, room_grade="F",
+            name="only", dim_reachability=0,
+            all_desks_reachable=False, room_grade="F",
         )
-        _, by_std = _filter_with_by_std([impossible])
-        assert by_std["standard3"] is None
+        final, by_std = _filter_with_by_std([impossible])
+        assert len(final) == 1
+        assert final[0].best_effort is True
+        assert by_std["standard3"] == "only"
 
     def test_by_standard_multiple_standards(self):
+        """D-317: fallback is global (not per-standard). When at least
+        one standard survives, the other may still have None."""
         s3 = _make_score(
             name="s3_good", standard="standard3",
             dim_reachability=1.0, passage_grade="A",
         )
         s1_bad = _make_score(
             name="s1_bad", standard="standard1",
-            dim_reachability=0, room_grade="F",
+            dim_reachability=0, all_desks_reachable=False,
+            room_grade="F",
         )
-        _, by_std = _filter_with_by_std([s3, s1_bad])
+        final, by_std = _filter_with_by_std([s3, s1_bad])
         assert by_std["standard3"] == "s3_good"
+        # s1_bad removed; global list not empty → no fallback for std1.
         assert by_std["standard1"] is None
 
 
