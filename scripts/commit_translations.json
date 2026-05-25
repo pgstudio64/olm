@@ -200,5 +200,5 @@
   "UX: padding-top colonnes 20→22px": "UX: columns padding-top 20→22px",
   "UX: padding-top colonnes 32px→20px": "UX: columns padding-top 32px→20px",
   "Fix: Focus room shows ONLY selected room + seeds/rays": "Fix: Focus room shows ONLY selected room + seeds/rays",
-  "Fix: 3 KOs validation — labels grille, plan fantôme, dblclick navigation": "Fix: 3 validation KOs — grid labels, ghost plan, dblclick navigation"
+  "v0.5.70 — vague circulation/liste 3 catégories + zones d'ouverture + ergonomie (D-301→D-310)": "v0.5.70 — 3-category candidate list + opening forbidden zones + ergonomics (D-301->D-310)"
 }
