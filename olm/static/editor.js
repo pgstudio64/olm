@@ -3129,7 +3129,7 @@ function enterAmendMode(room, candidate) {
       ovOffY = room.bbox_px[1] / ov.pxPerCm;
     }
     // Always use ov.dataUrl (-SD enhanced version). User requirement 2026-05-19.
-    var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 15;
+    var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 20;
     state.overlay = {
       dataUrl: ov.dataUrl, pxPerCm: ov.pxPerCm, opacity: fpOvOpacity,
       offsetX: ovOffX, offsetY: ovOffY, imgW: ov.imgW, imgH: ov.imgH,

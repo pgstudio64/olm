@@ -420,10 +420,10 @@ function renderFloorplanSettings() {
   var ovOpEl = document.getElementById("cfgDefaultOverlayOpacity");
   if (ovOpEl) {
     var _savedOp = parseInt(localStorage.getItem("olm_defaultOverlayOpacity"), 10);
-    ovOpEl.value = isNaN(_savedOp) ? 15 : _savedOp;
+    ovOpEl.value = isNaN(_savedOp) ? 20 : _savedOp;
     ovOpEl.onchange = function () {
       var v = parseInt(this.value, 10);
-      if (isNaN(v)) v = 15;
+      if (isNaN(v)) v = 20;
       v = Math.max(5, Math.min(80, v));
       this.value = v;
       try { localStorage.setItem("olm_defaultOverlayOpacity", String(v)); }

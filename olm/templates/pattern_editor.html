@@ -451,8 +451,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
                 </td>
                 <td class="nav-center">
                   <label><input type="checkbox" id="rvOverlayToggle" onchange="window._rvRefresh && window._rvRefresh()"> Overlay</label>
-                  <input type="range" id="rvOverlayOpacity" min="5" max="80" value="15" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
-                  <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">15%</span>
+                  <input type="range" id="rvOverlayOpacity" min="5" max="80" value="20" style="width:60px;" title="Overlay opacity" oninput="document.getElementById('rvOverlayOpacityVal').textContent=this.value+'%'; window._rvRefresh && window._rvRefresh()">
+                  <span id="rvOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">20%</span>
                   <label><input type="checkbox" id="rvGridToggle" checked onchange="window._rvRefresh && window._rvRefresh()"> Grid</label>
                   <button class="btn btn-toolbar" id="rvZoomOut" title="Zoom out">&#8722;</button>
                   <button class="btn btn-toolbar" id="rvZoomFit" title="Fit all">&#8861;</button>
@@ -550,8 +550,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               <td class="nav-center">
                 <label><input type="checkbox" id="fpCircToggle" checked> Circulation</label>
                 <label><input type="checkbox" id="fpOverlayToggle"> Overlay</label>
-                <input type="range" id="fpOverlayOpacity" min="5" max="80" value="15" style="width:60px;" title="Overlay opacity">
-                <span id="fpOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">15%</span>
+                <input type="range" id="fpOverlayOpacity" min="5" max="80" value="20" style="width:60px;" title="Overlay opacity">
+                <span id="fpOverlayOpacityVal" style="color:var(--text-dim);font-size:9px;min-width:24px;">20%</span>
                 <label><input type="checkbox" id="fpGridToggle" checked> Grid</label>
                 <button class="btn btn-toolbar" id="fpZoomOut" title="Zoom out">&#8722;</button>
                 <button class="btn btn-toolbar" id="fpZoomFit" title="Fit all">&#8861;</button>
@@ -724,8 +724,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <!-- Hidden overlay controls (referenced by JS, not shown in PE) -->
     <div style="display:none;">
       <input type="checkbox" id="edOverlayToggle">
-      <input type="range" id="edOverlayOpacity" min="5" max="80" value="15">
-      <span id="edOverlayOpacityVal">15%</span>
+      <input type="range" id="edOverlayOpacity" min="5" max="80" value="20">
+      <span id="edOverlayOpacityVal">20%</span>
     </div>
     <div class="canvas-wrap">
       <svg id="canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">

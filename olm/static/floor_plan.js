@@ -577,7 +577,7 @@
     if (window.fpOverlay && (fpOvChecked || rvOvChecked)) {
       var ov = window.fpOverlay;
       var fpOvOpacity = parseInt(document.getElementById("rvOverlayOpacity").value) ||
-        parseInt(document.getElementById("fpOverlayOpacity").value) || 15;
+        parseInt(document.getElementById("fpOverlayOpacity").value) || 20;
       // bbox_px gives the room position in the plan image (pixels)
       var ovOffX = 0, ovOffY = 0;
       if (room.bbox_px) {
@@ -783,7 +783,7 @@
         roomOvX = room.bbox_px[0] / ov.pxPerCm;
         roomOvY = room.bbox_px[1] / ov.pxPerCm;
       }
-      var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 15;
+      var fpOvOpacity = parseInt(document.getElementById("fpOverlayOpacity").value) || 20;
       // Always use ov.dataUrl (-SD enhanced version, no detection colors).
       // User requirement 2026-05-19.
       state.overlay = {
@@ -1116,7 +1116,7 @@
     function applyOverlayGridDefaults() {
       syncOverlayToggle(_ovDefBool("olm_defaultOverlayVisible", true));
       syncGridToggle(_ovDefBool("olm_defaultGridVisible", true));
-      syncOverlayOpacity(_ovDefInt("olm_defaultOverlayOpacity", 15));
+      syncOverlayOpacity(_ovDefInt("olm_defaultOverlayOpacity", 20));
       if (typeof window.fpRenderCurrent === "function") window.fpRenderCurrent();
       if (typeof window.rvRenderCurrent === "function") window.rvRenderCurrent();
     }

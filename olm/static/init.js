@@ -1338,6 +1338,9 @@ async function init() {
   // action auto-scopes to the active panel (Pattern editor, Amend layout,
   // Room amend, Office review). Reuses each button's own click handler and
   // its existing confirmation — no extra confirmation is introduced.
+  // S stays LOCAL to an editing panel: it never triggers the global floor-plan
+  // save (btnSavePlan, header-level, always visible) — that would, in Amend
+  // layout, exit the amend and look like a discard.
   // R = Revert targets the Office "Revert" button only; in the editor/amend
   // R already rotates the selection (those handlers run first and call
   // preventDefault), and the Revert button is not visible there, so they
@@ -1357,7 +1360,7 @@ async function init() {
     var btn = null;
     if (e.key === "s" || e.key === "S") {
       btn = _firstVisibleBtn(
-        ["btnSave", "rvBtnSaveRoom", "fpBtnSaveLayout", "btnSavePlan"]);
+        ["btnSave", "rvBtnSaveRoom", "fpBtnSaveLayout"]);
     } else if (e.key === "d" || e.key === "D") {
       btn = _firstVisibleBtn(["btnAmendCancel", "rvBtnCancelRoom"]);
     } else if (e.key === "r" || e.key === "R") {
