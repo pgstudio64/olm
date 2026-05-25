@@ -19,10 +19,11 @@ import logging
 import math
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from olm.core.app_config import get_standard_label
+from olm.core.exceptions import PatternStructurallyInvalid
 from olm.core.pattern_generator import (
-    CABINET,
     BLOCK_1,
     BLOCK_2_FACE,
     BLOCK_2_ORTHO_L,
@@ -31,12 +32,15 @@ from olm.core.pattern_generator import (
     BLOCK_3_SIDE,
     BLOCK_4_FACE,
     BLOCK_6_FACE,
+    CABINET,
     DESK_D_CM,
     DESK_W_CM,
 )
-from olm.core.exceptions import PatternStructurallyInvalid
 from olm.core.room_model import RoomSpec
 from olm.core.spacing_config import ALL_CONFIGS
+
+if TYPE_CHECKING:
+    from olm.core.spacing_config import SpacingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +279,7 @@ def effective_dimensions(room: RoomSpec) -> tuple[int, int]:
 def _classify_fit(
     pattern: dict,
     room: RoomSpec,
-    spacing: "SpacingConfig | None" = None,
+    spacing: SpacingConfig | None = None,
     tol_1axis: float = 0.10,
     tol_2axes: float = 0.10,
 ) -> tuple[str, float]:
@@ -1546,7 +1550,7 @@ _PASSAGE_GRADE: list[tuple[str, float]] = [
 
 
 def _compute_dim_passage(
-    min_passage_cm: float, spacing: "SpacingConfig | None",
+    min_passage_cm: float, spacing: SpacingConfig | None,
 ) -> tuple[float | None, str | None]:
     """D-293 — Passage comfort dimension.
 
@@ -1775,10 +1779,14 @@ def _pattern_to_circulation_format(
         (room_dict, blocks_list) au format attendu par circulation_analysis.analyse().
     """
     # Room dict in legacy format.
-    # D-280: if the room has at least one real door, only doors are used as
-    # circulation entries (people enter through doors, not open bays);
-    # otherwise fall back to all openings.
-    entries = [o for o in room.openings if o.has_door] or list(room.openings)
+    # D-280/D-296: circulation entries = real doors + openings on the corridor
+    # face (south in the canonical frame). People enter through doors or the
+    # corridor opening, never through an exterior bay. When the room has neither,
+    # fall back to all openings. Mirrors computeCirculationInfo (shared.js).
+    entries = [
+        o for o in room.openings
+        if o.has_door or o.face.value == _CANONICAL_CORRIDOR_FACE
+    ] or list(room.openings)
     doors = []
     for o in entries:
         doors.append({
@@ -2080,7 +2088,7 @@ class MatchingResult:
 def _footprint_within_room(
     pattern: dict,
     room: RoomSpec,
-    spacing: "SpacingConfig | None",
+    spacing: SpacingConfig | None,
 ) -> bool:
     """Check that the adapted pattern footprint fits inside the room.
 

@@ -14,10 +14,9 @@ from olm.core.pattern_generator import (
     DESK_W_CM,
     DOUBLE_ROW_PATTERNS,
     DOUBLE_ROW_PATTERNS_ALL,
-    WALKING_MARGIN_CM,
-    SLIP_IN_MARGIN_CM,
     PATTERNS,
     PATTERNS_ALL,
+    WALKING_MARGIN_CM,
     FaceZone,
     compose_double_row,
     compose_row,
@@ -245,7 +244,9 @@ def test_hot_reload_coherence():
     """After refresh_desk_dims + rebuild, registry/defs/layouts are coherent."""
     import olm.core.pattern_generator as pg
     from olm.core.catalogue_matcher import (
-        _BLOCK_REGISTRY, _DESK_LAYOUTS, rebuild_block_registry,
+        _BLOCK_REGISTRY,
+        _DESK_LAYOUTS,
+        rebuild_block_registry,
     )
     from olm.core.spacing_config import ALL_CONFIGS, build_block_defs
 

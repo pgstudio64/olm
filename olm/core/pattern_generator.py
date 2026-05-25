@@ -3,7 +3,11 @@ from dataclasses import dataclass
 
 from olm.core.app_config import (
     get as _cfg_get,
+)
+from olm.core.app_config import (
     get_current_standard as _cfg_current_standard,
+)
+from olm.core.app_config import (
     get_derogatory_label as _cfg_derogatory_label,
 )
 

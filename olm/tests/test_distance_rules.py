@@ -4,7 +4,6 @@ Since the JS functions cannot be called directly from Python, these
 tests replicate the analyzeGap algorithm in pure Python to validate
 the margin model against the specification (CONSTRAINTS.md §2.6/2.7).
 """
-import pytest
 
 
 # ── Python replica of analyzeGap (mirrors distance_rules.js exactly) ──

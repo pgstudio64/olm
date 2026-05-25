@@ -1,0 +1,286 @@
+{
+  "blocks": {
+    "BLOCK_1": {
+      "name": "BLOCK_1",
+      "eo_cm": 80,
+      "ns_cm": 160,
+      "n_desks": 1,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        }
+      }
+    },
+    "BLOCK_2_FACE": {
+      "name": "BLOCK_2_FACE",
+      "eo_cm": 160,
+      "ns_cm": 160,
+      "n_desks": 2,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        }
+      }
+    },
+    "BLOCK_2_SIDE": {
+      "name": "BLOCK_2_SIDE",
+      "eo_cm": 80,
+      "ns_cm": 320,
+      "n_desks": 2,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        }
+      }
+    },
+    "BLOCK_3_SIDE": {
+      "name": "BLOCK_3_SIDE",
+      "eo_cm": 80,
+      "ns_cm": 480,
+      "n_desks": 3,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        }
+      }
+    },
+    "BLOCK_4_FACE": {
+      "name": "BLOCK_4_FACE",
+      "eo_cm": 160,
+      "ns_cm": 320,
+      "n_desks": 4,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        }
+      }
+    },
+    "BLOCK_6_FACE": {
+      "name": "BLOCK_6_FACE",
+      "eo_cm": 160,
+      "ns_cm": 480,
+      "n_desks": 6,
+      "derogatory": true,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        }
+      }
+    },
+    "BLOCK_2_ORTHO_L": {
+      "name": "BLOCK_2_ORTHO_L",
+      "eo_cm": 160,
+      "ns_cm": 240,
+      "n_desks": 2,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": true
+        }
+      }
+    },
+    "BLOCK_2_ORTHO_R": {
+      "name": "BLOCK_2_ORTHO_R",
+      "eo_cm": 160,
+      "ns_cm": 240,
+      "n_desks": 2,
+      "derogatory": false,
+      "furniture": false,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 70,
+          "candidate_cm": 20,
+          "internal": true
+        },
+        "west": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        }
+      }
+    },
+    "CABINET": {
+      "name": "CABINET",
+      "eo_cm": 70,
+      "ns_cm": 40,
+      "n_desks": 0,
+      "derogatory": false,
+      "furniture": true,
+      "faces": {
+        "north": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "south": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "east": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        },
+        "west": {
+          "non_superposable_cm": 0,
+          "candidate_cm": 0,
+          "internal": false
+        }
+      }
+    }
+  },
+  "constants": {
+    "DESK_W_CM": 160,
+    "DESK_D_CM": 80
+  },
+  "spacing": {
+    "chair_clearance_cm": 70,
+    "slip_in_margin_cm": 20,
+    "walking_margin_cm": 70,
+    "main_corridor_cm": 100,
+    "distance_tolerance_cm": 5,
+    "main_corridor_threshold": 6
+  }
+}

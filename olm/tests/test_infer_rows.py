@@ -6,13 +6,10 @@ attribute preservation.
 """
 from __future__ import annotations
 
-import copy
-
 import pytest
 
 from olm.core.catalogue_matcher import compute_block_positions
 from olm.core.pattern_canonicalize import infer_rows_from_positions
-
 
 # ---------------------------------------------------------------------------
 # Helpers

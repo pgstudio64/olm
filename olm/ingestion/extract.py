@@ -741,8 +741,7 @@ _RE_SURFACE_M2 = re.compile(r"(\d+[.,]?\d*)\s*m[²2]", re.IGNORECASE)
 # Regex pour parser plan_scale (ex: "1:100", "1 : 50")
 _RE_PLAN_SCALE = re.compile(r"1\s*:\s*(\d+)")
 # Conversion inch → cm et formules d'échelle : source unique dans units.py.
-from olm.core.units import INCH_TO_CM, parse_drawing_scale, scale_from_dpi_ratio
-from olm.core.units import px_to_cm, cm_to_px
+from olm.core.units import cm_to_px, parse_drawing_scale, px_to_cm, scale_from_dpi_ratio
 
 
 def _parse_surface_m2(text: str) -> float:
@@ -1897,8 +1896,8 @@ def extract_room_features(
     # D-145 : on passe binary_for_arcs et door_seeds pour que
     # expand_door_arcs utilise la binaire pré-clean et scope le scan
     # autour des seeds de portes connus.
-    from olm.ingestion.comb_detection import detect_room as _comb_detect_room
     from olm.ingestion.comb_detection import COMB_STEP_PX
+    from olm.ingestion.comb_detection import detect_room as _comb_detect_room
     comb_step_px = COMB_STEP_PX
     door_px = max(1, cm_to_px(door_width_cm, scale_cm_per_px))
 

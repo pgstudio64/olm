@@ -80,7 +80,6 @@ def build_grid(
     """
     # Local imports to avoid module-level circular dependency
     from olm.core.pattern_generator import (
-        CABINET,
         BLOCK_1,
         BLOCK_2_FACE,
         BLOCK_2_ORTHO_L,
@@ -89,6 +88,7 @@ def build_grid(
         BLOCK_3_SIDE,
         BLOCK_4_FACE,
         BLOCK_6_FACE,
+        CABINET,
         rotate_face_candidates,
     )
     _BLOCKS = {b.name: b for b in [

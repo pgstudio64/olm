@@ -830,12 +830,12 @@
     var lines = [
       "Grade " + rg + " \u2014 composite " + cs,
       "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
-      "Accessibilit\u00e9      : " + _fmtDim(c.dim_reachability),
-      "Confort de passage : " + _fmtDim(c.dim_passage),
-      "Lumi\u00e8re naturelle  : " + _fmtDim(c.dim_light),
-      "Dos \u00e0 porte        : " + _fmtDim(c.dim_back_door),
-      "Face au mur        : " + _fmtDim(c.dim_face_wall),
-      "Distance           : " + _fmtDim(c.dim_distance),
+      "Accessibility   : " + _fmtDim(c.dim_reachability),
+      "Passage comfort : " + _fmtDim(c.dim_passage),
+      "Natural light   : " + _fmtDim(c.dim_light),
+      "Back to door    : " + _fmtDim(c.dim_back_door),
+      "Face to wall    : " + _fmtDim(c.dim_face_wall),
+      "Distance        : " + _fmtDim(c.dim_distance),
       "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
       "A \u2265 0.90 \u00b7 B \u2265 0.75 \u00b7 C \u2265 0.60 \u00b7 D \u2265 0.45 \u00b7 E \u2265 0.30",
     ];
@@ -864,11 +864,11 @@
 
     // Score breakdown (per-criterion notes 0–1) as coloured mini-bars.
     document.getElementById("fpScores").innerHTML = gradeHtml +
-      _scoreRow("Accessibilit\u00e9", candidate.dim_reachability) +
-      _scoreRow("Confort de passage", candidate.dim_passage) +
-      _scoreRow("Lumi\u00e8re naturelle", candidate.dim_light) +
-      _scoreRow("Dos \u00e0 porte", candidate.dim_back_door) +
-      _scoreRow("Face au mur", candidate.dim_face_wall) +
+      _scoreRow("Accessibility", candidate.dim_reachability) +
+      _scoreRow("Passage comfort", candidate.dim_passage) +
+      _scoreRow("Natural light", candidate.dim_light) +
+      _scoreRow("Back to door", candidate.dim_back_door) +
+      _scoreRow("Face to wall", candidate.dim_face_wall) +
       _scoreRow("Distance", candidate.dim_distance);
 
     // Metrics: Connectivity is a 0–100 % → coloured bar; the others are

@@ -25,4 +25,4 @@ jobs:
         run: ruff check olm/
 
       - name: Run tests
-        run: pytest olm/tests/ -q --cov=olm --cov-report=term
+        run: pytest olm/tests/ -q --cov=olm --cov-report=term --cov-fail-under=70

@@ -23,9 +23,9 @@ from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw
 
 from olm.core.units import px_to_cm
-from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 

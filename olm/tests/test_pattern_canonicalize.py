@@ -7,11 +7,8 @@ from __future__ import annotations
 
 import copy
 
-import pytest
-
 import olm.core.pattern_generator as pg
 from olm.core.pattern_canonicalize import CanonicalizeResult, canonicalize_blocks
-
 
 # ---------------------------------------------------------------------------
 # Helpers

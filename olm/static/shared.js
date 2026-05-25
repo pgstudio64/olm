@@ -255,10 +255,11 @@ function computeCirculationInfo() {
     if (ri < state.rows.length - 1) yRow += state.row_gaps_cm[ri] || 0;
   }
 
-  // Entry cells (D-280): doors are the priority circulation entries — people
-  // enter through doors, not open bays. Open bays (has_door=false) are used
-  // ONLY when the room has no usable door, where they avoid the "middle of
-  // south wall" fallback. Mirrors _pattern_to_circulation_format (server).
+  // Entry cells (D-280/D-296): circulation entries = real doors + openings on
+  // the corridor face ("south" in the canonical frame). People enter through
+  // doors or the corridor opening, never through an exterior bay. When the room
+  // has neither, fall back to all openings; if still none, the "middle of south
+  // wall" fallback applies. Mirrors _pattern_to_circulation_format (server).
   var doorCells = [];
   function _addEntryCell(d) {
     var midCm = d.offset_cm + d.width_cm / 2;
@@ -277,15 +278,14 @@ function computeCirculationInfo() {
     return d && (d.face === "north" || d.face === "south" ||
                  d.face === "east" || d.face === "west");
   };
-  var _doorEntries = (state.room_doors || []).filter(_hasFace).concat(
+  var _entries = (state.room_doors || []).filter(_hasFace).concat(
     (state.room_openings || []).filter(function (o) {
-      return o.has_door && _hasFace(o);
+      return _hasFace(o) && (o.has_door || o.face === "south");
     }));
-  if (_doorEntries.length > 0) {
-    _doorEntries.forEach(_addEntryCell);
-  } else {
-    (state.room_openings || []).forEach(_addEntryCell);
+  if (_entries.length === 0) {
+    _entries = (state.room_openings || []);
   }
+  _entries.forEach(_addEntryCell);
   if (doorCells.length === 0) {
     var midC = Math.floor(cols / 2);
     var fc = findNearestFreeCell(grid, rowsN - 1, midC, cols, rowsN);

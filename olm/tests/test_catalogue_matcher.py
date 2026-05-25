@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from olm.core.catalogue_matcher import (
-    MatchScore,
+    _GRADE_TO_DIM,
     PatternAdaptOverlap,
     PatternCandidate,
     SelectionResult,
@@ -15,12 +15,11 @@ from olm.core.catalogue_matcher import (
     _compute_dim_face_wall,
     _compute_dim_light,
     _compute_dim_passage,
-    _GRADE_TO_DIM,
+    _pattern_to_circulation_format,
     _select_top_desks,
     adapt_dimensions,
     adapt_to_room,
     compact_catalogue_names,
-    compute_block_positions,
     compute_desk_positions,
     count_desks,
     dedupe_by_fingerprint,
@@ -37,7 +36,6 @@ from olm.core.pattern_generator import DESK_D_CM, DESK_W_CM
 from olm.core.room_model import (
     ExclusionZone,
     Face,
-    HingeSide,
     OpeningSpec,
     RoomSpec,
     WindowSpec,
@@ -598,8 +596,8 @@ class TestNoLockHugWalls:
         ], room_width_cm=270, room_depth_cm=300)
         target = RoomSpec(width_cm=540, depth_cm=300)
         adapted = adapt_to_room(p, target)
-        from olm.core.spacing_config import ALL_CONFIGS
         from olm.core.pattern_fit import compute_pattern_footprint
+        from olm.core.spacing_config import ALL_CONFIGS
         x_min, x_max, _, _ = compute_pattern_footprint(
             adapted, ALL_CONFIGS["standard1"],
         )
@@ -1454,3 +1452,74 @@ class TestComputeDimPassage:
         dim, grade = _compute_dim_passage(val, cfg)
         assert dim == 0.0
         assert grade == "F"
+
+
+class TestCirculationEntries:
+    """D-280/D-296: entries = doors + corridor-face (south) openings.
+
+    The room is canonical here (corridor = south), so circulation must enter
+    through doors and/or south openings, never an exterior bay.
+    """
+
+    @staticmethod
+    def _walls(room: RoomSpec) -> set[str]:
+        pattern = _make_pattern([[{"type": "BLOCK_1"}]])
+        room_dict, _ = _pattern_to_circulation_format(pattern, room)
+        return {d["wall"] for d in room_dict["doors"]}
+
+    def test_door_plus_south_opening(self):
+        """Door (north) + free passage (south) → both are entries."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[
+                OpeningSpec(face=Face.NORTH, offset_cm=100, width_cm=90,
+                            has_door=True),
+                OpeningSpec(face=Face.SOUTH, offset_cm=100, width_cm=90,
+                            has_door=False),
+            ],
+        )
+        assert self._walls(room) == {"north", "south"}
+
+    def test_door_without_south_opening(self):
+        """Door (north) + non-corridor passage (east) → only the door."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[
+                OpeningSpec(face=Face.NORTH, offset_cm=100, width_cm=90,
+                            has_door=True),
+                OpeningSpec(face=Face.EAST, offset_cm=100, width_cm=90,
+                            has_door=False),
+            ],
+        )
+        assert self._walls(room) == {"north"}
+
+    def test_no_door_prefers_south_opening(self):
+        """No door, south + north passages → only the south (corridor) one."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[
+                OpeningSpec(face=Face.SOUTH, offset_cm=100, width_cm=90,
+                            has_door=False),
+                OpeningSpec(face=Face.NORTH, offset_cm=100, width_cm=90,
+                            has_door=False),
+            ],
+        )
+        assert self._walls(room) == {"south"}
+
+    def test_no_door_no_south_falls_back_to_all(self):
+        """No door, no south opening → fall back to all openings."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[
+                OpeningSpec(face=Face.EAST, offset_cm=100, width_cm=90,
+                            has_door=False),
+                OpeningSpec(face=Face.WEST, offset_cm=100, width_cm=90,
+                            has_door=False),
+            ],
+        )
+        assert self._walls(room) == {"east", "west"}
+
+    def test_no_openings(self):
+        """No openings at all → no entries."""
+        room = RoomSpec(width_cm=400, depth_cm=400, openings=[])
+        assert self._walls(room) == set()

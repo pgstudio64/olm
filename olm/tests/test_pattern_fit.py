@@ -5,18 +5,16 @@ import copy
 
 import pytest
 
+import olm.core.pattern_generator as pg
 from olm.core.pattern_fit import (
     MIN_DOOR_WIDTH_CM,
     SNAP_CM,
-    FitResult,
     PatternStructurallyInvalid,
     compute_pattern_footprint,
     fit_room_to_pattern,
     is_pattern_valid,
 )
 from olm.core.spacing_config import SpacingConfig
-import olm.core.pattern_generator as pg
-
 
 # ---------------------------------------------------------------------------
 # Helpers

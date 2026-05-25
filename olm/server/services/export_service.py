@@ -16,8 +16,8 @@ import re
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from olm.core.catalogue_matcher import compute_desk_positions
 import olm.core.pattern_generator as _pg
+from olm.core.catalogue_matcher import compute_desk_positions
 from olm.server.services.config_service import (
     PROJECT_ROOT,
     get_corridor_rgb,

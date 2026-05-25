@@ -151,18 +151,42 @@ function _isPassage(circInfo, gapRect, gapAxis) {
   return false;
 }
 
+// Walking-margin passage detection: does a Dijkstra path run along the
+// walkable band (rect) for at least minSpanCm on the long axis?
+// axis: "x" (vertical gap, long axis = rows) or "y" (horizontal, cols).
+function _isPassageAlong(circInfo, rect, axis, minSpanCm) {
+  if (!circInfo || !circInfo.paths) return false;
+  var r0 = rect.r0, r1 = rect.r1, c0 = rect.c0, c1 = rect.c1;
+  if (r0 >= r1 || c0 >= c1) return false;
+  for (var pi = 0; pi < circInfo.paths.length; pi++) {
+    var pts = circInfo.paths[pi].points;
+    if (!pts || pts.length === 0) continue;
+    var mn = Infinity, mx = -Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (p.r >= r0 && p.r < r1 && p.c >= c0 && p.c < c1) {
+        var v = (axis === "x") ? p.r : p.c;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+    }
+    if (mx >= mn && (mx - mn + 1) * GRID_STEP_CM >= minSpanCm) return true;
+  }
+  return false;
+}
+
 // D-257: build the residual gap rectangle in cells for a block-to-block
 // or block-to-wall gap. Returns {r0,r1,c0,c1} in cell coordinates,
 // or null if the residual is empty (emprises eat up the gap).
 // blockEdges in px (with MARGIN offset), spacing = CURRENT_SPACING.
-function _gapResidualCells(gapType, a, b, spacing, roomState) {
+function _gapResidualCells(gapType, a, b, spacing, roomState,
+    empriseMode) {
   var cellCm = GRID_STEP_CM;
   var emprise = function(face) {
     var side = classifyGapSide(face);
-    if (side.type === "chair") {
-      return (spacing.chair_clearance_cm || 0) + (spacing.slip_in_margin_cm || 0);
-    }
-    return 0;
+    if (side.type !== "chair") return 0;
+    if (empriseMode === "walkable") return face.non_superposable_cm || 0;
+    return (spacing.chair_clearance_cm || 0) + (spacing.slip_in_margin_cm || 0);
   };
 
   // Block positions are in pixels with origin at room NW corner (MARGIN=0).
@@ -243,6 +267,119 @@ function _gapResidualCells(gapType, a, b, spacing, roomState) {
       };
     }
   }
+}
+
+// Walking-margin passage detection scoped to a specific block's own paths.
+// Only paths whose terminal (arrival = points[0]) belongs to blockA on face
+// are considered.  The span is measured in a union band that covers all blocks
+// sharing the same chair corridor, not just blockA's own extent.
+//
+// blockA: {deskX, deskY, deskW, deskH, faces}  (px, SCALE-aware)
+// face:   "west"|"east"|"north"|"south"
+// allBlocks: array of block descriptors (same shape as blockA)
+// band:   walkable residual rect from _gapResidualCells (cell coords)
+// axis:   "x" (vertical gap, long axis = rows) or "y" (horizontal, cols)
+function _isPassageForBlock(circInfo, band, axis, minSpanCm,
+    blockA, face, allBlocks) {
+  if (!circInfo || !circInfo.paths || !band) return false;
+  var cellCm = GRID_STEP_CM;
+
+  // 1. Identify the chair side for blockA on this face.
+  var faceObj = getFacingFace(blockA.faces, face);
+  var side = classifyGapSide(faceObj);
+  if (side.type !== "chair") return false;
+
+  // BlockA extents in cells (used by steps 2 and 3).
+  var aR0 = Math.floor(blockA.deskY / SCALE / cellCm);
+  var aR1 = Math.ceil((blockA.deskY + blockA.deskH) / SCALE / cellCm);
+  var aC0 = Math.floor(blockA.deskX / SCALE / cellCm);
+  var aC1 = Math.ceil((blockA.deskX + blockA.deskW) / SCALE / cellCm);
+
+  // 2. Compute union extent along the corridor axis (long axis of the band).
+  //    Collect all blocks that (a) have a chair on the same face and
+  //    (b) overlap the transverse range of A's walkable band.
+  var uMin = Infinity, uMax = -Infinity;
+  for (var bi = 0; bi < allBlocks.length; bi++) {
+    var ob = allBlocks[bi];
+    var obFace = getFacingFace(ob.faces, face);
+    if (!obFace || classifyGapSide(obFace).type !== "chair") continue;
+    // Transverse overlap check: ob must share the same corridor as blockA.
+    // Compare block extents on the transverse axis (not the band), because
+    // the band is the corridor BESIDE the blocks, not overlapping them.
+    var tOv;
+    if (axis === "x") {
+      // Vertical gap (west/east): transverse axis = columns (block widths).
+      var obC0 = ob.deskX / SCALE / cellCm;
+      var obC1 = (ob.deskX + ob.deskW) / SCALE / cellCm;
+      tOv = Math.min(obC1, aC1) - Math.max(obC0, aC0);
+    } else {
+      // Horizontal gap (north/south): transverse axis = rows (block depths).
+      var obR0 = ob.deskY / SCALE / cellCm;
+      var obR1 = (ob.deskY + ob.deskH) / SCALE / cellCm;
+      tOv = Math.min(obR1, aR1) - Math.max(obR0, aR0);
+    }
+    if (tOv <= 0) continue;
+    // Extend union along the long axis.
+    if (axis === "x") {
+      var oR0 = ob.deskY / SCALE / cellCm;
+      var oR1 = (ob.deskY + ob.deskH) / SCALE / cellCm;
+      if (oR0 < uMin) uMin = oR0;
+      if (oR1 > uMax) uMax = oR1;
+    } else {
+      var oC0 = ob.deskX / SCALE / cellCm;
+      var oC1 = (ob.deskX + ob.deskW) / SCALE / cellCm;
+      if (oC0 < uMin) uMin = oC0;
+      if (oC1 > uMax) uMax = oC1;
+    }
+  }
+  if (uMin >= uMax) return false;
+
+  // Build the union band rect (same transverse as original band, extended
+  // long axis to the union of aligned blocks).
+  var uBand;
+  if (axis === "x") {
+    uBand = { r0: Math.floor(uMin), r1: Math.ceil(uMax),
+              c0: band.c0, c1: band.c1 };
+  } else {
+    uBand = { r0: band.r0, r1: band.r1,
+              c0: Math.floor(uMin), c1: Math.ceil(uMax) };
+  }
+
+  // 3. Identify paths whose terminal belongs to blockA on this face.
+  //    Terminal = points[0].  Belonging:
+  //    - terminal is on the chair side of A (e.g. west: col < deskX/cell)
+  //    - terminal's perpendicular coord is within A's extent.
+  for (var pi = 0; pi < circInfo.paths.length; pi++) {
+    var pts = circInfo.paths[pi].points;
+    if (!pts || pts.length === 0) continue;
+    var term = pts[0];
+    // Check terminal belongs to blockA on this face.
+    var belongs = false;
+    if (face === "west") {
+      belongs = term.c < aC0 && term.r >= aR0 && term.r < aR1;
+    } else if (face === "east") {
+      belongs = term.c >= aC1 && term.r >= aR0 && term.r < aR1;
+    } else if (face === "north") {
+      belongs = term.r < aR0 && term.c >= aC0 && term.c < aC1;
+    } else if (face === "south") {
+      belongs = term.r >= aR1 && term.c >= aC0 && term.c < aC1;
+    }
+    if (!belongs) continue;
+
+    // 4. Measure span of this path in the union band.
+    var mn = Infinity, mx = -Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (p.r >= uBand.r0 && p.r < uBand.r1 &&
+          p.c >= uBand.c0 && p.c < uBand.c1) {
+        var v = (axis === "x") ? p.r : p.c;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+    }
+    if (mx >= mn && (mx - mn + 1) * cellCm >= minSpanCm) return true;
+  }
+  return false;
 }
 
 // D-258 Lot 3: compute reduction of effective gap distance due to cabinets
@@ -1757,8 +1894,14 @@ function _renderImpl(targetSvg) {
       const ly = (overlapTop + overlapBot) / 2;
       // D-257: passage detection via Dijkstra residual
       var rRect = CURRENT_SPACING
-        ? _gapResidualCells("right", a, nearestRight, CURRENT_SPACING, state) : null;
-      var rPass = rRect ? _isPassage(_circCache, rRect, rRect.axis) : false;
+        ? _gapResidualCells("right", a, nearestRight, CURRENT_SPACING, state)
+        : null;
+      var rBand = CURRENT_SPACING
+        ? _gapResidualCells("right", a, nearestRight, CURRENT_SPACING,
+            state, "walkable")
+        : null;
+      var rPass = (rRect && _isPassage(_circCache, rRect, rRect.axis))
+        || (rBand && _isPassageAlong(_circCache, rBand, rBand.axis, DESK_W));
       // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
       var rReduce = rPass ? _cabinetReductionCm(rRect, state) : 0;
       pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm - rReduce,
@@ -1774,8 +1917,14 @@ function _renderImpl(targetSvg) {
       const ly = a.deskY + a.deskH + nearestBelowGap / 2;
       // D-257: passage detection via Dijkstra residual
       var bRect = CURRENT_SPACING
-        ? _gapResidualCells("below", a, nearestBelow, CURRENT_SPACING, state) : null;
-      var bPass = bRect ? _isPassage(_circCache, bRect, bRect.axis) : false;
+        ? _gapResidualCells("below", a, nearestBelow, CURRENT_SPACING, state)
+        : null;
+      var bBand = CURRENT_SPACING
+        ? _gapResidualCells("below", a, nearestBelow, CURRENT_SPACING,
+            state, "walkable")
+        : null;
+      var bPass = (bRect && _isPassage(_circCache, bRect, bRect.axis))
+        || (bBand && _isPassageAlong(_circCache, bBand, bBand.axis, DESK_W));
       // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
       var bReduce = bPass ? _cabinetReductionCm(bRect, state) : 0;
       pushDistLabelWithGap(elements, lx, ly + 4 * zf, gapCm - bReduce,
@@ -1831,8 +1980,14 @@ function _renderImpl(targetSvg) {
       }
       // D-257: block face vs wall — passage from Dijkstra residual
       var wRect = CURRENT_SPACING
-        ? _gapResidualCells(dir.face, a, null, CURRENT_SPACING, state) : null;
-      var wPass = wRect ? _isPassage(_circCache, wRect, wRect.axis) : false;
+        ? _gapResidualCells(dir.face, a, null, CURRENT_SPACING, state)
+        : null;
+      var wBand = CURRENT_SPACING
+        ? _gapResidualCells(dir.face, a, null, CURRENT_SPACING,
+            state, "walkable")
+        : null;
+      var wPass = wBand && _isPassageForBlock(_circCache, wBand, wBand.axis,
+            DESK_W, a, dir.face, allBlocks);
       // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
       var wReduce = wPass ? _cabinetReductionCm(wRect, state) : 0;
       pushDistLabelWithGap(elements, tx, ty + 4, dcm - wReduce,

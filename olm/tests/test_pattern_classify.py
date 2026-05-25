@@ -1,11 +1,8 @@
 """Tests for olm.core.pattern_classify."""
 from __future__ import annotations
 
-import pytest
-
 from olm.core.pattern_classify import classify_pattern
 from olm.core.spacing_config import SpacingConfig
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image as PILImage
 
 from olm.core.canonical import canonicalize_room
+from olm.core.units import cm_to_px, parse_drawing_scale, px_to_cm
 from olm.server.services.config_service import (
     atomic_write_json,
     get_corridor_rgb,
@@ -28,8 +29,6 @@ from olm.server.services.config_service import (
     get_exterior_rgb,
     get_plans_dir,
 )
-
-from olm.core.units import cm_to_px, parse_drawing_scale, px_to_cm
 
 logger = logging.getLogger(__name__)
 

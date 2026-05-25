@@ -21,8 +21,6 @@ import logging
 from dataclasses import dataclass
 
 from olm.core.catalogue_matcher import (
-    BlockPosition,
-    _block_ns_extent,
     compute_block_positions,
 )
 

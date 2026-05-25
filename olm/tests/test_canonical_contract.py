@@ -23,7 +23,6 @@ from pathlib import Path
 import pytest
 
 from olm.core.canonical import (
-    _FACE_MAPS,
     _flip_from,
     canonicalize_room,
     decanonicalize_room,

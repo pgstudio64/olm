@@ -337,7 +337,9 @@ def api_serve_image():
     # "hide detection colors" toggle without any client-side pixel loop.
     if request.args.get("clean"):
         import io
+
         from PIL import Image
+
         from olm.server.services.export_service import (
             neutralize_detection_colors,
         )
@@ -1180,6 +1182,7 @@ def api_coverage():
 def api_floor_plan_preview():
     """Return a PNG preview of the annotated plan (no disk write)."""
     from io import BytesIO
+
     from olm.server.services.export_service import compose_plan_image
     data = request.json
     if not data:

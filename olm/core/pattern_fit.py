@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from olm.core.catalogue_matcher import (
-    BlockPosition,
     _BLOCK_REGISTRY,
+    BlockPosition,
     compute_block_positions,
 )
 from olm.core.pattern_generator import (

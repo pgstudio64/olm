@@ -22,8 +22,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from olm.core.catalogue_matcher import (
     ALL_CONFIGS,
     PatternAdaptOverlap,

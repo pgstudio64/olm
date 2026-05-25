@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import copy
 
-import pytest
-
 import olm.core.pattern_generator as pg
 from olm.core.pattern_normalize import normalize_pattern
 from olm.core.spacing_config import SpacingConfig

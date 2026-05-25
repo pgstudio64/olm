@@ -6,10 +6,6 @@ update, cross-standard recalibration.
 """
 from __future__ import annotations
 
-import copy
-
-import pytest
-
 from olm.core.pattern_normalize import normalize_catalogue, normalize_pattern
 from olm.core.spacing_config import SpacingConfig
 

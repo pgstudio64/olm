@@ -166,7 +166,6 @@ def get_corridor_rgb() -> tuple[int, int, int]:
 
 from olm.core.spacing_config import build_block_defs as _build_block_defs
 
-
 # Cache by standard
 _BLOCK_DEFS_CACHE: dict[str, dict] = {}
 

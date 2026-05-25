@@ -17,20 +17,29 @@ _PIN_W, _PIN_D = 160, 80
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _preserve_config_json():
-    """Snapshot project/config.json before the suite and restore it after.
+def _preserve_config_json(tmp_path_factory):
+    """Redirect config.json to a temp copy for the whole suite.
 
-    Some endpoint tests POST config mutations that persist to the real
-    config.json (e.g. /api/current-standard writes current_standard).
-    Without this, running the suite leaves the user's config.json mutated
-    on disk (the « current_standard reverts to standard2 » bug).
+    Some endpoint tests POST config mutations that persist via
+    ``app_config._save()`` (e.g. /api/current-standard writes current_standard,
+    plus a .bak/.tmp).
+
+    A snapshot-and-restore-after approach is NOT interrupt-safe: a killed or
+    partial run skips the teardown and leaves the real config.json mutated on
+    disk (the « current_standard revient à standard2 » bug). Instead we point
+    ``_CONFIG_PATH`` at a temp copy so the real project/config.json is NEVER
+    written, whatever happens to the run.
     """
     from olm.core import app_config
-    path = app_config._CONFIG_PATH
-    backup = path.read_text(encoding="utf-8") if path.exists() else None
+    real = app_config._CONFIG_PATH
+    tmp = tmp_path_factory.mktemp("olm_cfg") / "config.json"
+    if real.exists():
+        tmp.write_text(real.read_text(encoding="utf-8"), encoding="utf-8")
+    app_config._CONFIG_PATH = tmp
+    app_config.reload()
     yield
-    if backup is not None:
-        path.write_text(backup, encoding="utf-8")
+    app_config._CONFIG_PATH = real
+    app_config.reload()
 
 
 @pytest.fixture(autouse=True)

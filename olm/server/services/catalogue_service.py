@@ -415,9 +415,9 @@ def save_as_default_catalogue(
     # must fit within room dimensions. Uses the single source of truth
     # in pattern_fit so PE, matcher and save-as-default share one rule.
     from olm.core.pattern_fit import (
+        PatternStructurallyInvalid,
         compute_pattern_footprint,
         is_pattern_valid,
-        PatternStructurallyInvalid,
     )
     from olm.core.spacing_config import ALL_CONFIGS
 

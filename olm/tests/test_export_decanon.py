@@ -84,7 +84,7 @@ def test_draw_room_desks_west_room_in_bounds():
     """
     from PIL import Image, ImageDraw, ImageFont
 
-    from olm.server.services.export_service import _draw_room_desks, _EXPORT_DEBUG
+    from olm.server.services.export_service import _EXPORT_DEBUG, _draw_room_desks
 
     _EXPORT_DEBUG.clear()
     img = Image.new("RGBA", (4000, 3000), (255, 255, 255, 255))

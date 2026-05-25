@@ -47,6 +47,17 @@ markers = [
     "slow: tests longs (OCR, ray-cast sur image réelle)",
 ]
 
+[tool.coverage.run]
+source = ["olm"]
+omit = [
+    "olm/tests/*",
+    # Dev / CLI viewers and one-off tooling — not shipped product code.
+    "olm/ingestion/dev_viewer.py",
+    "olm/ingestion/orientation_check.py",
+    "olm/ingestion/ingestion_viewer.py",
+    "olm/tools/*",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

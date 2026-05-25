@@ -865,6 +865,7 @@ class TestAtomicWriteJson:
     def test_crash_during_write_preserves_original(self, tmp_path):
         """Crash simule (raise dans json.dump) laisse le fichier intact."""
         from unittest.mock import patch
+
         from olm.server.services.config_service import atomic_write_json
         path = str(tmp_path / "test.json")
         atomic_write_json(path, {"v": 1})
