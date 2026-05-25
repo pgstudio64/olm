@@ -3,10 +3,10 @@
     --bg:       #0e0e0d;
     --surface:  #161614;
     --surface2: #1e1e1c;
-    --border:   #2a2826;
+    --border:   #423f3a;
     --text:     #e4e0d8;
-    --text-dim: #908a7e;
-    --text-mid: #a8a39a;
+    --text-dim: #beb8aa;
+    --text-mid: #d2cdc4;
     --accent:   #c8a050;
     --accent2:  #5090c0;
     --ok:       #58c080;
@@ -769,8 +769,8 @@
   .catalogue-card { position: relative; }
   .catalogue-card.card-overflow { border-color: var(--bad); }
   .catalogue-card.card-overflow .card-title { color: var(--bad); }
-  .catalogue-card.card-tolere { border-color: #888; }
-  .catalogue-card.card-tolere .card-title { color: #888; }
+  .catalogue-card.card-tolere { border-color: var(--text-dim); }
+  .catalogue-card.card-tolere .card-title { color: var(--text-dim); }
   .card-fit {
     font-size: var(--fs-xs);
     margin-top: 2px;
@@ -780,7 +780,7 @@
   }
   .card-fit:hover { color: var(--accent); }
   .card-fit-ok { color: var(--text-dim); }
-  .card-fit-tight { color: #888; }
+  .card-fit-tight { color: var(--text-dim); }
   .card-fit-overflow { color: var(--bad); }
   .card-delete {
     position: absolute;
@@ -1098,6 +1098,7 @@
   .amend-layout-mode #btnCatSaveAsDefault { display: none; }
   .amend-layout-mode #stickCheckboxes { display: none; }
   .amend-layout-mode #stickCheckboxesTitle { display: none; }
+  .amend-layout-mode #peBtnBackCards { display: none; }
   .amend-layout-mode #peBtnPrev { display: none; }
   .amend-layout-mode #peBtnNext { display: none; }
   .amend-layout-mode #peNavInfo { display: none; }

@@ -829,13 +829,14 @@
     var cs = c.composite_score != null ? c.composite_score.toFixed(2) : "?";
     var lines = [
       "Grade " + rg + " \u2014 composite " + cs,
-      "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
-      "Circulation : " + _fmtDim(c.dim_circulation),
-      "Lumi\u00e8re     : " + _fmtDim(c.dim_light),
-      "Dos \u00e0 porte : " + _fmtDim(c.dim_back_door),
-      "Face mur    : " + _fmtDim(c.dim_face_wall),
-      "Distance    : " + _fmtDim(c.dim_distance),
-      "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "Accessibilit\u00e9      : " + _fmtDim(c.dim_reachability),
+      "Confort de passage : " + _fmtDim(c.dim_passage),
+      "Lumi\u00e8re naturelle  : " + _fmtDim(c.dim_light),
+      "Dos \u00e0 porte        : " + _fmtDim(c.dim_back_door),
+      "Face au mur        : " + _fmtDim(c.dim_face_wall),
+      "Distance           : " + _fmtDim(c.dim_distance),
+      "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
       "A \u2265 0.90 \u00b7 B \u2265 0.75 \u00b7 C \u2265 0.60 \u00b7 D \u2265 0.45 \u00b7 E \u2265 0.30",
     ];
     return lines.join("\n");
@@ -849,22 +850,25 @@
     document.getElementById("fpInfoStandard").textContent = getStdLabel(candidate.standard) || "-";
     document.getElementById("fpInfoDesks").textContent = candidate.n_desks || "-";
     document.getElementById("fpInfoM2").textContent = candidate.m2_per_desk ? candidate.m2_per_desk.toFixed(1) : "-";
-    var gradeEl = document.getElementById("fpInfoCirc");
+    // D-293: Grade en tête du panneau Scores (lettre + barre composite)
     var rg = candidate.room_grade || candidate.circulation_grade || "-";
-    gradeEl.innerHTML = (rg === "-") ? "-" :
-      '<span class="fp-c-grade fp-grade-' + rg + '">' + rg + '</span>';
-    gradeEl.title = _gradeTooltip(candidate);
-    document.getElementById("fpInfoComposite").textContent =
-      candidate.composite_score != null
-        ? candidate.composite_score.toFixed(2) : "-";
-    document.getElementById("fpInfoPassage").textContent = candidate.min_passage_cm ? candidate.min_passage_cm + " cm" : "-";
+    var compositeVal = candidate.composite_score;
+    var gradeHtml = (rg === "-") ? '<div class="fp-score-row"><span class="fp-score-label">Grade</span><span class="fp-score-na">-</span></div>' :
+      '<div class="fp-score-row" title="' + _gradeTooltip(candidate).replace(/"/g, '&quot;') + '" style="cursor:help;">' +
+      '<span class="fp-score-label">Grade</span>' +
+      '<span class="fp-c-grade fp-grade-' + rg + '" style="margin-right:6px;">' + rg + '</span>' +
+      '<span class="fp-score-bar"><span class="fp-score-fill" style="width:' +
+        (compositeVal != null ? Math.round(compositeVal * 100) : 0) + '%;background:' +
+        _scoreColor(compositeVal != null ? compositeVal : 0) + ';"></span></span>' +
+      '<span class="fp-score-val">' + (compositeVal != null ? compositeVal.toFixed(2) : "-") + '</span></div>';
 
     // Score breakdown (per-criterion notes 0–1) as coloured mini-bars.
-    document.getElementById("fpScores").innerHTML =
-      _scoreRow("Circulation", candidate.dim_circulation) +
-      _scoreRow("Natural light", candidate.dim_light) +
-      _scoreRow("Back to door", candidate.dim_back_door) +
-      _scoreRow("Face to wall", candidate.dim_face_wall) +
+    document.getElementById("fpScores").innerHTML = gradeHtml +
+      _scoreRow("Accessibilit\u00e9", candidate.dim_reachability) +
+      _scoreRow("Confort de passage", candidate.dim_passage) +
+      _scoreRow("Lumi\u00e8re naturelle", candidate.dim_light) +
+      _scoreRow("Dos \u00e0 porte", candidate.dim_back_door) +
+      _scoreRow("Face au mur", candidate.dim_face_wall) +
       _scoreRow("Distance", candidate.dim_distance);
 
     // Metrics: Connectivity is a 0–100 % → coloured bar; the others are
@@ -873,6 +877,8 @@
     var det = candidate.worst_detour;
     var fr = candidate.largest_free_rect_m2;
     document.getElementById("fpMetrics").innerHTML =
+      _valueRow("Min passage",
+                candidate.min_passage_cm ? candidate.min_passage_cm + " cm" : "-") +
       _scoreRow("Connectivity", conn != null ? conn / 100 : null,
                 conn != null ? Math.round(conn) + " %" : null) +
       _valueRow("Worst detour",
@@ -986,6 +992,9 @@
               min_passage_cm: best.min_passage_cm,
               worst_detour: best.worst_detour,
               largest_free_rect_m2: best.largest_free_rect_m2,
+              dim_reachability: best.dim_reachability,
+              dim_passage: best.dim_passage,
+              passage_grade: best.passage_grade,
             };
           }
         }
@@ -1004,6 +1013,9 @@
             min_passage_cm: c.min_passage_cm,
             worst_detour: c.worst_detour,
             largest_free_rect_m2: c.largest_free_rect_m2,
+            dim_reachability: c.dim_reachability,
+            dim_passage: c.dim_passage,
+            passage_grade: c.passage_grade,
             n_desks_active: c.desks ? c.desks.filter(function(d) { return !d.removed; }).length : c.n_desks,
           };
         });
@@ -1323,6 +1335,30 @@
       window.ingShowRoomView();
     });
 
+    // Esc steps back one panel — mirror of the Pattern editor's Esc → Card view.
+    // Room → Floor, Office → Room. Inhibited in amend modes (which keep their
+    // own Esc to cancel/deselect) and when a modal/popup is open.
+    document.addEventListener("keydown", function(e) {
+      if (e.key !== "Escape") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (state.amendMode || state.roomAmendMode) return;
+      var openPopup = ["olmModalBackdrop", "candidateHelpBackdrop", "rvRoomPopup"]
+        .some(function(id) {
+          var el = document.getElementById(id);
+          return el && el.style.display !== "none";
+        });
+      if (openPopup) return;
+      var tab = document.querySelector(".tab-btn.active");
+      if (!tab) return;
+      if (tab.dataset.tab === "fpReview") {
+        e.preventDefault();
+        window.ingShowPlanView();
+      } else if (tab.dataset.tab === "lytDesign") {
+        e.preventDefault();
+        window.ingShowRoomView();
+      }
+    });
+
     document.getElementById("fpBtnSaveLayout").addEventListener("click", function() {
       var room = fpCurrent();
       if (!room || !fpCurrentCandidate) return;
@@ -1335,7 +1371,9 @@
         circulation_grade: c.circulation_grade,
         room_grade: c.room_grade,
         composite_score: c.composite_score,
-        dim_circulation: c.dim_circulation,
+        dim_reachability: c.dim_reachability,
+        dim_passage: c.dim_passage,
+        passage_grade: c.passage_grade,
         dim_light: c.dim_light,
         dim_back_door: c.dim_back_door,
         dim_face_wall: c.dim_face_wall,

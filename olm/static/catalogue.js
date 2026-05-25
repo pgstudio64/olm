@@ -574,9 +574,9 @@ function renderPatternMiniSvg(p, scale, offsetX, offsetY, opts) {
       } else if (o.face === "west") {
         var dx = offsetX;
         var dy = offsetY + off;
-        var hy = (hingeS === "left") ? dy + dw : dy;
-        var fy = (hingeS === "left") ? dy : dy + dw;
-        var sw = (hingeS === "left") ? 0 : 1;
+        var hy = (hingeS === "left") ? dy : dy + dw;
+        var fy = (hingeS === "left") ? dy + dw : dy;
+        var sw = (hingeS === "left") ? 1 : 0;
         if (!o.opens_inward) sw = 1 - sw;
         var ex = o.opens_inward ? dx + dw : dx - dw;
         elements.push({ z: 6, s: '<path d="M ' + dx + ' ' + fy +

@@ -14,6 +14,7 @@ from olm.core.catalogue_matcher import (
     _compute_dim_back_door,
     _compute_dim_face_wall,
     _compute_dim_light,
+    _compute_dim_passage,
     _GRADE_TO_DIM,
     _select_top_desks,
     adapt_dimensions,
@@ -1385,10 +1386,71 @@ class TestScoreCandidateGrade:
         )
         p["_n_desks_after_removal"] = 1
         score = score_candidate(p, room, "standard1")
-        assert score.dim_circulation is not None
+        assert score.dim_reachability is not None
         assert score.dim_light is not None
         assert score.dim_back_door is not None
         assert score.dim_face_wall is not None
         assert score.dim_distance is None  # v1 limitation
+        # dim_passage is None when min_passage_cm <= 0 (no passage found)
+        if score.min_passage_cm > 0:
+            assert score.dim_passage is not None
+            assert score.passage_grade in ("A", "B", "C", "D", "F")
+        else:
+            assert score.dim_passage is None
+            assert score.passage_grade is None
         assert score.composite_score >= 0
         assert score.room_grade in ("A", "B", "C", "D", "E", "F")
+
+
+class TestComputeDimPassage:
+    """D-293 — passage comfort dimension with 5 grade thresholds."""
+
+    def test_no_passage(self):
+        """min_passage_cm <= 0 → (None, None)."""
+        dim, grade = _compute_dim_passage(0, None)
+        assert dim is None
+        assert grade is None
+
+    def test_grade_a(self):
+        """min_passage >= corridor → A (1.0)."""
+        from olm.core.spacing_config import get_default
+        cfg = get_default()
+        dim, grade = _compute_dim_passage(cfg.main_corridor_cm, cfg)
+        assert dim == 1.0
+        assert grade == "A"
+
+    def test_grade_b(self):
+        """min_passage > passage AND < corridor → B (0.8)."""
+        from olm.core.spacing_config import get_default
+        cfg = get_default()
+        mid = cfg.walking_margin_cm + 1
+        if mid < cfg.main_corridor_cm:
+            dim, grade = _compute_dim_passage(mid, cfg)
+            assert dim == 0.8
+            assert grade == "B"
+
+    def test_grade_c(self):
+        """min_passage == passage → C (0.6)."""
+        from olm.core.spacing_config import get_default
+        cfg = get_default()
+        dim, grade = _compute_dim_passage(cfg.walking_margin_cm, cfg)
+        assert dim == 0.6
+        assert grade == "C"
+
+    def test_grade_d(self):
+        """min_passage >= passage * 0.5 AND < passage → D (0.4)."""
+        from olm.core.spacing_config import get_default
+        cfg = get_default()
+        val = cfg.walking_margin_cm * 0.5
+        dim, grade = _compute_dim_passage(val, cfg)
+        assert dim == 0.4
+        assert grade == "D"
+
+    def test_grade_f(self):
+        """min_passage < passage * 0.5 → F (0.0)."""
+        from olm.core.spacing_config import get_default
+        cfg = get_default()
+        val = cfg.walking_margin_cm * 0.5 - 1
+        dim, grade = _compute_dim_passage(val, cfg)
+        assert dim == 0.0
+        assert grade == "F"

@@ -267,11 +267,11 @@ function renderGeneralSettings() {
   }
 
   var matching = APP_CONFIG.matching || {};
-  el = document.getElementById("cfgWDensity");
-  if (el) { el.value = matching.w_density != null ? matching.w_density : 0.5; el.onchange = function() { saveConfigField(["matching", "w_density"], parseFloat(this.value)||0.5); }; }
+  el = document.getElementById("cfgWReachability");
+  if (el) { el.value = matching.w_reachability != null ? matching.w_reachability : 0.5; el.onchange = function() { saveConfigField(["matching", "w_reachability"], parseFloat(this.value)||0.5); }; }
 
-  el = document.getElementById("cfgWComfort");
-  if (el) { el.value = matching.w_comfort != null ? matching.w_comfort : 0.5; el.onchange = function() { saveConfigField(["matching", "w_comfort"], parseFloat(this.value)||0.5); }; }
+  el = document.getElementById("cfgWPassage");
+  if (el) { el.value = matching.w_passage != null ? matching.w_passage : 0.5; el.onchange = function() { saveConfigField(["matching", "w_passage"], parseFloat(this.value)||0.5); }; }
 
   el = document.getElementById("cfgWBackDoor");
   if (el) { el.value = matching.w_back_door != null ? matching.w_back_door : 0; el.onchange = function() { saveConfigField(["matching", "w_back_door"], parseFloat(this.value)||0); }; }

@@ -131,8 +131,8 @@ class TestExportPng:
             reader = csv.reader(f, delimiter=";")
             header = next(reader)
         assert header[0] == "room_code"
-        assert header[-1] == "manual_amendments"
-        assert len(header) == 15
+        assert header[-1] == "composite_score"
+        assert len(header) == 20
 
 
 _HAS_FITZ = False
@@ -166,7 +166,7 @@ class TestExportPdf:
 
 
 class TestExportCsvNoCandidate:
-    """(c) Room without candidate → CSV with empty columns 5-15."""
+    """(c) Room without candidate → CSV with empty columns 5-19."""
 
     def test_export_csv_room_without_candidate(self, client, export_env):
         payload = {
@@ -187,8 +187,8 @@ class TestExportCsvNoCandidate:
         # First 4 columns filled
         assert row[0] == "101"
         assert row[3] == "14.4"
-        # Columns 5-15 (indices 4..14) all empty
-        for i in range(4, 15):
+        # Columns 5-20 (indices 4..19) all empty
+        for i in range(4, 20):
             assert row[i] == "", f"Column {i} should be empty, got '{row[i]}'"
 
 

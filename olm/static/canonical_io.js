@@ -98,25 +98,18 @@
   }
 
   /**
-   * True si "left" correspond au côté low-coord sur cette face.
-   * Toutes les faces sauf "west" : left = low. "west" : left = high y.
-   */
-  function _leftIsLow(f) { return f !== "west"; }
-
-  /**
-   * Détermine si hinge_side doit être inversé lors d'une rotation (B-F5).
-   * flip = offset_flipped XOR (leftIsLow(src) != leftIsLow(dst)).
+   * Détermine si hinge_side doit être inversé lors d'une rotation.
+   * Règle : flip = offsetFlipped. Pas d'exception de polarité.
    *
    * @param {string} hingeSide       - "left"/"right" (ou falsy → retourné tel quel).
-   * @param {string} srcFace         - Face avant mapping.
-   * @param {string} dstFace         - Face après mapping.
+   * @param {string} srcFace         - Face avant mapping (conservé pour compat).
+   * @param {string} dstFace         - Face après mapping (conservé pour compat).
    * @param {boolean} offsetFlipped  - True si l'offset a été retourné.
    * @returns {string} hinge corrigé.
    */
   function flipHingeOnRotation(hingeSide, srcFace, dstFace, offsetFlipped) {
     if (!hingeSide) return hingeSide;
-    var polarityDiff = _leftIsLow(srcFace) !== _leftIsLow(dstFace);
-    if (offsetFlipped !== polarityDiff) {
+    if (offsetFlipped) {
       return hingeSide === "left" ? "right" : "left";
     }
     return hingeSide;

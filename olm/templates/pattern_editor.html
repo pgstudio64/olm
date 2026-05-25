@@ -248,10 +248,10 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="settings-section">
       <div class="section-title">Scoring weights</div>
       <div class="settings-grid">
-        <label class="settings-label">Density</label>
-        <input type="number" id="cfgWDensity" step="0.1" min="0" max="1" class="settings-input" title="Weight for desk count (more desks = better)">
-        <label class="settings-label">Comfort</label>
-        <input type="number" id="cfgWComfort" step="0.1" min="0" max="1" class="settings-input" title="Weight for circulation grade">
+        <label class="settings-label">Reachability</label>
+        <input type="number" id="cfgWReachability" step="0.1" min="0" max="1" class="settings-input" title="Weight for accessibility (connectivity + detour)">
+        <label class="settings-label">Passage comfort</label>
+        <input type="number" id="cfgWPassage" step="0.1" min="0" max="1" class="settings-input" title="Weight for passage width comfort">
         <label class="settings-label">Back to door</label>
         <input type="number" id="cfgWBackDoor" step="0.1" min="0" max="1" class="settings-input" title="Penalty for desks facing away from the door">
         <label class="settings-label">Natural light</label>
@@ -588,9 +588,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <table>
           <tr><td>Desks</td><td id="fpInfoDesks">-</td></tr>
           <tr><td>Area/desk (m²)</td><td id="fpInfoM2">-</td></tr>
-          <tr><td>Grade</td><td id="fpInfoCirc" style="cursor:help;">-</td></tr>
-          <tr><td>Composite</td><td id="fpInfoComposite">-</td></tr>
-          <tr><td>Min passage</td><td id="fpInfoPassage">-</td></tr>
         </table>
         <div class="section-title">Scores <span id="candidateHelpToggle" class="help-link" style="text-transform:none;letter-spacing:0;font-weight:normal;margin-left:6px;">Scoring help</span></div>
         <div id="fpScores"></div>
@@ -682,6 +679,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     <div class="fp-nav ol-header">
       <table class="nav-layout"><tr>
         <td class="nav-left">
+          <button class="btn" id="peBtnBackCards" title="Back to Card view">&larr; Card view</button>
         </td>
         <td class="nav-center">
           <button class="btn" id="peBtnPrev" title="Previous pattern (width then depth ascending)">&larr; Prev</button>
@@ -754,7 +752,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <tr><td>EW x NS (blocks, cm)</td><td id="infoDimsBlocks">- x -</td></tr>
         <tr><td>EW x NS (total, cm)</td><td id="infoDimsTotal">- x -</td></tr>
         <tr><td>Area/desk (m²)</td><td id="infoM2">-</td></tr>
-        <tr><td>Min passage</td><td id="infoCirc">-</td></tr>
+        <tr><td>Confort de passage</td><td id="infoCirc">-</td></tr>
       </table>
 
       <div id="selectionHint" style="margin-top:12px; color:var(--text-dim); font-size:10px;">
@@ -929,24 +927,24 @@ Row: blocks separated by ,  with gap (cm) between  |  ; = new row + inter-row ga
 <div id="candidateHelpTooltip" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9001;padding:24px 32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;line-height:1.8;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,0.25);max-height:80vh;overflow-y:auto;min-width:550px;max-width:700px;"><span class="tooltip-close" onclick="this.parentElement.style.display='none';document.getElementById('candidateHelpBackdrop').style.display='none';">&times;</span>
 <div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Candidate solutions</div>
 Each room is matched against the pattern catalogue. Solutions are ranked by a weighted score combining several criteria.
-<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Scoring weights</div>
-– <b>Density</b> — More desks in the room = higher score<br>
-– <b>Comfort</b> — Better circulation grade = higher score<br>
-– <b>Back to door</b> — Penalty for desks facing away from the door<br>
-– <b>Natural light</b> — Bonus for desks closer to windows<br>
-– <b>Face to wall</b> — Penalty for desks directly facing a blank wall
-<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Circulation grades</div>
-– <b style="color:#58c080;">A</b> — Min passage ≥ main corridor width<br>
-– <b style="color:#7ab060;">B</b> — Min passage > circulation passage<br>
-– <b style="color:#c8a050;">C</b> — Min passage = circulation passage<br>
-– <b style="color:#c07040;">D</b> — Min passage ≥ 50% of circulation passage<br>
-– <b style="color:#c05858;">F</b> — Min passage below 50% of circulation passage
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Sorting</div>
+Candidates are sorted by <b>density</b> (m²/desk, unweighted). The Grade does not affect sorting.
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Grade (composite)</div>
+The Grade is a <b>weighted average</b> of sub-scores (each 0–1), mapped to a letter:<br>
+– <b style="color:#58c080;">A</b> ≥ 0.90 · <b style="color:#7ab060;">B</b> ≥ 0.75 · <b style="color:#c8a050;">C</b> ≥ 0.60 · <b style="color:#c07040;">D</b> ≥ 0.45 · <b style="color:#c05858;">E</b> ≥ 0.30 · <b style="color:#c05858;">F</b> below
+<div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Sub-scores</div>
+– <b>Accessibility</b> — Connectivity and detour from the door (Dijkstra graph analysis)<br>
+– <b>Passage comfort</b> — Minimum passage width vs standard thresholds (corridor/walking margin)<br>
+– <b>Natural light</b> — Ratio of desks within 200 cm of a window<br>
+– <b>Back to door</b> — Ratio of desks NOT facing away from corridor doors<br>
+– <b>Face to wall</b> — Ratio of desks NOT directly facing a blank wall<br>
+– <b>Distance</b> — Inter-desk distance (not yet computed server-side)
 <div style="color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-top:12px;margin-bottom:4px;">Solution card</div>
 – <b>Pattern name</b> — Name and standard of the matched pattern<br>
 – <b>Desks</b> — Number of workstations placed in the room<br>
 – <b>m²/desk</b> — Room area divided by desk count<br>
-– <b>Grade</b> — Circulation grade (A to F)<br>
-– <b>Score</b> — Weighted total (higher = better)
+– <b>Grade</b> — Composite grade (A to F)<br>
+– <b>Score</b> — Density (m²/desk)
 </div>
 </body>
 </html>

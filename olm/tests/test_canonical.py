@@ -149,15 +149,14 @@ class TestCanonicalOffsetEast:
         assert op["offset_cm"] == 250
 
     def test_door_south_offset_preserved(self) -> None:
-        """Porte south abs → west canon. Offset préservé, hinge flippé (B-F5)."""
+        """Porte south abs → west canon. Offset préservé, hinge inchangé."""
         c = self._canon()
         door = [o for o in c["openings"] if o.get("has_door")][0]
         # south abs, offset=100, width=90 → west canon.
-        # south is horizontal, CW: no offset flip.
+        # south is horizontal, CW: no offset flip → no hinge flip.
         assert door["face"] == "west"
         assert door["offset_cm"] == 100
-        # B-F5 : south→west, polarity_diff=true, off_flip=false → flip hinge
-        assert door["hinge_side"] == "right"
+        assert door["hinge_side"] == "left"
 
 
 class TestCanonicalOffsetWest:

@@ -5,7 +5,7 @@ Pipeline (7 steps):
     2. East-West mirror
     3. Stick clamping + homothety
     4. Individual desk removal in forbidden zones
-    5. Scoring (circulation + comfort + multi-dim grade D-238)
+    5. Scoring (circulation + passage + multi-dim grade D-238/D-293)
     6. Best selection per standard
     7. Residual free rectangle
 
@@ -1495,11 +1495,13 @@ class MatchScore:
         largest_free_rect_m2: Largest free rectangle (m²).
         adapted_pattern: Adapted JSON pattern.
         oversize: Whether pattern is oversize for the room.
-        dim_circulation: D-238 dimension 1 — circulation [0,1].
-        dim_light: D-238 dimension 2 — window proximity [0,1] or None.
-        dim_back_door: D-238 dimension 3 — back-to-door [0,1] or None.
-        dim_face_wall: D-238 dimension 4 — face-wall [0,1] or None.
-        dim_distance: D-238 dimension 5 — inter-desk distance [0,1] or None.
+        dim_reachability: D-293 — accessibility (connectivity+detour) [0,1].
+        dim_passage: D-293 — passage comfort [0,1] or None.
+        passage_grade: D-293 — passage letter grade (A-F) or None.
+        dim_light: D-238 dimension — window proximity [0,1] or None.
+        dim_back_door: D-238 dimension — back-to-door [0,1] or None.
+        dim_face_wall: D-238 dimension — face-wall [0,1] or None.
+        dim_distance: D-238 dimension — inter-desk distance [0,1] or None.
             v1: always None (computed frontend-side, not replicated yet).
         composite_score: Weighted average of active dimensions.
         room_grade: Composite letter grade (A-F).
@@ -1517,7 +1519,9 @@ class MatchScore:
     oversize: bool = False
     fit_class: str = "fitting"
     overflow_cm: float = 0.0
-    dim_circulation: float | None = None
+    dim_reachability: float | None = None
+    dim_passage: float | None = None
+    passage_grade: str | None = None
     dim_light: float | None = None
     dim_back_door: float | None = None
     dim_face_wall: float | None = None
@@ -1530,10 +1534,56 @@ class MatchScore:
 # D-238 — Multi-dimensional grade
 # ---------------------------------------------------------------------------
 
-# Circulation grade → dimension [0, 1]
+# Circulation grade → dimension [0, 1] (reachability = connectivity+detour)
 _GRADE_TO_DIM: dict[str, float] = {
     "A": 1.0, "B": 0.8, "C": 0.6, "D": 0.4, "E": 0.2, "F": 0.0,
 }
+
+# D-293 passage comfort: seuils basés sur min_passage_cm vs standard thresholds
+_PASSAGE_GRADE: list[tuple[str, float]] = [
+    ("A", 1.0), ("B", 0.8), ("C", 0.6), ("D", 0.4), ("F", 0.0),
+]
+
+
+def _compute_dim_passage(
+    min_passage_cm: float, spacing: "SpacingConfig | None",
+) -> tuple[float | None, str | None]:
+    """D-293 — Passage comfort dimension.
+
+    Grades based on min_passage_cm vs standard passage/corridor thresholds:
+        A (1.0): min_passage >= corridor
+        B (0.8): min_passage > passage
+        C (0.6): min_passage >= passage
+        D (0.4): min_passage >= passage * 0.5
+        F (0.0): below
+
+    Returns None if min_passage_cm <= 0 (no passage exists).
+
+    Args:
+        min_passage_cm: Minimum passage width in cm.
+        spacing: Active spacing config (for thresholds).
+
+    Returns:
+        (dim_value, grade_letter) or (None, None).
+    """
+    if min_passage_cm <= 0:
+        return None, None
+
+    passage = spacing.walking_margin_cm if spacing else 90
+    corridor = spacing.main_corridor_cm if spacing else 140
+    # Ensure corridor >= passage (guard against misconfigured thresholds)
+    corridor = max(corridor, passage)
+
+    if min_passage_cm >= corridor:
+        return 1.0, "A"
+    if min_passage_cm > passage:
+        return 0.8, "B"
+    if min_passage_cm >= passage:
+        return 0.6, "C"
+    if min_passage_cm >= passage * 0.5:
+        return 0.4, "D"
+    return 0.0, "F"
+
 
 # In canonical model, corridor is always south
 _CANONICAL_CORRIDOR_FACE = "south"
@@ -1831,7 +1881,8 @@ def score_candidate(
         if (d.row_idx, d.block_idx, d.desk_idx) not in removed_set
     ]
 
-    dim_circulation = _GRADE_TO_DIM.get(circ.grade, 0.0)
+    dim_reachability = _GRADE_TO_DIM.get(circ.grade, 0.0)
+    dim_passage, passage_grade = _compute_dim_passage(min_passage, cfg)
     dim_light = _compute_dim_light(active_desks, room)
     dim_back_door = _compute_dim_back_door(active_desks, room)
 
@@ -1842,18 +1893,21 @@ def score_candidate(
     # v1: dim_distance not computed backend-side (D-238 limitation)
     dim_distance = None
 
-    # Composite grade
+    # D-293 composite grade — w_comfort/w_density legacy, replaced by
+    # w_reachability + w_passage
     from olm.core.app_config import get_matching
     matching = get_matching()
     dim_weights = {
-        "circulation": matching.get("w_comfort", 1.0),
+        "reachability": matching.get("w_reachability", 0.5),
+        "passage": matching.get("w_passage", 0.5),
         "light": matching.get("w_light", 1.0),
         "back_door": matching.get("w_back_door", 1.0),
         "face_wall": matching.get("w_face_wall", 1.0),
         "distance": matching.get("w_distance", 1.0),
     }
     dims = {
-        "circulation": dim_circulation,
+        "reachability": dim_reachability,
+        "passage": dim_passage,
         "light": dim_light,
         "back_door": dim_back_door,
         "face_wall": dim_face_wall,
@@ -1875,7 +1929,9 @@ def score_candidate(
         oversize=oversize,
         fit_class=fit_class,
         overflow_cm=overflow_cm,
-        dim_circulation=dim_circulation,
+        dim_reachability=dim_reachability,
+        dim_passage=dim_passage,
+        passage_grade=passage_grade,
         dim_light=dim_light,
         dim_back_door=dim_back_door,
         dim_face_wall=dim_face_wall,

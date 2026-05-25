@@ -631,7 +631,7 @@ function renderRoomElements(elements, roomX, roomY, roomWPx, roomHPx, isReview, 
       '" stroke="' + COLOR_WALL_STROKE + '" stroke-width="4" vector-effect="non-scaling-stroke"/>' });
     var swing = d.hinge_side;
     var swingLeft = (swing === "left");
-    var hingeAtStart = swingLeft !== (d.face === "west");
+    var hingeAtStart = swingLeft;
     var along, wallCoord;
     if (d.face === "south") {
       along = roomX + d.offset_cm * SCALE; wallCoord = roomY + roomHPx;
@@ -2291,7 +2291,7 @@ function updateInfo() {
     _safeText("infoM2", "-");
   }
 
-  // Circulation: grade + min passage
+  // D-293: Passage comfort grade + min passage width
   var circInfo = computeCirculationInfo();
   if (circInfo && nd > 0) {
     var cg = circGrade(circInfo);
@@ -2827,12 +2827,17 @@ async function save() {
     var roomArea = (state.room_width_cm * state.room_depth_cm) / 10000;
     var circInfo = computeCirculationInfo();
     var cg = circInfo ? circGrade(circInfo) : { grade: "F" };
+    // D-293: PE computes passage comfort (circGrade), NOT reachability
+    // (no Dijkstra client-side). dim_reachability left null.
     fpAmendments[amend.roomName] = {
       pattern_name: amend.candidate.pattern_name.replace(/ \(amended\)$/, "") + " (amended)",
       standard: state.standard,
       n_desks: nd,
       m2_per_desk: nd > 0 ? +(roomArea / nd).toFixed(1) : 0,
       circulation_grade: cg.grade,
+      dim_reachability: null,
+      dim_passage: cg.grade === "A" ? 1.0 : cg.grade === "B" ? 0.8 : cg.grade === "C" ? 0.6 : cg.grade === "D" ? 0.4 : 0.0,
+      passage_grade: cg.grade,
       min_passage_cm: circInfo ? circInfo.minPassageCm : 0,
       connectivity_pct: circInfo ? circInfo.connectivityPct : 0,
       worst_detour: circInfo ? circInfo.worstDetour : 0,

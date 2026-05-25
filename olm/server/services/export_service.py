@@ -687,6 +687,8 @@ _CSV_HEADER = [
     "circulation_grade", "connectivity_pct", "min_passage_cm",
     "worst_detour", "largest_free_rect_m2", "removed_desks_count",
     "manual_amendments",
+    "dim_reachability", "dim_passage", "passage_grade",
+    "room_grade", "composite_score",
 ]
 
 
@@ -710,7 +712,7 @@ def write_csv(rooms_payload: list[dict], output_path: str) -> str:
             surface = round(w_cm * d_cm / 10000, 2)
             candidate = room.get("candidate")
             if not candidate:
-                writer.writerow([name, w_cm, d_cm, surface] + [""] * 11)
+                writer.writerow([name, w_cm, d_cm, surface] + [""] * 16)
                 continue
             desks = candidate.get("desks") or []
             removed = sum(1 for dk in desks if dk.get("removed"))
@@ -728,6 +730,11 @@ def write_csv(rooms_payload: list[dict], output_path: str) -> str:
                 candidate.get("largest_free_rect_m2", ""),
                 removed,
                 is_amended,
+                candidate.get("dim_reachability", ""),
+                candidate.get("dim_passage", ""),
+                candidate.get("passage_grade", ""),
+                candidate.get("room_grade", ""),
+                candidate.get("composite_score", ""),
             ])
     return os.path.abspath(output_path)
 

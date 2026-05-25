@@ -22,7 +22,12 @@ from pathlib import Path
 
 import pytest
 
-from olm.core.canonical import canonicalize_room, decanonicalize_room
+from olm.core.canonical import (
+    _FACE_MAPS,
+    _flip_from,
+    canonicalize_room,
+    decanonicalize_room,
+)
 
 # -- Chargement des fixtures partagees Py / JS ---------------------------
 
@@ -184,6 +189,49 @@ def test_canon_hinge_correct() -> None:
                 )
     assert not mismatches, (
         f"{len(mismatches)} hinge mismatch(es):\n"
+        + "\n".join(f"  {m}" for m in mismatches)
+    )
+
+
+# -- test_hinge_invariant_flip_equals_offset_flipped ----------------------
+
+def test_hinge_invariant_flip_equals_offset_flipped() -> None:
+    """Invariant : hinge flips SSI offset flips (pas d'exception de polarite).
+
+    Test 0b — verifie que _flip_hinge_on_rotation se reduit a flip=off_flip,
+    sans terme de polarite lie a la face west.
+    Doit ECHOUER avant le fix B-F5 east, PASSER apres.
+    """
+    mismatches: list[str] = []
+    for case in CASES:
+        room = case["input_room"]
+        cf = room.get("corridor_face", "")
+        if not cf or cf == "south":
+            continue
+        canon = canonicalize_room(copy.deepcopy(room))
+        for feat_type in ("openings", "doors"):
+            for i, (inp, can) in enumerate(
+                zip(room.get(feat_type, []), canon.get(feat_type, []))
+            ):
+                hs_in = inp.get("hinge_side")
+                hs_out = can.get("hinge_side")
+                if not hs_in:
+                    continue
+                off_flip = _flip_from(cf, inp["face"])
+                expected = (
+                    ("right" if hs_in == "left" else "left")
+                    if off_flip
+                    else hs_in
+                )
+                if hs_out != expected:
+                    mismatches.append(
+                        f"{case['name']} {feat_type}[{i}] "
+                        f"({inp['face']}->{can['face']}): "
+                        f"off_flip={off_flip}, "
+                        f"in={hs_in}, got={hs_out}, want={expected}"
+                    )
+    assert not mismatches, (
+        f"{len(mismatches)} invariant mismatch(es):\n"
         + "\n".join(f"  {m}" for m in mismatches)
     )
 

@@ -5,9 +5,8 @@ Une pièce est «canonicalisée» en pivotant sa description (faces, ouvertures,
 portes, exclusions, zones transparentes) de sorte que le corridor soit toujours
 au sud.
 
-B-F5 résolu (D-274 Passe 1.5b-1) : hinge_side corrigé via
-_flip_hinge_on_rotation — tient compte de l'inversion de polarité
-de la face "west" (left = high y).
+B-F5 résolu : hinge_side corrigé via _flip_hinge_on_rotation.
+Convention uniforme : left = min-along pour les 4 faces (pas d'exception west).
 """
 
 from __future__ import annotations
@@ -63,15 +62,6 @@ def _flip_to(ocf: str, canon_face: str) -> bool:
     return False
 
 
-def _left_is_low(face: str) -> bool:
-    """True si "left" correspond au côté low-coord sur cette face.
-
-    Toutes les faces sauf "west" : left = low x ou low y.
-    "west" : left = high y (polarité inversée).
-    """
-    return face != "west"
-
-
 def _flip_hinge_on_rotation(
     hinge_side: str,
     src_face: str,
@@ -80,13 +70,13 @@ def _flip_hinge_on_rotation(
 ) -> str:
     """Détermine si hinge_side doit être inversé lors d'une rotation.
 
-    Formule : flip = offset_flipped XOR (left_is_low(src) != left_is_low(dst)).
-    Gère la polarité inversée de la face "west" (B-F5).
+    Règle : flip = offset_flipped. Si l'offset a été retourné, le
+    hinge_side aussi (left ↔ right). Pas d'exception de polarité.
 
     Args:
         hinge_side: "left" ou "right" (ou vide → retourné tel quel).
-        src_face: Face avant mapping.
-        dst_face: Face après mapping.
+        src_face: Face avant mapping (conservé pour compatibilité signature).
+        dst_face: Face après mapping (conservé pour compatibilité signature).
         offset_flipped: True si l'offset a été retourné.
 
     Returns:
@@ -94,8 +84,7 @@ def _flip_hinge_on_rotation(
     """
     if not hinge_side:
         return hinge_side
-    polarity_diff = _left_is_low(src_face) != _left_is_low(dst_face)
-    if offset_flipped != polarity_diff:
+    if offset_flipped:
         return "right" if hinge_side == "left" else "left"
     return hinge_side
 

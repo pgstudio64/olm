@@ -1066,6 +1066,12 @@ async function init() {
   if (_peBtnNext) _peBtnNext.addEventListener("click", function() {
     if (window.peNavigate) window.peNavigate(1);
   });
+  var _peBtnBackCards = document.getElementById("peBtnBackCards");
+  if (_peBtnBackCards) _peBtnBackCards.addEventListener("click", function() {
+    // Same action as Esc → Card view (init.js keydown handler).
+    document.querySelector('.sub-tab-btn[data-subtab="catalogue"]').click();
+    if (window.catScrollSelectedIntoView) window.catScrollSelectedIntoView();
+  });
   document.getElementById("catFilterMinW").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMaxW").addEventListener("change", onCatalogueFilterChange);
   document.getElementById("catFilterMinD").addEventListener("change", onCatalogueFilterChange);
