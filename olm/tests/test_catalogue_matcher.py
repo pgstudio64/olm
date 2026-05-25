@@ -10,6 +10,7 @@ from olm.core.catalogue_matcher import (
     PatternCandidate,
     SelectionResult,
     _assert_no_block_overlap,
+    _candidate_sort_key,
     _classify_fit,
     _compute_composite_and_grade,
     _compute_dim_back_door,
@@ -20,14 +21,18 @@ from olm.core.catalogue_matcher import (
     _select_top_desks,
     adapt_dimensions,
     adapt_to_room,
+    candidate_category,
+    circulates_well,
     compact_catalogue_names,
     compute_desk_positions,
+    compute_opening_forbidden_zones,
     count_desks,
     dedupe_by_fingerprint,
     generate_auto_name,
     generate_mirrors,
     largest_free_rectangle_m2,
     load_catalogue,
+    max_working_desks,
     mirror_pattern,
     remove_conflicting_desks,
     score_candidate,
@@ -323,15 +328,15 @@ class TestSelectCandidates:
         assert isinstance(result, SelectionResult)
         assert result.standard == "standard1"
 
-    def test_candidates_subset_of_all_fitting(self, catalogue):
-        """D-244: displayed candidates are a subset of all_fitting."""
+    def test_candidates_are_all_non_hidden(self, catalogue):
+        """D-304: candidates = all non-hidden (no desk-count elaguage)."""
         if not catalogue:
             pytest.skip("Empty catalogue")
         room = RoomSpec(width_cm=600, depth_cm=500)
         results = select_candidates(catalogue, room)
         for sel in results:
             for c in sel.candidates:
-                assert c in sel.all_fitting
+                assert c.fit_class != "hidden"
 
     def test_hidden_patterns_excluded(self, catalogue):
         """D-244: patterns exceeding 10% tolerance are hidden."""
@@ -805,6 +810,116 @@ class TestRemoveConflictingDesks:
         result, removed = remove_conflicting_desks(p, room)
         assert len(removed) == 0
         assert result["_n_desks_after_removal"] == 4
+
+
+# ---------------------------------------------------------------------------
+# 7b. Entry-opening forbidden zones (912.4)
+# ---------------------------------------------------------------------------
+
+class TestOpeningForbiddenZones:
+    """Geometry + entry predicate of the opening clear strips (912.4)."""
+
+    def test_south_door_zone(self):
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.SOUTH, offset_cm=50,
+                                  width_cm=90, has_door=True)],
+        )
+        assert compute_opening_forbidden_zones(room, 90) == [(50, 310, 90, 90)]
+
+    def test_west_door_zone(self):
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.WEST, offset_cm=20,
+                                  width_cm=90, has_door=True)],
+        )
+        assert compute_opening_forbidden_zones(room, 70) == [(0, 20, 70, 90)]
+
+    def test_corridor_opening_without_door_included(self):
+        """A south (canonical corridor) opening is an entry even without door."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.SOUTH, offset_cm=0,
+                                  width_cm=90, has_door=False)],
+        )
+        assert compute_opening_forbidden_zones(room, 90)
+
+    def test_exterior_bay_excluded(self):
+        """A north bay without door is not an entry → no zone."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.NORTH, offset_cm=0,
+                                  width_cm=90, has_door=False)],
+        )
+        assert compute_opening_forbidden_zones(room, 90) == []
+
+    def test_zero_margin_no_zone(self):
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.SOUTH, offset_cm=0,
+                                  width_cm=90, has_door=True)],
+        )
+        assert compute_opening_forbidden_zones(room, 0) == []
+
+
+class TestRemoveDesksOnOpening:
+    """Desks landing on an entry strip are dropped at placement (912.4)."""
+
+    def test_desk_on_west_door_removed_with_margin(self):
+        p = _make_pattern([[{"type": "BLOCK_1", "gap_cm": 0}]],
+                          room_width_cm=400, room_depth_cm=400)
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.WEST, offset_cm=0,
+                                  width_cm=90, has_door=True)],
+        )
+        # Legacy behaviour (margin 0) keeps the desk.
+        _, removed0 = remove_conflicting_desks(p, room, 0)
+        assert len(removed0) == 0
+        # With the walking margin, the desk on the entry strip is dropped.
+        _, removed1 = remove_conflicting_desks(p, room, 90)
+        assert len(removed1) == 1
+
+    def test_desk_on_exterior_bay_kept(self):
+        p = _make_pattern([[{"type": "BLOCK_1", "gap_cm": 0}]],
+                          room_width_cm=400, room_depth_cm=400)
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[OpeningSpec(face=Face.NORTH, offset_cm=0,
+                                  width_cm=90, has_door=False)],
+        )
+        _, removed = remove_conflicting_desks(p, room, 90)
+        assert len(removed) == 0
+
+
+class TestCirculationEntryStrip:
+    """A desk on an entry no longer makes the room falsely infeasible (912.4)."""
+
+    def test_entry_unsealed_and_remaining_desk_reachable(self):
+        from olm.core.circulation_analysis import analyse
+        from olm.core.pattern_fit import build_circ_blocks_from_pattern
+        # Block A sits on the west door (sealing it); block B is reachable.
+        p = _make_pattern([[
+            {"type": "BLOCK_1", "gap_cm": 0},
+            {"type": "BLOCK_1", "gap_cm": 140},
+        ]], room_width_cm=600, room_depth_cm=600)
+        blocks = build_circ_blocks_from_pattern(p)
+        room_dict = {"eo_cm": 600, "ns_cm": 600,
+                     "doors": [{"wall": "west", "position_cm": 0,
+                                "width_cm": 90}]}
+        room = RoomSpec(
+            width_cm=600, depth_cm=600,
+            openings=[OpeningSpec(face=Face.WEST, offset_cm=0,
+                                  width_cm=90, has_door=True)],
+        )
+        zones = compute_opening_forbidden_zones(room, 90)
+        # Without the fix: block A seals the west door → no path at all.
+        circ_no = analyse(room_dict, blocks, 0)
+        assert not circ_no.path_widths
+        # With the entry strip: door reopened, on-entry desk skipped, the
+        # remaining desk is reachable.
+        circ_yes = analyse(room_dict, blocks, 0, forbidden_zones=zones)
+        assert circ_yes.path_widths
 
 
 # ---------------------------------------------------------------------------
@@ -1527,51 +1642,182 @@ class TestCirculationEntries:
 
 
 # ---------------------------------------------------------------------------
-# D-299 — select_best demotes infeasible candidates
+# 3-category model — circulates_well, candidate_category,
+# max_working_desks, _candidate_sort_key, select_best
 # ---------------------------------------------------------------------------
 
 def _make_score(
-    m2: float, min_passage: float = 120.0,
-    grade: str | None = "C", name: str = "P",
+    m2: float = 10.0,
+    min_passage: float = 120.0,
+    grade: str | None = "C",
+    name: str = "P",
+    n_desks: int = 4,
+    fit_class: str = "fitting",
+    overflow_cm: float = 0.0,
+    room_grade: str = "C",
 ) -> MatchScore:
-    """Minimal MatchScore for select_best tests."""
+    """Minimal MatchScore for select_best / sort key tests."""
     return MatchScore(
-        pattern_name=name, standard="s1", n_desks=4,
+        pattern_name=name, standard="s1", n_desks=n_desks,
         m2_per_desk=m2, circulation_grade="A",
         connectivity_pct=100.0, min_passage_cm=min_passage,
         worst_detour=1.0, largest_free_rect_m2=1.0,
         adapted_pattern={}, passage_grade=grade,
+        fit_class=fit_class, overflow_cm=overflow_cm,
+        room_grade=room_grade,
     )
 
 
-class TestSelectBestInfeasible:
-    """D-299: feasible candidate beats denser infeasible one."""
+class TestCirculatesWell:
+    """circulates_well predicate."""
 
-    def test_feasible_beats_denser_infeasible_passage_zero(self):
-        """Infeasible (min_passage=0) demoted behind less-dense feasible."""
-        infeasible = _make_score(m2=12.0, min_passage=0.0, grade=None,
-                                 name="dense_dead")
-        feasible = _make_score(m2=10.0, min_passage=90.0, grade="C",
-                               name="less_dense_ok")
-        best = select_best([infeasible, feasible])
-        assert best is feasible
+    def test_grade_a(self):
+        assert circulates_well(_make_score(grade="A")) is True
 
-    def test_feasible_beats_denser_infeasible_grade_f(self):
-        """Infeasible (passage_grade=F) demoted behind less-dense feasible."""
-        infeasible = _make_score(m2=12.0, min_passage=30.0, grade="F",
-                                 name="dense_F")
-        feasible = _make_score(m2=10.0, min_passage=90.0, grade="C",
-                               name="ok")
-        best = select_best([infeasible, feasible])
-        assert best is feasible
+    def test_grade_b(self):
+        assert circulates_well(_make_score(grade="B")) is True
 
-    def test_all_infeasible_returns_densest(self):
-        """When all candidates are infeasible, select_best returns the
-        densest (highest m2_per_desk) — never None."""
-        dense = _make_score(m2=12.0, min_passage=0.0, grade=None,
-                            name="dense")
-        sparse = _make_score(m2=8.0, min_passage=0.0, grade=None,
-                             name="sparse")
-        best = select_best([sparse, dense])
-        assert best is dense
-        assert best is not None
+    def test_grade_c(self):
+        assert circulates_well(_make_score(grade="C")) is True
+
+    def test_grade_d(self):
+        assert circulates_well(_make_score(grade="D")) is False
+
+    def test_grade_f(self):
+        assert circulates_well(_make_score(grade="F")) is False
+
+    def test_grade_none(self):
+        assert circulates_well(_make_score(grade=None)) is False
+
+
+class TestMaxWorkingDesks:
+    """max_working_desks helper."""
+
+    def test_max_among_fitting_well(self):
+        scores = [
+            _make_score(n_desks=3, grade="A"),
+            _make_score(n_desks=2, grade="B"),
+            _make_score(n_desks=5, grade="D"),  # bad circ → excluded
+        ]
+        assert max_working_desks(scores) == 3
+
+    def test_zero_when_no_fitting_well(self):
+        scores = [
+            _make_score(n_desks=4, grade="F"),
+            _make_score(n_desks=6, fit_class="oversize_1axis"),
+        ]
+        assert max_working_desks(scores) == 0
+
+    def test_empty(self):
+        assert max_working_desks([]) == 0
+
+
+class TestCandidateCategory:
+    """candidate_category classification."""
+
+    def test_fits_well(self):
+        s = _make_score(fit_class="fitting", grade="B", n_desks=4)
+        assert candidate_category(s, max_working=4) == "fits_well"
+
+    def test_fewer_desks(self):
+        s = _make_score(fit_class="fitting", grade="B", n_desks=2)
+        assert candidate_category(s, max_working=4) == "fewer_desks"
+
+    def test_too_tight_bad_circulation(self):
+        s = _make_score(fit_class="fitting", grade="D", n_desks=4)
+        assert candidate_category(s, max_working=4) == "too_tight"
+
+    def test_too_tight_passage_none(self):
+        s = _make_score(fit_class="fitting", grade=None, min_passage=0.0)
+        assert candidate_category(s, max_working=4) == "too_tight"
+
+    def test_too_tight_oversize(self):
+        s = _make_score(fit_class="oversize_1axis", overflow_cm=15.0)
+        assert candidate_category(s, max_working=4) == "too_tight"
+
+    def test_fewer_desks_when_max_working_zero(self):
+        """All fitting+well → fewer_desks if max_working=0 (no well)."""
+        s = _make_score(fit_class="fitting", grade="A", n_desks=2)
+        assert candidate_category(s, max_working=0) == "fewer_desks"
+
+
+class TestCandidateSortKey:
+    """_candidate_sort_key category-based comparator."""
+
+    def test_fits_well_beats_too_tight(self):
+        """fits_well (fitting+good circ) < too_tight (fitting+bad circ)."""
+        fw = _make_score(n_desks=2, fit_class="fitting", grade="B", name="fw")
+        tt = _make_score(n_desks=3, fit_class="fitting", grade="D", name="tt")
+        mw = 2
+        assert _candidate_sort_key(fw, mw) < _candidate_sort_key(tt, mw)
+
+    def test_too_tight_beats_fewer_desks(self):
+        """too_tight < fewer_desks (fewer_desks displayed last)."""
+        tt = _make_score(
+            n_desks=2, fit_class="fitting", grade="F", name="tt")
+        fd = _make_score(
+            n_desks=1, fit_class="fitting", grade="A", name="fd")
+        mw = 2
+        assert _candidate_sort_key(tt, mw) < _candidate_sort_key(fd, mw)
+
+    def test_more_desks_wins_same_category(self):
+        """3 desks beats 2 desks within same category."""
+        two = _make_score(n_desks=2, name="two")
+        three = _make_score(n_desks=3, name="three")
+        mw = 3
+        assert _candidate_sort_key(three, mw) < _candidate_sort_key(two, mw)
+
+    def test_better_grade_breaks_tie(self):
+        """At same desk count, grade A beats grade D."""
+        grade_a = _make_score(n_desks=3, room_grade="A", name="a")
+        grade_d = _make_score(n_desks=3, room_grade="D", name="d")
+        mw = 3
+        assert _candidate_sort_key(grade_a, mw) < _candidate_sort_key(grade_d, mw)
+
+    def test_overflow_discriminates_too_tight(self):
+        """Within too_tight, lower overflow wins."""
+        small = _make_score(
+            fit_class="oversize_1axis", overflow_cm=5.0, name="small")
+        big = _make_score(
+            fit_class="oversize_1axis", overflow_cm=20.0, name="big")
+        mw = 0
+        assert _candidate_sort_key(small, mw) < _candidate_sort_key(big, mw)
+
+    def test_3desks_gradeD_vs_2desks_gradeA_same_category(self):
+        """3 desks grade D beats 2 desks grade A (desks before grade)."""
+        three_d = _make_score(n_desks=3, room_grade="D", name="3D")
+        two_a = _make_score(n_desks=2, room_grade="A", name="2A")
+        mw = 3
+        assert _candidate_sort_key(three_d, mw) < _candidate_sort_key(two_a, mw)
+
+
+class TestSelectBest:
+    """select_best returns best by _candidate_sort_key."""
+
+    def test_fits_well_preferred_over_too_tight(self):
+        fw = _make_score(n_desks=2, grade="C", name="fw")
+        tt = _make_score(n_desks=4, grade="D", name="tt")
+        best = select_best([tt, fw])
+        assert best is fw
+
+    def test_returns_too_tight_when_no_fits_well(self):
+        """No fits_well → returns best of too_tight (not None)."""
+        tt = _make_score(
+            n_desks=3, fit_class="fitting", grade="D", name="tt")
+        os = _make_score(
+            n_desks=4, fit_class="oversize_1axis",
+            overflow_cm=10.0, grade="A", name="os")
+        best = select_best([os, tt])
+        assert best is tt
+
+    def test_returns_oversize_when_no_fitting(self):
+        """Only oversize → returns best oversize."""
+        osa = _make_score(
+            fit_class="oversize_1axis", overflow_cm=5.0, name="a")
+        osb = _make_score(
+            fit_class="oversize_1axis", overflow_cm=20.0, name="b")
+        best = select_best([osb, osa])
+        assert best is osa
+
+    def test_empty_returns_none(self):
+        assert select_best([]) is None

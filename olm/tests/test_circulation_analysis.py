@@ -322,3 +322,152 @@ class TestAnalyse:
 
         assert result.connectivity_pct == pytest.approx(100.0, abs=1.0)
         assert len(result.desk_ids) >= 1
+
+
+# ---------------------------------------------------------------------------
+# D-305 : desk access through own clearance
+# ---------------------------------------------------------------------------
+
+class TestD305ClearanceAccess:
+    """D-305 : Dijkstra traverse le degagement propre du desk."""
+
+    def test_clearance_width_not_gap(self) -> None:
+        """Cas terrain 340x390 simplifie : min_passage >= degagement (70 cm).
+
+        BLOCK_3_SIDE (3 postes, 80x540) dans une piece 340x600.
+        Chaise face west, degagement 70 cm.  Avant D-305, le BFS
+        contournait le degagement et mesurait le gap lateral (~10 cm).
+        Apres D-305, le BFS traverse le degagement : min_passage >= 70.
+        """
+        # Piece 340 x 600, porte south
+        room = _make_room(
+            eo_cm=340, ns_cm=600,
+            doors=[{"wall": "south", "position_cm": 100, "width_cm": 90}],
+        )
+        # BLOCK_3_SIDE : 80x540, place contre le mur est (x=260=340-80)
+        # pour que le degagement west (70 cm) tombe DANS la piece.
+        # Gap lateral entre degagement et mur ouest = 340 - 80 - 70 = 190.
+        # Mais le degagement (70 cm de large) doit etre la voie mesuree.
+        block = _make_block("BLOCK_3_SIDE", x_cm=260, y_cm=10,
+                            eo_cm=80, ns_cm=540)
+        result = analyse(room, [block])
+
+        assert len(result.path_widths) >= 1
+        min_pw = min(result.path_widths)
+        # Le degagement propre fait 70 cm ; la voie d'acces l'inclut.
+        assert min_pw >= 70, (
+            f"min_passage={min_pw} trop bas — le BFS n'a pas traverse "
+            f"le degagement propre (attendu >= 70)"
+        )
+
+    def test_real_bottleneck_preserved(self) -> None:
+        """Vrai goulot de transit entre deux blocs : min_passage reste faible.
+
+        Deux BLOCK_1 face a face creent un couloir etroit de 20 cm
+        entre les degagements.  Ce bottleneck est un transit reel
+        (pas un degagement propre) et doit etre conserve.
+        """
+        # Piece 500x500, porte south.
+        room = _make_room(
+            eo_cm=500, ns_cm=500,
+            doors=[{"wall": "south", "position_cm": 200, "width_cm": 90}],
+        )
+        # Deux BLOCK_1 (80x180) face a face, degagement west (70 cm).
+        # Bloc A a x=200, chaise a gauche (west), degagement [130..200].
+        # Bloc B a x=40, chaise a droite... B est un BLOCK_1@180
+        # (face east, degagement east 70 cm → [120..190]).
+        # Gap physique entre degagements A et B = 200 - 80 - 70 - 40 = 10 cm.
+        # Mais on veut un vrai couloir de transit.
+        # Simplifions : 2 BLOCK_1 standard (chaise west) cote a cote
+        # verticalement, avec un couloir de transit de 20 cm entre eux.
+        # Bloc A a y=50, Bloc B a y=250.  Pas de bottleneck horizontal.
+        #
+        # Pour un VRAI bottleneck : un faux mur (FAKE) qui retrecit
+        # le corridor central a 20 cm entre les 2 blocs.
+        block_a = _make_block("BLOCK_1", x_cm=200, y_cm=50,
+                              eo_cm=80, ns_cm=180)
+        block_b = _make_block("BLOCK_1", x_cm=200, y_cm=300,
+                              eo_cm=80, ns_cm=180)
+        # Faux mur qui laisse 20 cm libre entre lui et les blocs.
+        # Place a x=0, y=240, largeur=110, hauteur=10 (barre).
+        # Le corridor libre horizontal = 200 - 70 (degagement A) = 130,
+        # mais la barre le retrecit a 20 cm : barre occupe 110 cm
+        # depuis x=0, laissant 130 - 110 = 20 cm de passage.
+        wall_bar = _make_block("FAKE_WALL", x_cm=0, y_cm=240,
+                               eo_cm=110, ns_cm=10)
+
+        result = analyse(room, [block_a, block_b, wall_bar])
+
+        # Au moins un desk doit avoir un min_passage <= 30 cm (bottleneck)
+        assert len(result.path_widths) >= 1
+        assert min(result.path_widths) <= 30, (
+            f"min_passage={min(result.path_widths)} — le bottleneck de "
+            f"transit devrait etre <= 30 cm"
+        )
+
+    def test_enclosed_desk_unreachable(self) -> None:
+        """Poste encercle (degagement + tous cotes bloques) → BFS echoue.
+
+        min_passage = 0 (desk unreachable).
+        """
+        # Piece 500x500, porte south.
+        room = _make_room(
+            eo_cm=500, ns_cm=500,
+            doors=[{"wall": "south", "position_cm": 200, "width_cm": 90}],
+        )
+        # BLOCK_1 a x=200, y=100. Entoure par un faux mur rectangulaire
+        # qui bloque tous les cotes : barres N/S/E/W autour du bloc +
+        # degagement.
+        block = _make_block("BLOCK_1", x_cm=200, y_cm=100,
+                            eo_cm=80, ns_cm=180)
+        # Enclos : barres mur-a-mur qui isolent le bloc.
+        # Barre nord (y=20, largeur 500, hauteur 10) — coupe au-dessus.
+        bar_n = _make_block("FAKE", x_cm=100, y_cm=20,
+                            eo_cm=200, ns_cm=10)
+        bar_s = _make_block("FAKE", x_cm=100, y_cm=290,
+                            eo_cm=200, ns_cm=10)
+        bar_w = _make_block("FAKE", x_cm=100, y_cm=20,
+                            eo_cm=10, ns_cm=280)
+        bar_e = _make_block("FAKE", x_cm=290, y_cm=20,
+                            eo_cm=10, ns_cm=280)
+
+        result = analyse(room, [block, bar_n, bar_s, bar_w, bar_e])
+
+        # Le desk doit etre unreachable : min_passage = 0
+        if result.path_widths:
+            assert min(result.path_widths) == 0.0
+
+    def test_desk_against_wall_reachable(self) -> None:
+        """Poste colle au mur (degagement touche la paroi) : joignable.
+
+        Avant D-305, _access_for_zone retournait None quand la case
+        « au-dela du degagement » etait hors grille.  Apres D-305,
+        le centre chaise est DANS la piece → le desk est joignable
+        par le cote via son degagement.
+        """
+        # Piece 500x500, porte south.
+        room = _make_room(
+            eo_cm=500, ns_cm=500,
+            doors=[{"wall": "south", "position_cm": 200, "width_cm": 90}],
+        )
+        # BLOCK_1 (80x180) colle au mur ouest : x=10 (= 1 cell du mur).
+        # Chaise west : degagement s'etend de x=10-70=-60 → clampe a 0.
+        # Centre chaise = (10 - 70/2) / 10 = col -2.5 → hors grille?
+        # Non : x=10, c1=1, nsup=7, chair_col = 1 - 3.5 = -2.5 → hors.
+        # Il faut placer le bloc un peu plus loin : x=80 pour que le
+        # centre chaise tombe dans la piece.
+        # c1 = 80/10 = 8, nsup = 7, chair_col = 8 - 3.5 = 4.5 → col 4 ✓
+        # Degagement [col 1..8], touche le mur ouest.
+        # AVANT D-305 : c = 8 - 7 - 1 = 0 (= mur WALL) → _best_walkable
+        # echouait ou retournait None. APRES : chair centre col=4, in grid.
+        block = _make_block("BLOCK_1", x_cm=80, y_cm=100,
+                            eo_cm=80, ns_cm=180)
+        result = analyse(room, [block])
+
+        assert len(result.desk_ids) >= 1, (
+            "desk_ids vide — le desk colle au mur devrait etre joignable"
+        )
+        assert all(w > 0 for w in result.path_widths), (
+            "path_widths contient un 0 — le desk colle au mur est "
+            "marque unreachable a tort"
+        )

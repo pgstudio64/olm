@@ -1333,6 +1333,39 @@ async function init() {
     }
   });
 
+  // Homogeneous panel shortcuts: S = Save, D = Discard, R = Revert.
+  // Each key clicks the matching button *only when it is visible*, so the
+  // action auto-scopes to the active panel (Pattern editor, Amend layout,
+  // Room amend, Office review). Reuses each button's own click handler and
+  // its existing confirmation — no extra confirmation is introduced.
+  // R = Revert targets the Office "Revert" button only; in the editor/amend
+  // R already rotates the selection (those handlers run first and call
+  // preventDefault), and the Revert button is not visible there, so they
+  // never collide.
+  function _firstVisibleBtn(ids) {
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && el.offsetParent !== null) return el;
+    }
+    return null;
+  }
+  document.addEventListener("keydown", function(e) {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    var backdrop = document.getElementById("olmModalBackdrop");
+    if (backdrop && backdrop.style.display !== "none") return;
+    var btn = null;
+    if (e.key === "s" || e.key === "S") {
+      btn = _firstVisibleBtn(
+        ["btnSave", "rvBtnSaveRoom", "fpBtnSaveLayout", "btnSavePlan"]);
+    } else if (e.key === "d" || e.key === "D") {
+      btn = _firstVisibleBtn(["btnAmendCancel", "rvBtnCancelRoom"]);
+    } else if (e.key === "r" || e.key === "R") {
+      btn = _firstVisibleBtn(["fpBtnDiscard"]);
+    }
+    if (btn) { e.preventDefault(); btn.click(); }
+  });
+
   // Floor + Room sidebar resize handles extracted to
   // olm/static/init_resize.js as of D-94 P3.
 

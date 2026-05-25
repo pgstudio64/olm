@@ -11,6 +11,8 @@ that contains every rectangle, then moves walls to match.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 from dataclasses import dataclass, field
@@ -21,6 +23,7 @@ from olm.core.catalogue_matcher import (
     BlockPosition,
     compute_block_positions,
 )
+from olm.core.matching_config import GRID_CELL_CM
 from olm.core.pattern_generator import (
     FaceCandidates,
     FaceZone,
@@ -101,6 +104,47 @@ def fit_room_to_pattern(
         direction=direction,
         warnings=warnings,
     )
+
+
+# Module-level cache for circulation-aware min-room.
+# Key: content fingerprint (hash of structural pattern data + standard).
+# Value: (min_w, min_d, shrink_w, shrink_n).
+_MIN_ROOM_CACHE: dict[str, tuple[int, int, int, int]] = {}
+
+
+def compute_min_room_circ(
+    pattern: dict,
+    spacing: SpacingConfig,
+) -> tuple[int, int]:
+    """Compute minimum room dimensions with circulation margins.
+
+    Pure function — does NOT mutate *pattern*.  Cached by content
+    fingerprint + standard name.
+
+    Starts from the declared room and shrinks margins while all
+    desks remain reachable and min passage >= walking_margin_cm.
+    Falls back to footprint-only dimensions when the pattern has
+    no doors or when circulation fails at the declared room size.
+
+    Args:
+        pattern: Catalogue pattern (JSON dict).
+        spacing: Spacing config for the pattern's standard.
+
+    Returns:
+        (min_width_cm, min_depth_cm) snapped to SNAP_CM.
+    """
+    key = _min_room_cache_key(pattern, spacing)
+    cached = _MIN_ROOM_CACHE.get(key)
+    if cached is not None:
+        return cached[0], cached[1]
+    result = _compute_min_room_circ_impl(pattern, spacing)
+    _MIN_ROOM_CACHE[key] = result
+    return result[0], result[1]
+
+
+def clear_min_room_cache() -> None:
+    """Clear the circulation-aware min-room cache."""
+    _MIN_ROOM_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -210,14 +254,271 @@ def is_pattern_valid(
     return x_min >= 0 and y_min >= 0 and x_max <= rw and y_max <= rd
 
 
+# ---------------------------------------------------------------------------
+# Circulation-aware min room helpers (D-305)
+# ---------------------------------------------------------------------------
+
+
+def build_circ_blocks_from_pattern(
+    pattern: dict,
+    shift_x: int = 0,
+    shift_y: int = 0,
+    positions: list[BlockPosition] | None = None,
+) -> list[dict]:
+    """Build blocks in circulation-analysis format from a pattern.
+
+    Converts ``BlockPosition`` dataclasses to the dict format
+    expected by ``circulation_analysis.analyse``.  Optionally
+    shifts all positions by ``(-shift_x, -shift_y)`` to model a
+    shrunk room whose origin moved.
+
+    Args:
+        pattern: Catalogue pattern (JSON dict).
+        shift_x: Subtract from each block's x_cm.
+        shift_y: Subtract from each block's y_cm.
+        positions: Pre-computed positions (avoids recomputation).
+
+    Returns:
+        List of block dicts for circulation analysis.
+    """
+    if positions is None:
+        positions = compute_block_positions(pattern)
+    return [
+        {
+            "type": bp.block_type,
+            "orientation": bp.orientation,
+            "x_cm": bp.x_cm - shift_x,
+            "y_cm": bp.y_cm - shift_y,
+            "eo_cm": bp.eo_cm,
+            "ns_cm": bp.ns_cm,
+        }
+        for bp in positions
+    ]
+
+
+def _build_circ_format(
+    pattern: dict,
+    room_w: int,
+    room_d: int,
+    shift_x: int = 0,
+    shift_y: int = 0,
+    positions: list[BlockPosition] | None = None,
+) -> tuple[dict, list[dict]]:
+    """Build ``(room_dict, blocks)`` for circulation analysis.
+
+    Doors are extracted from ``pattern["room_openings"]``: entries
+    with ``has_door``, falling back to all openings, then to a
+    synthetic 90 cm south door.
+
+    Args:
+        pattern: Catalogue pattern.
+        room_w: Candidate room width (cm).
+        room_d: Candidate room depth (cm).
+        shift_x: West-side shrink (subtracted from block x and
+            door offsets on north/south walls).
+        shift_y: North-side shrink (subtracted from block y and
+            door offsets on east/west walls).
+        positions: Pre-computed BlockPositions (optional).
+
+    Returns:
+        ``(room_dict, blocks_list)`` for
+        ``circulation_analysis.analyse``.
+    """
+    openings = pattern.get("room_openings", [])
+    entries = [o for o in openings if o.get("has_door")] or list(openings)
+
+    doors: list[dict] = []
+    for o in entries:
+        face = o.get("face", "")
+        offset = o.get("offset_cm", 0)
+        width = o.get("width_cm", 0)
+        if face in ("north", "south"):
+            offset -= shift_x
+            wall_len = room_w
+        elif face in ("east", "west"):
+            offset -= shift_y
+            wall_len = room_d
+        else:
+            wall_len = room_w
+        offset = max(0, offset)
+        if offset + width > wall_len:
+            offset = max(0, wall_len - width)
+        doors.append({
+            "wall": face,
+            "position_cm": offset,
+            "width_cm": min(width, wall_len),
+        })
+
+    if not doors:
+        doors.append({
+            "wall": "south",
+            "position_cm": 0,
+            "width_cm": min(90, room_w),
+        })
+
+    room_dict = {
+        "eo_cm": room_w, "ns_cm": room_d, "doors": doors,
+    }
+    blocks = build_circ_blocks_from_pattern(
+        pattern, shift_x, shift_y, positions,
+    )
+    return room_dict, blocks
+
+
+def _circulation_ok(
+    pattern: dict,
+    room_w: int,
+    room_d: int,
+    shift_x: int,
+    shift_y: int,
+    spacing: SpacingConfig,
+    positions: list[BlockPosition] | None = None,
+) -> bool:
+    """Return True if circulation passes for a candidate room.
+
+    Criteria (D-305): **all** desks reachable (non-empty BFS path)
+    AND ``min(path_widths) >= spacing.walking_margin_cm``.
+    """
+    from olm.core.circulation_analysis import (
+        analyse as _circ_analyse,
+    )
+
+    room_dict, blocks = _build_circ_format(
+        pattern, room_w, room_d, shift_x, shift_y, positions,
+    )
+    circ = _circ_analyse(
+        room_dict, blocks, spacing.door_exclusion_depth_cm,
+    )
+    if not circ.path_widths:
+        return False
+    if any(len(p) == 0 for p in circ.paths):
+        return False
+    return min(circ.path_widths) >= spacing.walking_margin_cm
+
+
+def _min_room_cache_key(
+    pattern: dict, spacing: SpacingConfig,
+) -> str:
+    """Content-based fingerprint for the min-room cache."""
+    rows_json = json.dumps(
+        pattern.get("rows", []), sort_keys=True,
+    )
+    row_gaps_json = json.dumps(pattern.get("row_gaps_cm", []))
+    openings_json = json.dumps(
+        pattern.get("room_openings", []), sort_keys=True,
+    )
+    raw = (
+        f"{spacing.name}\n"
+        f"{pattern.get('room_width_cm', 0)}\n"
+        f"{pattern.get('room_depth_cm', 0)}\n"
+        f"{rows_json}\n{row_gaps_json}\n{openings_json}"
+    )
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _compute_min_room_circ_impl(
+    pattern: dict,
+    spacing: SpacingConfig,
+    bbox: tuple[int, int, int, int] | None = None,
+) -> tuple[int, int, int, int]:
+    """Shrink-from-declared implementation of circ-aware min room.
+
+    Returns ``(min_w, min_d, shrink_west, shrink_north)`` snapped
+    to ``SNAP_CM``.  Falls back to footprint-only dimensions when
+    circulation cannot be evaluated (no doors, no blocks, or the
+    declared room itself fails the circulation check).
+    """
+    room_w = pattern.get("room_width_cm", 0)
+    room_d = pattern.get("room_depth_cm", 0)
+    if room_w <= 0 or room_d <= 0:
+        return room_w, room_d, 0, 0
+
+    positions = compute_block_positions(pattern)
+    if not positions:
+        return room_w, room_d, 0, 0
+
+    if bbox is None:
+        try:
+            bbox = compute_pattern_footprint(pattern, spacing)
+        except PatternStructurallyInvalid:
+            return room_w, room_d, 0, 0
+    fp_x_min, fp_x_max, fp_y_min, fp_y_max = bbox
+
+    # Margins between footprint and declared walls
+    margin_n = max(0, fp_y_min)
+    margin_s = max(0, room_d - fp_y_max)
+    margin_w = max(0, fp_x_min)
+    margin_e = max(0, room_w - fp_x_max)
+
+    if margin_n + margin_s + margin_w + margin_e == 0:
+        return room_w, room_d, 0, 0
+
+    # Guard: need at least one suitable door/opening for circ
+    openings = pattern.get("room_openings", [])
+    has_entries = len(openings) > 0
+    if not has_entries:
+        return _circ_footprint_fallback(bbox)
+
+    # Declared room must pass circulation to start shrinking
+    if not _circulation_ok(
+        pattern, room_w, room_d, 0, 0, spacing, positions,
+    ):
+        return _circ_footprint_fallback(bbox)
+
+    # Shrink each side: north, east, west, south (corridor last)
+    shrinks = {"north": 0, "south": 0, "east": 0, "west": 0}
+    max_s = {
+        "north": (margin_n // GRID_CELL_CM) * GRID_CELL_CM,
+        "south": (margin_s // GRID_CELL_CM) * GRID_CELL_CM,
+        "east": (margin_e // GRID_CELL_CM) * GRID_CELL_CM,
+        "west": (margin_w // GRID_CELL_CM) * GRID_CELL_CM,
+    }
+
+    for side in ("north", "east", "west", "south"):
+        while shrinks[side] + GRID_CELL_CM <= max_s[side]:
+            shrinks[side] += GRID_CELL_CM
+            cw = room_w - shrinks["west"] - shrinks["east"]
+            cd = room_d - shrinks["north"] - shrinks["south"]
+            if not _circulation_ok(
+                pattern, cw, cd,
+                shrinks["west"], shrinks["north"],
+                spacing, positions,
+            ):
+                shrinks[side] -= GRID_CELL_CM
+                break
+
+    min_w = room_w - shrinks["west"] - shrinks["east"]
+    min_d = room_d - shrinks["north"] - shrinks["south"]
+    min_w = math.ceil(min_w / SNAP_CM) * SNAP_CM
+    min_d = math.ceil(min_d / SNAP_CM) * SNAP_CM
+    return min_w, min_d, shrinks["west"], shrinks["north"]
+
+
+def _circ_footprint_fallback(
+    bbox: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Fallback: footprint-only min room (no circ margins)."""
+    fp_x_min, fp_x_max, fp_y_min, fp_y_max = bbox
+    fp_w = math.ceil(
+        (fp_x_max - fp_x_min) / SNAP_CM,
+    ) * SNAP_CM
+    fp_d = math.ceil(
+        (fp_y_max - fp_y_min) / SNAP_CM,
+    ) * SNAP_CM
+    return fp_w, fp_d, max(0, fp_x_min), max(0, fp_y_min)
+
+
 def _compute_min_room(
     pattern: dict,
     spacing: SpacingConfig,
 ) -> tuple[int, int, list[str]]:
     """Compute minimum room dimensions for a pattern.
 
-    Delegates the obstacle bbox to ``compute_pattern_footprint``, then
-    snaps to grid and translates the pattern into the positive quadrant.
+    Combines footprint-based and circulation-aware constraints
+    (D-305): the room is at least large enough to contain the
+    footprint (blocks + face zones + door obstacles) and all
+    features (windows, openings), and additionally includes
+    enough margin for circulation to pass.
 
     Returns:
         (width_cm, depth_cm, warnings)
@@ -237,21 +538,40 @@ def _compute_min_room(
     bbox_x_min, bbox_x_max, bbox_y_min, bbox_y_max = (
         compute_pattern_footprint(pattern, spacing)
     )
-    width = bbox_x_max - bbox_x_min
-    depth = bbox_y_max - bbox_y_min
 
-    # Feature constraint (windows, non-door openings)
-    width, depth, feat_warns = _apply_feature_constraints(
-        pattern, width, depth,
+    # D-305: circulation-aware min room (shrink from declared)
+    circ_w, circ_d, shrink_w, shrink_n = (
+        _compute_min_room_circ_impl(
+            pattern, spacing,
+            bbox=(bbox_x_min, bbox_x_max, bbox_y_min, bbox_y_max),
+        )
+    )
+
+    # Feature constraints (windows, non-door openings)
+    fp_width = bbox_x_max - bbox_x_min
+    fp_depth = bbox_y_max - bbox_y_min
+    feat_w, feat_d, feat_warns = _apply_feature_constraints(
+        pattern, fp_width, fp_depth,
     )
     warnings.extend(feat_warns)
+    feat_w = math.ceil(feat_w / SNAP_CM) * SNAP_CM
+    feat_d = math.ceil(feat_d / SNAP_CM) * SNAP_CM
 
-    width = math.ceil(width / SNAP_CM) * SNAP_CM
-    depth = math.ceil(depth / SNAP_CM) * SNAP_CM
+    width = max(circ_w, feat_w)
+    depth = max(circ_d, feat_d)
 
-    # Translation: bring everything into [0, width] x [0, depth]
-    shift_x = -bbox_x_min
-    shift_y = -bbox_y_min
+    # Translation: bring blocks into [0, width] x [0, depth].
+    # Use circ shrink as origin shift when footprint is in the
+    # positive quadrant; otherwise shift to clear negative bbox.
+    if bbox_x_min < 0:
+        shift_x = -bbox_x_min
+    else:
+        shift_x = -shrink_w
+    if bbox_y_min < 0:
+        shift_y = -bbox_y_min
+    else:
+        shift_y = -shrink_n
+
     if shift_x != 0 or shift_y != 0:
         _translate_pattern(pattern, shift_x, shift_y)
 

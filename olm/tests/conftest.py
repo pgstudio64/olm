@@ -120,16 +120,21 @@ def sample_plan_json() -> dict[str, Any]:
 
 @pytest.fixture()
 def sample_room_canonical() -> dict[str, Any]:
-    """Room canonique minimale pour /api/floor-plan/match."""
+    """Room canonique minimale pour /api/floor-plan/match.
+
+    Dimensions 500×480 ensure the single BLOCK_1 from
+    monkeypatch_catalogue yields a feasible candidate (passage > 50%
+    of walking_margin) so the happy-path test sees candidates.
+    """
     return {
         "name": "101",
-        "width_cm": 300,
+        "width_cm": 500,
         "depth_cm": 480,
         "windows": [
-            {"face": "north", "offset_cm": 0, "width_cm": 300},
+            {"face": "north", "offset_cm": 0, "width_cm": 500},
         ],
         "openings": [
-            {"face": "south", "offset_cm": 100, "width_cm": 90,
+            {"face": "south", "offset_cm": 200, "width_cm": 90,
              "has_door": True, "opens_inward": True, "hinge_side": "left"},
         ],
         "exclusion_zones": [

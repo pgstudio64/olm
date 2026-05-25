@@ -171,6 +171,45 @@ function computeCirculationInfo() {
       fDims.width_cm, fDims.depth_cm, cellCm, cols, rowsN, 1);
   }
 
+  // 912.4 — Entry-opening forbidden strips (mirror of server
+  // compute_opening_forbidden_zones). Entry = a door, or an opening on the
+  // corridor face ("south"); depth = walking margin. The strip stays
+  // walkable (a desk on it never seals the entry) and a desk landing on it
+  // is not a circulation target. See D-309.
+  var _wm = CURRENT_SPACING ? (CURRENT_SPACING.walking_margin_cm || 0) : 0;
+  var forbiddenZones = []; // {x, y, w, d} cm
+  if (_wm > 0) {
+    var _zoneFeats = (state.room_doors || []).concat(
+      (state.room_openings || []).filter(function (o) {
+        return o && (o.has_door || o.face === "south");
+      }));
+    _zoneFeats.forEach(function (o) {
+      if (!o || (o.face !== "north" && o.face !== "south" &&
+                 o.face !== "east" && o.face !== "west")) return;
+      var off = Math.max(0, o.offset_cm || 0);
+      var w = o.width_cm || 0;
+      if (o.face === "north" || o.face === "south") {
+        var ww = Math.min(w, Math.max(0, state.room_width_cm - off));
+        var dep = Math.min(_wm, state.room_depth_cm);
+        var zy = o.face === "north" ? 0 : Math.max(0, state.room_depth_cm - dep);
+        forbiddenZones.push({ x: off, y: zy, w: ww, d: dep });
+      } else {
+        var hh = Math.min(w, Math.max(0, state.room_depth_cm - off));
+        var dep2 = Math.min(_wm, state.room_width_cm);
+        var zx = o.face === "west" ? 0 : Math.max(0, state.room_width_cm - dep2);
+        forbiddenZones.push({ x: zx, y: off, w: dep2, d: hh });
+      }
+    });
+  }
+  function _inForbidden(xc, yc, wc, hc) {
+    for (var z = 0; z < forbiddenZones.length; z++) {
+      var fz = forbiddenZones[z];
+      if (xc < fz.x + fz.w && xc + wc > fz.x &&
+          yc < fz.y + fz.d && yc + hc > fz.y) return true;
+    }
+    return false;
+  }
+
   // Blocks: footprint + chair setback zones as obstacles (BFS cannot traverse them)
   var deskCells = []; // {r, c, chairSide}
   var yRow = 0;
@@ -203,6 +242,8 @@ function computeCirculationInfo() {
       }
       for (var di = 0; di < desks.length; di++) {
         var d = desks[di];
+        // 912.4 (effect B): a desk on an entry strip is not a target.
+        if (_inForbidden(xBlock + d.x, yRow + offNS + d.y, d.w, d.h)) continue;
         var faceKey = {N:"north",S:"south",E:"east",W:"west"}[d.chairSide];
         var faceData = f[faceKey] || {};
         var nsupCm = faceData.non_superposable_cm || 70;
@@ -254,6 +295,16 @@ function computeCirculationInfo() {
     yRow += rowMaxNS;
     if (ri < state.rows.length - 1) yRow += state.row_gaps_cm[ri] || 0;
   }
+
+  // 912.4 (effect A): reopen any block footprint that landed on an entry
+  // strip, so a desk on the opening never seals the entry (exclusions kept).
+  forbiddenZones.forEach(function (fz) {
+    var c0 = Math.floor(fz.x / cellCm), r0 = Math.floor(fz.y / cellCm);
+    var c1 = Math.ceil((fz.x + fz.w) / cellCm), r1 = Math.ceil((fz.y + fz.d) / cellCm);
+    for (var r = Math.max(0, r0); r < Math.min(rowsN, r1); r++)
+      for (var c = Math.max(0, c0); c < Math.min(cols, c1); c++)
+        if (grid[r][c] === 1) grid[r][c] = 0;
+  });
 
   // Entry cells (D-280/D-296): circulation entries = real doors + openings on
   // the corridor face ("south" in the canonical frame). People enter through

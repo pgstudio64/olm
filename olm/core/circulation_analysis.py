@@ -63,10 +63,35 @@ class CirculationResult:
 # Grid construction
 # ---------------------------------------------------------------------------
 
+def _stamp_doors(grid: np.ndarray, doors: list[dict]) -> None:
+    """Stamp DOOR cells on the wall edges (overwriting walls/footprints).
+
+    Called once after the peripheral walls, and again after the block
+    footprints when entry strips are reopened (912.4), so a desk on an
+    opening can never seal the door it sits on.
+    """
+    ROWS, COLS = grid.shape
+    for door in doors:
+        wall = door["wall"]
+        pos = door.get("position_cm", 0)
+        width = door.get("width_cm", 90)
+        c1 = pos // GRID_CELL_CM
+        c2 = (pos + width) // GRID_CELL_CM
+        if wall == "south":
+            grid[ROWS - 1, c1:c2] = int(CellType.DOOR)
+        elif wall == "north":
+            grid[0, c1:c2] = int(CellType.DOOR)
+        elif wall == "west":
+            grid[c1:c2, 0] = int(CellType.DOOR)
+        elif wall == "east":
+            grid[c1:c2, COLS - 1] = int(CellType.DOOR)
+
+
 def build_grid(
     room: dict,
     blocks: list[dict],
     door_depth_cm: int = _DEFAULT_DOOR_DEPTH,
+    forbidden_zones: list[tuple[int, int, int, int]] | None = None,
 ) -> np.ndarray:
     """Build a numpy grid (ROWS x COLS) of CellType values.
 
@@ -74,6 +99,9 @@ def build_grid(
         room: Dict with eo_cm, ns_cm, doors (list of wall/position_cm/width_cm).
         blocks: List of dicts with type/orientation/x_cm/y_cm/eo_cm/ns_cm.
         door_depth_cm: Door exclusion zone depth in cm.
+        forbidden_zones: Entry-opening clear strips (912.4). Any block
+            FOOTPRINT inside such a strip is reset to CORRIDOR so a desk
+            sitting on an entry never seals it (the strip stays walkable).
 
     Returns:
         Integer numpy grid of shape (ROWS, COLS) initialised with CellType values.
@@ -110,21 +138,7 @@ def build_grid(
     grid[:, COLS - 1] = int(CellType.WALL)
 
     # Step 4 — Doors (overwrite walls)
-    for door in room.get("doors", []):
-        wall = door["wall"]
-        pos = door.get("position_cm", 0)
-        width = door.get("width_cm", 90)
-        c1 = pos // GRID_CELL_CM
-        c2 = (pos + width) // GRID_CELL_CM
-
-        if wall == "south":
-            grid[ROWS - 1, c1:c2] = int(CellType.DOOR)
-        elif wall == "north":
-            grid[0, c1:c2] = int(CellType.DOOR)
-        elif wall == "west":
-            grid[c1:c2, 0] = int(CellType.DOOR)
-        elif wall == "east":
-            grid[c1:c2, COLS - 1] = int(CellType.DOOR)
+    _stamp_doors(grid, room.get("doors", []))
 
     # Step 5 — Door exclusion zone: remains CORRIDOR (walkable).
     # Furniture placement prohibition is handled by the matcher
@@ -181,6 +195,23 @@ def build_grid(
             t = faces.west.non_superposable_cm // GRID_CELL_CM
             c1 = max(0, min(COLS, col1 - t))
             grid[row1:row2, c1:col1] = int(CellType.FOOTPRINT)
+
+    # 912.4 — Entry-opening clear strips: reopen any FOOTPRINT cell that
+    # landed on an entry strip, so a desk on the opening never seals it.
+    # Only FOOTPRINT is reset (walls/doors are left untouched).
+    if forbidden_zones:
+        footprint_val = int(CellType.FOOTPRINT)
+        corridor_val = int(CellType.CORRIDOR)
+        for (zx, zy, zw, zd) in forbidden_zones:
+            zc1 = max(0, min(COLS, zx // GRID_CELL_CM))
+            zc2 = max(0, min(COLS, (zx + zw) // GRID_CELL_CM))
+            zr1 = max(0, min(ROWS, zy // GRID_CELL_CM))
+            zr2 = max(0, min(ROWS, (zy + zd) // GRID_CELL_CM))
+            sub = grid[zr1:zr2, zc1:zc2]
+            sub[sub == footprint_val] = corridor_val
+        # A block may have overwritten the DOOR cells at the wall edge;
+        # restore them so the reopened entry stays reachable.
+        _stamp_doors(grid, room.get("doors", []))
 
     # Interior corridors: all CORRIDOR cells are confirmed
     # (walls and footprints have been marked, the rest stays CORRIDOR)
@@ -412,12 +443,25 @@ def _dijkstra(
 
 @dataclass
 class DeskAccess:
-    """Access result for a desk in a block."""
-    target_row: int       # BFS target cell (walkable adjacent to chair)
-    target_col: int
+    """Access result for a desk in a block.
+
+    D-305: clearance rectangle bounds (clear_r1..clear_c2) delimit the
+    non_superposable zone of THIS desk in grid cells.  When computing
+    the BFS path to this desk, these cells are temporarily set to
+    CORRIDOR so the path goes *through* the desk's own clearance
+    instead of around it.
+    """
     chair_row: float      # visual chair centre (in cells, may be .5)
     chair_col: float
     desk_id: str
+    clear_r1: int         # clearance rectangle — top row (inclusive)
+    clear_r2: int         # clearance rectangle — bottom row (exclusive)
+    clear_c1: int         # clearance rectangle — left col (inclusive)
+    clear_c2: int         # clearance rectangle — right col (exclusive)
+    desk_x_cm: int = 0    # desk-zone rect (cm) — for 912.4 forbidden-zone skip
+    desk_y_cm: int = 0
+    desk_eo_cm: int = 0
+    desk_ns_cm: int = 0
 
 
 def _desk_access_cells(
@@ -469,30 +513,18 @@ def _desk_access_cells(
     ROWS, COLS = grid.shape
     eo = block["eo_cm"]
     ns = block["ns_cm"]
-    walkable = {int(CellType.CORRIDOR), int(CellType.DOOR)}
-
-    def _best_walkable(
-        candidates: list[tuple[int, int]], mid_r: float, mid_c: float,
-    ) -> tuple[int, int] | None:
-        # D-242 hotfix: filter out-of-bounds candidates before grid access.
-        # Oversize patterns (post-D-242) can yield r or c outside the grid;
-        # the per-face guards in _access_for_zone only catch one direction
-        # of overshoot. Defensive bounds check here covers all cases.
-        valid = [
-            (r, c) for r, c in candidates
-            if 0 <= r < ROWS and 0 <= c < COLS
-            and int(grid[r, c]) in walkable
-        ]
-        if not valid:
-            return None
-        valid.sort(key=lambda rc: abs(rc[0] - mid_r) + abs(rc[1] - mid_c))
-        return valid[0]
 
     def _access_for_zone(
         face: str, zone_x: int, zone_y: int, zone_eo: int, zone_ns: int,
         nsup_cm: int, desk_id: str,
     ) -> DeskAccess | None:
-        """Compute the access point for a desk zone on a given face."""
+        """Compute the access point for a desk zone on a given face.
+
+        D-305: the BFS target is the chair centre cell (inside the
+        clearance zone).  Returns None only when that cell is outside
+        the grid (block truly out of room).  Clearance rectangle bounds
+        are clamped to [0, ROWS/COLS).
+        """
         c1 = zone_x // GRID_CELL_CM
         c2 = (zone_x + zone_eo) // GRID_CELL_CM
         r1 = zone_y // GRID_CELL_CM
@@ -502,38 +534,42 @@ def _desk_access_cells(
         nsup = nsup_cm // GRID_CELL_CM
 
         if face == "west":
+            chair_row = r_mid
             chair_col = c1 - nsup / 2.0
-            c = c1 - nsup - 1
-            if c < 0:
-                return None
-            cands = [(r, c) for r in range(max(0, r1), min(ROWS, r2))]
-            best = _best_walkable(cands, r_mid, c)
-            return DeskAccess(best[0], best[1], r_mid, chair_col, desk_id) if best else None
+            cr1, cr2 = max(0, r1), min(ROWS, r2)
+            cc1, cc2 = max(0, c1 - nsup), min(COLS, c1)
         elif face == "east":
+            chair_row = r_mid
             chair_col = c2 + nsup / 2.0
-            c = c2 + nsup
-            if c >= COLS:
-                return None
-            cands = [(r, c) for r in range(max(0, r1), min(ROWS, r2))]
-            best = _best_walkable(cands, r_mid, c)
-            return DeskAccess(best[0], best[1], r_mid, chair_col, desk_id) if best else None
+            cr1, cr2 = max(0, r1), min(ROWS, r2)
+            cc1, cc2 = max(0, c2), min(COLS, c2 + nsup)
         elif face == "north":
             chair_row = r1 - nsup / 2.0
-            r = r1 - nsup - 1
-            if r < 0:
-                return None
-            cands = [(r, c) for c in range(max(0, c1), min(COLS, c2))]
-            best = _best_walkable(cands, r, c_mid)
-            return DeskAccess(best[0], best[1], chair_row, c_mid, desk_id) if best else None
+            chair_col = c_mid
+            cr1, cr2 = max(0, r1 - nsup), min(ROWS, r1)
+            cc1, cc2 = max(0, c1), min(COLS, c2)
         elif face == "south":
             chair_row = r2 + nsup / 2.0
-            r = r2 + nsup
-            if r >= ROWS:
-                return None
-            cands = [(r, c) for c in range(max(0, c1), min(COLS, c2))]
-            best = _best_walkable(cands, r, c_mid)
-            return DeskAccess(best[0], best[1], chair_row, c_mid, desk_id) if best else None
-        return None
+            chair_col = c_mid
+            cr1, cr2 = max(0, r2), min(ROWS, r2 + nsup)
+            cc1, cc2 = max(0, c1), min(COLS, c2)
+        else:
+            return None
+
+        # Target = chair centre cell; None only if truly out of grid
+        tr = int(chair_row)
+        tc = int(chair_col)
+        if not (0 <= tr < ROWS and 0 <= tc < COLS):
+            return None
+
+        return DeskAccess(
+            chair_row=chair_row, chair_col=chair_col,
+            desk_id=desk_id,
+            clear_r1=cr1, clear_r2=cr2,
+            clear_c1=cc1, clear_c2=cc2,
+            desk_x_cm=zone_x, desk_y_cm=zone_y,
+            desk_eo_cm=zone_eo, desk_ns_cm=zone_ns,
+        )
 
     results: list[DeskAccess] = []
 
@@ -805,8 +841,18 @@ def _compute_desk_paths(
     grid: np.ndarray,
     blocks: list[dict],
     room: dict,
+    forbidden_zones: list[tuple[int, int, int, int]] | None = None,
 ) -> list[DeskPathResult]:
     """Compute door-to-chair paths and widths for each desk.
+
+    D-305: for each desk, the desk's own clearance zone is temporarily
+    set to CORRIDOR before running BFS, so the path goes *through* the
+    clearance instead of around it.  Clearances of OTHER desks stay
+    FOOTPRINT.  Mark → BFS → widths → restore (try/finally).
+
+    912.4: a desk whose footprint lands on an entry-opening clear strip
+    is not a target (it has been dropped at placement), so it is skipped
+    here too — keeping circulation consistent with the desk count.
 
     Multi-door: one BFS per DOOR cell cluster; the best (shortest)
     path is kept for each desk.
@@ -820,49 +866,77 @@ def _compute_desk_paths(
     for block in blocks:
         all_access.extend(_desk_access_cells(block, grid))
 
+    # 912.4: drop targets whose desk footprint sits on an entry strip.
+    if forbidden_zones:
+        def _on_entry(a: DeskAccess) -> bool:
+            return any(
+                a.desk_x_cm < zx + zw and a.desk_x_cm + a.desk_eo_cm > zx
+                and a.desk_y_cm < zy + zd and a.desk_y_cm + a.desk_ns_cm > zy
+                for (zx, zy, zw, zd) in forbidden_zones
+            )
+        all_access = [a for a in all_access if not _on_entry(a)]
+
     if not all_access:
         return []
+
+    footprint_val = int(CellType.FOOTPRINT)
+    corridor_val = int(CellType.CORRIDOR)
 
     results: list[DeskPathResult] = []
 
     for access in all_access:
-        best_path: list[tuple[int, int]] | None = None
-        best_len = float("inf")
-        best_door_center = (0.0, 0.0)
+        # -- D-305 MARK: open this desk's clearance -----------------------
+        clr = grid[
+            access.clear_r1:access.clear_r2,
+            access.clear_c1:access.clear_c2,
+        ]
+        saved = clr.copy()
+        mask = clr == footprint_val
+        clr[mask] = corridor_val
 
-        # Test each door cluster
-        for cluster in door_clusters:
-            path = _cell_bfs_path(
-                grid, cluster, (access.target_row, access.target_col),
-            )
-            if path is not None and len(path) < best_len:
-                best_path = path
-                best_len = len(path)
-                # Centre of this door cluster
-                best_door_center = (
-                    sum(r for r, _ in cluster) / len(cluster) + 0.5,
-                    sum(c for _, c in cluster) / len(cluster) + 0.5,
-                )
+        target = (int(access.chair_row), int(access.chair_col))
 
-        if best_path is None:
-            results.append(DeskPathResult(
-                desk_id=access.desk_id,
-                path=[],
-                min_width_cm=0.0,
-                widths_cm=[],
-                door_center=best_door_center,
-                chair_center=(access.chair_row, access.chair_col),
-            ))
-        else:
-            cell_widths = _path_widths_per_cell_cm(best_path, grid)
-            results.append(DeskPathResult(
-                desk_id=access.desk_id,
-                path=best_path,
-                min_width_cm=min(cell_widths),
-                widths_cm=cell_widths,
-                door_center=best_door_center,
-                chair_center=(access.chair_row, access.chair_col),
-            ))
+        try:
+            best_path: list[tuple[int, int]] | None = None
+            best_len = float("inf")
+            best_door_center = (0.0, 0.0)
+
+            for cluster in door_clusters:
+                path = _cell_bfs_path(grid, cluster, target)
+                if path is not None and len(path) < best_len:
+                    best_path = path
+                    best_len = len(path)
+                    best_door_center = (
+                        sum(r for r, _ in cluster) / len(cluster) + 0.5,
+                        sum(c for _, c in cluster) / len(cluster) + 0.5,
+                    )
+
+            if best_path is None:
+                results.append(DeskPathResult(
+                    desk_id=access.desk_id,
+                    path=[],
+                    min_width_cm=0.0,
+                    widths_cm=[],
+                    door_center=best_door_center,
+                    chair_center=(access.chair_row, access.chair_col),
+                ))
+            else:
+                # Measure widths BEFORE restore (clearance = CORRIDOR)
+                cell_widths = _path_widths_per_cell_cm(best_path, grid)
+                results.append(DeskPathResult(
+                    desk_id=access.desk_id,
+                    path=best_path,
+                    min_width_cm=min(cell_widths),
+                    widths_cm=cell_widths,
+                    door_center=best_door_center,
+                    chair_center=(access.chair_row, access.chair_col),
+                ))
+        finally:
+            # -- D-305 RESTORE --------------------------------------------
+            grid[
+                access.clear_r1:access.clear_r2,
+                access.clear_c1:access.clear_c2,
+            ] = saved
 
     return results
 
@@ -953,6 +1027,7 @@ def analyse(
     room: dict,
     blocks: list[dict],
     door_depth_cm: int = _DEFAULT_DOOR_DEPTH,
+    forbidden_zones: list[tuple[int, int, int, int]] | None = None,
 ) -> CirculationResult:
     """Analyse circulation quality for a matched layout candidate.
 
@@ -960,6 +1035,9 @@ def analyse(
         room: Dict with eo_cm, ns_cm, doors.
         blocks: List of positioned blocks (static matcher candidate format).
         door_depth_cm: Door exclusion zone depth in cm.
+        forbidden_zones: Entry-opening clear strips (912.4), as
+            (x_cm, y_cm, width_cm, depth_cm) rects. The strip stays
+            walkable and desks landing in it are not targeted.
 
     Returns:
         CirculationResult with grade, metrics, and violations.
@@ -968,7 +1046,7 @@ def analyse(
     cell_size_m = GRID_CELL_CM / 100.0
 
     # Step 1 — Build the grid
-    grid = build_grid(room, blocks, door_depth_cm)
+    grid = build_grid(room, blocks, door_depth_cm, forbidden_zones)
     if grid is None or grid.size == 0:
         return CirculationResult(
             grade="F",
@@ -1054,7 +1132,7 @@ def analyse(
     )
 
     # Step 9 — BFS paths from door to each desk chair
-    desk_path_results = _compute_desk_paths(grid, blocks, room)
+    desk_path_results = _compute_desk_paths(grid, blocks, room, forbidden_zones)
     paths = [r.path for r in desk_path_results]
     path_widths = [r.min_width_cm for r in desk_path_results]
     desk_ids = [r.desk_id for r in desk_path_results]

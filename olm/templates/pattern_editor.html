@@ -435,6 +435,7 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
               </td>
               <td class="nav-right">
                 <button class="btn" id="rvBtnAdjustRoom" title="Edit room geometry">Adjust room</button>
+                <button class="btn" id="rvBtnDefineLayout" title="Open this room in Office to define its layout">Define layout</button>
                 <button class="btn" id="rvBtnSaveRoom" style="display:none;">Save room</button>
                 <button class="btn btn-cancel" id="rvBtnCancelRoom" style="display:none;">Discard</button>
               </td>
@@ -593,8 +594,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <div id="fpScores"></div>
         <div class="section-title">Metrics</div>
         <div id="fpMetrics"></div>
-        <div class="section-title">Workstations</div>
-        <div id="fpDeskList" style="flex:1;overflow-y:auto;font-size:13px;"></div>
       </div>
     </div>
 </div><!-- /tabLytDesign -->
@@ -719,7 +718,6 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           <button class="btn" id="btnFit" title="Compute and apply minimum room dimensions (keeps current gaps)">Fit room to pattern</button>
           <button class="btn" id="peBtnAddDoor" title="Add a door to the room">Add door</button>
           <button class="btn" id="btnAddCabinet" title="Add a cabinet (furniture)">Add cabinet</button>
-          <button class="btn" id="btnRotateCabinet" title="Rotate selected cabinet (R)">Rotate</button>
         </td>
       </tr></table>
     </div>

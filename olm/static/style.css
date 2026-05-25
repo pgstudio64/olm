@@ -684,13 +684,6 @@
     padding: 6px; resize: vertical; cursor: default;
     font-size: var(--fs-base);
   }
-  .fp-desk-item {
-    padding: 3px 6px; border-bottom: 1px solid var(--border);
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .fp-desk-item.removed { opacity: 0.4; text-decoration: line-through; }
-  .fp-desk-name { font-weight: bold; color: var(--accent2); min-width: 40px; }
-  .fp-desk-pos { color: var(--text-dim); font-size: var(--fs-sm); }
   .fp-score-row {
     display: flex; align-items: center; gap: var(--sp-xs);
     padding: 2px var(--sp-xs); font-size: var(--fs-base);
@@ -717,7 +710,6 @@
   .fp-candidate:hover { background: rgba(255,255,255,0.05); }
   .fp-candidate.best { border: 1px solid #58c080; border-radius: 4px; }
   .fp-candidate.amended { border: 1px solid #d4a04a; border-radius: 4px; }
-  .fp-candidate.fp-oversize { opacity: 0.45; }
   /* Edit mode indicator — shared by Amend layout, Adjust room, dirty editor */
   .edit-mode {
     background: rgba(200, 160, 80, 0.10) !important;
@@ -742,6 +734,9 @@
   .fp-standard-filter { padding: var(--sp-sm) var(--sp-md); display: flex; gap: var(--sp-sm); border-bottom: 1px solid var(--border); }
   .fp-standard-filter label { font-size: var(--fs-sm); cursor: pointer; }
   .fp-no-match { padding: var(--sp-lg); color: var(--text-dim); font-size: var(--fs-base); text-align: center; }
+  .fp-tier-header { padding: 5px 8px; font-size: 11px; font-weight: bold; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; background: var(--surface2); border-top: 2px solid var(--accent); border-bottom: 1px solid var(--border); margin: 14px 0 6px; }
+  .fp-tier-header:first-child { margin-top: 0; }
+  .fp-c-warn { color: #e0a030; font-size: 11px; }
 
   /* Catalogue tab */
   .catalogue-grid {
@@ -1106,8 +1101,6 @@
   /* D-256: Cabinet buttons — hidden by default, visible in amend mode */
   #btnAddCabinet { display: none; }
   .amend-layout-mode #btnAddCabinet { display: inline-block; }
-  #btnRotateCabinet { display: none; }
-  .amend-layout-mode #btnRotateCabinet { display: inline-block; }
 
   /* ── Preview Lightbox ────────────────────────────────── */
   .preview-lightbox {

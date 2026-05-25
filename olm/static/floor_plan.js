@@ -626,60 +626,83 @@
       candidates = candidates.filter(function(c) { return c.standard === stdFilter; });
     }
 
-    var gradeOrd = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
-    function gradeVal(g) { return g in gradeOrd ? gradeOrd[g] : 6; }
-    var fitOrd = {fitting: 0, oversize_1axis: 1, oversize_2axes: 2};
-    function fitVal(c) { return fitOrd[c.fit_class] != null ? fitOrd[c.fit_class] : (c.oversize ? 1 : 0); }
-    candidates.sort(function(a, b) {
-      // D-299: feasible before infeasible (unreachable desks or critical passage)
-      var ia = (a.min_passage_cm <= 0) || a.passage_grade === "F" ? 1 : 0;
-      var ib = (b.min_passage_cm <= 0) || b.passage_grade === "F" ? 1 : 0;
-      if (ia !== ib) return ia - ib;
-      // Fitting first, then oversize_1axis, then oversize_2axes
-      var fa = fitVal(a), fb = fitVal(b);
-      if (fa !== fb) return fa - fb;
-      // Within oversize groups: overflow ascending
-      if (fa > 0) {
-        var od = (a.overflow_cm || 0) - (b.overflow_cm || 0);
-        if (od !== 0) return od;
-      }
-      if (b.n_desks !== a.n_desks) return b.n_desks - a.n_desks;
-      var gd = gradeVal(a.room_grade || a.circulation_grade) - gradeVal(b.room_grade || b.circulation_grade);
-      if (gd !== 0) return gd;
-      var pd = (b.min_passage_cm || 0) - (a.min_passage_cm || 0);
-      if (pd !== 0) return pd;
-      var md = (a.m2_per_desk || 99) - (b.m2_per_desk || 99);
-      if (md !== 0) return md;
-      return (a.pattern_name || "").localeCompare(b.pattern_name || "");
-    });
+    // 3-category model: server provides candidates sorted by
+    // category-first key.  We group and display in fixed order.
 
     if (!candidates.length) {
-      container.innerHTML = '<div class="fp-no-match">No matching patterns</div>';
+      container.innerHTML =
+        '<div class="fp-no-match">' +
+        'No matching patterns for this standard</div>';
       return;
     }
 
-    container.innerHTML = candidates.map(function(c, i) {
-      var isBest = false;
-      for (var std in room.by_standard) {
-        if (room.by_standard[std] === c.pattern_name && c.standard === std) isBest = true;
-      }
-      var rg = c.room_grade || c.circulation_grade || "F";
-      var gradeClass = "fp-grade-" + rg;
-      var classes = "fp-candidate";
-      if (c.oversize) classes += " fp-oversize";
-      if (isBest) classes += " selected best";
-      return '<div class="' + classes + '" tabindex="-1" data-fp-cand="' + i + '">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-          '<span class="fp-c-name">' + c.pattern_name + '</span>' +
-        '</div>' +
-        '<div class="fp-c-stats">' +
-          c.n_desks + ' desks &middot; ' + c.m2_per_desk + ' m&sup2;/d &middot; ' +
-          '<span class="fp-c-grade ' + gradeClass + '">' + rg + '</span>' +
-          (c.fit_class === "oversize_1axis" ? ' &middot; +' + Math.round(c.overflow_cm) + 'cm (1 axis)' : '') +
-          (c.fit_class === "oversize_2axes" ? ' &middot; +' + Math.round(c.overflow_cm) + 'cm (2 axes)' : '') +
-        '</div>' +
-      '</div>';
-    }).join("");
+    // Group by category in display order.
+    var catOrder = ["fits_well", "too_tight", "fewer_desks"];
+    var catLabels = {
+      fits_well: "Fits well",
+      too_tight: "Too tight",
+      fewer_desks: "Fewer desks",
+    };
+
+    // Build flat candidate array in display order (for data-fp-cand index).
+    var flat = [];
+    catOrder.forEach(function(cat) {
+      candidates.forEach(function(c) {
+        if (c.category === cat) flat.push(c);
+      });
+    });
+    // Replace candidates with flat so click handler indices match.
+    candidates = flat;
+
+    var html = "";
+    var flatIdx = 0;
+    catOrder.forEach(function(cat) {
+      var items = candidates.filter(function(c) { return c.category === cat; });
+      if (!items.length) return;
+      html += '<div class="fp-tier-header">' + catLabels[cat] + '</div>';
+      items.forEach(function(c) {
+        var isBest = false;
+        if (c.category === "fits_well") {
+          for (var std in room.by_standard) {
+            if (room.by_standard[std] === c.pattern_name && c.standard === std) {
+              isBest = true;
+            }
+          }
+        }
+        var rg = c.room_grade || c.circulation_grade || "F";
+        var gradeClass = "fp-grade-" + rg;
+        var classes = "fp-candidate";
+        if (isBest) classes += " selected best";
+
+        // Motif for "Too tight" items.
+        var extra = "";
+        if (cat === "too_tight") {
+          if (c.fit_class !== "fitting") {
+            extra = ' &middot; <span class="fp-c-warn">+' +
+              Math.round(c.overflow_cm) + 'cm too large</span>';
+          } else if (c.passage_grade == null || c.min_passage_cm <= 0) {
+            extra = ' &middot; <span class="fp-c-warn">' +
+              'desk unreachable</span>';
+          } else {
+            extra = ' &middot; <span class="fp-c-warn">' +
+              'tight passage</span>';
+          }
+        }
+
+        html += '<div class="' + classes + '" tabindex="-1" data-fp-cand="' + flatIdx + '">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+            '<span class="fp-c-name">' + c.pattern_name + '</span>' +
+          '</div>' +
+          '<div class="fp-c-stats">' +
+            c.n_desks + ' desks &middot; ' + c.m2_per_desk + ' m&sup2;/d &middot; ' +
+            '<span class="fp-c-grade ' + gradeClass + '">' + rg + '</span>' +
+            extra +
+          '</div>' +
+        '</div>';
+        flatIdx++;
+      });
+    });
+    container.innerHTML = html;
 
     // Click on a candidate -> display in SVG + enable action buttons
     container.querySelectorAll(".fp-candidate").forEach(function(el) {
@@ -887,34 +910,6 @@
                 (det != null && isFinite(det)) ? det.toFixed(2) : "n/a") +
       _valueRow("Free area", fr != null ? fr.toFixed(1) + " m²" : "-") +
       _valueRow("Fit", _fmtFit(candidate));
-
-    // Workstation list
-    var deskList = document.getElementById("fpDeskList");
-    if (!candidate.desks || candidate.desks.length === 0) {
-      deskList.innerHTML = '<div style="color:var(--text-dim);padding:8px;">No desks</div>';
-      return;
-    }
-    var activeDesks = candidate.desks.filter(function(d) { return !d.removed; });
-    var removedDesks = candidate.desks.filter(function(d) { return d.removed; });
-    var html = "";
-    var idx = 0;
-    activeDesks.forEach(function(d) {
-      idx++;
-      var name = "WS" + String(idx).padStart(2, "0");
-      html += '<div class="fp-desk-item">' +
-        '<span class="fp-desk-name">' + name + '</span>' +
-        '<span class="fp-desk-pos">' + d.x_cm + ', ' + d.y_cm + '</span>' +
-        '</div>';
-    });
-    removedDesks.forEach(function(d) {
-      idx++;
-      var name = "WS" + String(idx).padStart(2, "0");
-      html += '<div class="fp-desk-item removed">' +
-        '<span class="fp-desk-name">' + name + '</span>' +
-        '<span class="fp-desk-pos">removed</span>' +
-        '</div>';
-    });
-    deskList.innerHTML = html;
   }
 
   // ── Export results ─────────────────────────────────────────────────────
@@ -1198,6 +1193,13 @@
         var roomData = fpRoomAmendments[room.name] || room;
         enterRoomAmendMode(roomData);
       }
+    });
+    // Define layout: jump to Office (lytDesign) for the current room. Room and
+    // Office share fpData.currentIdx, so activating the tab renders the same
+    // room (the tab handler calls fpRenderCurrent + loadCatalogue).
+    document.getElementById("rvBtnDefineLayout").addEventListener("click", function() {
+      if (!fpCurrent()) return;
+      document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
     });
     document.getElementById("fpBtnEditPattern").addEventListener("click", function() {
       if (fpCurrentCandidate && fpCurrentCandidate.pattern) {

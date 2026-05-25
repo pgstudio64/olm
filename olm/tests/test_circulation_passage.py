@@ -93,27 +93,51 @@ def test_between_blocks_corridor_is_passage(results, gap):
     assert e["legacy"] is False  # le bug : non détecté avant le fix
 
 
-def test_stacked_back_is_passage(results):
-    """STACKED 2x BLOCK_1 : le desk du FOND (back) a un couloir profond = passage."""
+def test_stacked_back_not_passage(results):
+    """STACKED 2x BLOCK_1 : desk du FOND (back) = bout du couloir, non-passage."""
     e = results[("STACKED_BLOCK_1", 160, "west", "back")]
-    assert e["prod"] is True
-    assert e["color"] == "AMBER"
-    assert e["marge"] == 0
-
-
-def test_stacked_front_is_not_passage(results):
-    """STACKED 2x BLOCK_1 : le desk de DEVANT (front) a un couloir peu profond."""
-    e = results[("STACKED_BLOCK_1", 160, "west", "front")]
     assert e["prod"] is False
     assert e["color"] == "GREEN"
     assert e["marge"] == 70
 
 
-def test_two_columns_union_isolation(results):
-    """Deux colonnes empilées : l'union d'un couloir n'englobe pas l'autre."""
-    back = results[("TWOCOL_BLOCK_1", 160, "west", "colB_back")]
-    assert back["prod"] is True, "colB back devrait être passage (profond)"
-    assert back["color"] == "AMBER"
+def test_stacked_front_is_passage(results):
+    """STACKED 2x BLOCK_1 : desk PROCHE (front) = trafic vers le fond, passage."""
+    e = results[("STACKED_BLOCK_1", 160, "west", "front")]
+    assert e["prod"] is True
+    assert e["color"] == "AMBER"
+    assert e["marge"] == 0
+
+
+def test_stacked3_front_is_passage(results):
+    """STACKED3 3x BLOCK_1 : desk PROCHE (front) = passage (trafic vers mid+back)."""
+    e = results[("STACKED3_BLOCK_1", 160, "west", "front")]
+    assert e["prod"] is True
+    assert e["color"] == "AMBER"
+    assert e["marge"] == 0
+
+
+def test_stacked3_mid_is_passage(results):
+    """STACKED3 3x BLOCK_1 : desk MILIEU (mid) = passage (trafic vers back)."""
+    e = results[("STACKED3_BLOCK_1", 160, "west", "mid")]
+    assert e["prod"] is True
+    assert e["color"] == "AMBER"
+    assert e["marge"] == 0
+
+
+def test_stacked3_back_not_passage(results):
+    """STACKED3 3x BLOCK_1 : desk FOND (back) = bout du couloir, non-passage."""
+    e = results[("STACKED3_BLOCK_1", 160, "west", "back")]
+    assert e["prod"] is False
+    assert e["color"] == "GREEN"
+    assert e["marge"] == 70
+
+
+def test_two_columns_end_of_corridor(results):
+    """Deux colonnes : colB_front (proche porte) = passage, colB_back (fond) = non."""
     front = results[("TWOCOL_BLOCK_1", 160, "west", "colB_front")]
-    assert front["prod"] is False, "colB front ne devrait PAS être passage"
-    assert front["color"] == "GREEN"
+    assert front["prod"] is True, "colB front devrait être passage (trafic vers back)"
+    assert front["color"] == "AMBER"
+    back = results[("TWOCOL_BLOCK_1", 160, "west", "colB_back")]
+    assert back["prod"] is False, "colB back = bout du couloir, non-passage"
+    assert back["color"] == "GREEN"

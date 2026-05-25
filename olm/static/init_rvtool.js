@@ -1103,19 +1103,6 @@
       });
     }
 
-    // D-256: "Rotate" button for selected cabinet
-    var btnRotCabinet = document.getElementById("btnRotateCabinet");
-    if (btnRotCabinet) {
-      btnRotCabinet.addEventListener("click", function () {
-        if (state.selectedFurniture < 0) return;
-        var f = (state.furniture || [])[state.selectedFurniture];
-        if (!f) return;
-        f.orientation = (f.orientation || 0) === 0 ? 90 : 0;
-        if (typeof markDirty === "function") markDirty();
-        _renderActive();
-      });
-    }
-
     // Helper: rebuild full Room DSL from state and push to backend.
     // Preserves `origin` across the DSL round-trip by caching per
     // (type, face, offset, width) key — the DSL serializes these 3 values

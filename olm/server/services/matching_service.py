@@ -7,9 +7,14 @@ from __future__ import annotations
 import logging
 import time  # v0.5.33 instrumentation : timing matching (freeze Floor→Room)
 
+from olm.core.app_config import get_matching as _get_matching
 from olm.core.catalogue_matcher import (
+    best_pattern_per_standard,
+    candidate_category,
     compute_desk_positions,
+    filter_and_rank_candidates,
     match_room,
+    max_working_desks,
 )
 from olm.core.coverage_analysis import (
     analyse_coverage,
@@ -164,7 +169,27 @@ def floor_plan_match(data: dict) -> dict:
         room_result["by_standard"] = {}
         room_result["all_candidates"] = []
 
-        for score in match_result.all_scores:
+        # D-310: sort + filter 6bis/6ter via shared pure function.
+        all_scores = match_result.all_scores
+        matching_cfg = _get_matching()
+        removal_pct = matching_cfg.get("passage_removal_margin_pct", 20)
+
+        final_scores = filter_and_rank_candidates(
+            all_scores, removal_pct,
+        )
+
+        # max_working per standard on survivors (for category field).
+        _kept_by_std: dict[str, list] = {}
+        for s in final_scores:
+            _kept_by_std.setdefault(s.standard, []).append(s)
+        _mw_kept = {
+            std: max_working_desks(ss)
+            for std, ss in _kept_by_std.items()
+        }
+
+        # Build all_candidates from survivors.
+        for score in final_scores:
+            mw = _mw_kept.get(score.standard, 0)
             desks = compute_desk_positions(score.adapted_pattern)
             removed_set = set()
             for rd in score.adapted_pattern.get("_removed_desks", []):
@@ -202,15 +227,17 @@ def floor_plan_match(data: dict) -> dict:
                 "dim_face_wall": score.dim_face_wall,
                 "composite_score": score.composite_score,
                 "room_grade": score.room_grade,
+                "category": candidate_category(score, mw),
                 "desks": desk_list,
                 "pattern": score.adapted_pattern,
             }
             room_result["all_candidates"].append(candidate)
 
-        for std, best in match_result.by_standard.items():
-            room_result["by_standard"][std] = (
-                best.pattern_name if best else None
-            )
+        # by_standard: best survivor per standard (None if empty).
+        all_stds = list({s.standard for s in all_scores})
+        room_result["by_standard"] = best_pattern_per_standard(
+            final_scores, all_stds,
+        )
 
         results.append(room_result)
 

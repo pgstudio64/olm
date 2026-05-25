@@ -10,6 +10,8 @@ from olm.core.pattern_fit import (
     MIN_DOOR_WIDTH_CM,
     SNAP_CM,
     PatternStructurallyInvalid,
+    clear_min_room_cache,
+    compute_min_room_circ,
     compute_pattern_footprint,
     fit_room_to_pattern,
     is_pattern_valid,
@@ -363,9 +365,10 @@ class TestDoorExclusionWest:
 
 
 class TestOpeningWithoutDoor:
-    """Case 11: opening without has_door — no exclusion zone."""
+    """Case 11: opening without has_door — no door exclusion zone,
+    but D-305 circ-aware corridor still applies."""
 
-    def test_no_extension(self):
+    def test_no_door_exclusion_but_circ_corridor(self):
         pat = _pattern(
             block_type="BLOCK_4_FACE",
             room_w=800,
@@ -377,9 +380,13 @@ class TestOpeningWithoutDoor:
         )
         sp = _spacing()
         result = fit_room_to_pattern(pat, sp)
-        # Same as without any door: 360 x 2*W (D-244)
+        # Width: footprint-constrained = 360 (same as no door).
         assert result.new_width == 360
-        assert result.new_depth == 2 * pg.DESK_W_CM
+        # Depth: D-305 circ-aware = footprint 320 + corridor for
+        # walking_margin 90, snapped to 10 → 420.
+        # (No door exclusion zone — the 180 cm pushback is NOT added.)
+        assert result.new_depth > 2 * pg.DESK_W_CM  # corridor > footprint
+        assert result.new_depth < 2 * pg.DESK_W_CM + 180  # no door pushback
 
 
 class TestNoDoorRegression:
@@ -698,3 +705,144 @@ class TestOutwardDoorExclusion:
         sp = _spacing()
         x_min, x_max, y_min, y_max = compute_pattern_footprint(pat, sp)
         assert y_max == 2 * pg.DESK_W_CM + 180
+
+
+# ---------------------------------------------------------------------------
+# D-305: circulation-aware min room (compute_min_room_circ)
+# ---------------------------------------------------------------------------
+
+
+class TestMinRoomCircSingleRow:
+    """D-305: 1-row pattern → min room ~ footprint (no inter-row passage)."""
+
+    def test_single_row_min_room_matches_footprint(self):
+        clear_min_room_cache()
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=600, room_d=600,
+            openings=[_door_opening("south", offset_cm=0, width_cm=90)],
+        )
+        sp = _spacing()
+        bbox = compute_pattern_footprint(pat, sp)
+        fp_w = bbox[1] - bbox[0]
+        fp_d = bbox[3] - bbox[2]
+        min_w, min_d = compute_min_room_circ(pat, sp)
+        # Single row: circ corridor may add a bit, but min room
+        # should not exceed footprint + walking_margin on any axis.
+        assert min_w <= fp_w + sp.walking_margin_cm
+        assert min_d <= fp_d + sp.walking_margin_cm
+
+
+class TestMinRoomCircTwoRowsFaceToFace:
+    """D-305: 2 rows face-to-face → min room reflects inter-row passage."""
+
+    def test_two_rows_preserve_passage(self):
+        clear_min_room_cache()
+        pat = {
+            "name": "TWO_ROWS",
+            "rows": [
+                {"blocks": [{"type": "BLOCK_4_FACE", "orientation": 0}]},
+                {"blocks": [{"type": "BLOCK_4_FACE", "orientation": 0}]},
+            ],
+            "row_gaps_cm": [0],
+            "room_width_cm": 900,
+            "room_depth_cm": 900,
+            "standard": "test_std",
+            "room_windows": [],
+            "room_openings": [
+                _door_opening("south", offset_cm=0, width_cm=90),
+            ],
+            "room_exclusions": [],
+        }
+        sp = _spacing()
+        bbox = compute_pattern_footprint(pat, sp)
+        fp_d = bbox[3] - bbox[2]
+        min_w, min_d = compute_min_room_circ(pat, sp)
+        # Shrink never exceeds declared room, but should preserve
+        # inter-row passage (shrink < declared).
+        assert min_d < 900, "Should shrink from declared"
+        # min_d must accommodate the footprint (body + face zones
+        # + door pushback) so it should be close to fp_d.
+        assert min_d >= fp_d, (
+            f"min_d={min_d} should be >= footprint depth {fp_d}"
+        )
+
+
+class TestMinRoomCircOpeningWithoutDoor:
+    """D-305: opening south without has_door → corridor still included."""
+
+    def test_opening_no_door_includes_corridor(self):
+        clear_min_room_cache()
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=600, room_d=600,
+            openings=[{
+                "face": "south", "offset_cm": 0, "width_cm": 90,
+                "has_door": False,
+            }],
+        )
+        sp = _spacing()
+        bbox = compute_pattern_footprint(pat, sp)
+        fp_d = bbox[3] - bbox[2]  # footprint depth (no door exclusion)
+        min_w, min_d = compute_min_room_circ(pat, sp)
+        # Corridor for walking must push depth beyond footprint.
+        assert min_d > fp_d, (
+            f"Expected min_d > {fp_d} (footprint), got {min_d}"
+        )
+
+
+class TestMinRoomCircSymmetricEWCorridors:
+    """D-305: E/W symmetric chairs → corridors preserved on BOTH sides.
+
+    This was the case that broke with the NW-anchor approach: the
+    west corridor was eaten by the anchor.  With shrink-from-declared,
+    both corridors survive because the footprint constraint is
+    symmetric (max of circ and feature-constrained).
+    """
+
+    def test_both_corridors_preserved(self):
+        clear_min_room_cache()
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=600, room_d=600,
+            openings=[_door_opening("south", offset_cm=100, width_cm=90)],
+        )
+        sp = _spacing()
+        import copy
+        pat_c = copy.deepcopy(pat)
+        result = fit_room_to_pattern(pat_c, sp)
+        from olm.core.catalogue_matcher import compute_block_positions
+        pos = compute_block_positions(pat_c)
+        bp = pos[0]
+        room_w = pat_c["room_width_cm"]
+        # Chair zones: west = [bp.x_cm - 100, bp.x_cm],
+        #              east = [bp.x_cm + 160, bp.x_cm + 260].
+        west_outside = bp.x_cm - 100  # should be >= 0
+        east_outside = room_w - (bp.x_cm + 260)  # should be >= 0
+        assert west_outside >= 0, (
+            f"West chairs clipped: west_outside={west_outside}"
+        )
+        assert east_outside >= 0, (
+            f"East chairs clipped: east_outside={east_outside}"
+        )
+        # Both margins should be equal (symmetric block, symmetric fit).
+        assert west_outside == east_outside
+
+
+class TestMinRoomCircNoDoors:
+    """D-305: pattern without any opening → fallback to footprint."""
+
+    def test_no_doors_footprint_fallback(self):
+        clear_min_room_cache()
+        pat = _pattern(
+            block_type="BLOCK_4_FACE",
+            room_w=600, room_d=600,
+        )
+        sp = _spacing()
+        bbox = compute_pattern_footprint(pat, sp)
+        fp_w = bbox[1] - bbox[0]
+        fp_d = bbox[3] - bbox[2]
+        min_w, min_d = compute_min_room_circ(pat, sp)
+        # No doors → footprint-only fallback, no circ margins.
+        assert min_w == (fp_w + SNAP_CM - 1) // SNAP_CM * SNAP_CM
+        assert min_d == (fp_d + SNAP_CM - 1) // SNAP_CM * SNAP_CM

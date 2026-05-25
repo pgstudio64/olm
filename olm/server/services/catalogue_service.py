@@ -103,15 +103,39 @@ def _add_fit_class(pattern: dict) -> None:
         pattern["fit_class"] = "ok"
 
 
+def _add_min_room(pattern: dict) -> None:
+    """Annotate *pattern* with ``min_room_width`` / ``min_room_depth``.
+
+    D-305: circulation-aware minimum room dimensions.  The pattern
+    dict is mutated in-place (response-only, not persisted).
+    """
+    from olm.core.pattern_fit import compute_min_room_circ
+    from olm.core.spacing_config import ALL_CONFIGS
+
+    std = pattern.get("standard", "")
+    spacing = ALL_CONFIGS.get(std) if std else None
+    if spacing is None:
+        return
+    try:
+        min_w, min_d = compute_min_room_circ(pattern, spacing)
+        pattern["min_room_width"] = min_w
+        pattern["min_room_depth"] = min_d
+    except Exception:
+        logger.exception(
+            "_add_min_room failed for %s", pattern.get("name"),
+        )
+
+
 def list_patterns() -> dict:
-    """Return all patterns with count and fit classification.
+    """Return all patterns with count, fit classification, and min room.
 
     Includes ``default_available`` flag for the first-launch banner:
     True when the private catalogue is empty and the default is not.
 
-    Each pattern in the response carries a ``fit_class`` field
-    (``"ok"`` / ``"tolere"`` / ``"reject"``), computed on-the-fly
-    and not persisted to disk.
+    Each pattern in the response carries ``fit_class``
+    (``"ok"`` / ``"tolere"`` / ``"reject"``) and
+    ``min_room_width`` / ``min_room_depth`` (D-305), computed
+    on-the-fly and not persisted to disk.
     """
     patterns = load_catalogue()
     default_available = (
@@ -119,6 +143,7 @@ def list_patterns() -> dict:
     )
     for p in patterns:
         _add_fit_class(p)
+        _add_min_room(p)
     return {
         "patterns": patterns,
         "count": len(patterns),

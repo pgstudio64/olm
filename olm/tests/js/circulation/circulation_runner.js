@@ -145,10 +145,9 @@ function makeTwoBlockScenario(blockType, gapCm, opts) {
 }
 
 // Scenario: two single-desk blocks STACKED in two rows, chairs facing the same
-// west corridor, door south. Reproduces the screenshot (front desk near door,
-// back desk far). Reveals the attribution bug: walking margin currently lands on
-// the FRONT block's gap (traffic crosses it) instead of the BACK block (reached
-// via a deep path).
+// west corridor, door south.  D-303 straddle: the FRONT desk (near door) is a
+// passage (traffic to the back desk crosses its chair band), the BACK desk
+// (end of corridor) is NOT a passage (no traffic beyond).
 function makeStackedScenario(blockType, opts) {
   opts = opts || {};
   var def = BLOCK_DEFS[blockType];
@@ -177,12 +176,43 @@ function makeStackedScenario(blockType, opts) {
   };
 }
 
+// Scenario: THREE single-desk blocks STACKED in three rows (D-303 straddle).
+// desk1 (south, near door) = passage, desk2 (middle) = passage,
+// desk3 (north, end of corridor) = NOT passage.
+function makeStacked3Scenario(blockType, opts) {
+  opts = opts || {};
+  var def = BLOCK_DEFS[blockType];
+  var eo = def.eo_cm, ns = def.ns_cm;
+  var westCorr = opts.westCorr != null ? opts.westCorr : 160;
+  var southCorr = opts.southCorr != null ? opts.southCorr : 120;
+  var roomW = westCorr + eo + 10;
+  var roomD = ns * 3 + southCorr;
+  return {
+    standard: "test",
+    room_width_cm: roomW,
+    room_depth_cm: roomD,
+    room_exclusions: [],
+    furniture: [],
+    room_openings: [],
+    room_doors: [{ face: "south", offset_cm: Math.round(roomW / 2 - 45),
+                   width_cm: 90 }],
+    rows: [
+      { blocks: [{ type: blockType, orientation: 0, offset_ns_cm: 0,
+                   gap_cm: westCorr }] },
+      { blocks: [{ type: blockType, orientation: 0, offset_ns_cm: 0,
+                   gap_cm: westCorr }] },
+      { blocks: [{ type: blockType, orientation: 0, offset_ns_cm: 0,
+                   gap_cm: westCorr }] },
+    ],
+    row_gaps_cm: [0, 0],
+    _meta: { westCorr: westCorr, southCorr: southCorr, eo: eo, ns: ns },
+  };
+}
+
 // Scenario: TWO COLUMNS of stacked blocks with ASYMMETRIC heights.
 // Column A (left) = 3 rows of BLOCK_1 (rows [0, 3*ns]).
 // Column B (right) = 2 rows of BLOCK_1 (rows [0, 2*ns]).
-// Column A is taller, so if the union bug includes colA blocks, colB's union
-// would grow to [0, 3*ns] instead of [0, 2*ns], inflating the penetration
-// and causing a false positive on colB_front.
+// D-303 straddle: colB_front (near door) = passage, colB_back (far) = not.
 function makeTwoColumnScenario(blockType, opts) {
   opts = opts || {};
   var def = BLOCK_DEFS[blockType];
@@ -322,6 +352,44 @@ function runStacked(blockType, opts) {
   console.log(renderMap(ci, scn));
 }
 
+function runStacked3(blockType, opts) {
+  var scn = makeStacked3Scenario(blockType, opts);
+  state = scn;
+  var ci = __api.computeCirculationInfo();
+  var ns = scn._meta.ns, westCorr = scn._meta.westCorr, eo = scn._meta.eo;
+  console.log("==================================================================");
+  console.log("STACKED3 3x " + blockType + "  room " + scn.room_width_cm + "x" +
+    scn.room_depth_cm + "  westCorr=" + westCorr);
+  var spacing = CURRENT_SPACING;
+  var faces0 = __api.getEffectiveGeom(blockType, 0).faces;
+  var backBlk = { deskX: westCorr, deskY: 0, deskW: eo, deskH: ns,
+                  faces: faces0 };
+  var midBlk  = { deskX: westCorr, deskY: ns, deskW: eo, deskH: ns,
+                  faces: faces0 };
+  var frontBlk = { deskX: westCorr, deskY: 2 * ns, deskW: eo, deskH: ns,
+                   faces: faces0 };
+  var all3 = [backBlk, midBlk, frontBlk];
+  [["BACK(north,row0)", backBlk], ["MID(row1)", midBlk],
+   ["FRONT(south,row2)", frontBlk]].forEach(function (e) {
+    var label = e[0], blk = e[1];
+    var prod = passageProd(ci, blk, "west", spacing, all3);
+    var rawCm = westCorr;
+    var faceObj = __api.getFacingFace(blk.faces, "west");
+    var gap = __api.analyzeGap(rawCm, faceObj, null, spacing,
+      { passage: prod.passage });
+    console.log("  " + label + " west gap: PROD passage=" + prod.passage +
+      " -> " + colorName(gap.color) + " (marge=" + gap.marge + ")");
+    var pos = label.indexOf("BACK") >= 0 ? "back"
+      : label.indexOf("MID") >= 0 ? "mid" : "front";
+    RESULTS.push({
+      scenario: "STACKED3_" + blockType, width: westCorr,
+      kind: "stacked3", face: "west", position: pos,
+      prod: prod.passage, color: colorName(gap.color), marge: gap.marge,
+    });
+  });
+  console.log(renderMap(ci, scn));
+}
+
 // ASCII render of grid + paths + arrival points.
 function renderMap(ci, scn) {
   var glyph = [];
@@ -360,8 +428,8 @@ var _log = console.log;
 if (JSON_MODE) console.log = function () {};
 
 // Passage detection using REAL prod functions.
-// For wall gaps (b=null): uses _isPassageForBlock (scoped to block's own
-// paths + union band).  For block-to-block gaps: _isPassageAlong (D-297).
+// For wall gaps (b=null): D-303 straddle OR _isPassageAlong (intra-block).
+// For block-to-block gaps: _isPassageAlong (D-297).
 var DESK_W_HARNESS = fixture.constants.DESK_W_CM;
 function passageProd(ci, blockA, face, spacing, allBlocks) {
   var rect = __api._gapResidualCells(face, blockA, null, spacing, state);
@@ -369,9 +437,10 @@ function passageProd(ci, blockA, face, spacing, allBlocks) {
     "walkable");
   var pass;
   if (allBlocks) {
-    // Wall gap: scoped detection only (no unscoped _isPassage on rect).
-    pass = band && __api._isPassageForBlock(ci, band, band.axis,
-        DESK_W_HARNESS, blockA, face, allBlocks);
+    // Wall gap: D-303 straddle (inter-block) OR along (intra-block).
+    pass = band && (__api._isPassageForBlock(ci, band, band.axis,
+        blockA, face)
+      || __api._isPassageAlong(ci, band, band.axis, DESK_W_HARNESS));
   } else {
     // Block-to-block gap: original D-297 logic.
     pass = (rect && __api._isPassage(ci, rect, rect.axis))
@@ -553,12 +622,16 @@ if (!only) {
   // Narrow gap: 90 between two BLOCK_2_SIDE (perpendicular access only)
   runTwoBlocks("BLOCK_2_SIDE", 90, {});
 
-  // Stacked single-desk blocks (reproduces screenshot attribution bug)
+  // Stacked single-desk blocks (D-303 straddle: front=passage, back=not)
   console.log("\n=== STACKED ATTRIBUTION (front vs back desk) ===");
   runStacked("BLOCK_1", { westCorr: 160 });
 
-  // Two columns of stacked blocks: union must NOT cross columns.
-  console.log("\n=== TWO COLUMNS (union isolation) ===");
+  // Three stacked (D-303: front+mid=passage, back=not)
+  console.log("\n=== STACKED3 (3 desks: front+mid passage, back not) ===");
+  runStacked3("BLOCK_1", { westCorr: 160 });
+
+  // Two columns of stacked blocks: end-of-corridor isolation.
+  console.log("\n=== TWO COLUMNS (end-of-corridor isolation) ===");
   runTwoColumns("BLOCK_1", { westCorr: 160, midGap: 160 });
 }
 

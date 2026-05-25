@@ -269,115 +269,52 @@ function _gapResidualCells(gapType, a, b, spacing, roomState,
   }
 }
 
-// Walking-margin passage detection scoped to a specific block's own paths.
-// Only paths whose terminal (arrival = points[0]) belongs to blockA on face
-// are considered.  The span is measured in a union band that covers all blocks
-// sharing the same chair corridor, not just blockA's own extent.
+// D-303: Walking-margin passage detection via STRADDLE test.
+// The chair band of blockA is a passage iff a Dijkstra path has a point
+// BEFORE A's extent AND a point AFTER A's extent along the corridor axis,
+// both within the band's transverse range.  This means traffic toward a
+// desk further away crosses A's chair band — A bears the walking margin.
+// The end-of-corridor desk has no traffic beyond → no straddle → no margin.
 //
 // blockA: {deskX, deskY, deskW, deskH, faces}  (px, SCALE-aware)
 // face:   "west"|"east"|"north"|"south"
-// allBlocks: array of block descriptors (same shape as blockA)
 // band:   walkable residual rect from _gapResidualCells (cell coords)
 // axis:   "x" (vertical gap, long axis = rows) or "y" (horizontal, cols)
-function _isPassageForBlock(circInfo, band, axis, minSpanCm,
-    blockA, face, allBlocks) {
+function _isPassageForBlock(circInfo, band, axis, blockA, face) {
   if (!circInfo || !circInfo.paths || !band) return false;
   var cellCm = GRID_STEP_CM;
 
-  // 1. Identify the chair side for blockA on this face.
+  // 1. Chair guard: only applies to the chair side.
   var faceObj = getFacingFace(blockA.faces, face);
   var side = classifyGapSide(faceObj);
   if (side.type !== "chair") return false;
 
-  // BlockA extents in cells (used by steps 2 and 3).
+  // 2. BlockA extents in cells.
   var aR0 = Math.floor(blockA.deskY / SCALE / cellCm);
   var aR1 = Math.ceil((blockA.deskY + blockA.deskH) / SCALE / cellCm);
   var aC0 = Math.floor(blockA.deskX / SCALE / cellCm);
   var aC1 = Math.ceil((blockA.deskX + blockA.deskW) / SCALE / cellCm);
 
-  // 2. Compute union extent along the corridor axis (long axis of the band).
-  //    Collect all blocks that (a) have a chair on the same face and
-  //    (b) overlap the transverse range of A's walkable band.
-  var uMin = Infinity, uMax = -Infinity;
-  for (var bi = 0; bi < allBlocks.length; bi++) {
-    var ob = allBlocks[bi];
-    var obFace = getFacingFace(ob.faces, face);
-    if (!obFace || classifyGapSide(obFace).type !== "chair") continue;
-    // Transverse overlap check: ob must share the same corridor as blockA.
-    // Compare block extents on the transverse axis (not the band), because
-    // the band is the corridor BESIDE the blocks, not overlapping them.
-    var tOv;
-    if (axis === "x") {
-      // Vertical gap (west/east): transverse axis = columns (block widths).
-      var obC0 = ob.deskX / SCALE / cellCm;
-      var obC1 = (ob.deskX + ob.deskW) / SCALE / cellCm;
-      tOv = Math.min(obC1, aC1) - Math.max(obC0, aC0);
-    } else {
-      // Horizontal gap (north/south): transverse axis = rows (block depths).
-      var obR0 = ob.deskY / SCALE / cellCm;
-      var obR1 = (ob.deskY + ob.deskH) / SCALE / cellCm;
-      tOv = Math.min(obR1, aR1) - Math.max(obR0, aR0);
-    }
-    if (tOv <= 0) continue;
-    // Extend union along the long axis.
-    if (axis === "x") {
-      var oR0 = ob.deskY / SCALE / cellCm;
-      var oR1 = (ob.deskY + ob.deskH) / SCALE / cellCm;
-      if (oR0 < uMin) uMin = oR0;
-      if (oR1 > uMax) uMax = oR1;
-    } else {
-      var oC0 = ob.deskX / SCALE / cellCm;
-      var oC1 = (ob.deskX + ob.deskW) / SCALE / cellCm;
-      if (oC0 < uMin) uMin = oC0;
-      if (oC1 > uMax) uMax = oC1;
-    }
-  }
-  if (uMin >= uMax) return false;
-
-  // Build the union band rect (same transverse as original band, extended
-  // long axis to the union of aligned blocks).
-  var uBand;
-  if (axis === "x") {
-    uBand = { r0: Math.floor(uMin), r1: Math.ceil(uMax),
-              c0: band.c0, c1: band.c1 };
-  } else {
-    uBand = { r0: band.r0, r1: band.r1,
-              c0: Math.floor(uMin), c1: Math.ceil(uMax) };
-  }
-
-  // 3. Identify paths whose terminal belongs to blockA on this face.
-  //    Terminal = points[0].  Belonging:
-  //    - terminal is on the chair side of A (e.g. west: col < deskX/cell)
-  //    - terminal's perpendicular coord is within A's extent.
+  // 3. Straddle test across all paths.
+  //    axis "x": transverse = cols [band.c0, band.c1), straddle on rows.
+  //    axis "y": transverse = rows [band.r0, band.r1), straddle on cols.
   for (var pi = 0; pi < circInfo.paths.length; pi++) {
     var pts = circInfo.paths[pi].points;
     if (!pts || pts.length === 0) continue;
-    var term = pts[0];
-    // Check terminal belongs to blockA on this face.
-    var belongs = false;
-    if (face === "west") {
-      belongs = term.c < aC0 && term.r >= aR0 && term.r < aR1;
-    } else if (face === "east") {
-      belongs = term.c >= aC1 && term.r >= aR0 && term.r < aR1;
-    } else if (face === "north") {
-      belongs = term.r < aR0 && term.c >= aC0 && term.c < aC1;
-    } else if (face === "south") {
-      belongs = term.r >= aR1 && term.c >= aC0 && term.c < aC1;
-    }
-    if (!belongs) continue;
-
-    // 4. Measure span of this path in the union band.
-    var mn = Infinity, mx = -Infinity;
+    var hasBefore = false, hasAfter = false;
     for (var i = 0; i < pts.length; i++) {
       var p = pts[i];
-      if (p.r >= uBand.r0 && p.r < uBand.r1 &&
-          p.c >= uBand.c0 && p.c < uBand.c1) {
-        var v = (axis === "x") ? p.r : p.c;
-        if (v < mn) mn = v;
-        if (v > mx) mx = v;
+      if (axis === "x") {
+        if (p.c < band.c0 || p.c >= band.c1) continue;
+        if (p.r < aR0) hasBefore = true;
+        if (p.r >= aR1) hasAfter = true;
+      } else {
+        if (p.r < band.r0 || p.r >= band.r1) continue;
+        if (p.c < aC0) hasBefore = true;
+        if (p.c >= aC1) hasAfter = true;
       }
+      if (hasBefore && hasAfter) return true;
     }
-    if (mx >= mn && (mx - mn + 1) * cellCm >= minSpanCm) return true;
   }
   return false;
 }
@@ -1986,8 +1923,9 @@ function _renderImpl(targetSvg) {
         ? _gapResidualCells(dir.face, a, null, CURRENT_SPACING,
             state, "walkable")
         : null;
-      var wPass = wBand && _isPassageForBlock(_circCache, wBand, wBand.axis,
-            DESK_W, a, dir.face, allBlocks);
+      var wPass = wBand && (
+            _isPassageForBlock(_circCache, wBand, wBand.axis, a, dir.face)
+            || _isPassageAlong(_circCache, wBand, wBand.axis, DESK_W));
       // D-258 Lot 3: reduce effective distance by cabinet encroachment in passage
       var wReduce = wPass ? _cabinetReductionCm(wRect, state) : 0;
       pushDistLabelWithGap(elements, tx, ty + 4, dcm - wReduce,
@@ -3172,6 +3110,12 @@ function enterAmendMode(room, candidate) {
   // Hide sub-tab bar (Card view / Grid view / Pattern editor)
   document.querySelector("#tabLytCatalogue > .sub-tab-bar").style.display = "none";
   loadPatternFromData(JSON.parse(JSON.stringify(candidate.pattern)));
+  // Locks (sticks) have no meaning in Amend layout: it is a room-specific
+  // arrangement, not an adaptive pattern. Strip them so blocks move and
+  // rotate freely (the lock UI is hidden in this mode by design).
+  state.rows.forEach(function (row) {
+    (row.blocks || []).forEach(function (b) { delete b.sticks; });
+  });
   // D-256 Lot 2: load furniture from saved amendment
   state.furniture = JSON.parse(JSON.stringify(candidate.furniture || []));
   state.selectedFurniture = -1;
@@ -3368,6 +3312,7 @@ function enterRoomAmendMode(room, context) {
 
     // Show Save/Discard/AddExcl in nav bar, hide Adjust room
     document.getElementById("rvBtnAdjustRoom").style.display = "none";
+    document.getElementById("rvBtnDefineLayout").style.display = "none";
     document.getElementById("rvBtnSaveRoom").style.display = "";
     document.getElementById("rvBtnCancelRoom").style.display = "";
     var rvAddMenuWrap = document.getElementById("rvAddMenuWrap");
@@ -3429,6 +3374,7 @@ function exitRoomAmendUI() {
 
     // Restore nav bar: show Adjust room, hide Save/Discard/AddExcl
     document.getElementById("rvBtnAdjustRoom").style.display = "";
+    document.getElementById("rvBtnDefineLayout").style.display = "";
     document.getElementById("rvBtnSaveRoom").style.display = "none";
     document.getElementById("rvBtnCancelRoom").style.display = "none";
     var rvAddMenuWrap2 = document.getElementById("rvAddMenuWrap");

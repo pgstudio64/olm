@@ -1,7 +1,7 @@
 """Catalogue pattern matching against real rooms.
 
 Pipeline (7 steps):
-    1. Selection: 4-state classify fit + top/top-1 desks
+    1. Selection: 4-state classify fit (all non-hidden)
     2. East-West mirror
     3. Stick clamping + homothety
     4. Individual desk removal in forbidden zones
@@ -98,12 +98,10 @@ class SelectionResult:
 
     Attributes:
         standard: Standard name.
-        candidates: D-244 — top/top-1 fittings + all tolerated (displayed).
-        all_fitting: All fitting + tolerated before top/top-1 filter.
+        candidates: All non-hidden candidates (fitting + oversize).
     """
     standard: str
     candidates: list[PatternCandidate]
-    all_fitting: list[PatternCandidate]
 
 
 # ---------------------------------------------------------------------------
@@ -349,15 +347,14 @@ def _classify_fit(
     return ("hidden", overflow_cm)
 
 
-def _select_top_desks(
-    candidates: list[PatternCandidate],
-) -> list[PatternCandidate]:
-    """Keep only patterns with the top or top-1 desk count.
+def _select_top_desks(candidates: list) -> list:
+    """Keep only items with the top or top-1 desk count.
 
-    D-244: replaces the Pareto front. Simpler and more predictable.
+    Works on any list of objects with an ``n_desks`` attribute
+    (PatternCandidate or MatchScore).
 
     Args:
-        candidates: Fitting candidates (oversize=False).
+        candidates: Items with .n_desks attribute.
 
     Returns:
         Sub-list with n_desks in {N, N-1} where N = max desk count.
@@ -377,8 +374,8 @@ def select_candidates(
     """Select candidate patterns for a target room.
 
     4-state classification (fitting / oversize_1axis / oversize_2axes /
-    hidden) with configurable tolerances, then top + top-1 desk selection
-    on fittings.
+    hidden) with configurable tolerances. Returns ALL non-hidden candidates
+    (no desk-count elaguage at this stage).
 
     Args:
         catalogue: JSON patterns from the catalogue.
@@ -387,7 +384,6 @@ def select_candidates(
 
     Returns:
         SelectionResult or list of SelectionResult.
-        ``all_fitting`` contains all non-hidden candidates.
     """
     from olm.core.matching_config import oversize_tol_1axis, oversize_tol_2axes
     tol_1 = oversize_tol_1axis()
@@ -427,26 +423,16 @@ def select_candidates(
             else:
                 oversize_2axes.append(candidate)
 
-        top = _select_top_desks(fitting)
-        top.sort(key=lambda c: c.n_desks, reverse=True)
-
-        def _oversize_sort_key(c: PatternCandidate):
-            return (c.overflow_cm, -c.n_desks, c.name)
-
-        oversize_1axis.sort(key=_oversize_sort_key)
-        oversize_2axes.sort(key=_oversize_sort_key)
-
         all_non_hidden = fitting + oversize_1axis + oversize_2axes
         results.append(SelectionResult(
             standard=std,
-            candidates=top + oversize_1axis + oversize_2axes,
-            all_fitting=all_non_hidden,
+            candidates=all_non_hidden,
         ))
 
         logger.debug(
-            "Selection %s: %d fit, %d 1axis, %d 2axes, %d top desks",
+            "Selection %s: %d fit, %d 1axis, %d 2axes",
             std, len(fitting), len(oversize_1axis),
-            len(oversize_2axes), len(top),
+            len(oversize_2axes),
         )
 
     if standard:
@@ -1308,8 +1294,55 @@ def _rects_intersect(
             and y1 < y2 + d2 and y1 + d1 > y2)
 
 
+def compute_opening_forbidden_zones(
+    room: RoomSpec, walking_margin_cm: int,
+) -> list[tuple[int, int, int, int]]:
+    """Forbidden rectangles in front of entry openings (912.4).
+
+    An entry opening — a real door, or any opening on the canonical
+    corridor face — needs a clear strip of depth ``walking_margin_cm``
+    inside the room so people can walk through it. Desks landing in
+    this strip are dropped (placement) and not targeted (circulation);
+    the strip stays walkable in the circulation grid.
+
+    The predicate mirrors the Dijkstra entry rule in
+    ``_pattern_to_circulation_format`` (has_door OR corridor face), so
+    placement and circulation share a single notion of "entry".
+
+    Args:
+        room: Target room (provides openings + dimensions).
+        walking_margin_cm: Strip depth (the standard's walking margin).
+
+    Returns:
+        List of (x_cm, y_cm, width_cm, depth_cm) rects clamped to the
+        room. Empty when ``walking_margin_cm <= 0``.
+    """
+    if walking_margin_cm <= 0:
+        return []
+    rw, rd = room.width_cm, room.depth_cm
+    d = walking_margin_cm
+    zones: list[tuple[int, int, int, int]] = []
+    for o in room.openings:
+        if not (o.has_door or o.face.value == _CANONICAL_CORRIDOR_FACE):
+            continue
+        face = o.face.value
+        if face in ("north", "south"):
+            x = max(0, o.offset_cm)
+            w = min(o.width_cm, max(0, rw - x))
+            depth = min(d, rd)
+            y = 0 if face == "north" else max(0, rd - depth)
+            zones.append((x, y, w, depth))
+        else:  # east / west — offset runs along the depth axis
+            y = max(0, o.offset_cm)
+            h = min(o.width_cm, max(0, rd - y))
+            depth = min(d, rw)
+            x = 0 if face == "west" else max(0, rw - depth)
+            zones.append((x, y, depth, h))
+    return zones
+
+
 def remove_conflicting_desks(
-    pattern: dict, room: RoomSpec,
+    pattern: dict, room: RoomSpec, walking_margin_cm: int = 0,
 ) -> tuple[dict, list[DeskPosition]]:
     """Remove desks that intersect forbidden zones.
 
@@ -1319,18 +1352,26 @@ def remove_conflicting_desks(
     Args:
         pattern: JSON pattern (adapted to the target room).
         room: Target room with exclusion_zones.
+        walking_margin_cm: When > 0, also drop desks landing on the
+            clear strip in front of an entry opening (912.4). 0 keeps
+            the legacy behaviour (exclusion zones + out-of-room only).
 
     Returns:
         (modified_pattern, list_of_removed_desks)
     """
     desks = compute_desk_positions(pattern)
     removed = []
+    opening_zones = compute_opening_forbidden_zones(room, walking_margin_cm)
 
     for desk in desks:
-        for excl in room.exclusion_zones:
+        forbidden = [
+            (e.x_cm, e.y_cm, e.width_cm, e.depth_cm)
+            for e in room.exclusion_zones
+        ] + opening_zones
+        for (zx, zy, zw, zd) in forbidden:
             if _rects_intersect(
                 desk.x_cm, desk.y_cm, desk.width_cm, desk.depth_cm,
-                excl.x_cm, excl.y_cm, excl.width_cm, excl.depth_cm,
+                zx, zy, zw, zd,
             ):
                 removed.append(desk)
                 break
@@ -1797,44 +1838,9 @@ def _pattern_to_circulation_format(
         "doors": doors,
     }
 
-    # Positioned blocks in circulation format
-    blocks_out = []
-    row_y = 0
-    rows = pattern.get("rows", [])
-    row_gaps = pattern.get("row_gaps_cm", [])
-
-    for ri, row in enumerate(rows):
-        if ri > 0 and ri - 1 < len(row_gaps):
-            row_y += row_gaps[ri - 1]
-
-        block_x = 0
-        for bi, block in enumerate(row.get("blocks", [])):
-            block_x += block.get("gap_cm", 0)
-            btype = block.get("type", "")
-            orient = block.get("orientation", 0)
-            offset_ns = block.get("offset_ns_cm", 0)
-
-            eo, ns, _ = _BLOCK_REGISTRY.get(btype, (0, 0, 0))
-            if orient in (90, 270):
-                block_eo, block_ns = ns, eo
-            else:
-                block_eo, block_ns = eo, ns
-
-            blocks_out.append({
-                "type": btype,
-                "orientation": orient,
-                "x_cm": block_x,
-                "y_cm": row_y + offset_ns,
-                "eo_cm": block_eo,
-                "ns_cm": block_ns,
-            })
-
-            block_x += block_eo
-
-        max_ns = 0
-        for block in row.get("blocks", []):
-            max_ns = max(max_ns, _block_ns_extent(block))
-        row_y += max_ns
+    # D-305: blocks from shared helper (no duplication)
+    from olm.core.pattern_fit import build_circ_blocks_from_pattern
+    blocks_out = build_circ_blocks_from_pattern(pattern)
 
     return room_dict, blocks_out
 
@@ -1866,7 +1872,15 @@ def score_candidate(
     default_cfg = get_default()
     cfg = ALL_CONFIGS.get(standard, default_cfg) if default_cfg else None
     room_dict, blocks_list = _pattern_to_circulation_format(pattern, room)
-    circ = circ_analyse(room_dict, blocks_list, cfg.door_exclusion_depth_cm)
+    # 912.4: entry openings reserve a walkable strip — desks landing there
+    # are not targeted and the strip stays walkable (shared with placement).
+    forbidden_zones = compute_opening_forbidden_zones(
+        room, cfg.walking_margin_cm if cfg else 0,
+    )
+    circ = circ_analyse(
+        room_dict, blocks_list, cfg.door_exclusion_depth_cm,
+        forbidden_zones=forbidden_zones,
+    )
 
     # Minimum passage (via desk paths)
     min_passage = min(circ.path_widths) if circ.path_widths else 0.0
@@ -1916,6 +1930,11 @@ def score_candidate(
     }
     composite, room_grade = _compute_composite_and_grade(dims, dim_weights)
 
+    # 6bis-grade (D-310): reachability 0 is eliminatory — a layout with an
+    # unreachable desk cannot score better than F regardless of composite.
+    if dim_reachability == 0:
+        room_grade = "F"
+
     return MatchScore(
         pattern_name=pattern.get("name", "?"),
         standard=standard,
@@ -1942,33 +1961,217 @@ def score_candidate(
 
 
 # ---------------------------------------------------------------------------
-# Step 6 — Best selection per standard
+# Step 6 — Best selection per standard (3-category model, D-304 rev.)
 # ---------------------------------------------------------------------------
 
-def _score_key(s: MatchScore) -> tuple[bool, float]:
-    """Sort key for best candidate selection.
+# Category rank for sort key (lower = better).
+_CAT_RANK: dict[str, int] = {
+    "fits_well": 0,
+    "too_tight": 1,
+    "fewer_desks": 2,
+}
 
-    D-299: infeasible candidates (unreachable desks or critical passage)
-    are demoted after all feasible ones.  Among same feasibility, density
-    wins (m²/desk descending = less dense = better).
-    Lower key = better candidate (used with min()).
+
+def circulates_well(score: MatchScore) -> bool:
+    """True if passage grade indicates good circulation.
+
+    Good circulation = passage_grade in {A, B, C} (passage >= walking
+    margin of the standard).
+
+    Args:
+        score: Scored candidate.
+
+    Returns:
+        True if circulation is acceptable.
     """
-    infeasible = s.min_passage_cm <= 0 or s.passage_grade == "F"
-    return (infeasible, -s.m2_per_desk)
+    return score.passage_grade in {"A", "B", "C"}
+
+
+def max_working_desks(scores: list[MatchScore]) -> int:
+    """Max n_desks among fitting + circulates-well candidates.
+
+    Args:
+        scores: All scored candidates for one standard.
+
+    Returns:
+        Max desk count (0 if no fitting+well candidate exists).
+    """
+    return max(
+        (s.n_desks for s in scores
+         if s.fit_class == "fitting" and circulates_well(s)),
+        default=0,
+    )
+
+
+def candidate_category(
+    score: MatchScore, max_working: int,
+) -> str:
+    """Classify a scored candidate into one of 3 categories.
+
+    - fits_well:  fitting + circulates well + n_desks == max_working
+    - fewer_desks: fitting + circulates well + n_desks < max_working
+    - too_tight:  everything else (bad circulation, oversize, etc.)
+
+    Args:
+        score: Scored candidate.
+        max_working: Max desks among fitting+well candidates.
+
+    Returns:
+        "fits_well", "fewer_desks", or "too_tight".
+    """
+    if score.fit_class == "fitting" and circulates_well(score):
+        if max_working > 0 and score.n_desks == max_working:
+            return "fits_well"
+        return "fewer_desks"
+    return "too_tight"
+
+
+def _candidate_sort_key(
+    s: MatchScore, max_working: int,
+) -> tuple[int, float, int, float, float, float, str]:
+    """Unified sort key for all candidates.
+
+    Order (lower = better, used with min/sorted):
+        1. category rank (fits_well=0 < too_tight=1 < fewer_desks=2)
+        2. overflow_cm ascending (0 for fitting, discriminant for oversize)
+        3. n_desks descending (maximize desks)
+        4. room_grade ascending (A first, via -_GRADE_TO_DIM)
+        5. min_passage_cm descending (wider passage better)
+        6. m2_per_desk ascending (denser better)
+        7. pattern_name (stable tie-breaker)
+
+    Args:
+        s: Scored candidate.
+        max_working: Max desks among fitting+well candidates.
+
+    Returns:
+        Comparable tuple for sorted()/min().
+    """
+    grade = s.room_grade or s.circulation_grade or "F"
+    cat = candidate_category(s, max_working)
+    return (
+        _CAT_RANK.get(cat, 9),
+        s.overflow_cm,
+        -s.n_desks,
+        -_GRADE_TO_DIM.get(grade, 0.0),
+        -s.min_passage_cm,
+        s.m2_per_desk,
+        s.pattern_name,
+    )
 
 
 def select_best(scores: list[MatchScore]) -> MatchScore | None:
     """Select the best candidate from a list of scores.
 
+    Uses _candidate_sort_key (category-first ordering).  Returns the
+    overall best available candidate (fits_well preferred, then
+    too_tight, then fewer_desks).  None only if scores is empty.
+
     Args:
         scores: List of MatchScore for a given standard.
 
     Returns:
-        Best MatchScore, or None if list is empty.
+        Best MatchScore, or None if empty.
     """
     if not scores:
         return None
-    return min(scores, key=_score_key)
+    mw = max_working_desks(scores)
+    return min(scores, key=lambda s: _candidate_sort_key(s, mw))
+
+
+def filter_and_rank_candidates(
+    scores: list[MatchScore],
+    removal_pct: int = 20,
+    configs: dict | None = None,
+) -> list[MatchScore]:
+    """Sort scores then apply D-310 filters (6bis + 6ter).
+
+    Pipeline:
+        1. Sort by ``_candidate_sort_key`` (max_working per standard).
+        2. **6bis** — remove truly impossible candidates:
+           ``dim_reachability == 0`` (unreachable desk) or
+           ``min_passage_cm < walking_margin * (1 - removal_pct/100)``.
+        3. Recalculate ``max_working`` on survivors.
+        4. **6ter** — remove dominated *too_tight* candidates whose
+           ``n_desks <= max_working`` (not worth amending).
+
+    Args:
+        scores: All scored candidates (any number of standards).
+        removal_pct: Passage removal margin percentage (default 20).
+        configs: Standard → SpacingConfig lookup. Defaults to
+            ``ALL_CONFIGS`` (production registry).
+
+    Returns:
+        Sorted list of surviving MatchScore instances.
+    """
+    if configs is None:
+        configs = ALL_CONFIGS
+
+    # Initial sort.
+    scores_by_std: dict[str, list[MatchScore]] = {}
+    for s in scores:
+        scores_by_std.setdefault(s.standard, []).append(s)
+    mw_by_std = {
+        std: max_working_desks(ss) for std, ss in scores_by_std.items()
+    }
+    sorted_scores = sorted(
+        scores,
+        key=lambda s: _candidate_sort_key(s, mw_by_std[s.standard]),
+    )
+
+    # 6bis: remove truly impossible candidates.
+    kept: list[MatchScore] = []
+    for s in sorted_scores:
+        if s.dim_reachability == 0:
+            continue
+        std_cfg = configs.get(s.standard)
+        if std_cfg:
+            threshold = std_cfg.walking_margin_cm * (1 - removal_pct / 100)
+            if s.min_passage_cm < threshold:
+                continue
+        kept.append(s)
+
+    # Recalculate max_working on survivors.
+    kept_by_std: dict[str, list[MatchScore]] = {}
+    for s in kept:
+        kept_by_std.setdefault(s.standard, []).append(s)
+    mw_kept = {
+        std: max_working_desks(ss) for std, ss in kept_by_std.items()
+    }
+
+    # 6ter: remove dominated too_tight candidates.
+    final: list[MatchScore] = []
+    for s in kept:
+        mw = mw_kept.get(s.standard, 0)
+        cat = candidate_category(s, mw)
+        if cat == "too_tight" and mw > 0 and s.n_desks <= mw:
+            continue
+        final.append(s)
+
+    return final
+
+
+def best_pattern_per_standard(
+    final_scores: list[MatchScore],
+    all_standards: list[str],
+) -> dict[str, str | None]:
+    """Best surviving pattern name per standard.
+
+    The first occurrence for each standard in ``final_scores`` wins
+    (assumes the list is already sorted by ``_candidate_sort_key``).
+
+    Args:
+        final_scores: Sorted survivors from ``filter_and_rank_candidates``.
+        all_standards: All standard keys that should appear in the result.
+
+    Returns:
+        ``{standard: pattern_name | None}``.
+    """
+    best: dict[str, str | None] = {}
+    for s in final_scores:
+        if s.standard not in best:
+            best[s.standard] = s.pattern_name
+    return {std: best.get(std) for std in all_standards}
 
 
 # ---------------------------------------------------------------------------
@@ -2179,9 +2382,13 @@ def match_room(
             deduped_pairs.append((candidate, adapted))
 
         std_scores: list[MatchScore] = []
+        std_cfg = ALL_CONFIGS.get(std)
+        std_walking_margin = std_cfg.walking_margin_cm if std_cfg else 0
         for candidate, adapted in deduped_pairs:
-            # Step 4: remove desks in forbidden zones
-            cleaned, removed = remove_conflicting_desks(adapted, room)
+            # Step 4: remove desks in forbidden zones (incl. entry openings, 912.4)
+            cleaned, removed = remove_conflicting_desks(
+                adapted, room, std_walking_margin,
+            )
 
             # Step 5: scoring
             score = score_candidate(

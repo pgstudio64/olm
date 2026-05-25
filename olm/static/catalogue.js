@@ -271,8 +271,11 @@ function _cardFitStatusHtml(p, fitClass) {
     label = "Tight: +" + over + " cm";
   } else {
     cls = "card-fit card-fit-ok";
-    var spareW = Math.round(Math.max(0, roomW - (fp.xMax - fp.xMin)));
-    var spareD = Math.round(Math.max(0, roomD - (fp.yMax - fp.yMin)));
+    // D-305: use circ-aware min-room from server when available
+    var minW = p.min_room_width || (fp.xMax - fp.xMin);
+    var minD = p.min_room_depth || (fp.yMax - fp.yMin);
+    var spareW = Math.round(Math.max(0, roomW - minW));
+    var spareD = Math.round(Math.max(0, roomD - minD));
     label = (spareW <= 0 && spareD <= 0)
       ? "Exact fit"
       : "Room to spare: " + spareW + " × " + spareD + " cm";

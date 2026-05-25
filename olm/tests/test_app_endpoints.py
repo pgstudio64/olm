@@ -258,6 +258,11 @@ class TestFloorPlanMatch:
         candidate_names = {c["pattern_name"] for c in candidates}
         assert best_name in candidate_names
 
+        # 3-category model: category present on candidates
+        for c in candidates:
+            assert "category" in c
+            assert c["category"] in ("fits_well", "too_tight", "fewer_desks")
+
     def test_room_without_features(self, client, monkeypatch_catalogue):
         """Room sans windows ni openings retourne 200."""
         resp = client.post("/api/floor-plan/match", json={

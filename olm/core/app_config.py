@@ -41,6 +41,7 @@ _EMBEDDED_DEFAULTS: dict = {
         "min_desks_drop_ratio": 0.30,
         "oversize_tol_1axis_pct": 10,
         "oversize_tol_2axes_pct": 10,
+        "passage_removal_margin_pct": 20,
     },
     "standards": {},
     "current_standard": "",
