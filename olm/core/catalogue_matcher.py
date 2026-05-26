@@ -2561,6 +2561,7 @@ def diagnose_room(
     entries: dict[tuple[str, str], dict] = {}
     step_survivors: dict[str, set[tuple[str, str]]] = {
         "after_standard_fit": set(),
+        "after_mirror_expansion": set(),
         "after_adapt": set(),
         "after_6bis": set(),
         "after_6ter": set(),
@@ -2632,6 +2633,11 @@ def diagnose_room(
 
         for candidate in with_mirrors:
             key = (candidate.name, std)
+            # Track mirror-expanded universe so the diag funnel shows the
+            # growth from `after_standard_fit` (originals only) explicitly,
+            # instead of mirrors appearing for the first time at
+            # `after_adapt` (which made the counts non-monotonic).
+            step_survivors["after_mirror_expansion"].add(key)
             try:
                 adapted = adapt_to_room(candidate.pattern, room)
             except PatternAdaptOverlap:
@@ -2773,6 +2779,7 @@ def diagnose_room(
     step_counts = {
         "total_catalogue": len(catalogue),
         "after_standard_fit": len(step_survivors["after_standard_fit"]),
+        "after_mirror_expansion": len(step_survivors["after_mirror_expansion"]),
         "after_adapt": len(step_survivors["after_adapt"]),
         "after_6bis": len(step_survivors["after_6bis"]),
         "after_6ter": len(step_survivors["after_6ter"]),

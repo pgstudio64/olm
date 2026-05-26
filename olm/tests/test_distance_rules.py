@@ -79,14 +79,14 @@ class TestAnalyzeGapPassageTrue:
         assert gap["color"] == "#58c080"
         assert gap["marge"] == 70
 
-    def test_two_chairs_face_to_face_amber(self):
+    def test_two_chairs_face_to_face_green_290(self):
         """D-312: 290 cm => requis 230, marge=+60 => green."""
         gap = analyze_gap(290, CHAIR_FACE, CHAIR_FACE, SPACING_STD1,
                           {"passage": True})
         assert gap["color"] == "#58c080"
         assert gap["marge"] == 60
 
-    def test_two_chairs_face_to_face_red(self):
+    def test_two_chairs_face_to_face_green_270(self):
         """D-312: 270 cm => requis 230, marge=+40 => green."""
         gap = analyze_gap(270, CHAIR_FACE, CHAIR_FACE, SPACING_STD1,
                           {"passage": True})

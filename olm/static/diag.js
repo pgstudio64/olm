@@ -457,8 +457,13 @@ function _buildOfficeDiagResult(data, room) {
     { label: "Total catalogue", value: String(counts.total_catalogue || 0) },
     { label: "After standard + fit", value: String(counts.after_standard_fit || 0),
       status: (counts.after_standard_fit || 0) === 0 ? "error" : "ok" },
-    { label: "After adapt / overflow", value: String(counts.after_adapt || 0),
-      status: (counts.after_adapt || 0) === 0 && (counts.after_standard_fit || 0) > 0
+    { label: "After mirror expansion",
+      value: String(counts.after_mirror_expansion || 0),
+      note: "originals + generated mirrors" },
+    { label: "After adapt (no overflow / no fp dup)",
+      value: String(counts.after_adapt || 0),
+      status: (counts.after_adapt || 0) === 0
+        && (counts.after_mirror_expansion || 0) > 0
         ? "error" : "ok" },
     { label: "After 6bis (reach/passage)", value: String(counts.after_6bis || 0),
       status: (counts.after_6bis || 0) === 0 && (counts.after_adapt || 0) > 0

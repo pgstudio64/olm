@@ -299,9 +299,23 @@ class TestDiagnoseEndpoint:
         assert ctx["n_windows"] == 1
 
         counts = data["step_counts"]
-        assert "total_catalogue" in counts
-        assert "kept" in counts
+        for key in (
+            "total_catalogue", "after_standard_fit",
+            "after_mirror_expansion", "after_adapt",
+            "after_6bis", "after_6ter", "kept",
+        ):
+            assert key in counts
         assert counts["total_catalogue"] >= 0
+        # Funnel monotonicity: after mirror expansion, each step never
+        # grows (it can only filter candidates).
+        assert counts["after_adapt"] <= counts["after_mirror_expansion"]
+        assert counts["after_6bis"] <= counts["after_adapt"]
+        # 6ter only includes the best_effort fallback when 6bis empties
+        # everything; otherwise 6ter ≤ 6bis.
+        assert (
+            counts["after_6ter"] <= counts["after_6bis"]
+            or (counts["after_6bis"] == 0 and counts["after_6ter"] <= 1)
+        )
 
         # Patterns list: each entry has required fields.
         for p in data["patterns"]:
