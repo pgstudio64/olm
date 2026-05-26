@@ -1186,6 +1186,19 @@ def api_office_diagnose():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/floor-plan/score-amendment", methods=["POST"])
+def api_score_amendment():
+    """Re-score a user-amended pattern with the full server pipeline."""
+    from olm.server.services.matching_service import score_amendment
+    try:
+        return jsonify(score_amendment(request.json))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        logger.exception("score amendment failed")
+        return jsonify({"error": "internal server error"}), 500
+
+
 # ===================================================================
 # E-bis — Export
 # ===================================================================

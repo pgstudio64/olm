@@ -2515,7 +2515,11 @@ def match_room(
 # Diagnostic pipeline (office.candidates diag)
 # ---------------------------------------------------------------------------
 
-# Status ordering from worst (0) to best (6) — used to deduplicate mirrors.
+# Status ordering from worst (0) to best (7) — used to deduplicate mirrors.
+# kept_best_effort (D-317 fallback) ranks above kept so it always overrides
+# any prior failure entry for the same (pattern_name, standard) key. It
+# cannot coexist with kept since the fallback only fires when nothing was
+# kept.
 _STATUS_RANK: dict[str, int] = {
     "wrong_standard": 0,
     "hidden": 1,
@@ -2524,6 +2528,7 @@ _STATUS_RANK: dict[str, int] = {
     "removed_6bis_passage": 4,
     "removed_6ter": 5,
     "kept": 6,
+    "kept_best_effort": 7,
 }
 
 
@@ -2728,6 +2733,39 @@ def diagnose_room(
             "passage_grade": s.passage_grade,
             "category": cat,
         })
+
+    # ------------------------------------------------------------------
+    # D-317 fallback — mirror filter_and_rank_candidates: when 6bis+6ter
+    # leave nothing, the production pipeline keeps the best-sorted
+    # candidate marked best_effort. Reflect it here so the diag matches
+    # what the Office list shows.
+    # ------------------------------------------------------------------
+    if not step_survivors["after_6ter"] and all_scores:
+        mw_initial: dict[str, int] = {}
+        scores_by_std_initial: dict[str, list[MatchScore]] = {}
+        for s in all_scores:
+            scores_by_std_initial.setdefault(s.standard, []).append(s)
+        for std, ss in scores_by_std_initial.items():
+            mw_initial[std] = max_working_desks(ss)
+        sorted_initial = sorted(
+            all_scores,
+            key=lambda s: _candidate_sort_key(s, mw_initial[s.standard]),
+        )
+        s = sorted_initial[0]
+        key = (s.pattern_name, s.standard)
+        mw = mw_initial.get(s.standard, 0)
+        cat = candidate_category(s, mw)
+        _upsert(key, {
+            "pattern_name": s.pattern_name, "standard": s.standard,
+            "status": "kept_best_effort", "fit_class": s.fit_class,
+            "n_desks": s.n_desks, "overflow_cm": s.overflow_cm,
+            "dim_reachability": s.dim_reachability,
+            "all_desks_reachable": s.all_desks_reachable,
+            "min_passage_cm": s.min_passage_cm,
+            "passage_grade": s.passage_grade,
+            "category": cat,
+        })
+        step_survivors["after_6ter"].add(key)
 
     # ------------------------------------------------------------------
     # Assemble result

@@ -309,7 +309,65 @@ class TestDiagnoseEndpoint:
             assert "standard" in p
             assert "status" in p
             assert p["status"] in {
-                "kept", "wrong_standard", "no_fit",
+                "kept", "kept_best_effort", "wrong_standard", "no_fit",
                 "removed_6bis_reach", "removed_6bis_passage",
                 "removed_6ter", "hidden",
             }
+
+
+# ---------------------------------------------------------------------------
+# D-317 suivi A7-bis — diagnose_room reflects best_effort fallback
+# ---------------------------------------------------------------------------
+
+class TestDiagnoseFallback:
+    """diagnose_room must mirror filter_and_rank_candidates' D-317 fallback:
+    when 6bis+6ter would leave nothing, expose the surviving best-sorted
+    candidate as kept_best_effort so the diag matches the Office list.
+    """
+
+    def test_fallback_produces_kept_best_effort(self, monkeypatch):
+        """Force all candidates to fail 6bis → exactly one kept_best_effort
+        entry; step_counts.kept == 1."""
+        from olm.core import catalogue_matcher as cm
+
+        room = {
+            "name": "diag_fallback",
+            "width_cm": 400,
+            "depth_cm": 500,
+            "openings": [{
+                "face": "south", "offset_cm": 0, "width_cm": 90,
+                "has_door": True, "opens_inward": True,
+                "hinge_side": "left",
+            }],
+            "windows": [{"face": "north", "offset_cm": 0, "width_cm": 300}],
+            "exclusion_zones": [],
+        }
+        # Force every candidate (in both 6bis and 6ter passes) to be
+        # removed by 6bis_passage. all_scores stays non-empty since the
+        # patch only affects the post-scoring classification step.
+        monkeypatch.setattr(
+            cm, "classify_candidate_status",
+            lambda *a, **kw: "removed_6bis_passage",
+        )
+
+        from olm.server.services.matching_service import diagnose_candidates
+        result = diagnose_candidates({"room": room})
+
+        patterns = result["patterns"]
+        best_effort = [p for p in patterns if p["status"] == "kept_best_effort"]
+        # Skip gracefully if the local catalogue is empty (no patterns
+        # could be scored at all — fallback can't fire).
+        if not any(p["status"] != "wrong_standard" and "min_passage_cm" in p
+                   for p in patterns):
+            import pytest
+            pytest.skip("local catalogue has no scorable pattern for room")
+        assert len(best_effort) == 1, (
+            f"expected exactly one kept_best_effort, got {len(best_effort)}"
+        )
+        assert result["step_counts"]["kept"] == 1
+        # The surviving entry must carry the scoring fields (it went
+        # through Phase 2).
+        e = best_effort[0]
+        assert "n_desks" in e
+        assert "min_passage_cm" in e
+        assert "fit_class" in e

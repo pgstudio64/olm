@@ -100,7 +100,8 @@
     document.activeElement.blur();
   }
 
-  // ── API room builder (shared by ensureRoomMatched & fpRematchRoom) ──
+  // ── API room builder (shared by ensureRoomMatched, fpRematchRoom,
+  //    and editor.js score-amendment) ──
   // Merges openings + doors into a single openings[] with has_door flag,
   // as expected by the /api/floor-plan/match backend.
   function _buildApiRoom(r) {
@@ -119,6 +120,9 @@
     });
     return Object.assign({}, r, { openings: apiOpenings, doors: undefined });
   }
+  // Exposed on window for cross-module access (EC-1: editor.js
+  // score-amendment needs to build the API room payload).
+  window._buildApiRoom = _buildApiRoom;
 
   // ── Single-room match fetch wrapper ───────────────────────────────────
   // Sends one room to /api/floor-plan/match and calls onDone(responseRoom)

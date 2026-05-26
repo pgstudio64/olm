@@ -1362,7 +1362,12 @@ async function init() {
     var backdrop = document.getElementById("olmModalBackdrop");
     if (backdrop && backdrop.style.display !== "none") return;
     var btn = null;
-    if (e.key === "s" || e.key === "S") {
+    if ((e.key === "d" || e.key === "D") && e.shiftKey) {
+      // Shift+D = Diag (dev-only, off-screen on small viewports).
+      btn = _firstVisibleBtn(["fpBtnDiag", "rvBtnDiag"]);
+    } else if (e.shiftKey) {
+      return;
+    } else if (e.key === "s" || e.key === "S") {
       btn = _firstVisibleBtn(
         ["btnSave", "rvBtnSaveRoom", "fpBtnSaveLayout"]);
     } else if (e.key === "d" || e.key === "D") {

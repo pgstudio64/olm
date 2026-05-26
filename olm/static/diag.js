@@ -474,6 +474,7 @@ function _buildOfficeDiagResult(data, room) {
   // --- Section 3: Per-pattern table ---
   var _STATUS_STYLE = {
     kept: "ok",
+    kept_best_effort: "warning",
     removed_6ter: "warning",
     removed_6bis_passage: "warning",
     removed_6bis_reach: "error",

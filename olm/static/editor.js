@@ -2918,44 +2918,82 @@ async function save() {
       return;
     }
     var payload = buildPatternPayload();
-    // Recompute desk count
-    var nd = totalDesks();
-    var roomArea = (state.room_width_cm * state.room_depth_cm) / 10000;
-    var circInfo = computeCirculationInfo();
-    var cg = circInfo ? circGrade(circInfo) : { grade: "F" };
-    // D-293: PE computes passage comfort (circGrade), NOT reachability
-    // (no Dijkstra client-side). dim_reachability left null.
-    fpAmendments[amend.roomName] = {
-      pattern_name: amend.candidate.pattern_name.replace(/ \(amended\)$/, "") + " (amended)",
-      standard: state.standard,
-      n_desks: nd,
-      m2_per_desk: nd > 0 ? +(roomArea / nd).toFixed(1) : 0,
-      circulation_grade: cg.grade,
-      dim_reachability: null,
-      dim_passage: cg.grade === "A" ? 1.0 : cg.grade === "B" ? 0.8 : cg.grade === "C" ? 0.6 : cg.grade === "D" ? 0.4 : 0.0,
-      passage_grade: cg.grade,
-      min_passage_cm: circInfo ? circInfo.minPassageCm : 0,
-      connectivity_pct: circInfo ? circInfo.connectivityPct : 0,
-      worst_detour: circInfo ? circInfo.worstDetour : 0,
-      largest_free_rect_m2: 0,
-      desks: circInfo ? circInfo.desks : [],
-      pattern: payload,
-      furniture: JSON.parse(JSON.stringify(state.furniture || [])),
-      amended: true,
-    };
-    state.amendMode = null;
-    state.overlay = null;
-    // clearDirty() BEFORE exitAmendUI(): exitAmendUI clicks the catalogue
-    // sub-tab, which runs the unsaved-pattern guard; with amendMode already
-    // null, a still-dirty state would wrongly trigger the discard prompt.
-    clearDirty();
-    exitAmendUI();
-    setStatus("Amendment saved for room \"" + amend.roomName + "\".");
-    // Switch back to Design — use setTimeout to ensure exitAmendUI
-    // DOM changes (Card view click, sub-tab restore) are settled.
-    setTimeout(function() {
-      document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
-    }, 0);
+    var saveFurniture = JSON.parse(JSON.stringify(state.furniture || []));
+    // Build API room for server-side scoring (EC-1)
+    var apiRoom = window._buildApiRoom
+      ? window._buildApiRoom(amend.room)
+      : amend.room;
+    // Disable Save button during server round-trip (P5/P8)
+    var saveBtn = document.getElementById("btnSave");
+    if (saveBtn) saveBtn.disabled = true;
+    setStatus("Scoring amendment...");
+    fetch("/api/floor-plan/score-amendment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        room: apiRoom,
+        pattern: payload,
+        standard: state.standard,
+      }),
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.error) {
+        if (saveBtn) saveBtn.disabled = false;
+        setStatus("Amendment NOT saved: " + data.error);
+        if (typeof alertModal === "function") {
+          alertModal("Scoring failed: " + data.error);
+        }
+        return;
+      }
+      // Populate amendment with server-scored fields (all 24 + extras)
+      var amendName = amend.candidate.pattern_name
+        .replace(/ \(amended\)$/, "") + " (amended)";
+      fpAmendments[amend.roomName] = {
+        pattern_name: amendName,
+        standard: data.standard,
+        n_desks: data.n_desks,
+        m2_per_desk: data.m2_per_desk,
+        circulation_grade: data.circulation_grade,
+        connectivity_pct: data.connectivity_pct,
+        min_passage_cm: data.min_passage_cm,
+        worst_detour: data.worst_detour,
+        largest_free_rect_m2: data.largest_free_rect_m2,
+        oversize: data.oversize,
+        fit_class: data.fit_class,
+        overflow_cm: data.overflow_cm,
+        dim_reachability: data.dim_reachability,
+        all_desks_reachable: data.all_desks_reachable,
+        dim_passage: data.dim_passage,
+        passage_grade: data.passage_grade,
+        dim_light: data.dim_light,
+        dim_back_door: data.dim_back_door,
+        dim_face_wall: data.dim_face_wall,
+        composite_score: data.composite_score,
+        room_grade: data.room_grade,
+        category: data.category,
+        desks: data.desks,
+        pattern: data.pattern,
+        furniture: saveFurniture,
+        amended: true,
+      };
+      state.amendMode = null;
+      state.overlay = null;
+      // P6: clearDirty() BEFORE exitAmendUI()
+      clearDirty();
+      exitAmendUI();
+      setStatus("Amendment saved for room \"" + amend.roomName + "\".");
+      setTimeout(function() {
+        document.querySelector('.tab-btn[data-tab="lytDesign"]').click();
+      }, 0);
+    })
+    .catch(function(err) {
+      if (saveBtn) saveBtn.disabled = false;
+      setStatus("Amendment NOT saved.");
+      if (typeof alertModal === "function") {
+        alertModal("Scoring failed: " + (err.message || String(err)));
+      }
+    });
     return;
   }
 
@@ -3102,6 +3140,7 @@ function enterAmendMode(room, candidate) {
     .replace(/ \(amended\)$/, "");
   state.amendMode = {
     roomName: room.name,
+    room: room,
     roomIdx: null,
     candidate: Object.assign({}, candidate, { pattern_name: baseName }),
   };

@@ -9,6 +9,7 @@ import time  # v0.5.33 instrumentation : timing matching (freeze Floor→Room)
 
 from olm.core.app_config import get_matching as _get_matching
 from olm.core.catalogue_matcher import (
+    _classify_fit,
     best_pattern_per_standard,
     candidate_category,
     compute_desk_positions,
@@ -17,6 +18,8 @@ from olm.core.catalogue_matcher import (
     filter_and_rank_candidates,
     match_room,
     max_working_desks,
+    remove_conflicting_desks,
+    score_candidate,
 )
 from olm.core.coverage_analysis import (
     analyse_coverage,
@@ -250,6 +253,115 @@ def floor_plan_match(data: dict) -> dict:
     return {
         "rooms": results,
         "_perf": {"total_ms": round(_dt_all), "rooms": _perf_rooms},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Score amendment (re-score a user-amended pattern server-side)
+# ---------------------------------------------------------------------------
+
+
+def score_amendment(data: dict) -> dict:
+    """Score a user-amended pattern against its target room.
+
+    Runs the full scoring pipeline (remove_conflicting_desks +
+    score_candidate) so the amendment carries the same grade fields
+    as a regular catalogue candidate.
+
+    Args:
+        data: dict with ``room`` (API room format), ``pattern``
+            (amended pattern dict), and optional ``standard``
+            (defaults to current_standard from config).
+
+    Returns:
+        Flat dict with all 24 candidate fields (see P4).
+
+    Raises:
+        ValueError: if required fields are missing or standard is
+            unknown.
+    """
+    if not data or "room" not in data or "pattern" not in data:
+        raise ValueError("Required fields: room, pattern")
+
+    from olm.core.app_config import get_current_standard
+    from olm.core.matching_config import oversize_tol_1axis, oversize_tol_2axes
+    from olm.core.spacing_config import ALL_CONFIGS
+
+    room = room_from_json(data["room"])
+    pattern = data["pattern"]
+    standard = data.get("standard") or get_current_standard()
+
+    spacing = ALL_CONFIGS.get(standard)
+    if spacing is None:
+        raise ValueError(f"Unknown standard: {standard}")
+
+    # Q4: classify fit from actual footprint vs room
+    tol_1 = oversize_tol_1axis()
+    tol_2 = oversize_tol_2axes()
+    fit_class, overflow_cm = _classify_fit(
+        pattern, room, spacing, tol_1, tol_2,
+    )
+    oversize = fit_class != "fitting"
+
+    # Q2: remove desks in forbidden zones before scoring
+    cleaned, _removed = remove_conflicting_desks(
+        pattern, room, spacing.walking_margin_cm,
+    )
+
+    # Full scoring (5 dimensions + composite + room_grade)
+    score = score_candidate(
+        cleaned, room, standard,
+        oversize=oversize,
+        fit_class=fit_class,
+        overflow_cm=overflow_cm,
+    )
+
+    # Build desk list (same format as floor_plan_match)
+    desks = compute_desk_positions(score.adapted_pattern)
+    removed_set = {
+        (rd["row"], rd["block"], rd["desk"])
+        for rd in score.adapted_pattern.get("_removed_desks", [])
+    }
+    desk_list = [
+        {
+            "x_cm": d.x_cm, "y_cm": d.y_cm,
+            "width_cm": d.width_cm, "depth_cm": d.depth_cm,
+            "chair_side": d.chair_side,
+            "removed": (d.row_idx, d.block_idx, d.desk_idx)
+                       in removed_set,
+        }
+        for d in desks
+    ]
+
+    # EC-3: category from single-amendment max_working
+    mw = max_working_desks([score])
+    category = candidate_category(score, mw)
+
+    return {
+        "pattern_name": score.pattern_name,
+        "standard": score.standard,
+        "n_desks": score.n_desks,
+        "m2_per_desk": score.m2_per_desk,
+        "circulation_grade": score.circulation_grade,
+        "connectivity_pct": score.connectivity_pct,
+        "min_passage_cm": score.min_passage_cm,
+        "worst_detour": score.worst_detour,
+        "largest_free_rect_m2": score.largest_free_rect_m2,
+        "oversize": score.oversize,
+        "fit_class": score.fit_class,
+        "overflow_cm": score.overflow_cm,
+        "dim_reachability": score.dim_reachability,
+        "all_desks_reachable": score.all_desks_reachable,
+        "dim_passage": score.dim_passage,
+        "passage_grade": score.passage_grade,
+        "dim_light": score.dim_light,
+        "dim_back_door": score.dim_back_door,
+        "dim_face_wall": score.dim_face_wall,
+        "composite_score": score.composite_score,
+        "room_grade": score.room_grade,
+        "category": category,
+        "desks": desk_list,
+        "pattern": score.adapted_pattern,
     }
 
 
