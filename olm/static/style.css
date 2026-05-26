@@ -752,7 +752,12 @@
     background: var(--surface2);
     border: 1px solid var(--border);
     padding: var(--sp-sm);
-    min-height: 100px;
+    /* 320px = square SVG (~232) + title + 2x info + fit (~80) + padding.
+       Needed because .card-mini-svg uses padding-top:100% whose height
+       depends on parent width — that height is treated as 0 during the
+       grid max-content compute, so the row track collapses to
+       min-height. Without this bump, all rows freeze at min-height. */
+    min-height: 320px;
     display: flex;
     flex-direction: column;
   }
@@ -802,11 +807,10 @@
     color: var(--text-dim);
     margin-bottom: 6px;
   }
-  .catalogue-card svg {
-    flex: 1;
-    width: 100%;
-    min-height: 60px;
-  }
+  /* SVG miniature constrained to its wrapper (.card-mini-svg). The
+     wrapper forces a square aspect-ratio so the SVG never grows wider
+     than tall (workaround for browsers that compute height:auto on
+     viewBox SVG to the default replaced size 300x150). */
   .catalogue-toolbar {
     padding: var(--sp-sm) var(--sp-lg);
     border-bottom: 1px solid var(--border);
@@ -842,18 +846,27 @@
   .view-toggle.active { border-color: var(--accent); color: var(--accent); }
 
   /* Card miniature SVG */
+  /* Square wrapper via padding-top:100% — robust across browsers and
+     contributes its true height to the flex column max-content (unlike
+     aspect-ratio which can compute to 0 in grid sizing). */
   .card-mini-svg {
     display: block;
     width: 100%;
+    padding-top: 100%;
+    position: relative;
     background: #111;
     border-radius: 2px;
     margin-bottom: 4px;
     cursor: pointer;
+    flex: 0 0 auto;
   }
   .card-mini-svg svg {
     display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: auto;
+    height: 100%;
   }
 
   /* Zoom rectangle selection */
