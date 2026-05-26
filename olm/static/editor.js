@@ -2977,6 +2977,11 @@ async function save() {
         furniture: saveFurniture,
         amended: true,
       };
+      // Reset disabled flag on success too: clearDirty hides the button
+      // via display:none but leaves the disabled attribute set, which
+      // makes Save appear grey on the NEXT amend session as soon as
+      // markDirty re-shows it. Without this, the user has to reload.
+      if (saveBtn) saveBtn.disabled = false;
       state.amendMode = null;
       state.overlay = null;
       // P6: clearDirty() BEFORE exitAmendUI()
@@ -3189,8 +3194,13 @@ function enterAmendMode(room, candidate) {
     var el = document.getElementById(id);
     if (el) { el.disabled = true; el.style.opacity = "0.4"; }
   });
-  // Replace Save label, show Discard
-  document.getElementById("btnSave").textContent = "Save amendment";
+  // Replace Save label, show Discard. Also clear any stale disabled
+  // flag left over from a previous interrupted save fetch (defensive —
+  // the success path resets it too, but old sessions before this fix
+  // could have left disabled=true in the DOM).
+  var _btnSave = document.getElementById("btnSave");
+  _btnSave.textContent = "Save amendment";
+  _btnSave.disabled = false;
   document.getElementById("btnAmendCancel").style.display = "";
 
   // D-215: dedicated amend-layout CSS mode — hide non-relevant controls
