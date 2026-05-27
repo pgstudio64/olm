@@ -1523,6 +1523,9 @@
               rvTool._allBlockPositions = bPositions;
               rvTool._blockDragMoved = false;
               rvTool.mode = "blockDragging";
+              // D-320: hide floating action buttons during drag
+              var _fab = document.getElementById("floating-block-actions");
+              if (_fab) _fab.style.display = "none";
               _renderActive();
               e.preventDefault();
               e.stopPropagation();
@@ -2131,10 +2134,13 @@
           for (var bk in bSrc) {
             if (Object.prototype.hasOwnProperty.call(bSrc, bk)) bCopy[bk] = bSrc[bk];
           }
-          // Override with absolute position
+          // Override with absolute position. Tag the dragged block with
+          // a transient marker so we can find it back after infer-rows
+          // re-clusters (retour user 2026-05-28 : garder la sélection).
           if (bp.rowIdx === bds2.rowIdx && bp.blockIdx === bds2.blockIdx) {
             bCopy.x_cm = rvTool._blockDragCurrent.x_cm;
             bCopy.y_cm = rvTool._blockDragCurrent.y_cm;
+            bCopy._dragSelMarker = true;
           } else {
             bCopy.x_cm = bp.x_cm;
             bCopy.y_cm = bp.y_cm;
@@ -2158,8 +2164,23 @@
             if (data.rows) {
               state.rows = data.rows;
               state.row_gaps_cm = data.row_gaps_cm || [];
-              state.selectedBlock = -1;
+              // Restore selection on the dragged block (marker preserved
+              // by infer_rows_from_positions, cf pattern_canonicalize.py
+              // L261-265 : tous les attributs custom sont conservés).
               state.selectedRow = -1;
+              state.selectedBlock = -1;
+              for (var _ri = 0; _ri < state.rows.length; _ri++) {
+                var _rb = state.rows[_ri].blocks || [];
+                for (var _bi = 0; _bi < _rb.length; _bi++) {
+                  if (_rb[_bi] && _rb[_bi]._dragSelMarker) {
+                    state.selectedRow = _ri;
+                    state.selectedBlock = _bi;
+                    delete _rb[_bi]._dragSelMarker;
+                    break;
+                  }
+                }
+                if (state.selectedBlock >= 0) break;
+              }
               if (typeof markDirty === "function") markDirty();
               render();
               if (typeof updateDSL === "function") updateDSL();

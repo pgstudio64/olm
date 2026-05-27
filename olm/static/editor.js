@@ -92,6 +92,10 @@ const ZOOM_OUT_MAX_FIT_RATIO = 2;
 
 // Seed / hit visual radius in cm SVG units.
 const SEED_DISC_R_PX = 3;
+
+// D-320: Floating action buttons (rotate + delete) on selected block.
+var FLOAT_BTN_SIZE_PX = 20;   // button size in screen pixels (scaled by zf)
+var FLOAT_BTN_GAP_PX = 8;     // gap between buttons in screen pixels
 const HIT_DISC_R_PX  = 1.5;
 
 let BLOCK_DEFS = {};
@@ -1238,6 +1242,59 @@ function blockEmpriseCm(pos, type, orientation) {
 }
 
 /**
+ * D-320: Render floating action buttons (rotate + delete) at the centre of a
+ * selected block's emprise. Returns an array of {z, s} element descriptors.
+ *
+ * @param {number} empX - emprise left (SVG units, already scaled)
+ * @param {number} empY - emprise top (SVG units)
+ * @param {number} empW - emprise width (SVG units)
+ * @param {number} empH - emprise height (SVG units)
+ * @param {object} block - block object (needs .sticks)
+ * @param {number} zf - zoom factor (SVG units per CSS pixel)
+ */
+function _renderFloatingActions(empX, empY, empW, empH, block, zf) {
+  var sz = FLOAT_BTN_SIZE_PX * zf;
+  var gap = FLOAT_BTN_GAP_PX * zf;
+  var cx = empX + empW / 2;
+  var cy = empY + empH / 2;
+  // Two buttons side by side: rotate (left), delete (right)
+  var rotX = cx - sz - gap / 2;
+  var delX = cx + gap / 2;
+  var btnY = cy - sz / 2;
+  var r = sz * 0.3;
+  var fs = sz * 0.7;
+  var isLocked = block.sticks && block.sticks.length > 0;
+  var rotBg = isLocked ? "rgba(80,80,80,0.6)" : "rgba(30,30,30,0.8)";
+  var rotTxt = isLocked ? "rgba(255,255,255,0.4)" : "#fff";
+  var rotCur = isLocked ? "not-allowed" : "pointer";
+
+  var svg = '<g id="floating-block-actions">';
+  // Rotate button (visual)
+  svg += '<rect x="' + rotX + '" y="' + btnY + '" width="' + sz +
+    '" height="' + sz + '" rx="' + r + '" fill="' + rotBg + '"/>';
+  svg += '<text x="' + (rotX + sz / 2) + '" y="' + (btnY + sz * 0.72) +
+    '" text-anchor="middle" font-size="' + fs +
+    '" fill="' + rotTxt + '" pointer-events="none">\u21BB</text>';
+  // Delete button (visual)
+  svg += '<rect x="' + delX + '" y="' + btnY + '" width="' + sz +
+    '" height="' + sz + '" rx="' + r + '" fill="rgba(30,30,30,0.8)"/>';
+  svg += '<text x="' + (delX + sz / 2) + '" y="' + (btnY + sz * 0.72) +
+    '" text-anchor="middle" font-size="' + fs +
+    '" fill="#fff" pointer-events="none">\u2715</text>';
+  // Click targets (transparent, on top within the group)
+  svg += '<rect x="' + rotX + '" y="' + btnY + '" width="' + sz +
+    '" height="' + sz + '" fill="transparent"' +
+    ' style="cursor:' + rotCur + ';pointer-events:auto"' +
+    ' data-float-action="rotate"/>';
+  svg += '<rect x="' + delX + '" y="' + btnY + '" width="' + sz +
+    '" height="' + sz + '" fill="transparent"' +
+    ' style="cursor:pointer;pointer-events:auto"' +
+    ' data-float-action="delete"/>';
+  svg += '</g>';
+  return [{ z: 12, s: svg }];
+}
+
+/**
  * Absolute desk surfaces (oriented) of a block in cm, mirroring
  * renderBlockDesks. Excludes the chair void of ORTHO L-blocks.
  */
@@ -1747,6 +1804,16 @@ function _renderImpl(targetSvg) {
         '" fill="transparent" style="cursor:pointer" ' + lockAttrs + '/>' });
     }
   } // end lock visualization
+
+    // D-320: Floating action buttons (rotate + delete) on selected block.
+    // Rendered at z=12 (above locks at z=10-11). Hidden during blockDragging
+    // via id="floating-block-actions" + display:none set in init_rvtool.js.
+    if (isSelected) {
+      var fabEls = _renderFloatingActions(
+        bx - wTotal, by - nTotal, bw + wTotal + eTotal, bh + nTotal + sTotal,
+        b, zf);
+      for (var fi = 0; fi < fabEls.length; fi++) elements.push(fabEls[fi]);
+    }
   } // end for blockPos pi loop
   // Compute totalW / totalH from block positions
   for (let pi = 0; pi < blockPos.length; pi++) {

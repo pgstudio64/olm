@@ -355,6 +355,19 @@ function _pngTextSvg(x, y, text, fontSize, color, bold, maxW) {
 }
 
 function _pngCardSvg(p, idx, extByPattern, miniFloorCm) {
+  // Diagnostic (suivi retour user 2026-05-28 "blocs manquants") :
+  // logue pour chaque pattern le nombre de blocs déclarés et l'emprise
+  // calculée. Permet d'identifier dans la console quel pattern a un
+  // problème sans avoir besoin d'attendre une repro précise.
+  var _nBlocks = 0;
+  (p.rows || []).forEach(function(r) { _nBlocks += (r.blocks || []).length; });
+  var _ext = extByPattern.get(p);
+  console.log("[PNG] " + (p.name || "?")
+    + " blocks=" + _nBlocks
+    + " ext=[" + _ext.xMin.toFixed(0) + "," + _ext.yMin.toFixed(0)
+    + ".." + _ext.xMax.toFixed(0) + "," + _ext.yMax.toFixed(0) + "]"
+    + " room=" + (p.room_width_cm || 0) + "x" + (p.room_depth_cm || 0));
+
   var fitClass = p.fit_class || "ok";
   var bc = PNG_BORDER_COLOR[fitClass] || "#cccccc";
   var parts = [];

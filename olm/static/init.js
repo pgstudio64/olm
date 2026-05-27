@@ -300,6 +300,23 @@ async function init() {
   document.getElementById("canvas").addEventListener("click", _handleLockClick);
   var peCanvas = document.getElementById("peCanvas");
   if (peCanvas) peCanvas.addEventListener("click", _handleLockClick);
+
+  // D-320: Floating action buttons (rotate + delete) — event delegation.
+  // Registered BEFORE the block-selection handler so stopImmediatePropagation
+  // prevents a selection change when clicking rotate/delete.
+  function _handleFloatActionClick(e) {
+    var el = e.target.closest("[data-float-action]");
+    if (!el) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    var action = el.getAttribute("data-float-action");
+    if (action === "rotate") {
+      rotateSelectedBlock();
+    } else if (action === "delete") {
+      deleteSelectedBlockKeepPositions();
+    }
+  }
+  document.getElementById("canvas").addEventListener("click", _handleFloatActionClick);
   document.getElementById("gridToggle").addEventListener("change", function(e) {
     if (window.syncGridToggle) window.syncGridToggle(e.target.checked);
     else { state.gridVisible = e.target.checked; }
@@ -1105,7 +1122,8 @@ async function init() {
           e.target.closest("[data-furn]") ||
           e.target.closest("[data-furn-rotate]") ||
           e.target.closest("[data-furn-delete]") ||
-          e.target.getAttribute && e.target.getAttribute("data-lock-face")) return;
+          e.target.getAttribute && e.target.getAttribute("data-lock-face") ||
+          e.target.closest("[data-float-action]")) return;
       if (svg.id === "rvCanvas" && window.rvTool &&
           (window.rvTool.mode === "placing" || window.rvTool.mode === "drawing" ||
            window.rvTool.mode === "roomResizing" ||
