@@ -2153,6 +2153,14 @@
         rvTool._blockDragMoved = false;
         // Suppress the click event that fires after mouseup on the same SVG
         window._blockDragJustReleased = true;
+        // Diag (retour user 2026-05-28 "blocs qui bougent en déplaçant un
+        // autre") : log positions avant/après pour la prochaine repro.
+        var _diagBefore = flatBlocks.map(function (fb) {
+          return (fb.type || "?") + "@" + Math.round(fb.x_cm || 0) + ","
+            + Math.round(fb.y_cm || 0)
+            + (fb._dragSelMarker ? "*" : "");
+        });
+        console.log("[DRAG] before infer-rows : " + _diagBefore.join(" | "));
         // Call server to infer rows
         fetch("/api/patterns/infer-rows", {
           method: "POST",
@@ -2164,6 +2172,15 @@
             if (data.rows) {
               state.rows = data.rows;
               state.row_gaps_cm = data.row_gaps_cm || [];
+              // Diag : log positions reconstruites par infer-rows.
+              if (typeof computeBlockPositions === "function") {
+                var _newPos = computeBlockPositions().map(function (p) {
+                  var src = state.rows[p.rowIdx].blocks[p.blockIdx];
+                  return (src.type || "?") + "@" + Math.round(p.x_cm) + ","
+                    + Math.round(p.y_cm);
+                });
+                console.log("[DRAG] after infer-rows  : " + _newPos.join(" | "));
+              }
               // Restore selection on the dragged block (marker preserved
               // by infer_rows_from_positions, cf pattern_canonicalize.py
               // L261-265 : tous les attributs custom sont conservés).

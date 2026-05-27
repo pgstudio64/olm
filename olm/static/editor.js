@@ -3748,6 +3748,18 @@ function getSelectedBlock() {
   return state.rows[state.selectedRow].blocks[state.selectedBlock] || null;
 }
 
+// D-321 (retour user 2026-05-28) : rotation autour du CENTRE DE L'EMPRISE.
+// Le bouton flottant \u21BB est positionn\u00E9 au centre de l'emprise. Sans
+// compensation, la rotation d\u00E9cale l'emprise (face extents permutent +
+// dimensions body swap) \u2192 le bouton saute, l'encha\u00EEnement de rotations
+// au m\u00EAme endroit devient impossible. Fix : on capture le centre AVANT
+// la rotation, on calcule la nouvelle position du bloc pour que le
+// nouveau centre co\u00EFncide, puis on POST infer-rows (m\u00EAme m\u00E9canique que
+// le drag, D-267) avec un marker pour restaurer la s\u00E9lection. Une
+// promise queue s\u00E9rialise les rotations rapides (sinon les fetches
+// peuvent se croiser et donner un r\u00E9sultat incoh\u00E9rent).
+var _rotatePromise = Promise.resolve();
+
 function rotateSelectedBlock() {
   const b = getSelectedBlock();
   if (!b) { setStatus("No block selected for rotation"); return; }
@@ -3755,10 +3767,101 @@ function rotateSelectedBlock() {
     setStatus("Cannot rotate locked block \u2014 remove locks first");
     return;
   }
+  // Queue the rotation so consecutive clicks apply sequentially.
+  _rotatePromise = _rotatePromise.then(function () {
+    return _doRotateAroundEmpriseCenter();
+  });
+}
+
+function _doRotateAroundEmpriseCenter() {
+  var b = getSelectedBlock();
+  if (!b) return Promise.resolve();
+  // Recompute positions inside the queue: previous queued rotation may
+  // have changed state.rows / selection.
+  var positions = computeBlockPositions();
+  var selPos = null;
+  for (var i = 0; i < positions.length; i++) {
+    if (positions[i].rowIdx === state.selectedRow &&
+        positions[i].blockIdx === state.selectedBlock) {
+      selPos = positions[i]; break;
+    }
+  }
+  if (!selPos) {
+    // Fallback : rotation classique (state.rows d\u00E9synchronis\u00E9).
+    b.orientation = ((b.orientation || 0) + 90) % 360;
+    markDirty();
+    updateDSL(); updateRowList(); zoomFit();
+    return Promise.resolve();
+  }
+  // Old emprise center (absolute cm).
+  var extOld = blockOuterExtentsCm(b.type, b.orientation);
+  var cx = selPos.x_cm + (selPos.w_cm + extOld.e - extOld.w) / 2;
+  var cy = selPos.y_cm + (selPos.h_cm + extOld.s - extOld.n) / 2;
+  // Apply rotation in the data.
+  var newOri = ((b.orientation || 0) + 90) % 360;
+  b.orientation = newOri;
   markDirty();
-  b.orientation = ((b.orientation || 0) + 90) % 360;
-  setStatus("Rotation " + b.type + " -> " + b.orientation + "\u00B0");
-  updateDSL(); updateRowList(); zoomFit();
+  // New body dims + face extents after rotation.
+  var newGeom = getEffectiveGeom(b.type, newOri);
+  var extNew = blockOuterExtentsCm(b.type, newOri);
+  // Solve for new top-left so the new emprise center equals (cx, cy).
+  var xNew = cx - (newGeom.eo + extNew.e - extNew.w) / 2;
+  var yNew = cy - (newGeom.ns + extNew.s - extNew.n) / 2;
+  // Build flat block list, override selected block position, tag marker
+  // (same pattern as the drag fix in init_rvtool.js).
+  var flatBlocks = [];
+  positions.forEach(function (p) {
+    var src = state.rows[p.rowIdx].blocks[p.blockIdx];
+    var copy = {};
+    for (var k in src) {
+      if (Object.prototype.hasOwnProperty.call(src, k)) copy[k] = src[k];
+    }
+    if (p.rowIdx === state.selectedRow &&
+        p.blockIdx === state.selectedBlock) {
+      copy.x_cm = Math.round(xNew);
+      copy.y_cm = Math.round(yNew);
+      copy._dragSelMarker = true;
+    } else {
+      copy.x_cm = p.x_cm;
+      copy.y_cm = p.y_cm;
+    }
+    flatBlocks.push(copy);
+  });
+  return fetch("/api/patterns/infer-rows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ blocks: flatBlocks }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.rows) return;
+      state.rows = data.rows;
+      state.row_gaps_cm = data.row_gaps_cm || [];
+      state.selectedRow = -1;
+      state.selectedBlock = -1;
+      for (var ri = 0; ri < state.rows.length; ri++) {
+        var rb = state.rows[ri].blocks || [];
+        for (var bi = 0; bi < rb.length; bi++) {
+          if (rb[bi] && rb[bi]._dragSelMarker) {
+            state.selectedRow = ri;
+            state.selectedBlock = bi;
+            delete rb[bi]._dragSelMarker;
+            break;
+          }
+        }
+        if (state.selectedBlock >= 0) break;
+      }
+      setStatus("Rotation " + b.type + " -> " + newOri + "\u00B0");
+      render();
+      updateDSL();
+      updateRowList();
+    })
+    .catch(function (err) {
+      console.warn("rotation infer-rows failed:", err);
+      // Fallback rendering so the orientation change is still visible.
+      updateDSL();
+      updateRowList();
+    });
 }
 
 
