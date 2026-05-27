@@ -1933,7 +1933,13 @@ def score_candidate(
         if (d.row_idx, d.block_idx, d.desk_idx) not in removed_set
     ]
 
-    dim_reachability = _GRADE_TO_DIM.get(circ.grade, 0.0)
+    # D-319: dim_reachability reflète l'atteignabilité réelle des
+    # postes (BFS Dijkstra, all_desks_reachable). circ.grade restait
+    # trop sévère sur grandes pièces où des petits rectangles de
+    # plancher isolés faisaient connectivity_pct < 50% bien que les
+    # postes soient joignables. circ.grade reste exposé via
+    # circulation_grade pour info / tooltips.
+    dim_reachability = 1.0 if all_desks_reachable else 0.0
     dim_passage, passage_grade = _compute_dim_passage(min_passage, cfg)
     dim_light = _compute_dim_light(active_desks, room)
     dim_back_door = _compute_dim_back_door(active_desks, room)

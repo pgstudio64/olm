@@ -253,7 +253,8 @@ class Test6bisGrade:
                 "has_door": True,
             }],
         }
-        # Mock circulation to return grade F (unreachable desk).
+        # Mock circulation to return grade F with one unreachable desk.
+        # paths=[[]] means 1 targeted desk with no BFS path found.
         fake_circ = CirculationResult(
             grade="F",
             connectivity_pct=50.0,
@@ -261,6 +262,7 @@ class Test6bisGrade:
             avg_detour_ratio=1.0,
             worst_detour_ratio=1.0,
             path_widths=[80.0],
+            paths=[[]],
         )
         with patch(
             "olm.core.circulation_analysis.analyse",
@@ -311,6 +313,102 @@ class Test6bisGrade:
 
         assert score.dim_reachability == 1.0
         assert score.room_grade != "F"
+
+
+# ---------------------------------------------------------------------------
+# D-319 — dim_reachability aligned on all_desks_reachable
+# ---------------------------------------------------------------------------
+
+class TestDimReachabilityFromDesks:
+    """D-319: dim_reachability is 1.0/0.0 based on all_desks_reachable."""
+
+    def test_all_desks_reachable_gives_one(self):
+        """One desk with a valid BFS path → dim_reachability=1.0."""
+        room = RoomSpec(
+            width_cm=300, depth_cm=400,
+            openings=[
+                OpeningSpec(
+                    face=Face.SOUTH, offset_cm=0, width_cm=90,
+                ),
+            ],
+        )
+        pattern = {
+            "name": "test_reach_ok",
+            "room_width_cm": 300,
+            "room_depth_cm": 400,
+            "rows": [{"blocks": [{
+                "type": "BLOCK_1_FACE",
+                "orientation": 0,
+                "gap_cm": 0,
+            }]}],
+            "row_gaps_cm": [0],
+            "room_openings": [{
+                "face": "south", "offset_cm": 0, "width_cm": 90,
+                "has_door": True,
+            }],
+        }
+        fake_circ = CirculationResult(
+            grade="C",
+            connectivity_pct=55.0,
+            isolated_area_pct=10.0,
+            avg_detour_ratio=1.2,
+            worst_detour_ratio=1.5,
+            path_widths=[90.0],
+            paths=[[(1, 1), (1, 2)]],
+        )
+        with patch(
+            "olm.core.circulation_analysis.analyse",
+            return_value=fake_circ,
+        ):
+            score = score_candidate(pattern, room, "standard3")
+
+        assert score.all_desks_reachable is True
+        assert score.dim_reachability == 1.0
+
+    def test_one_desk_unreachable_gives_zero(self):
+        """Two desks, second has no BFS path → dim_reachability=0.0."""
+        room = RoomSpec(
+            width_cm=400, depth_cm=400,
+            openings=[
+                OpeningSpec(
+                    face=Face.SOUTH, offset_cm=0, width_cm=90,
+                ),
+            ],
+        )
+        pattern = {
+            "name": "test_reach_ko",
+            "room_width_cm": 400,
+            "room_depth_cm": 400,
+            "rows": [{"blocks": [{
+                "type": "BLOCK_2",
+                "orientation": 0,
+                "gap_cm": 0,
+            }]}],
+            "row_gaps_cm": [0],
+            "room_openings": [{
+                "face": "south", "offset_cm": 0, "width_cm": 90,
+                "has_door": True,
+            }],
+        }
+        # paths: desk 0 reachable, desk 1 unreachable (empty path)
+        fake_circ = CirculationResult(
+            grade="F",
+            connectivity_pct=40.0,
+            isolated_area_pct=20.0,
+            avg_detour_ratio=2.0,
+            worst_detour_ratio=3.0,
+            path_widths=[60.0],
+            paths=[[(1, 1)], []],
+        )
+        with patch(
+            "olm.core.circulation_analysis.analyse",
+            return_value=fake_circ,
+        ):
+            score = score_candidate(pattern, room, "standard3")
+
+        assert score.all_desks_reachable is False
+        assert score.dim_reachability == 0.0
+        assert score.room_grade == "F"
 
 
 # ---------------------------------------------------------------------------
