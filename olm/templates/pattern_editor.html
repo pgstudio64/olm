@@ -135,6 +135,8 @@ document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
         <input type="text" id="cfgRoomCode" class="settings-input">
         <label class="settings-label">Plans directory</label>
         <input type="text" id="cfgPlansDir" class="settings-input" style="width:100%;" placeholder="project/plans">
+        <label class="settings-label" title="Glob pattern: plan image files matching it are hidden from the plan list (e.g. *-debug.png). Empty = show all.">Ignore plans (glob)</label>
+        <input type="text" id="cfgIgnoredPlanGlob" class="settings-input" style="width:100%;" placeholder="*-debug.png">
         <label class="settings-label">Render DPI</label>
         <input type="number" id="cfgRenderDpi" class="settings-input" style="width:70px;" min="72" max="600" step="1">
         <label class="settings-label">Default door width (cm)</label>

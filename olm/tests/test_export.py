@@ -362,6 +362,18 @@ class TestComputeFloorSummary:
         assert s["total_workstations"] == 0
         assert s["avg_area"] is None
 
+    def test_counts_misplaced_desks(self, plans_dir):
+        """D-323 suivi: misplaced (removed) desks count as workstations too."""
+        room = _room_payload()
+        room["name"] = "101"
+        room["candidate"]["desks"].append({
+            "x_cm": 200, "y_cm": 10, "width_cm": 180, "depth_cm": 80,
+            "removed": True, "chair_side": "S",
+        })
+        s = _compute_floor_summary("tp", [room], 5.0)
+        # 1 active + 1 misplaced = 2 workstations counted.
+        assert s["total_workstations"] == 2
+
     def test_room_outside_json(self, plans_dir):
         """Payload room not in JSON → still counted in total."""
         room = _room_payload()

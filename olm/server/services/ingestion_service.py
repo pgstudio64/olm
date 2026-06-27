@@ -5,6 +5,7 @@ All functions accept pre-parsed parameters (no Flask objects).
 """
 from __future__ import annotations
 
+import fnmatch
 import io
 import json
 import logging
@@ -27,10 +28,25 @@ from olm.server.services.config_service import (
     get_default_threshold,
     get_detection_overrides,
     get_exterior_rgb,
+    get_ignored_plan_glob,
     get_plans_dir,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _plan_ignore_matcher():
+    """Return a predicate ``fname -> bool`` telling if a plan file is ignored.
+
+    Based on the glob ``ingestion.ignored_plan_glob`` (default ``*-debug.png``).
+    Case-insensitive; an empty glob disables filtering. Used to hide upstream
+    data-prep debug images that have no JSON and would appear as phantom plans.
+    """
+    pattern = (get_ignored_plan_glob() or "").strip()
+    if not pattern:
+        return lambda name: False
+    pat_lower = pattern.lower()
+    return lambda name: fnmatch.fnmatch(name.lower(), pat_lower)
 
 
 def drawing_scale_to_cm_per_px(
@@ -62,8 +78,11 @@ def list_plans() -> dict:
         "has_png": False, "has_json": False, "has_enhanced": False,
         "png_mtime": 0.0, "json_mtime": 0.0,
     }
+    is_ignored = _plan_ignore_matcher()
     stems: dict[str, dict] = {}
     for fname in os.listdir(plans_dir):
+        if is_ignored(fname):
+            continue
         name, ext = os.path.splitext(fname)
         ext_lower = ext.lower()
         fpath = os.path.join(plans_dir, fname)
@@ -105,9 +124,11 @@ def list_ingestion_plans() -> dict:
     plans_dir = get_plans_dir()
     if not os.path.isdir(plans_dir):
         return {"plans": []}
+    is_ignored = _plan_ignore_matcher()
     plans = [
         f for f in os.listdir(plans_dir)
         if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff'))
+        and not is_ignored(f)
     ]
     return {"plans": sorted(plans)}
 

@@ -391,32 +391,31 @@
     }
   }
 
-  // Build one room's export payload. D-237 : only an explicitly committed
-  // layout ships its desks — either *saved* (Save layout button) or
-  // *amended* (edited in the layout editor, D-259). `useBestFallback`
-  // (opt-in, D-246) lets a room without a committed layout export its best
-  // matching candidate instead.
-  function _buildExportRoom(r, useBestFallback) {
-    var fpAmendments = window.fpAmendments || {};
-    var saved = fpAmendments[r.name];
+  // D-325 : une pièce a une "selected solution" lorsqu'elle a un layout
+  // explicitement validé dans Office — *saved* (bouton Save layout) ou
+  // *amended* (amend sauvegardé, D-259). Seules ces pièces figurent dans le
+  // preview/export. Le fallback "meilleur candidat" (D-246) est retiré : une
+  // pièce sans solution validée n'apparaît pas (preview vide juste après import
+  // tant qu'aucune pièce n'est sauvegardée).
+  function _roomHasSelectedSolution(r) {
+    var s = (window.fpAmendments || {})[r.name];
+    return !!(s && (s.saved || s.amended));
+  }
+
+  function _countSelectedRooms() {
+    var rooms = (window.fpData && window.fpData.rooms) || [];
+    return rooms.filter(_roomHasSelectedSolution).length;
+  }
+
+  // Build one room's export payload. D-237 / D-325 : only an explicitly
+  // committed layout (saved or amended) ships its desks; others → no candidate.
+  function _buildExportRoom(r) {
+    var saved = (window.fpAmendments || {})[r.name];
     var candidate = null;
     var isAmended = false;
     if (saved && (saved.saved || saved.amended)) {
       candidate = JSON.parse(JSON.stringify(saved));
       isAmended = true;
-    } else if (useBestFallback && r.all_candidates && r.all_candidates.length) {
-      // Best candidate for the current standard, else first available.
-      var std = (typeof getCurrentStandard === 'function')
-        ? getCurrentStandard() : '';
-      var best = null;
-      var bestName = (std && r.by_standard) ? r.by_standard[std] : null;
-      if (bestName) {
-        best = r.all_candidates.find(function (c) {
-          return c.pattern_name === bestName && c.standard === std;
-        });
-      }
-      if (!best) best = r.all_candidates[0];
-      if (best) candidate = JSON.parse(JSON.stringify(best));
     }
     if (candidate && candidate.desks && candidate.desks.length
         && candidate.pattern) {
@@ -433,13 +432,10 @@
     };
   }
 
-  // Build the full export/preview payload from current state.
-  // useBestFallback: if true, rooms without a saved layout get the best
-  // matching candidate instead (D-246 fallback mode).
-  function _buildExportPayload(planId, scaleCmPerPx, useBestFallback) {
-    var rooms = fpData.rooms.map(function (r) {
-      return _buildExportRoom(r, useBestFallback);
-    });
+  // Build the full export/preview payload from current state (only rooms with
+  // a selected solution carry a candidate).
+  function _buildExportPayload(planId, scaleCmPerPx) {
+    var rooms = fpData.rooms.map(_buildExportRoom);
     return {
       plan_id: planId,
       scale_cm_per_px: scaleCmPerPx,
@@ -499,38 +495,17 @@
       return;
     }
 
-    // D-237 : export only rooms with an explicitly saved layout.
-    var fpAmendments = window.fpAmendments || {};
-    var nSaved = fpData.rooms.filter(function (r) {
-      var s = fpAmendments[r.name];
-      return s && s.saved;
-    }).length;
-
-    // D-246 : no saved layout → warn instead of producing a desk-less plan,
-    // and offer to export the best matching candidate of each room.
-    if (nSaved === 0) {
-      confirmModal(
-        'No room has a saved layout — the export would contain no ' +
-        'workstations.\n\nExport the best matching candidate for each ' +
-        'room instead?'
-      ).then(function (ok) {
-        if (!ok) return;
-        var go = function () {
-          var payload = _buildExportPayload(planId, scaleCmPerPx, true);
-          _postExport(fmt, planId, scaleCmPerPx, payload.rooms);
-        };
-        // Best candidate needs every room matched (lazy matching, A).
-        if (typeof window.ensureAllMatched === 'function') {
-          showModal('Matching rooms...');
-          window.ensureAllMatched(function () { hideModal(); go(); });
-        } else {
-          go();
-        }
-      });
+    // D-237 / D-325 : export only rooms with a selected solution (saved or
+    // amended layout). No best-candidate fallback (D-246 reversed).
+    if (_countSelectedRooms() === 0) {
+      alertModal(
+        'No room has a saved layout — nothing to export.\n\n' +
+        'Use "Save layout" in Office to select a solution for each room.'
+      );
       return;
     }
 
-    var payload = _buildExportPayload(planId, scaleCmPerPx, false);
+    var payload = _buildExportPayload(planId, scaleCmPerPx);
     _postExport(fmt, planId, scaleCmPerPx, payload.rooms);
   }
 
@@ -555,68 +530,54 @@
       return;
     }
 
-    var fpAmendments = window.fpAmendments || {};
-    var nSaved = fpData.rooms.filter(function (r) {
-      var s = fpAmendments[r.name];
-      return s && (s.saved || s.amended);
-    }).length;
+    // D-325 : preview only rooms with a selected solution (saved/amended).
+    // No best-candidate fallback (D-246 reversed) → empty selection = nothing.
+    if (_countSelectedRooms() === 0) {
+      alertModal(
+        'No room has a saved layout — nothing to preview.\n\n' +
+        'Use "Save layout" in Office to select a solution for a room.'
+      );
+      return;
+    }
 
     var btn = document.getElementById('btnPreviewPlan');
     if (btn) btn.disabled = true;
-
-    var doPreview = function (useBestFallback) {
-      showModal('Generating preview...');
-      var payload = _buildExportPayload(planId, scaleCmPerPx, useBestFallback);
-      fetch('/api/floor-plan/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+    showModal('Generating preview...');
+    var payload = _buildExportPayload(planId, scaleCmPerPx);
+    fetch('/api/floor-plan/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.json().then(function (e) {
+            return Promise.reject(e.error || 'Preview failed');
+          });
+        }
+        return r.blob();
       })
-        .then(function (r) {
-          if (!r.ok) {
-            return r.json().then(function (e) {
-              return Promise.reject(e.error || 'Preview failed');
-            });
-          }
-          return r.blob();
-        })
-        .then(function (blob) {
-          hideModal();
-          var blobUrl = URL.createObjectURL(blob);
-          // Load image to get natural dimensions
-          var tmpImg = new Image();
-          tmpImg.onload = function () {
-            window.openPreviewLightbox(blobUrl, tmpImg.naturalWidth, tmpImg.naturalHeight);
-          };
-          tmpImg.onerror = function () {
-            URL.revokeObjectURL(blobUrl);
-            alertModal('Failed to decode preview image.');
-          };
-          tmpImg.src = blobUrl;
-        })
-        .catch(function (e) {
-          hideModal();
-          alertModal('Preview failed: ' + e);
-        })
-        .finally(function () {
-          if (btn) btn.disabled = false;
-        });
-    };
-
-    if (nSaved === 0) {
-      // No saved layout: use best fallback, ensure all rooms matched first.
-      if (typeof window.ensureAllMatched === 'function') {
-        showModal('Generating preview...');
-        window.ensureAllMatched(function () {
-          hideModal();
-          doPreview(true);
-        });
-      } else {
-        doPreview(true);
-      }
-    } else {
-      doPreview(false);
-    }
+      .then(function (blob) {
+        hideModal();
+        var blobUrl = URL.createObjectURL(blob);
+        // Load image to get natural dimensions
+        var tmpImg = new Image();
+        tmpImg.onload = function () {
+          window.openPreviewLightbox(blobUrl, tmpImg.naturalWidth, tmpImg.naturalHeight);
+        };
+        tmpImg.onerror = function () {
+          URL.revokeObjectURL(blobUrl);
+          alertModal('Failed to decode preview image.');
+        };
+        tmpImg.src = blobUrl;
+      })
+      .catch(function (e) {
+        hideModal();
+        alertModal('Preview failed: ' + e);
+      })
+      .finally(function () {
+        if (btn) btn.disabled = false;
+      });
   }
 
   // ==========================================================================

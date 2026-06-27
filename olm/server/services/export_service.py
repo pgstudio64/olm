@@ -616,7 +616,9 @@ def _compute_floor_summary(
         furnished_offices += 1
         name = room.get("name", "")
         furnished_area += _surface(name)
-        total_workstations += len(_get_active_desks(candidate))
+        # D-323 suivi : tous les postes comptent, y compris ceux mal placés
+        # (dessinés en gris). Le total doit refléter ce qui est dessiné.
+        total_workstations += len(_get_all_desks(candidate))
 
     total_offices = len(all_names)
     total_area = sum(_surface(n) for n in all_names)

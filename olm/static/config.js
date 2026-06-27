@@ -260,6 +260,13 @@ function renderGeneralSettings() {
     el.onchange = function() { saveConfigField(["ingestion", "plans_dir"], this.value); };
   }
 
+  el = document.getElementById("cfgIgnoredPlanGlob");
+  if (el) {
+    var ingG = APP_CONFIG.ingestion || {};
+    el.value = (ingG.ignored_plan_glob != null) ? ingG.ignored_plan_glob : "*-debug.png";
+    el.onchange = function() { saveConfigField(["ingestion", "ignored_plan_glob"], this.value.trim()); };
+  }
+
   el = document.getElementById("cfgWindowMode");
   if (el) {
     el.value = (APP_CONFIG.ingestion || {}).window_mode || "simple";

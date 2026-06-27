@@ -102,6 +102,23 @@ def get_plans_dir() -> str:
     return os.path.join(PROJECT_ROOT, _plans_dir)
 
 
+# Default glob for plan files to hide from the plan list. The upstream data-prep
+# module emits ``*-debug.png`` files (room-detection / seed checks) that have no
+# JSON and would otherwise show up as phantom OCR plans.
+_DEFAULT_IGNORED_PLAN_GLOB = "*-debug.png"
+
+
+def get_ignored_plan_glob() -> str:
+    """Return the glob of plan filenames to ignore in the plan list.
+
+    Reads ``ingestion.ignored_plan_glob`` from config.json. An empty string
+    disables filtering. Falls back to ``*-debug.png`` when the key is absent.
+    """
+    _ing = load_project_config().get("ingestion", {})
+    val = _ing.get("ignored_plan_glob", _DEFAULT_IGNORED_PLAN_GLOB)
+    return val if isinstance(val, str) else _DEFAULT_IGNORED_PLAN_GLOB
+
+
 # ---------------------------------------------------------------------------
 # Detection overrides (D-155)
 # ---------------------------------------------------------------------------
