@@ -132,6 +132,13 @@ _SCREEN_FILL = (0, 0, 0, 255)
 _LABEL_COLOR = (0, 0, 0, 255)
 _WHITE = [255, 255, 255, 255]
 
+# Desks in a placement conflict (overflow walls or straddle an exclusion /
+# opening zone) are no longer dropped: they are drawn with grey ink instead of
+# black so the problem is visible on screen (preview) and on print (export).
+# Only the black strokes change — the white fill stays white. See Decisions D-323.
+_DESK_CONFLICT_INK = (136, 136, 136, 255)  # #888888
+_DESK_CONFLICT_NOTE = "Placement issue"
+
 # Chair seat geometry (mirror of olm/static/block_constants.js
 # CHAIR_W_CM / CHAIR_D_CM). The chair is drawn as a wireframe rounded
 # seat + backrest arc on the chair side of the desk (D-260).
@@ -243,6 +250,25 @@ def compose_plan_image(
     return img
 
 
+def _get_all_desks(candidate: dict) -> list[dict]:
+    """Return every desk of a candidate (incl. removed), recomputing if needed.
+
+    Each desk carries a ``removed`` flag (True when it overflows the room walls
+    or straddles an exclusion / opening zone). Used by the renderer to draw
+    conflicting desks in grey rather than dropping them (D-323).
+
+    Args:
+        candidate: Room candidate dict with ``desks`` and/or ``pattern``.
+
+    Returns:
+        Full list of desk dicts (active + removed).
+    """
+    desks = candidate.get("desks")
+    if not desks and candidate.get("pattern"):
+        desks = _compute_desks_with_chair_side(candidate["pattern"])
+    return desks or []
+
+
 def _get_active_desks(candidate: dict) -> list[dict]:
     """Return non-removed desks from a candidate, recomputing if needed.
 
@@ -252,18 +278,14 @@ def _get_active_desks(candidate: dict) -> list[dict]:
     Returns:
         List of active (non-removed) desk dicts.
     """
-    desks = candidate.get("desks")
-    if not desks and candidate.get("pattern"):
-        desks = _compute_desks_with_chair_side(candidate["pattern"])
-    if not desks:
-        return []
-    return [d for d in desks if not d.get("removed")]
+    return [d for d in _get_all_desks(candidate) if not d.get("removed")]
 
 
 def _draw_chair(
     draw: ImageDraw.ImageDraw,
     x1: float, y1: float, x2: float, y2: float,
     cs: str, scale: float,
+    ink: tuple[int, int, int, int] = _DESK_OUTLINE,
 ) -> None:
     """Draw a wireframe (B&W) chair on the *cs* side of a desk.
 
@@ -271,6 +293,10 @@ def _draw_chair(
     overlapping the desk edge plus a curved backrest, drawn as a black
     outline on white (no colour). Call BEFORE the desk rectangle so the
     desk overlaps the seat, as on screen (chair z < desk z). D-260.
+
+    ``ink`` is the stroke colour for the seat outline and backrest — grey for
+    desks in a placement conflict (D-323), black otherwise. The white seat
+    fill is unchanged.
     """
     dw, dh = x2 - x1, y2 - y1
     is_horiz = cs in ("W", "E")
@@ -309,7 +335,7 @@ def _draw_chair(
 
     draw.rounded_rectangle(
         [chx, chy, chx + chw, chy + chh], radius=seat_r,
-        outline=_DESK_OUTLINE, fill=_DESK_FILL, width=1,
+        outline=ink, fill=_DESK_FILL, width=1,
     )
     # Backrest: quadratic Bézier sampled as a polyline.
     pts = []
@@ -320,7 +346,7 @@ def _draw_chair(
         bx = mt * mt * p0[0] + 2 * mt * t * ctrl[0] + t * t * p2[0]
         by = mt * mt * p0[1] + 2 * mt * t * ctrl[1] + t * t * p2[1]
         pts.append((bx, by))
-    draw.line(pts, fill=_CHAIR_ARC_OUTLINE, width=2, joint="curve")
+    draw.line(pts, fill=ink, width=2, joint="curve")
 
 
 # D-264 (temporary): per-export diagnostic capture. export_plan clears this
@@ -349,9 +375,13 @@ def _draw_room_desks(
     if not room_w or not room_d:
         return
 
-    active = _get_active_desks(candidate)
+    # D-323: draw every desk (active + conflicting). Conflicting desks are
+    # rendered in grey instead of being dropped, so the placement problem is
+    # visible on the preview and the export.
+    all_desks = _get_all_desks(candidate)
+    n_active = sum(1 for d in all_desks if not d.get("removed"))
     furniture = candidate.get("furniture") or []
-    if not active and not furniture:
+    if not all_desks and not furniture:
         logger.warning("Room %s: no desks to render", room.get("name"))
         return
 
@@ -370,11 +400,15 @@ def _draw_room_desks(
         f"canon={canon_w}x{canon_d} "
         f"pattern={_pat.get('room_width_cm')}x{_pat.get('room_depth_cm')} "
         f"bbox_px={bbox} scale={scale} "
-        f"desks_stored={len(candidate.get('desks') or [])} active={len(active)} "
+        f"desks_stored={len(candidate.get('desks') or [])} "
+        f"all={len(all_desks)} active={n_active} "
         f"saved={candidate.get('saved')} amended={candidate.get('amended')}"
     )
 
-    for desk_local_idx, desk in enumerate(active, start=1):
+    for desk_local_idx, desk in enumerate(all_desks, start=1):
+        # D-323: grey ink for desks in a placement conflict (kept, not dropped).
+        conflict = bool(desk.get("removed"))
+        ink = _DESK_CONFLICT_INK if conflict else _DESK_OUTLINE
         # Decanonicalize rect → absolute coords (cm)
         ax, ay, aw, ad = _decanon_rect(
             desk["x_cm"], desk["y_cm"],
@@ -403,10 +437,10 @@ def _draw_room_desks(
 
         # Chair first (behind the desk, as on screen), then the desk on top
         # so the desk overlaps the seat (mirrors editor z-order).
-        _draw_chair(draw, x1, y1, x2, y2, cs_abs, scale)
+        _draw_chair(draw, x1, y1, x2, y2, cs_abs, scale, ink)
         draw.rectangle(
             [x1, y1, x2, y2],
-            outline=_DESK_OUTLINE,
+            outline=ink,
             fill=_DESK_FILL,
             width=_DESK_STROKE_WIDTH,
         )
@@ -434,16 +468,27 @@ def _draw_room_desks(
                 scr_y1 = y2 - _SCREEN_INSET_PX - _SCREEN_THICK_PX
             scr_y2 = scr_y1 + _SCREEN_THICK_PX
         draw.rectangle([scr_x1, scr_y1, scr_x2, scr_y2],
-                       fill=_SCREEN_FILL)
+                       fill=ink if conflict else _SCREEN_FILL)
 
-        # Label centered in desk
+        # Label centered in desk (grey for conflicting desks). D-323: a conflict
+        # desk also gets a note line under its number so the user understands it
+        # is a placement problem to fix (still numbered like the others).
         label = f"{room['name']}.{desk_local_idx}"
+        label_color = ink if conflict else _LABEL_COLOR
         tb = draw.textbbox((0, 0), label, font=font)
         tw, th = tb[2] - tb[0], tb[3] - tb[1]
+        cx_mid, cy_mid = (x1 + x2) / 2, (y1 + y2) / 2
         draw.text(
-            ((x1 + x2) / 2 - tw / 2, (y1 + y2) / 2 - th / 2),
-            label, fill=_LABEL_COLOR, font=font,
+            (cx_mid - tw / 2, cy_mid - th / 2),
+            label, fill=label_color, font=font,
         )
+        if conflict:
+            nb = draw.textbbox((0, 0), _DESK_CONFLICT_NOTE, font=font)
+            nw = nb[2] - nb[0]
+            draw.text(
+                (cx_mid - nw / 2, cy_mid + th / 2 + 1),
+                _DESK_CONFLICT_NOTE, fill=label_color, font=font,
+            )
 
     # D-266: Draw cabinets (furniture) as B&W rectangles — no chair/screen/label
     for item in furniture:

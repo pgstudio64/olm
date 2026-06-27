@@ -14,8 +14,10 @@ from PIL import Image
 
 from olm.server.app import app
 from olm.server.services.export_service import (
+    _DESK_CONFLICT_INK,
     _compute_floor_summary,
     _get_active_desks,
+    _get_all_desks,
     _parse_surface_m2,
 )
 
@@ -594,3 +596,59 @@ class TestPreviewEndpoint:
         after = set(export_env.rglob("*")) - {plans_dir / "test_plan.json",
                                                plans_dir / "test_plan-SD.png"}
         assert before == after, "Preview should not write files to disk"
+
+
+class TestConflictDeskGrey:
+    """D-323: desks in a placement conflict are kept and drawn in grey ink,
+    not dropped, on preview/export."""
+
+    def test_get_all_desks_includes_removed(self):
+        """_get_all_desks keeps removed desks; _get_active_desks filters them."""
+        candidate = {
+            "desks": [
+                {"x_cm": 0, "y_cm": 0, "removed": False},
+                {"x_cm": 1, "y_cm": 0, "removed": True},
+                {"x_cm": 2, "y_cm": 0, "removed": False},
+            ]
+        }
+        assert len(_get_all_desks(candidate)) == 3
+        assert len(_get_active_desks(candidate)) == 2
+
+    def _write_plan_json(self, plans_dir):
+        plan = {"rooms": {"101": {"surface": "14.40 m2",
+                                  "bbox_px": [10, 10, 60, 50]}}}
+        with open(plans_dir / "test_plan.json", "w") as f:
+            json.dump(plan, f)
+
+    def test_conflict_desk_drawn_grey(self, export_env):
+        """A removed desk produces grey ink pixels; an active one does not."""
+        import numpy as np
+        from olm.server.services.export_service import compose_plan_image
+        self._write_plan_json(export_env / "plans")
+        ink = tuple(_DESK_CONFLICT_INK)
+
+        room_removed = _room_payload()
+        room_removed["candidate"]["desks"][0]["removed"] = True
+        arr_removed = np.array(compose_plan_image("test_plan", [room_removed], 5.0))
+
+        room_active = _room_payload()  # removed=False by default
+        arr_active = np.array(compose_plan_image("test_plan", [room_active], 5.0))
+
+        def count_ink(arr):
+            return int(np.all(arr == np.array(ink), axis=-1).sum())
+
+        assert count_ink(arr_removed) > 0, "conflict desk should add grey ink"
+        assert count_ink(arr_active) == 0, "active desk must not use conflict grey"
+
+    def test_conflict_only_room_still_renders(self, export_env):
+        """A room whose only desk is in conflict is still drawn (not skipped)."""
+        import numpy as np
+        from olm.server.services.export_service import compose_plan_image
+        self._write_plan_json(export_env / "plans")
+        ink = tuple(_DESK_CONFLICT_INK)
+
+        room = _room_payload()
+        room["candidate"]["desks"][0]["removed"] = True
+        arr = np.array(compose_plan_image("test_plan", [room], 5.0))
+        grey = int(np.all(arr == np.array(ink), axis=-1).sum())
+        assert grey > 0, "all-conflict room must still render its grey desk"
